@@ -1,0 +1,77 @@
+import { useState } from "react";
+import { User } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
+import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
+import { PageHeader } from "@/components/ui/page-header";
+import { useAuth } from "@/contexts/AuthContext";
+import { toast } from "sonner";
+
+const activityLog = [
+  { id: "1", time: "2026-03-08 09:00", action: "Logged in" },
+  { id: "2", time: "2026-03-07 18:30", action: "Logged out" },
+  { id: "3", time: "2026-03-07 08:45", action: "Logged in" },
+  { id: "4", time: "2026-03-06 17:00", action: "Logged out" },
+  { id: "5", time: "2026-03-06 09:15", action: "Logged in" },
+];
+
+const Profile = () => {
+  const { user } = useAuth();
+  const [name, setName] = useState(user?.name || "Admin User");
+  const [email, setEmail] = useState(user?.email || "admin@ovenisto.com");
+  const [phone, setPhone] = useState("03201119898");
+  const [currentPw, setCurrentPw] = useState("");
+  const [newPw, setNewPw] = useState("");
+  const [confirmPw, setConfirmPw] = useState("");
+  const [emailAlerts, setEmailAlerts] = useState(true);
+  const [smsAlerts, setSmsAlerts] = useState(false);
+  const [pushAlerts, setPushAlerts] = useState(true);
+
+  const handleSaveProfile = () => {
+    if (!name.trim() || !email.trim()) { toast.error("Name and email are required"); return; }
+    toast.success("Profile updated successfully");
+  };
+
+  const handleUpdatePassword = () => {
+    if (!currentPw) { toast.error("Current password is required"); return; }
+    if (newPw.length < 6) { toast.error("Password must be at least 6 characters"); return; }
+    if (newPw !== confirmPw) { toast.error("Passwords don't match"); return; }
+    toast.success("Password changed successfully");
+    setCurrentPw(""); setNewPw(""); setConfirmPw("");
+  };
+
+  return (
+    <div className="space-y-6">
+      <PageHeader icon={<User className="h-5 w-5" />} title="My Profile" subtitle="Account settings" />
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <Card className="shadow-sm"><CardHeader><CardTitle className="text-base">Personal Info</CardTitle></CardHeader><CardContent className="space-y-4">
+          <div className="flex justify-center"><div className="h-20 w-20 rounded-full gradient-primary flex items-center justify-center text-primary-foreground text-2xl font-bold">{name.charAt(0)}</div></div>
+          <div><label className="text-sm font-medium">Full Name</label><Input value={name} onChange={(e) => setName(e.target.value)} /></div>
+          <div><label className="text-sm font-medium">Email</label><Input value={email} onChange={(e) => setEmail(e.target.value)} /></div>
+          <div><label className="text-sm font-medium">Phone</label><Input value={phone} onChange={(e) => setPhone(e.target.value)} /></div>
+          <Button className="gradient-primary text-primary-foreground" onClick={handleSaveProfile}>Save Changes</Button>
+        </CardContent></Card>
+        <div className="space-y-6">
+          <Card className="shadow-sm"><CardHeader><CardTitle className="text-base">Change Password</CardTitle></CardHeader><CardContent className="space-y-4">
+            <div><label className="text-sm font-medium">Current Password</label><Input type="password" value={currentPw} onChange={(e) => setCurrentPw(e.target.value)} /></div>
+            <div><label className="text-sm font-medium">New Password</label><Input type="password" value={newPw} onChange={(e) => setNewPw(e.target.value)} /></div>
+            <div><label className="text-sm font-medium">Confirm Password</label><Input type="password" value={confirmPw} onChange={(e) => setConfirmPw(e.target.value)} /></div>
+            <Button variant="outline" onClick={handleUpdatePassword}>Update Password</Button>
+          </CardContent></Card>
+          <Card className="shadow-sm"><CardHeader><CardTitle className="text-base">Notifications</CardTitle></CardHeader><CardContent className="space-y-3">
+            <div className="flex items-center justify-between"><span className="text-sm">Email Alerts</span><Switch checked={emailAlerts} onCheckedChange={setEmailAlerts} /></div>
+            <div className="flex items-center justify-between"><span className="text-sm">SMS Alerts</span><Switch checked={smsAlerts} onCheckedChange={setSmsAlerts} /></div>
+            <div className="flex items-center justify-between"><span className="text-sm">Push Notifications</span><Switch checked={pushAlerts} onCheckedChange={setPushAlerts} /></div>
+          </CardContent></Card>
+        </div>
+      </div>
+      <Card className="shadow-sm"><CardHeader><CardTitle className="text-base">Activity Log</CardTitle></CardHeader><CardContent>
+        <Table><TableHeader><TableRow><TableHead>Time</TableHead><TableHead>Action</TableHead></TableRow></TableHeader>
+          <TableBody>{activityLog.map(a => <TableRow key={a.id}><TableCell className="text-muted-foreground">{a.time}</TableCell><TableCell>{a.action}</TableCell></TableRow>)}</TableBody></Table>
+      </CardContent></Card>
+    </div>
+  );
+};
+export default Profile;

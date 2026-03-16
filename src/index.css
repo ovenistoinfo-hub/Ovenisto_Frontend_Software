@@ -1,0 +1,175 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 16 100% 98%;
+    --foreground: 0 0% 18%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 18%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 18%;
+
+    --primary: 12 82% 51%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 16 20% 90%;
+    --secondary-foreground: 0 0% 18%;
+
+    --muted: 16 20% 95%;
+    --muted-foreground: 0 0% 40%;
+
+    --accent: 18 100% 62%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 142 71% 45%;
+    --success-foreground: 0 0% 100%;
+
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 18%;
+
+    --info: 217 91% 60%;
+    --info-foreground: 0 0% 100%;
+
+    --gold: 38 90% 55%;
+    --gold-foreground: 0 0% 18%;
+
+    --border: 16 20% 90%;
+    --input: 16 20% 90%;
+    --ring: 12 82% 51%;
+
+    --radius: 0.75rem;
+
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 0 0% 18%;
+    --sidebar-primary: 12 82% 51%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 16 100% 96%;
+    --sidebar-accent-foreground: 12 82% 51%;
+    --sidebar-border: 16 20% 90%;
+    --sidebar-ring: 12 82% 51%;
+  }
+
+  .dark {
+    --background: 20 14.3% 4.1%;
+    --foreground: 0 0% 95%;
+
+    --card: 24 9.8% 8%;
+    --card-foreground: 0 0% 95%;
+
+    --popover: 24 9.8% 8%;
+    --popover-foreground: 0 0% 95%;
+
+    --primary: 12 82% 51%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 12 6.5% 15.1%;
+    --secondary-foreground: 0 0% 95%;
+
+    --muted: 12 6.5% 15.1%;
+    --muted-foreground: 24 5.4% 63.9%;
+
+    --accent: 18 100% 62%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 95%;
+
+    --success: 142 71% 35%;
+    --success-foreground: 0 0% 95%;
+
+    --warning: 38 92% 45%;
+    --warning-foreground: 0 0% 95%;
+
+    --info: 217 91% 55%;
+    --info-foreground: 0 0% 95%;
+
+    --gold: 45 80% 45%;
+    --gold-foreground: 0 0% 95%;
+
+    --border: 12 6.5% 15.1%;
+    --input: 12 6.5% 15.1%;
+    --ring: 12 82% 51%;
+
+    --radius: 0.75rem;
+
+    --sidebar-background: 20 14.3% 4.1%;
+    --sidebar-foreground: 0 0% 95%;
+    --sidebar-primary: 12 82% 51%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 12 6.5% 15.1%;
+    --sidebar-accent-foreground: 12 82% 51%;
+    --sidebar-border: 12 6.5% 15.1%;
+    --sidebar-ring: 12 82% 51%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+    scrollbar-color: hsl(var(--primary) / 0.45) hsl(var(--muted) / 0.3);
+    scrollbar-width: auto;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans;
+  }
+
+  /* Webkit scrollbar styling */
+  *::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  *::-webkit-scrollbar-track {
+    background: hsl(var(--muted) / 0.3);
+    border-radius: 9999px;
+  }
+
+  *::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, hsl(var(--primary) / 0.45), hsl(var(--accent) / 0.45));
+    border-radius: 9999px;
+  }
+
+  *::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(180deg, hsl(var(--primary) / 0.7), hsl(var(--accent) / 0.7));
+  }
+}
+
+@layer utilities {
+  .gradient-primary {
+    background: linear-gradient(135deg, hsl(12, 82%, 51%), hsl(18, 100%, 62%));
+  }
+
+  .table-row-alt:nth-child(even) {
+    background-color: hsl(16, 100%, 98%);
+  }
+
+  .dark .table-row-alt:nth-child(even) {
+    background-color: hsl(24, 9.8%, 10%);
+  }
+
+  @keyframes fadeInUp {
+    from { opacity: 0; transform: translateY(20px) scale(0.97); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+  }
+  .animate-login-card {
+    animation: fadeInUp 0.5s ease-out;
+  }
+}
+
+@layer utilities {
+  .scrollbar-none {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+}
