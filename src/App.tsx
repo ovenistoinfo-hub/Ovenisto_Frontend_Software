@@ -63,19 +63,39 @@ import EmployeePortal from "./pages/EmployeePortal";
 
 const queryClient = new QueryClient();
 
+// Returns the default landing page for each role
+function getDefaultRouteForRole(role?: string): string {
+  switch (role) {
+    case 'Waiter':           return '/waiter';
+    case 'Kitchen Staff':    return '/kitchens';
+    case 'Kitchen Manager':  return '/kitchens';
+    case 'Cashier':          return '/pos';
+    case 'Delivery Manager': return '/delivery';
+    case 'Store Manager':    return '/stock';
+    case 'Accountant':       return '/sales';
+    case 'Rider':            return '/my-portal';
+    case 'Customer Screen':  return '/customer-display';
+    default:                 return '/';
+  }
+}
+
 function ProtectedRoute({ children, module }: { children: React.ReactNode; module?: string }) {
-  const { isAuthenticated, hasPermission } = useAuth();
+  const { isAuthenticated, hasPermission, user } = useAuth();
   if (!isAuthenticated) return <Navigate to="/login" replace />;
-  if (module && !hasPermission(module)) return <Navigate to="/" replace />;
+  if (module && !hasPermission(module)) {
+    // Redirect to the user's role-appropriate default page instead of "/"
+    const defaultRoute = getDefaultRouteForRole(user?.role);
+    return <Navigate to={defaultRoute} replace />;
+  }
   return <>{children}</>;
 }
 
 function AppRoutes() {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
 
   return (
     <Routes>
-      <Route path="/login" element={isAuthenticated ? <Navigate to="/" replace /> : <Login />} />
+      <Route path="/login" element={isAuthenticated ? <Navigate to={getDefaultRouteForRole(user?.role)} replace /> : <Login />} />
       {/* Standalone routes (no AppLayout) */}
       <Route path="/pos" element={<ProtectedRoute module="pos"><POS /></ProtectedRoute>} />
       <Route path="/kitchen-panel/:id" element={<ProtectedRoute module="kitchens"><KitchenPanel /></ProtectedRoute>} />
@@ -125,7 +145,7 @@ function AppRoutes() {
       <Route path="/users" element={<ProtectedRoute module="users"><AppLayout><Users /></AppLayout></ProtectedRoute>} />
       <Route path="/attendance" element={<ProtectedRoute module="attendance"><AppLayout><Attendance /></AppLayout></ProtectedRoute>} />
       <Route path="/shifts" element={<ProtectedRoute module="attendance"><AppLayout><Shifts /></AppLayout></ProtectedRoute>} />
-      <Route path="/my-portal" element={<ProtectedRoute><AppLayout><EmployeePortal /></AppLayout></ProtectedRoute>} />
+      <Route path="/my-portal" element={<ProtectedRoute module="my-portal"><AppLayout><EmployeePortal /></AppLayout></ProtectedRoute>} />
       <Route path="/reports" element={<ProtectedRoute module="reports"><AppLayout><Reports /></AppLayout></ProtectedRoute>} />
       <Route path="/sms" element={<ProtectedRoute module="sms"><AppLayout><SMS /></AppLayout></ProtectedRoute>} />
       <Route path="/profile" element={<ProtectedRoute><AppLayout><Profile /></AppLayout></ProtectedRoute>} />

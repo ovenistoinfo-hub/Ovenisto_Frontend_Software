@@ -1,14 +1,37 @@
-import React, { createContext, useContext, useState, useCallback } from "react";
-import { users as mockUsers } from "@/data/mock-data";
+import React, { createContext, useContext, useState, useCallback, useEffect } from "react";
+import { authService, type AuthUser } from "@/services/auth.service";
+import { getAccessToken, clearTokens } from "@/services/api";
 
 // Role-based permissions mapping
 const rolePermissions: Record<string, string[]> = {
   "Super Admin": ["*"],
   "Admin": ["*"],
-  "Manager": ["dashboard", "analytics", "pos", "kitchens", "waiter", "order-status", "customer-display", "outlets", "items", "production", "stock", "sales", "customers", "customer-dues", "purchases", "suppliers", "supplier-dues", "expenses", "transfers", "waste", "attendance", "reports", "sms"],
-  "Cashier": ["dashboard", "pos", "sales", "customers", "customer-dues"],
-  "Waiter": ["waiter"],
-  "Kitchen Staff": ["kitchens"],
+  "Manager": [
+    "dashboard", "analytics", "pos", "kitchens", "waiter", "order-status",
+    "customer-display", "outlets", "items", "production", "stock", "sales",
+    "customers", "customer-dues", "purchases", "suppliers", "supplier-dues",
+    "expenses", "transfers", "waste", "attendance", "reports", "sms",
+    "settings", "my-portal",
+  ],
+  "Floor Manager": [
+    "dashboard", "waiter", "order-status", "customer-display", "customers",
+    "reservations", "table-layout", "attendance", "my-portal",
+  ],
+  "Cashier": ["dashboard", "pos", "sales", "customers", "customer-dues", "attendance", "my-portal"],
+  "Waiter": ["waiter", "attendance", "my-portal"],
+  "Kitchen Manager": ["kitchens", "order-status", "items", "production", "attendance", "my-portal"],
+  "Kitchen Staff": ["kitchens", "attendance", "my-portal"],
+  "Delivery Manager": ["delivery", "online-orders", "order-status", "sales", "attendance", "my-portal"],
+  "Store Manager": [
+    "items", "stock", "production", "purchases", "suppliers",
+    "supplier-dues", "transfers", "waste", "attendance", "my-portal",
+  ],
+  "Accountant": [
+    "sales", "customer-dues", "purchases", "suppliers", "supplier-dues",
+    "expenses", "reports", "attendance", "my-portal",
+  ],
+  "Rider": ["attendance", "my-portal"],
+  "Customer Screen": ["customer-display"],
 };
 
 export interface User {
@@ -16,17 +39,20 @@ export interface User {
   name: string;
   email: string;
   role: string;
-  avatar?: string;
-  phone?: string;
-  branch?: string;
+  avatar?: string | null;
+  phone?: string | null;
+  branch?: string | null;
+  outletId?: string | null;
 }
 
 interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
+  isLoading: boolean;
   login: (email: string, password: string) => Promise<boolean>;
   logout: () => void;
   hasPermission: (module: string) => boolean;
+  updateUser: (updates: Partial<User>) => void;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -39,30 +65,64 @@ export const useAuth = () => {
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(() => {
-    const stored = localStorage.getItem("ovenisto_user") || sessionStorage.getItem("ovenisto_user");
+    const stored = localStorage.getItem("ovenisto_user");
     return stored ? JSON.parse(stored) : null;
   });
+  const [isLoading, setIsLoading] = useState(false);
 
-  const login = useCallback(async (email: string, password: string) => {
-    if (!password.trim()) return false;
-    const found = mockUsers.find(u => u.email.toLowerCase() === email.toLowerCase());
-    if (!found) return false;
-    const authUser: User = {
-      id: found.id, name: found.name, email: found.email,
-      role: found.role, avatar: found.avatar, phone: found.phone, branch: found.branch,
-    };
-    setUser(authUser);
-    // Check remember me preference
-    const remember = localStorage.getItem("ovenisto_remember") === "true";
-    if (remember) {
-      localStorage.setItem("ovenisto_user", JSON.stringify(authUser));
-    } else {
-      sessionStorage.setItem("ovenisto_user", JSON.stringify(authUser));
+  // On mount: if we have a token but no user, fetch user from API
+  useEffect(() => {
+    const token = getAccessToken();
+    const stored = localStorage.getItem("ovenisto_user");
+
+    if (token && !stored) {
+      setIsLoading(true);
+      authService.getMe()
+        .then((data) => {
+          const authUser: User = {
+            id: data.id,
+            name: data.name,
+            email: data.email,
+            role: data.role,
+            avatar: data.avatar,
+            phone: data.phone,
+            branch: data.branch,
+            outletId: data.outletId,
+          };
+          setUser(authUser);
+          localStorage.setItem("ovenisto_user", JSON.stringify(authUser));
+        })
+        .catch(() => {
+          clearTokens();
+          setUser(null);
+        })
+        .finally(() => setIsLoading(false));
     }
-    return true;
   }, []);
 
-  const logout = useCallback(() => {
+  const login = useCallback(async (email: string, password: string): Promise<boolean> => {
+    try {
+      const data = await authService.login(email, password);
+      const authUser: User = {
+        id: data.id,
+        name: data.name,
+        email: data.email,
+        role: data.role,
+        avatar: data.avatar,
+        phone: data.phone,
+        branch: data.branch,
+        outletId: data.outletId,
+      };
+      setUser(authUser);
+      localStorage.setItem("ovenisto_user", JSON.stringify(authUser));
+      return true;
+    } catch {
+      return false;
+    }
+  }, []);
+
+  const logout = useCallback(async () => {
+    await authService.logout();
     setUser(null);
     localStorage.removeItem("ovenisto_user");
     sessionStorage.removeItem("ovenisto_user");
@@ -75,8 +135,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return perms.some(p => module.startsWith(p));
   }, [user]);
 
+  const updateUser = useCallback((updates: Partial<User>) => {
+    setUser(prev => {
+      if (!prev) return prev;
+      const updated = { ...prev, ...updates };
+      localStorage.setItem("ovenisto_user", JSON.stringify(updated));
+      return updated;
+    });
+  }, []);
+
   return (
-    <AuthContext.Provider value={{ user, isAuthenticated: !!user, login, logout, hasPermission }}>
+    <AuthContext.Provider value={{ user, isAuthenticated: !!user, isLoading, login, logout, hasPermission, updateUser }}>
       {children}
     </AuthContext.Provider>
   );

@@ -1,24 +1,41 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { ClipboardList, Plus, Eye } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Skeleton } from "@/components/ui/skeleton";
 import { PageHeader } from "@/components/ui/page-header";
-import { useData } from "@/contexts/DataContext";
 import { toast } from "sonner";
-import type { StockTake, StockTakeItem } from "@/contexts/DataContext";
+import { stockService, type StockTakeRecord } from "@/services/stock.service";
 
 const StockTakePage = () => {
-  const { stockTakes, ingredients, addItem, updateItem, adjustStock } = useData();
+  const [stockTakes, setStockTakes] = useState<StockTakeRecord[]>([]);
+  const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("All");
   const [showNew, setShowNew] = useState(false);
-  const [viewId, setViewId] = useState<string | null>(null);
-  const [countItems, setCountItems] = useState<StockTakeItem[]>([]);
+  const [dialogStep, setDialogStep] = useState<"notes" | "counting">("notes");
   const [notes, setNotes] = useState("");
+  const [activeTake, setActiveTake] = useState<StockTakeRecord | null>(null);
+  const [countedValues, setCountedValues] = useState<Record<string, number | null>>({});
+  const [saving, setSaving] = useState(false);
+  const [viewId, setViewId] = useState<string | null>(null);
+
+  const fetchStockTakes = useCallback(async () => {
+    try {
+      const data = await stockService.getStockTakes();
+      setStockTakes(data);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to load stock takes");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchStockTakes(); }, [fetchStockTakes]);
 
   const filtered = stockTakes.filter(s => {
     if (filter === "Active") return s.status === "active";
@@ -28,68 +45,75 @@ const StockTakePage = () => {
 
   const viewItem = viewId ? stockTakes.find(s => s.id === viewId) : null;
 
-  const startNew = () => {
-    const items: StockTakeItem[] = ingredients.map(ig => ({
-      ingredientId: ig.id, ingredientName: ig.name, unit: ig.unit,
-      systemQty: ig.currentStock, countedQty: null, variance: 0, varianceValue: 0,
-    }));
-    setCountItems(items);
+  const openNewDialog = () => {
+    setDialogStep("notes");
     setNotes("");
+    setActiveTake(null);
+    setCountedValues({});
     setShowNew(true);
   };
 
-  const updateCounted = (idx: number, val: number | null) => {
-    setCountItems(prev => prev.map((item, i) => {
-      if (i !== idx) return item;
-      const counted = val;
-      const variance = counted !== null ? counted - item.systemQty : 0;
-      const ing = ingredients.find(ig => ig.id === item.ingredientId);
-      const varianceValue = variance * (ing?.purchasePrice || 0);
-      return { ...item, countedQty: counted, variance, varianceValue };
-    }));
+  const beginCount = async () => {
+    setSaving(true);
+    try {
+      const take = await stockService.startStockTake(notes || undefined);
+      setActiveTake(take);
+      const init: Record<string, number | null> = {};
+      take.items.forEach(item => { init[item.ingredientId] = null; });
+      setCountedValues(init);
+      setDialogStep("counting");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to start stock take");
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const totalVariance = countItems.reduce((s, i) => s + i.varianceValue, 0);
-
-  const submitCount = () => {
-    const uncounted = countItems.filter(i => i.countedQty === null);
-    if (uncounted.length > 0) { toast.error(`${uncounted.length} items not counted yet`); return; }
-
-    const ref = `ST-${String(stockTakes.length + 1).padStart(3, "0")}`;
-    const stockTake: StockTake = {
-      id: crypto.randomUUID(), reference: ref,
-      date: new Date().toISOString().split("T")[0],
-      status: "completed", countedBy: "Admin",
-      items: countItems, totalVarianceValue: totalVariance,
-      notes, completedAt: new Date().toISOString(),
-    };
-    addItem("stockTakes", stockTake);
-
-    // Adjust stock for non-zero variances
-    countItems.forEach(item => {
-      if (item.variance !== 0 && item.countedQty !== null) {
-        if (item.variance > 0) adjustStock(item.ingredientId, item.variance, "add");
-        else adjustStock(item.ingredientId, Math.abs(item.variance), "deduct");
-      }
-    });
-
-    toast.success("Stock take completed and stock adjusted");
-    setShowNew(false);
+  const getVariance = (ingredientId: string): number | null => {
+    const item = activeTake?.items.find(i => i.ingredientId === ingredientId);
+    const counted = countedValues[ingredientId];
+    if (!item || counted === null) return null;
+    return counted - Number(item.systemQty);
   };
+
+  const submitCount = async () => {
+    if (!activeTake) return;
+    const uncounted = Object.values(countedValues).filter(v => v === null).length;
+    if (uncounted > 0) { toast.error(`${uncounted} items not counted yet`); return; }
+
+    setSaving(true);
+    try {
+      await stockService.completeStockTake(activeTake.id,
+        activeTake.items.map(item => ({
+          ingredientId: item.ingredientId,
+          countedQty: countedValues[item.ingredientId] ?? 0,
+        }))
+      );
+      toast.success("Stock take completed and stock adjusted");
+      setShowNew(false);
+      fetchStockTakes();
+    } catch (err: any) {
+      toast.error(err.message || "Failed to complete stock take");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) return <div className="space-y-6"><Skeleton className="h-10 w-full rounded-lg" />{[1,2,3,4,5].map(i => <Skeleton key={i} className="h-12 w-full rounded-lg mt-2" />)}</div>;
 
   return (
     <div className="space-y-6">
       <PageHeader icon={<ClipboardList className="h-5 w-5" />} title="Stock Take" subtitle="Physical inventory count and variance"
-        actions={<Button className="gradient-primary text-primary-foreground" onClick={startNew}><Plus className="h-4 w-4 mr-2" />New Stock Take</Button>} />
+        actions={<Button className="gradient-primary text-primary-foreground" onClick={openNewDialog}><Plus className="h-4 w-4 mr-2" />New Stock Take</Button>} />
       <div className="flex gap-1.5 flex-wrap">{["All", "Active", "Completed"].map(s => (
         <Button key={s} variant={filter === s ? "default" : "outline"} size="sm" onClick={() => setFilter(s)} className={filter === s ? "gradient-primary text-primary-foreground" : ""}>{s}</Button>
       ))}</div>
       <Card className="shadow-sm"><CardContent className="pt-4"><div className="overflow-x-auto">
-        <Table><TableHeader><TableRow className="bg-muted/50 hover:bg-muted/50"><TableHead>Date</TableHead><TableHead>Reference</TableHead><TableHead>Items</TableHead><TableHead>Variance</TableHead><TableHead>Status</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader>
+        <Table><TableHeader><TableRow className="bg-muted/50 hover:bg-muted/50"><TableHead>Date</TableHead><TableHead>Reference</TableHead><TableHead>Items</TableHead><TableHead>Variance Value</TableHead><TableHead>Status</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader>
           <TableBody>{filtered.map(s => (
             <TableRow key={s.id} className="hover:bg-muted/30 transition-colors">
-              <TableCell>{s.date}</TableCell><TableCell className="font-medium">{s.reference}</TableCell><TableCell>{s.items.length}</TableCell>
-              <TableCell className={s.totalVarianceValue < 0 ? "text-destructive font-medium" : s.totalVarianceValue > 0 ? "text-success font-medium" : ""}>Rs. {s.totalVarianceValue.toLocaleString()}</TableCell>
+              <TableCell>{s.date.slice(0, 10)}</TableCell><TableCell className="font-medium">{s.reference}</TableCell><TableCell>{s.items.length}</TableCell>
+              <TableCell className={s.totalVarianceValue < 0 ? "text-destructive font-medium" : s.totalVarianceValue > 0 ? "text-success font-medium" : ""}>Rs. {Number(s.totalVarianceValue).toLocaleString()}</TableCell>
               <TableCell><Badge variant="secondary" className={s.status === "completed" ? "bg-success/10 text-success" : "bg-warning/10 text-warning"}>{s.status}</Badge></TableCell>
               <TableCell><Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setViewId(s.id)}><Eye className="h-3 w-3" /></Button></TableCell>
             </TableRow>
@@ -97,30 +121,64 @@ const StockTakePage = () => {
       </div></CardContent></Card>
 
       {/* New Stock Take Dialog */}
-      <Dialog open={showNew} onOpenChange={setShowNew}><DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader><DialogTitle>New Stock Take</DialogTitle></DialogHeader>
-        <div className="overflow-x-auto">
-          <Table><TableHeader><TableRow className="bg-muted/50 hover:bg-muted/50"><TableHead>Ingredient</TableHead><TableHead>Unit</TableHead><TableHead>System</TableHead><TableHead>Counted</TableHead><TableHead>Variance</TableHead></TableRow></TableHeader>
-            <TableBody>{countItems.map((item, i) => (
-              <TableRow key={item.ingredientId} className="hover:bg-muted/30 transition-colors">
-                <TableCell className="font-medium">{item.ingredientName}</TableCell><TableCell>{item.unit}</TableCell>
-                <TableCell>{item.systemQty}</TableCell>
-                <TableCell><Input type="number" className="w-24 h-8" value={item.countedQty ?? ""} onChange={e => updateCounted(i, e.target.value === "" ? null : Number(e.target.value))} /></TableCell>
-                <TableCell className={item.variance < 0 ? "text-destructive font-medium" : item.variance > 0 ? "text-success font-medium" : ""}>{item.countedQty !== null ? `${item.variance > 0 ? "+" : ""}${item.variance}` : "—"}</TableCell>
-              </TableRow>
-            ))}</TableBody></Table>
-        </div>
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t"><div className="flex-1"><Label>Notes</Label><Input value={notes} onChange={e => setNotes(e.target.value)} placeholder="Optional notes" className="mt-1" /></div><div className="text-right"><p className="text-sm text-muted-foreground">Total Variance</p><p className={`text-lg font-bold ${totalVariance < 0 ? "text-destructive" : totalVariance > 0 ? "text-success" : ""}`}>Rs. {totalVariance.toLocaleString()}</p></div></div>
-        <DialogFooter><Button variant="outline" onClick={() => setShowNew(false)}>Cancel</Button><Button className="gradient-primary text-primary-foreground" onClick={submitCount}>Submit Count</Button></DialogFooter>
-      </DialogContent></Dialog>
+      <Dialog open={showNew} onOpenChange={(open) => { if (!open) setShowNew(false); }}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>New Stock Take</DialogTitle></DialogHeader>
+
+          {dialogStep === "notes" && (
+            <div className="space-y-4 py-2">
+              <div className="space-y-1.5"><Label>Notes (Optional)</Label><Input value={notes} onChange={e => setNotes(e.target.value)} placeholder="e.g. End of day count" /></div>
+              <p className="text-sm text-muted-foreground">This will capture current system quantities for all active ingredients.</p>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setShowNew(false)}>Cancel</Button>
+                <Button className="gradient-primary text-primary-foreground" onClick={beginCount} disabled={saving}>{saving ? "Starting..." : "Start Count"}</Button>
+              </DialogFooter>
+            </div>
+          )}
+
+          {dialogStep === "counting" && activeTake && (
+            <>
+              <div className="overflow-x-auto">
+                <Table><TableHeader><TableRow className="bg-muted/50 hover:bg-muted/50"><TableHead>Ingredient</TableHead><TableHead>Unit</TableHead><TableHead>System Qty</TableHead><TableHead>Counted Qty</TableHead><TableHead>Variance</TableHead></TableRow></TableHeader>
+                  <TableBody>{activeTake.items.map((item) => {
+                    const variance = getVariance(item.ingredientId);
+                    return (
+                      <TableRow key={item.ingredientId} className="hover:bg-muted/30 transition-colors">
+                        <TableCell className="font-medium">{item.ingredient.name}</TableCell>
+                        <TableCell>{item.ingredient.unit?.name || "—"}</TableCell>
+                        <TableCell>{Number(item.systemQty)}</TableCell>
+                        <TableCell><Input type="number" className="w-24 h-8" value={countedValues[item.ingredientId] ?? ""} onChange={e => setCountedValues(prev => ({ ...prev, [item.ingredientId]: e.target.value === "" ? null : Number(e.target.value) }))} /></TableCell>
+                        <TableCell className={variance === null ? "" : variance < 0 ? "text-destructive font-medium" : variance > 0 ? "text-success font-medium" : ""}>{variance === null ? "—" : `${variance > 0 ? "+" : ""}${variance}`}</TableCell>
+                      </TableRow>
+                    );
+                  })}</TableBody></Table>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setShowNew(false)}>Cancel</Button>
+                <Button className="gradient-primary text-primary-foreground" onClick={submitCount} disabled={saving}>{saving ? "Submitting..." : "Submit Count"}</Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* View Dialog */}
-      <Dialog open={!!viewItem} onOpenChange={() => setViewId(null)}><DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader><DialogTitle>Stock Take: {viewItem?.reference}</DialogTitle></DialogHeader>
-        {viewItem && <div className="overflow-x-auto"><Table><TableHeader><TableRow className="bg-muted/50"><TableHead>Ingredient</TableHead><TableHead>Unit</TableHead><TableHead>System</TableHead><TableHead>Counted</TableHead><TableHead>Variance</TableHead></TableRow></TableHeader>
-          <TableBody>{viewItem.items.map(item => (<TableRow key={item.ingredientId}><TableCell className="font-medium">{item.ingredientName}</TableCell><TableCell>{item.unit}</TableCell><TableCell>{item.systemQty}</TableCell><TableCell>{item.countedQty}</TableCell><TableCell className={item.variance < 0 ? "text-destructive" : item.variance > 0 ? "text-success" : ""}>{item.variance > 0 ? "+" : ""}{item.variance}</TableCell></TableRow>))}</TableBody></Table></div>}
-        <DialogFooter><Button variant="outline" onClick={() => setViewId(null)}>Close</Button></DialogFooter>
-      </DialogContent></Dialog>
+      <Dialog open={!!viewItem} onOpenChange={() => setViewId(null)}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>Stock Take: {viewItem?.reference}</DialogTitle></DialogHeader>
+          {viewItem && <div className="overflow-x-auto"><Table><TableHeader><TableRow className="bg-muted/50"><TableHead>Ingredient</TableHead><TableHead>Unit</TableHead><TableHead>System</TableHead><TableHead>Counted</TableHead><TableHead>Variance</TableHead></TableRow></TableHeader>
+            <TableBody>{viewItem.items.map(item => (
+              <TableRow key={item.ingredientId}>
+                <TableCell className="font-medium">{item.ingredient.name}</TableCell>
+                <TableCell>{item.ingredient.unit?.name || "—"}</TableCell>
+                <TableCell>{Number(item.systemQty)}</TableCell>
+                <TableCell>{item.countedQty !== null ? Number(item.countedQty) : "—"}</TableCell>
+                <TableCell className={Number(item.variance) < 0 ? "text-destructive" : Number(item.variance) > 0 ? "text-success" : ""}>{item.variance !== null ? `${Number(item.variance) > 0 ? "+" : ""}${Number(item.variance)}` : "—"}</TableCell>
+              </TableRow>
+            ))}</TableBody></Table></div>}
+          <DialogFooter><Button variant="outline" onClick={() => setViewId(null)}>Close</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

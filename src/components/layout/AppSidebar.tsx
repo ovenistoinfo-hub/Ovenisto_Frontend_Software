@@ -78,7 +78,7 @@ const navSections = [
     { title: "Waste", url: "/waste", icon: Trash2, module: "waste" },
   ]},
   { label: "Account / HR", items: [
-    { title: "My Portal", url: "/my-portal", icon: UserCircle, module: "dashboard" },
+    { title: "My Portal", url: "/my-portal", icon: UserCircle, module: "my-portal" },
     { title: "Users", url: "/users", icon: Users, module: "users" },
     { title: "Attendance", url: "/attendance", icon: Clock, module: "attendance" },
     { title: "Shifts & Schedule", url: "/shifts", icon: Timer, module: "attendance" },

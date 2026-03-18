@@ -8,11 +8,26 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
-import { users as mockUsers } from "@/data/mock-data";
+
+// Returns the default landing page for each role
+function getDefaultRouteForRole(role?: string): string {
+  switch (role) {
+    case 'Waiter':           return '/waiter';
+    case 'Kitchen Staff':    return '/kitchens';
+    case 'Kitchen Manager':  return '/kitchens';
+    case 'Cashier':          return '/pos';
+    case 'Delivery Manager': return '/delivery';
+    case 'Store Manager':    return '/stock';
+    case 'Accountant':       return '/sales';
+    case 'Rider':            return '/my-portal';
+    case 'Customer Screen':  return '/customer-display';
+    default:                 return '/';
+  }
+}
 
 const Login = () => {
   const [email, setEmail] = useState("admin@ovenisto.com");
-  const [password, setPassword] = useState("password");
+  const [password, setPassword] = useState("password123");
   const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
   const [remember, setRemember] = useState(true);
@@ -28,14 +43,21 @@ const Login = () => {
     setLoading(true);
     const ok = await login(email, password);
     setLoading(false);
-    if (ok) { toast.success("Welcome back!"); navigate("/"); }
+    if (ok) {
+      toast.success("Welcome back!");
+      // Read the stored user to get their role for navigation
+      const stored = localStorage.getItem("ovenisto_user");
+      const userData = stored ? JSON.parse(stored) : null;
+      navigate(getDefaultRouteForRole(userData?.role));
+    }
     else { toast.error("Invalid email or password"); }
   };
 
   const handleForgotPassword = () => {
-    const found = mockUsers.find(u => u.email.toLowerCase() === forgotEmail.toLowerCase());
-    if (found) { toast.success(`Password reset link sent to ${forgotEmail}`); setShowForgot(false); setForgotEmail(""); }
-    else { toast.error("No account found with this email"); }
+    if (!forgotEmail.trim()) { toast.error("Please enter your email"); return; }
+    toast.success(`Password reset link sent to ${forgotEmail}`);
+    setShowForgot(false);
+    setForgotEmail("");
   };
 
   return (

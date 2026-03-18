@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -10,23 +10,59 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Plus, Search, Pencil, Trash2, Utensils, Timer } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
-import { useData } from "@/contexts/DataContext";
+import { menuService, type MenuItemRecord, type CategoryRecord } from "@/services/menu.service";
 import { PageHeader } from "@/components/ui/page-header";
 import { TablePagination, paginate } from "@/components/TablePagination";
 
 const FoodMenu = () => {
   const navigate = useNavigate();
-  const { foodMenuItems, updateItem, removeItem, settings } = useData();
-  const currency = settings.currency || "Rs.";
+  const [items, setItems] = useState<MenuItemRecord[]>([]);
+  const [categories, setCategories] = useState<CategoryRecord[]>([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [catFilter, setCatFilter] = useState("All");
-  const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
-  useEffect(() => { const t = setTimeout(() => setLoading(false), 500); return () => clearTimeout(t); }, []);
 
-  const categories = ["All", ...new Set(foodMenuItems.map((i) => i.category))];
-  const filtered = foodMenuItems.filter((i) => (catFilter === "All" || i.category === catFilter) && i.name.toLowerCase().includes(search.toLowerCase()));
-  const toggleAvailable = (id: string) => { const item = foodMenuItems.find(i => i.id === id); if (item) updateItem("foodMenuItems", id, { available: !item.available }); };
+  const fetchAll = useCallback(async () => {
+    try {
+      const [menuItems, cats] = await Promise.all([
+        menuService.getMenuItems({ limit: 500 }),
+        menuService.getCategories(),
+      ]);
+      setItems(menuItems);
+      setCategories(cats);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to load menu items");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchAll(); }, [fetchAll]);
+
+  const filtered = items.filter((i) =>
+    (catFilter === "All" || i.category?.name === catFilter) &&
+    i.name.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const toggleAvailable = async (item: MenuItemRecord) => {
+    try {
+      await menuService.updateMenuItem(item.id, { available: !item.available });
+      setItems((prev) => prev.map((i) => i.id === item.id ? { ...i, available: !item.available } : i));
+    } catch (err: any) {
+      toast.error(err.message || "Failed to update availability");
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    try {
+      await menuService.deleteMenuItem(id);
+      toast.success("Deleted");
+      await fetchAll();
+    } catch (err: any) {
+      toast.error(err.message || "Failed to delete item");
+    }
+  };
 
   if (loading) return <div className="space-y-6"><Skeleton className="h-10 w-full rounded-lg" />{[1,2,3,4,5].map(i => <Skeleton key={i} className="h-12 w-full rounded-lg mt-2" />)}</div>;
 
@@ -37,7 +73,10 @@ const FoodMenu = () => {
         <CardHeader className="pb-3">
           <div className="flex items-center gap-3 flex-wrap">
             <div className="relative max-w-sm flex-1"><Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search menu..." className="pl-9" /></div>
-            <div className="flex gap-1 flex-wrap">{categories.map((c) => (<Button key={c} variant={catFilter === c ? "default" : "outline"} size="sm" onClick={() => setCatFilter(c)} className={catFilter === c ? "gradient-primary text-primary-foreground" : ""}>{c}</Button>))}</div>
+            <div className="flex gap-1 flex-wrap">
+              <Button key="All" variant={catFilter === "All" ? "default" : "outline"} size="sm" onClick={() => setCatFilter("All")} className={catFilter === "All" ? "gradient-primary text-primary-foreground" : ""}>All</Button>
+              {categories.map((c) => (<Button key={c.id} variant={catFilter === c.name ? "default" : "outline"} size="sm" onClick={() => setCatFilter(c.name)} className={catFilter === c.name ? "gradient-primary text-primary-foreground" : ""}>{c.name}</Button>))}
+            </div>
           </div>
         </CardHeader>
         <CardContent>
@@ -52,13 +91,13 @@ const FoodMenu = () => {
                   <TableRow key={item.id} className="hover:bg-muted/30 transition-colors">
                     <TableCell>{(page - 1) * 10 + i + 1}</TableCell>
                     <TableCell><div className="flex items-center gap-2">{item.image ? (<img src={item.image} alt={item.name} className="h-8 w-8 rounded-md object-cover shrink-0" />) : (<div className="h-8 w-8 rounded-md gradient-primary flex items-center justify-center text-primary-foreground text-xs font-bold shrink-0">{item.name.charAt(0)}</div>)}<span className="font-medium">{item.name}</span></div></TableCell>
-                    <TableCell><Badge variant="secondary">{item.category}</Badge></TableCell>
-                    <TableCell className="text-muted-foreground text-xs">{item.code}</TableCell>
-                    <TableCell className="font-medium">{currency} {item.price}</TableCell>
-                    <TableCell>{(item as any).cookingTime > 0 ? <span className="flex items-center gap-1 text-xs text-muted-foreground"><Timer className="h-3 w-3" />{(item as any).cookingTime} min</span> : <span className="text-xs text-muted-foreground">—</span>}</TableCell>
-                    <TableCell><Switch checked={item.available} onCheckedChange={() => toggleAvailable(item.id)} /></TableCell>
+                    <TableCell><Badge variant="secondary">{item.category?.name || "—"}</Badge></TableCell>
+                    <TableCell className="text-muted-foreground text-xs">{item.code || "—"}</TableCell>
+                    <TableCell className="font-medium">Rs. {item.price}</TableCell>
+                    <TableCell>{item.cookingTime > 0 ? <span className="flex items-center gap-1 text-xs text-muted-foreground"><Timer className="h-3 w-3" />{item.cookingTime} min</span> : <span className="text-xs text-muted-foreground">—</span>}</TableCell>
+                    <TableCell><Switch checked={item.available} onCheckedChange={() => toggleAvailable(item)} /></TableCell>
                     <TableCell><div className="flex gap-1"><Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => navigate(`/items/food-menu/edit/${item.id}`)}><Pencil className="h-3 w-3" /></Button>
-                      <AlertDialog><AlertDialogTrigger asChild><Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10"><Trash2 className="h-3 w-3" /></Button></AlertDialogTrigger><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Delete {item.name}?</AlertDialogTitle><AlertDialogDescription>This action cannot be undone.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={() => { removeItem("foodMenuItems", item.id); toast.success("Deleted"); }} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Delete</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
+                      <AlertDialog><AlertDialogTrigger asChild><Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10"><Trash2 className="h-3 w-3" /></Button></AlertDialogTrigger><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Delete {item.name}?</AlertDialogTitle><AlertDialogDescription>This action cannot be undone.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={() => handleDelete(item.id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Delete</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
                     </div></TableCell>
                   </TableRow>
                 ))}</TableBody>

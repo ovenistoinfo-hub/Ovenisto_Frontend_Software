@@ -1,5 +1,4 @@
-import { useState, useEffect } from "react";
-import { useData } from "@/contexts/DataContext";
+import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,27 +13,61 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { TablePagination, paginate } from "@/components/TablePagination";
 import { PageHeader } from "@/components/ui/page-header";
+import { stockService, type StockAdjustmentRecord } from "@/services/stock.service";
+import { inventoryService, type IngredientRecord } from "@/services/inventory.service";
+
+const TYPE_LABELS: Record<string, { label: string; cls: string }> = {
+  add: { label: "Addition", cls: "bg-success/10 text-success" },
+  deduct: { label: "Reduction", cls: "bg-destructive/10 text-destructive" },
+  damage: { label: "Damage", cls: "bg-warning/10 text-warning" },
+  correction: { label: "Correction", cls: "bg-info/10 text-info" },
+};
 
 const StockAdjustments = () => {
-  const { stockAdjustments: list, ingredients, addItem, adjustStock } = useData();
+  const [list, setList] = useState<StockAdjustmentRecord[]>([]);
+  const [ingredients, setIngredients] = useState<IngredientRecord[]>([]);
   const [showAdd, setShowAdd] = useState(false);
   const [search, setSearch] = useState("");
-  const [form, setForm] = useState({ ingredientId: "", type: "addition" as "addition" | "reduction", qty: 0, reason: "", notes: "" });
+  const [form, setForm] = useState({ ingredientId: "", type: "add" as string, quantity: 0, reason: "" });
+  const [saving, setSaving] = useState(false);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
-  useEffect(() => { const t = setTimeout(() => setLoading(false), 500); return () => clearTimeout(t); }, []);
 
-  const filtered = list.filter((a) => a.ingredient.toLowerCase().includes(search.toLowerCase()));
+  const fetchData = useCallback(async () => {
+    try {
+      const [adjRes, ings] = await Promise.all([
+        stockService.getAdjustments({ limit: 200 }),
+        inventoryService.getIngredients(),
+      ]);
+      setList(adjRes.data);
+      setIngredients(ings);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to load adjustments");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchData(); }, [fetchData]);
+
+  const filtered = list.filter((a) => (a.ingredient?.name || "").toLowerCase().includes(search.toLowerCase()));
   const paged = paginate(filtered, page);
   const selectedIng = ingredients.find(i => i.id === form.ingredientId);
 
-  const handleSave = () => {
-    if (!form.ingredientId || form.qty <= 0) { toast.error("Select ingredient and enter quantity"); return; }
-    const ing = ingredients.find(i => i.id === form.ingredientId);
-    addItem("stockAdjustments", { id: crypto.randomUUID(), date: new Date().toISOString().split("T")[0], ingredient: ing?.name || "", type: form.type, qty: form.qty, reason: form.reason, adjustedBy: "Admin User", notes: form.notes });
-    adjustStock(form.ingredientId, form.qty, form.type === "addition" ? "add" : "deduct");
-    setForm({ ingredientId: "", type: "addition", qty: 0, reason: "", notes: "" }); setShowAdd(false);
-    toast.success(`Stock ${form.type} recorded`);
+  const handleSave = async () => {
+    if (!form.ingredientId || form.quantity <= 0) { toast.error("Select ingredient and enter quantity"); return; }
+    setSaving(true);
+    try {
+      await stockService.createAdjustment({ ingredientId: form.ingredientId, type: form.type, quantity: form.quantity, reason: form.reason || undefined });
+      toast.success("Stock adjustment recorded");
+      setForm({ ingredientId: "", type: "add", quantity: 0, reason: "" });
+      setShowAdd(false);
+      fetchData();
+    } catch (err: any) {
+      toast.error(err.message || "Failed to save adjustment");
+    } finally {
+      setSaving(false);
+    }
   };
 
   if (loading) return <div className="space-y-6"><div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">{[1,2,3,4].map(i => <Skeleton key={i} className="h-24 rounded-xl" />)}</div><Skeleton className="h-10 w-full rounded-lg" />{[1,2,3,4,5].map(i => <Skeleton key={i} className="h-12 w-full rounded-lg mt-2" />)}</div>;
@@ -47,8 +80,21 @@ const StockAdjustments = () => {
         <CardContent>
           {filtered.length === 0 ? (<div className="text-center py-12"><ArrowUpDown className="h-12 w-12 text-muted-foreground mx-auto mb-3 opacity-30" /><p className="text-muted-foreground">No adjustments found</p><p className="text-xs text-muted-foreground mt-1.5">Record your first stock adjustment.</p></div>) : (
             <>
-              <div className="rounded-lg border overflow-auto max-h-[calc(100vh-300px)]"><Table><TableHeader className="sticky top-0 z-10 bg-card"><TableRow className="bg-muted/50 hover:bg-muted/50"><TableHead>SN</TableHead><TableHead>Date</TableHead><TableHead>Ingredient</TableHead><TableHead>Type</TableHead><TableHead>Qty</TableHead><TableHead>Reason</TableHead><TableHead>By</TableHead><TableHead>Notes</TableHead></TableRow></TableHeader>
-                <TableBody>{paged.map((a, i) => (<TableRow key={a.id} className="hover:bg-muted/30 transition-colors"><TableCell>{(page - 1) * 10 + i + 1}</TableCell><TableCell>{a.date}</TableCell><TableCell className="font-medium">{a.ingredient}</TableCell><TableCell><Badge variant="secondary" className={a.type === "addition" ? "bg-success/10 text-success" : "bg-destructive/10 text-destructive"}>{a.type}</Badge></TableCell><TableCell>{a.qty}</TableCell><TableCell>{a.reason}</TableCell><TableCell>{a.adjustedBy}</TableCell><TableCell className="text-muted-foreground">{a.notes}</TableCell></TableRow>))}</TableBody></Table></div>
+              <div className="rounded-lg border overflow-auto max-h-[calc(100vh-300px)]"><Table><TableHeader className="sticky top-0 z-10 bg-card"><TableRow className="bg-muted/50 hover:bg-muted/50"><TableHead>SN</TableHead><TableHead>Date</TableHead><TableHead>Ingredient</TableHead><TableHead>Type</TableHead><TableHead>Qty</TableHead><TableHead>Reason</TableHead><TableHead>By</TableHead></TableRow></TableHeader>
+                <TableBody>{paged.map((a, i) => {
+                  const t = TYPE_LABELS[a.type] || { label: a.type, cls: "" };
+                  return (
+                    <TableRow key={a.id} className="hover:bg-muted/30 transition-colors">
+                      <TableCell>{(page - 1) * 10 + i + 1}</TableCell>
+                      <TableCell>{a.date.slice(0, 10)}</TableCell>
+                      <TableCell className="font-medium">{a.ingredient?.name || "—"}</TableCell>
+                      <TableCell><Badge variant="secondary" className={t.cls}>{t.label}</Badge></TableCell>
+                      <TableCell>{a.quantity} {a.ingredient?.unit?.name || ""}</TableCell>
+                      <TableCell>{a.reason || "—"}</TableCell>
+                      <TableCell>{a.adjustedBy?.name || "—"}</TableCell>
+                    </TableRow>
+                  );
+                })}</TableBody></Table></div>
               <TablePagination currentPage={page} totalItems={filtered.length} onPageChange={setPage} />
             </>
           )}
@@ -57,16 +103,16 @@ const StockAdjustments = () => {
       <Dialog open={showAdd} onOpenChange={setShowAdd}>
         <DialogContent><DialogHeader><DialogTitle>Add Adjustment</DialogTitle></DialogHeader>
           <div className="space-y-3">
-            <div className="space-y-1.5"><Label>Ingredient</Label><Select value={form.ingredientId} onValueChange={(v) => setForm(p => ({ ...p, ingredientId: v }))}><SelectTrigger><SelectValue placeholder="Select Ingredient" /></SelectTrigger><SelectContent>{ingredients.map(ig => <SelectItem key={ig.id} value={ig.id}>{ig.name} (Stock: {ig.currentStock} {ig.unit})</SelectItem>)}</SelectContent></Select></div>
-            <div className="space-y-1.5"><Label>Type</Label><div className="flex gap-2">
-              <Button variant={form.type === "addition" ? "default" : "outline"} size="sm" onClick={() => setForm(p => ({ ...p, type: "addition" }))} className={form.type === "addition" ? "bg-success text-success-foreground" : ""}>Addition</Button>
-              <Button variant={form.type === "reduction" ? "default" : "outline"} size="sm" onClick={() => setForm(p => ({ ...p, type: "reduction" }))} className={form.type === "reduction" ? "bg-destructive text-destructive-foreground" : ""}>Reduction</Button>
+            <div className="space-y-1.5"><Label>Ingredient</Label><Select value={form.ingredientId} onValueChange={(v) => setForm(p => ({ ...p, ingredientId: v }))}><SelectTrigger><SelectValue placeholder="Select Ingredient" /></SelectTrigger><SelectContent>{ingredients.map(ig => <SelectItem key={ig.id} value={ig.id}>{ig.name} (Stock: {Number(ig.currentStock)} {ig.unit?.name || ""})</SelectItem>)}</SelectContent></Select></div>
+            <div className="space-y-1.5"><Label>Type</Label><div className="flex gap-2 flex-wrap">
+              {["add", "deduct", "damage", "correction"].map(t => (
+                <Button key={t} variant={form.type === t ? "default" : "outline"} size="sm" onClick={() => setForm(p => ({ ...p, type: t }))} className={form.type === t ? (t === "add" ? "bg-success text-success-foreground" : t === "deduct" ? "bg-destructive text-destructive-foreground" : "") : ""}>{TYPE_LABELS[t]?.label || t}</Button>
+              ))}
             </div></div>
-            <div className="space-y-1.5"><Label>Quantity{selectedIng ? ` (${selectedIng.unit})` : ""}</Label><Input type="number" value={form.qty || ""} onChange={(e) => setForm(p => ({ ...p, qty: Number(e.target.value) }))} /></div>
-            <div className="space-y-1.5"><Label>Reason</Label><Input placeholder="Enter reason" value={form.reason} onChange={(e) => setForm(p => ({ ...p, reason: e.target.value }))} /></div>
-            <div className="space-y-1.5"><Label>Notes</Label><Textarea placeholder="Additional notes" value={form.notes} onChange={(e) => setForm(p => ({ ...p, notes: e.target.value }))} /></div>
+            <div className="space-y-1.5"><Label>Quantity{selectedIng ? ` (${selectedIng.unit?.name || ""})` : ""}</Label><Input type="number" value={form.quantity || ""} onChange={(e) => setForm(p => ({ ...p, quantity: Number(e.target.value) }))} /></div>
+            <div className="space-y-1.5"><Label>Reason</Label><Textarea placeholder="Enter reason" value={form.reason} onChange={(e) => setForm(p => ({ ...p, reason: e.target.value }))} /></div>
           </div>
-          <DialogFooter><Button variant="outline" onClick={() => setShowAdd(false)}>Cancel</Button><Button className="gradient-primary text-primary-foreground" onClick={handleSave}>Save</Button></DialogFooter>
+          <DialogFooter><Button variant="outline" onClick={() => setShowAdd(false)}>Cancel</Button><Button className="gradient-primary text-primary-foreground" onClick={handleSave} disabled={saving}>{saving ? "Saving..." : "Save"}</Button></DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

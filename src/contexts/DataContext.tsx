@@ -1,19 +1,8 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from "react";
-import {
-  orders as mockOrders, customers as mockCustomers, suppliers as mockSuppliers,
-  purchases as mockPurchases, expenses as mockExpenses, ingredients as mockIngredients,
-  foodMenuItems as mockFoodMenuItems, foodCategories as mockFoodCategories,
-  foodRecipes as mockFoodRecipes, modifiers as mockModifiers,
-  ingredientCategories as mockIngredientCategories, ingredientUnits as mockIngredientUnits,
-  preMadeFood as mockPreMadeFood, users as mockUsers, outlets as mockOutlets,
-  attendance as mockAttendance, kitchens as mockKitchens, wasteRecords as mockWasteRecords,
-  transfers as mockTransfers, stockAdjustments as mockStockAdjustments,
-  productions as mockProductions, smsHistory as mockSmsHistory,
-  revenueChartData as mockRevenueChartData, orderTypeData as mockOrderTypeData,
-} from "@/data/mock-data";
 import type { Order, OrderStatus } from "@/data/mock-data";
 
 const STORAGE_KEY = "ovenisto_data";
+const STORAGE_VERSION = "v2"; // bump this to force-clear old mock data
 
 // ── Existing interfaces ──
 
@@ -468,30 +457,30 @@ const mockTables: RestaurantTable[] = [
 
 interface DataStore {
   orders: Order[];
-  customers: typeof mockCustomers;
-  suppliers: typeof mockSuppliers;
-  purchases: typeof mockPurchases;
-  expenses: typeof mockExpenses;
-  ingredients: typeof mockIngredients;
-  foodMenuItems: typeof mockFoodMenuItems;
-  foodCategories: typeof mockFoodCategories;
-  foodRecipes: typeof mockFoodRecipes;
-  modifiers: typeof mockModifiers;
-  ingredientCategories: typeof mockIngredientCategories;
-  ingredientUnits: typeof mockIngredientUnits;
-  preMadeFood: typeof mockPreMadeFood;
-  users: typeof mockUsers;
-  outlets: typeof mockOutlets;
-  attendance: typeof mockAttendance;
-  kitchens: typeof mockKitchens;
-  wasteRecords: typeof mockWasteRecords;
-  transfers: typeof mockTransfers;
-  stockAdjustments: typeof mockStockAdjustments;
-  productions: typeof mockProductions;
-  smsHistory: typeof mockSmsHistory;
+  customers: any[];
+  suppliers: any[];
+  purchases: any[];
+  expenses: any[];
+  ingredients: any[];
+  foodMenuItems: any[];
+  foodCategories: any[];
+  foodRecipes: Record<string, { ingredientId: string; qtyPerUnit: number }[]>;
+  modifiers: any[];
+  ingredientCategories: any[];
+  ingredientUnits: any[];
+  preMadeFood: any[];
+  users: any[];
+  outlets: any[];
+  attendance: any[];
+  kitchens: any[];
+  wasteRecords: any[];
+  transfers: any[];
+  stockAdjustments: any[];
+  productions: any[];
+  smsHistory: any[];
   settings: Settings;
-  revenueChartData: typeof mockRevenueChartData;
-  orderTypeData: typeof mockOrderTypeData;
+  revenueChartData: any[];
+  orderTypeData: any[];
   // New collections
   deals: Deal[];
   riders: DeliveryRider[];
@@ -513,33 +502,25 @@ interface DataStore {
 
 function getDefaults(): DataStore {
   return {
-    orders: mockOrders, customers: mockCustomers, suppliers: mockSuppliers,
-    purchases: mockPurchases, expenses: mockExpenses, ingredients: mockIngredients,
-    foodMenuItems: mockFoodMenuItems, foodCategories: mockFoodCategories,
-    foodRecipes: mockFoodRecipes, modifiers: mockModifiers,
-    ingredientCategories: mockIngredientCategories, ingredientUnits: mockIngredientUnits,
-    preMadeFood: mockPreMadeFood, users: mockUsers, outlets: mockOutlets,
-    attendance: mockAttendance, kitchens: mockKitchens, wasteRecords: mockWasteRecords,
-    transfers: mockTransfers, stockAdjustments: mockStockAdjustments,
-    productions: mockProductions, smsHistory: mockSmsHistory,
+    // All collections start empty — real data comes from the API phase by phase
+    orders: [], customers: [], suppliers: [],
+    purchases: [], expenses: [], ingredients: [],
+    foodMenuItems: [], foodCategories: [],
+    foodRecipes: {}, modifiers: [],
+    ingredientCategories: [], ingredientUnits: [],
+    preMadeFood: [], users: [], outlets: [],
+    attendance: [], kitchens: [], wasteRecords: [],
+    transfers: [], stockAdjustments: [],
+    productions: [], smsHistory: [],
     settings: defaultSettings,
-    revenueChartData: mockRevenueChartData, orderTypeData: mockOrderTypeData,
-    deals: mockDeals,
-    riders: mockRiders,
-    deliveryAssignments: mockDeliveryAssignments,
+    revenueChartData: [], orderTypeData: [],
+    deals: [], riders: [], deliveryAssignments: [],
     loyaltySettings: mockLoyaltySettings,
-    loyaltyMembers: mockLoyaltyMembers,
-    loyaltyRewards: mockLoyaltyRewards,
-    loyaltyTransactions: mockLoyaltyTransactions,
-    stockTakes: mockStockTakes,
-    shifts: mockShifts,
-    coupons: mockCoupons,
-    reservations: mockReservations,
-    tables: mockTables,
-    shiftTemplates: mockShiftTemplates,
-    staffSchedules: mockStaffSchedules,
-    leaveRequests: mockLeaveRequests,
-    leaveBalances: mockLeaveBalances,
+    loyaltyMembers: [], loyaltyRewards: [], loyaltyTransactions: [],
+    stockTakes: [], shifts: [], coupons: [],
+    reservations: [], tables: [],
+    shiftTemplates: mockShiftTemplates, // structural config, not data
+    staffSchedules: [], leaveRequests: [], leaveBalances: [],
   };
 }
 
@@ -548,29 +529,12 @@ function loadStore(): DataStore {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      const defaults = getDefaults();
-
-      // Deep-merge foodMenuItems by id so new properties (like variants) from defaults are preserved
-      let mergedFoodMenuItems = defaults.foodMenuItems;
-      if (parsed.foodMenuItems && Array.isArray(parsed.foodMenuItems)) {
-        mergedFoodMenuItems = defaults.foodMenuItems.map(defaultItem => {
-          const savedItem = parsed.foodMenuItems.find((p: any) => p.id === defaultItem.id);
-          if (savedItem) {
-            return { ...defaultItem, ...savedItem, variants: defaultItem.variants || savedItem.variants };
-          }
-          return defaultItem;
-        });
-        const defaultIds = new Set(defaults.foodMenuItems.map(i => i.id));
-        const extraItems = parsed.foodMenuItems.filter((p: any) => !defaultIds.has(p.id));
-        mergedFoodMenuItems = [...mergedFoodMenuItems, ...extraItems];
+      // If version mismatch, discard old mock-seeded localStorage and start fresh
+      if (parsed.__version !== STORAGE_VERSION) {
+        localStorage.removeItem(STORAGE_KEY);
+        return getDefaults();
       }
-
-      return {
-        ...defaults,
-        ...parsed,
-        foodMenuItems: mergedFoodMenuItems,
-        settings: { ...defaults.settings, ...(parsed.settings || {}) },
-      };
+      return { ...getDefaults(), ...parsed };
     }
   } catch { /* ignore */ }
   return getDefaults();
@@ -586,7 +550,7 @@ interface DataContextType extends DataStore {
   updateOrderStatus: (id: string, status: OrderStatus) => void;
   adjustStock: (ingredientId: string, qty: number, type: "add" | "deduct") => void;
   updateSettings: (updates: Partial<Settings>) => void;
-  updateFoodRecipes: (recipes: typeof mockFoodRecipes) => void;
+  updateFoodRecipes: (recipes: Record<string, { ingredientId: string; qtyPerUnit: number }[]>) => void;
   updateLoyaltySettings: (updates: Partial<LoyaltySettings>) => void;
   resetToDefaults: () => void;
 }
@@ -605,7 +569,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   storeRef.current = store;
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(store));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...store, __version: STORAGE_VERSION }));
   }, [store]);
 
   const update = useCallback((updater: (prev: DataStore) => DataStore) => {
@@ -673,7 +637,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     update(prev => ({ ...prev, settings: { ...prev.settings, ...updates } }));
   }, [update]);
 
-  const updateFoodRecipes = useCallback((recipes: typeof mockFoodRecipes) => {
+  const updateFoodRecipes = useCallback((recipes: Record<string, { ingredientId: string; qtyPerUnit: number }[]>) => {
     update(prev => ({ ...prev, foodRecipes: recipes }));
   }, [update]);
 
