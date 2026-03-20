@@ -5,6 +5,7 @@ import { menuService } from "@/services/menu.service";
 import { customerService, type CustomerRecord } from "@/services/customer.service";
 import { userService } from "@/services/user.service";
 import { settingsService, type SettingsRecord } from "@/services/settings.service";
+import { inventoryService, type IngredientRecord } from "@/services/inventory.service";
 import { Search, Plus, Minus, X, ShoppingCart, FileText, Printer, ArrowLeft, Trash2, User, MapPin, Phone, Flame, Check, CreditCard, Banknote, Smartphone, Star, RotateCcw, Download, ClipboardList, AlertTriangle, UtensilsCrossed, CalendarClock, Calendar, Wifi, Timer, ChefHat, Tag, Zap, History, Monitor, BookOpen, StickyNote, Eye, Building2, Crown, CircleAlert, Bell, DollarSign, Package, Ban } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -77,6 +78,7 @@ const POS = () => {
   const [apiCustomers, setApiCustomers] = useState<CustomerRecord[]>([]);
   const [apiStaff, setApiStaff] = useState<any[]>([]);
   const [apiSettings, setApiSettings] = useState<SettingsRecord | null>(null);
+  const [apiLowStockItems, setApiLowStockItems] = useState<IngredientRecord[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Normalize an API OrderRecord to match the mock Order field names
@@ -159,6 +161,7 @@ const POS = () => {
     const STAFF_ROLES = ['Waiter', 'Floor Manager', 'Cashier', 'Manager', 'Admin'];
     userService.getUsers({ limit: 100 }).then(res => setApiStaff(res.data.filter((u: any) => u.status === 'active' && STAFF_ROLES.includes(u.role)))).catch(() => {});
     settingsService.getSettings().then(s => setApiSettings({ ...s, taxRate: Number(s.taxRate) })).catch(() => {});
+    inventoryService.getIngredients({ status: 'active', lowStock: true }).then(data => setApiLowStockItems(data)).catch(() => {});
   }, [loadApiOrders]);
 
   // Auto-refresh orders every 30s
@@ -407,9 +410,16 @@ const POS = () => {
     [allOrdersData]
   );
 
-  const lowStockItems = useMemo(() =>
-    ingredients.filter(i => i.status === "active" && i.currentStock <= i.lowStockLevel),
-    [ingredients]
+  const lowStockItems = useMemo(() => {
+    if (apiLowStockItems.length > 0) {
+      return apiLowStockItems.map(i => ({
+        ...i,
+        category: i.category?.name || '',
+        unit: i.unit?.name || '',
+      }));
+    }
+    return ingredients.filter((i: any) => i.status === "active" && i.currentStock <= i.lowStockLevel);
+  }, [apiLowStockItems, ingredients]
   );
 
   const activeStaff = useMemo(() => {
