@@ -6,6 +6,7 @@ import { customerService, type CustomerRecord } from "@/services/customer.servic
 import { userService } from "@/services/user.service";
 import { settingsService, type SettingsRecord } from "@/services/settings.service";
 import { inventoryService, type IngredientRecord } from "@/services/inventory.service";
+import { shiftService, type ShiftRecord } from "@/services/shift.service";
 import { Search, Plus, Minus, X, ShoppingCart, FileText, Printer, ArrowLeft, Trash2, User, MapPin, Phone, Flame, Check, CreditCard, Banknote, Smartphone, Star, RotateCcw, Download, ClipboardList, AlertTriangle, UtensilsCrossed, CalendarClock, Calendar, Wifi, Timer, ChefHat, Tag, Zap, History, Monitor, BookOpen, StickyNote, Eye, Building2, Crown, CircleAlert, Bell, DollarSign, Package, Ban } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -279,7 +280,8 @@ const POS = () => {
   const [loadedAdvanceMethod, setLoadedAdvanceMethod] = useState<string>("");
 
   // Cash Register
-  const [activeShift, setActiveShift] = useState<Shift | null>(null);
+  const [activeShift, setActiveShift] = useState<ShiftRecord | null>(null);
+  const [shiftLoading, setShiftLoading] = useState(true);
   const [showRegisterOpen, setShowRegisterOpen] = useState(true);
   const [showRegisterClose, setShowRegisterClose] = useState(false);
   const [openingCashInput, setOpeningCashInput] = useState("");
@@ -369,14 +371,18 @@ const POS = () => {
 
   const runningOrders = allOrdersData.filter((o) => o.status === "preparing" || o.status === "pending");
 
-  // Check for open shift on mount
+  // Check for open shift on mount via API
   useEffect(() => {
-    const openShift = shifts.find(s => s.status === "open");
-    if (openShift) {
-      setActiveShift(openShift);
-      setShowRegisterOpen(false);
-    }
-  }, [shifts]);
+    shiftService.getActiveShift()
+      .then(shift => {
+        if (shift) {
+          setActiveShift(shift);
+          setShowRegisterOpen(false);
+        }
+      })
+      .catch(() => { /* no active shift or network error — show open dialog */ })
+      .finally(() => setShiftLoading(false));
+  }, []);
 
   const shiftSales = useMemo(() => {
     if (!activeShift) return { total: 0, cash: 0, card: 0, online: 0, nonCash: 0, count: 0 };
@@ -2472,22 +2478,15 @@ const POS = () => {
           </div>
           <DialogFooter>
             <Button variant="outline" asChild><Link to="/">Cancel & Exit</Link></Button>
-            <Button className="gradient-primary text-primary-foreground" disabled={!openingCashInput} onClick={() => {
-              const newShift: Shift = {
-                id: crypto.randomUUID(),
-                shiftNumber: `SH-${String(shifts.length + 1).padStart(3, "0")}`,
-                cashierId: user?.id || "user-1",
-                cashierName: user?.name || "Admin",
-                openedAt: new Date().toISOString(),
-                openingCash: Number(openingCashInput),
-                status: "open",
-                totalSales: 0, totalCashSales: 0, totalCardSales: 0, totalOnlineSales: 0,
-                orderCount: 0, cancelledOrders: 0, totalExpenses: 0, expectedCash: Number(openingCashInput),
-              };
-              addItem("shifts", newShift);
-              setActiveShift(newShift);
-              setShowRegisterOpen(false);
-              toast.success("Register opened successfully");
+            <Button className="gradient-primary text-primary-foreground" disabled={!openingCashInput} onClick={async () => {
+              try {
+                const shift = await shiftService.openShift({ openingCash: Number(openingCashInput) });
+                setActiveShift(shift);
+                setShowRegisterOpen(false);
+                toast.success(`Register opened — Shift ${shift.shiftNumber}`);
+              } catch (err: any) {
+                toast.error(err?.message || "Failed to open register");
+              }
             }}>Open Register</Button>
           </DialogFooter>
         </DialogContent>
@@ -2526,19 +2525,25 @@ const POS = () => {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowRegisterClose(false)}>Continue Working</Button>
-            <Button className="gradient-primary text-primary-foreground" disabled={!closingCashInput} onClick={() => {
-              if (activeShift) {
-                updateDataItem("shifts", activeShift.id, {
-                  status: "closed", closedAt: new Date().toISOString(),
-                  closingCash: Number(closingCashInput),
-                  totalSales: shiftSales.total, totalCashSales: shiftSales.cash,
-                  totalCardSales: shiftSales.card, totalOnlineSales: shiftSales.online,
-                  orderCount: shiftSales.count, cashDifference: Number(closingCashInput) - ((activeShift.openingCash || 0) + shiftSales.cash),
-                  expectedCash: (activeShift.openingCash || 0) + shiftSales.cash, notes: closingNotes,
+            <Button className="gradient-primary text-primary-foreground" disabled={!closingCashInput || !activeShift} onClick={async () => {
+              if (!activeShift) return;
+              try {
+                await shiftService.closeShift(activeShift.id, {
+                  closingCash:      Number(closingCashInput),
+                  totalSales:       shiftSales.total,
+                  totalCashSales:   shiftSales.cash,
+                  totalCardSales:   shiftSales.card,
+                  totalOnlineSales: shiftSales.online,
+                  orderCount:       shiftSales.count,
+                  cancelledOrders:  0,
+                  totalExpenses:    0,
+                  notes:            closingNotes,
                 });
+                toast.success("Register closed successfully");
+                window.location.href = "/";
+              } catch (err: any) {
+                toast.error(err?.message || "Failed to close register");
               }
-              toast.success("Register closed successfully");
-              window.location.href = "/";
             }}>Close Register & Exit</Button>
           </DialogFooter>
         </DialogContent>
