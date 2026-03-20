@@ -4,6 +4,7 @@ import { orderService, type OrderRecord } from "@/services/order.service";
 import { menuService } from "@/services/menu.service";
 import { customerService, type CustomerRecord } from "@/services/customer.service";
 import { userService } from "@/services/user.service";
+import { settingsService, type SettingsRecord } from "@/services/settings.service";
 import { Search, Plus, Minus, X, ShoppingCart, FileText, Printer, ArrowLeft, Trash2, User, MapPin, Phone, Flame, Check, CreditCard, Banknote, Smartphone, Star, RotateCcw, Download, ClipboardList, AlertTriangle, UtensilsCrossed, CalendarClock, Calendar, Wifi, Timer, ChefHat, Tag, Zap, History, Monitor, BookOpen, StickyNote, Eye, Building2, Crown, CircleAlert, Bell, DollarSign, Package, Ban } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -75,6 +76,7 @@ const POS = () => {
   const [apiKitchens, setApiKitchens] = useState<any[]>([]);
   const [apiCustomers, setApiCustomers] = useState<CustomerRecord[]>([]);
   const [apiStaff, setApiStaff] = useState<any[]>([]);
+  const [apiSettings, setApiSettings] = useState<SettingsRecord | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Normalize an API OrderRecord to match the mock Order field names
@@ -156,6 +158,7 @@ const POS = () => {
     customerService.getCustomers({ limit: 500 }).then(res => setApiCustomers(res.data)).catch(() => {});
     const STAFF_ROLES = ['Waiter', 'Floor Manager', 'Cashier', 'Manager', 'Admin'];
     userService.getUsers({ limit: 100 }).then(res => setApiStaff(res.data.filter((u: any) => u.status === 'active' && STAFF_ROLES.includes(u.role)))).catch(() => {});
+    settingsService.getSettings().then(s => setApiSettings({ ...s, taxRate: Number(s.taxRate) })).catch(() => {});
   }, [loadApiOrders]);
 
   // Auto-refresh orders every 30s
@@ -495,7 +498,9 @@ const POS = () => {
     localStorage.setItem("ovenisto-pos-cart", JSON.stringify(customerDisplayData));
   }, [cart, orderType, tableNumber, selectedCustomer, orderDiscount]);
 
-  const taxRate = (settings?.taxRate || 16) / 100;
+  // Prefer API settings; fall back to localStorage settings
+  const effectiveSettings = apiSettings ?? settings;
+  const taxRate = (effectiveSettings?.taxRate || 16) / 100;
 
   // FIX 3A: Filter by tags
   const filteredMenu = useMemo(() => {
@@ -1090,7 +1095,7 @@ const POS = () => {
                   <Badge variant="secondary" className="text-[9px] bg-warning/10 text-warning gap-0.5 shrink-0"><Crown className="h-2.5 w-2.5" />VIP</Badge>
                 )}
                 {(selectedCustomerData as any).outstandingDue > 0 && (
-                  <Badge variant="secondary" className="text-[9px] bg-destructive/10 text-destructive shrink-0">Due: {settings.currency} {selectedCustomerData.outstandingDue.toLocaleString()}</Badge>
+                  <Badge variant="secondary" className="text-[9px] bg-destructive/10 text-destructive shrink-0">Due: {effectiveSettings.currency} {selectedCustomerData.outstandingDue.toLocaleString()}</Badge>
                 )}
               </div>
             )}
@@ -1309,7 +1314,7 @@ const POS = () => {
                     </div>
                     <p className="text-xs font-semibold truncate">{item.name}</p>
                     <div className="flex items-center justify-between mt-0.5">
-                      <p className="text-[11px] text-primary font-bold">{settings.currency} {item.price}</p>
+                      <p className="text-[11px] text-primary font-bold">{effectiveSettings.currency} {item.price}</p>
                       {(item as any).cookingTime > 0 && (
                         <span className="text-[9px] text-muted-foreground flex items-center gap-0.5"><Timer className="h-2.5 w-2.5" />{(item as any).cookingTime}m</span>
                       )}
@@ -1588,8 +1593,8 @@ const POS = () => {
           <div className="space-y-3 text-sm">
             <div className="text-center space-y-1">
               <Flame className="h-6 w-6 mx-auto text-primary" />
-              <p className="font-bold text-primary">{settings.restaurantName || "OVENISTO"}</p>
-              <p className="text-xs text-muted-foreground">{settings.address} — {settings.phone}</p>
+              <p className="font-bold text-primary">{effectiveSettings.restaurantName || "OVENISTO"}</p>
+              <p className="text-xs text-muted-foreground">{effectiveSettings.address} — {effectiveSettings.phone}</p>
             </div>
             <Separator />
             <p className="text-xs">Customer: <strong>{selectedCustomerData?.name || "Walk-in"}</strong> | Type: <strong>{orderType}</strong></p>
@@ -2346,11 +2351,11 @@ const POS = () => {
                   <p className="text-[10px] text-muted-foreground">Total Visits</p>
                 </Card>
                 <Card className="p-2.5 text-center">
-                  <p className="text-lg font-bold">{settings.currency} {customerHistory.totalSpent.toLocaleString()}</p>
+                  <p className="text-lg font-bold">{effectiveSettings.currency} {customerHistory.totalSpent.toLocaleString()}</p>
                   <p className="text-[10px] text-muted-foreground">Total Spent</p>
                 </Card>
                 <Card className="p-2.5 text-center">
-                  <p className="text-lg font-bold">{settings.currency} {customerHistory.avgBill.toLocaleString()}</p>
+                  <p className="text-lg font-bold">{effectiveSettings.currency} {customerHistory.avgBill.toLocaleString()}</p>
                   <p className="text-[10px] text-muted-foreground">Avg Bill</p>
                 </Card>
                 <Card className="p-2.5 text-center">
@@ -2361,7 +2366,7 @@ const POS = () => {
               {customerHistory.outstandingDue > 0 && (
                 <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-2.5 flex justify-between items-center">
                   <span className="text-sm font-medium text-destructive">Outstanding Due</span>
-                  <span className="font-bold text-destructive">{settings.currency} {customerHistory.outstandingDue.toLocaleString()}</span>
+                  <span className="font-bold text-destructive">{effectiveSettings.currency} {customerHistory.outstandingDue.toLocaleString()}</span>
                 </div>
               )}
               {customerHistory.topItems.length > 0 && (
@@ -2385,7 +2390,7 @@ const POS = () => {
                           <Badge variant="outline" className="text-[9px]">{o.type}</Badge>
                           <span className="text-muted-foreground">{o.date}</span>
                         </div>
-                        <span className="font-bold">{settings.currency} {o.total.toLocaleString()}</span>
+                        <span className="font-bold">{effectiveSettings.currency} {o.total.toLocaleString()}</span>
                       </div>
                     ))}
                   </div>
@@ -2409,8 +2414,8 @@ const POS = () => {
           <div className="space-y-3 text-sm">
             <div className="text-center space-y-1">
               <Flame className="h-6 w-6 mx-auto text-primary" />
-              <p className="font-bold text-primary">{settings.restaurantName || "OVENISTO"}</p>
-              <p className="text-xs text-muted-foreground">{settings.address} — {settings.phone}</p>
+              <p className="font-bold text-primary">{effectiveSettings.restaurantName || "OVENISTO"}</p>
+              <p className="text-xs text-muted-foreground">{effectiveSettings.address} — {effectiveSettings.phone}</p>
               <p className="text-xs font-semibold uppercase tracking-wider mt-2 bg-muted/60 py-1 rounded">QUOTATION</p>
             </div>
             <Separator />
@@ -2421,14 +2426,14 @@ const POS = () => {
             </div>
             <Table>
               <TableHeader><TableRow><TableHead className="text-xs">Item</TableHead><TableHead className="text-xs text-center">Qty</TableHead><TableHead className="text-xs text-right">Price</TableHead><TableHead className="text-xs text-right">Total</TableHead></TableRow></TableHeader>
-              <TableBody>{cart.map((c, i) => <TableRow key={i}><TableCell className="text-xs">{c.name}</TableCell><TableCell className="text-xs text-center">{c.qty}</TableCell><TableCell className="text-xs text-right">{settings.currency} {c.price}</TableCell><TableCell className="text-xs text-right">{settings.currency} {((c.price * c.qty) - c.discount).toLocaleString()}</TableCell></TableRow>)}</TableBody>
+              <TableBody>{cart.map((c, i) => <TableRow key={i}><TableCell className="text-xs">{c.name}</TableCell><TableCell className="text-xs text-center">{c.qty}</TableCell><TableCell className="text-xs text-right">{effectiveSettings.currency} {c.price}</TableCell><TableCell className="text-xs text-right">{effectiveSettings.currency} {((c.price * c.qty) - c.discount).toLocaleString()}</TableCell></TableRow>)}</TableBody>
             </Table>
             <div className="space-y-1 text-xs">
-              <div className="flex justify-between"><span>Subtotal</span><span>{settings.currency} {subtotal.toLocaleString()}</span></div>
-              {orderDiscount > 0 && <div className="flex justify-between"><span>Discount</span><span className="text-destructive">-{settings.currency} {orderDiscount.toLocaleString()}</span></div>}
-              <div className="flex justify-between"><span>Tax ({Math.round(taxRate * 100)}%)</span><span>{settings.currency} {tax.toLocaleString()}</span></div>
+              <div className="flex justify-between"><span>Subtotal</span><span>{effectiveSettings.currency} {subtotal.toLocaleString()}</span></div>
+              {orderDiscount > 0 && <div className="flex justify-between"><span>Discount</span><span className="text-destructive">-{effectiveSettings.currency} {orderDiscount.toLocaleString()}</span></div>}
+              <div className="flex justify-between"><span>Tax ({Math.round(taxRate * 100)}%)</span><span>{effectiveSettings.currency} {tax.toLocaleString()}</span></div>
               <Separator />
-              <div className="flex justify-between font-bold text-base"><span>Estimated Total</span><span className="text-primary">{settings.currency} {total.toLocaleString()}</span></div>
+              <div className="flex justify-between font-bold text-base"><span>Estimated Total</span><span className="text-primary">{effectiveSettings.currency} {total.toLocaleString()}</span></div>
             </div>
             <p className="text-[10px] text-muted-foreground text-center italic mt-2">This is a quotation only. Prices may vary. Valid for 24 hours.</p>
           </div>
@@ -2607,7 +2612,7 @@ const POS = () => {
                   <p>Order: <strong>{order.orderNumber}</strong></p>
                   <p>Customer: <strong>{order.customer}</strong></p>
                   <p>Status: <Badge variant="secondary" className="text-[10px]">{order.status}</Badge></p>
-                  <p>Total: <strong>{settings.currency} {order.total.toLocaleString()}</strong></p>
+                  <p>Total: <strong>{effectiveSettings.currency} {order.total.toLocaleString()}</strong></p>
                 </div>
                 {isSentToKitchen && (
                   <div className="bg-warning/10 border border-warning/30 rounded-lg p-2.5 text-xs text-warning font-medium">
