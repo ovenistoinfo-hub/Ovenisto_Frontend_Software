@@ -50,7 +50,7 @@ interface PaymentEntry {
   amount: number;
 }
 
-const orderTypes: OrderType[] = ["Dine In", "Take Away", "Delivery", "Walk-in", "Online", "Self Order", "Foodpanda"];
+const orderTypes: OrderType[] = ["Dine In", "Take Away", "Delivery"];
 const tableNumbers = Array.from({ length: 12 }, (_, i) => i + 1);
 
 const finalizeMethods = [
@@ -925,12 +925,11 @@ const POS = () => {
               <Badge className="h-5 px-1 text-[10px] bg-destructive text-destructive-foreground">{lowStockItems.length}</Badge>
             </Button>
           )}
-          {(["Online", "Vegetarian", "Beverage", "Combo", "Promo"] as const).map((tag, i) => {
-            const colors = ["bg-success/10 text-success border-success/20", "bg-success/10 text-success border-success/20", "bg-info/10 text-info border-info/20", "bg-warning/10 text-warning border-warning/20", "bg-destructive/10 text-destructive border-destructive/20"];
-            const isActive = tag === "Online" ? orderType === "Online" : activeTag === tag;
+          {(["Combo"] as const).map((tag) => {
+            const isActive = activeTag === tag;
             return (
               <Badge key={tag} variant="secondary" onClick={() => handleTagClick(tag)}
-                className={cn("text-[10px] cursor-pointer transition-all border px-2 py-0.5 rounded-full font-semibold shrink-0 hidden md:inline-flex", colors[i], isActive && "ring-2 ring-primary ring-offset-1 shadow-sm")}>
+                className={cn("text-[10px] cursor-pointer transition-all border px-2 py-0.5 rounded-full font-semibold shrink-0 hidden md:inline-flex bg-warning/10 text-warning border-warning/20", isActive && "ring-2 ring-primary ring-offset-1 shadow-sm")}>
                 {tag}
               </Badge>
             );
