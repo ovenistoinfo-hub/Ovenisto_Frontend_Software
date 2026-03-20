@@ -28,11 +28,11 @@ const Production = () => {
   const fetchData = useCallback(async () => {
     try {
       const [prodRes, itemsRes] = await Promise.all([
-        stockService.getProductions({ limit: 200 } as any),
+        stockService.getProductions({ limit: 200 }),
         menuService.getMenuItems(),
       ]);
       setList(prodRes.data);
-      setMenuItems(itemsRes.data);
+      setMenuItems(itemsRes);
     } catch (err: any) {
       toast.error(err.message || "Failed to load productions");
     } finally {

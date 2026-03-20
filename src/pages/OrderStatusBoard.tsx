@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Link } from "react-router-dom";
-import type { Order, OrderStatus } from "@/data/mock-data";
+import type { OrderStatus } from "@/data/mock-data";
 import { ArrowLeft, Flame, RefreshCw, Bell, Clock, BarChart3, TrendingUp, ShoppingBag, AlertCircle, ChefHat, CheckCircle2, XCircle, Timer } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -14,54 +14,87 @@ import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useData } from "@/contexts/DataContext";
+import { orderService } from "@/services/order.service";
 
-const statusConfig: Record<OrderStatus, { label: string; bg: string; text: string; border: string; icon: typeof Clock; pill: string }> = {
+const statusConfig: Record<string, { label: string; bg: string; text: string; border: string; icon: typeof Clock; pill: string }> = {
   pending:   { label: "Pending",   bg: "bg-warning/10",     text: "text-warning",     border: "border-l-warning",     icon: AlertCircle,   pill: "bg-warning/10 text-warning border-warning/30" },
   preparing: { label: "Preparing", bg: "bg-accent/10",      text: "text-accent",      border: "border-l-accent",      icon: ChefHat,       pill: "bg-accent/10 text-accent border-accent/30" },
   ready:     { label: "Ready",     bg: "bg-success/10",     text: "text-success",     border: "border-l-success",     icon: CheckCircle2,  pill: "bg-success/10 text-success border-success/30" },
   completed: { label: "Completed", bg: "bg-info/10",        text: "text-info",        border: "border-l-info",        icon: CheckCircle2,  pill: "bg-info/10 text-info border-info/30" },
   cancelled: { label: "Cancelled", bg: "bg-destructive/10", text: "text-destructive", border: "border-l-destructive", icon: XCircle,       pill: "bg-destructive/10 text-destructive border-destructive/30" },
+  scheduled: { label: "Scheduled", bg: "bg-info/10",        text: "text-info",        border: "border-l-info",        icon: Clock,         pill: "bg-info/10 text-info border-info/30" },
 };
 
 const allStatuses: (OrderStatus | "all")[] = ["all", "pending", "preparing", "ready", "completed", "cancelled"];
 const nextActionLabel: Record<string, string> = { pending: "Start Preparing", preparing: "Mark Ready", ready: "Mark Completed" };
 const nextActionColors: Record<string, string> = { pending: "bg-warning hover:bg-warning/90 text-warning-foreground", preparing: "gradient-primary text-primary-foreground", ready: "bg-success hover:bg-success/90 text-success-foreground" };
 
+const normalize = (o: any) => ({
+  ...o,
+  customer: o.customerName || o.customer || "Walk-in",
+  staff: o.staffName || o.staff || "",
+  phone: o.phone || "",
+  total: Number(o.total),
+  date: o.date ? new Date(o.date).toISOString().split("T")[0] : "",
+  items: (o.items || []).map((i: any) => ({ ...i, price: Number(i.price) })),
+});
+
 const OrderStatusBoard = () => {
-  const { orders: allOrders, updateOrderStatus, foodMenuItems } = useData();
+  const { foodMenuItems } = useData();
+  const [allOrders, setAllOrders] = useState<any[]>([]);
   const [filter, setFilter] = useState<OrderStatus | "all">("all");
   const [time, setTime] = useState(new Date());
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [soundAlert, setSoundAlert] = useState(false);
-  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
   const [mounted, setMounted] = useState(false);
+
+  const loadOrders = useCallback(async () => {
+    try {
+      const res = await orderService.getOrders({ limit: 200 });
+      setAllOrders((res.data || []).map(normalize));
+    } catch {}
+  }, []);
 
   useEffect(() => { setMounted(true); }, []);
   useEffect(() => { const t = setInterval(() => setTime(new Date()), 1000); return () => clearInterval(t); }, []);
+  useEffect(() => {
+    loadOrders();
+    const t = setInterval(loadOrders, 15000);
+    return () => clearInterval(t);
+  }, [loadOrders]);
 
-  const displayed = filter === "all" ? allOrders : allOrders.filter(o => o.status === filter);
+  const displayed = filter === "all" ? allOrders : allOrders.filter((o: any) => o.status === filter);
   const counts = {
     all: allOrders.length,
-    pending: allOrders.filter(o => o.status === "pending").length,
-    preparing: allOrders.filter(o => o.status === "preparing").length,
-    ready: allOrders.filter(o => o.status === "ready").length,
-    completed: allOrders.filter(o => o.status === "completed").length,
-    cancelled: allOrders.filter(o => o.status === "cancelled").length,
+    pending: allOrders.filter((o: any) => o.status === "pending").length,
+    preparing: allOrders.filter((o: any) => o.status === "preparing").length,
+    ready: allOrders.filter((o: any) => o.status === "ready").length,
+    completed: allOrders.filter((o: any) => o.status === "completed").length,
+    cancelled: allOrders.filter((o: any) => o.status === "cancelled").length,
   };
 
-  const todayOrders = allOrders.filter(o => o.date === new Date().toISOString().split("T")[0]);
-  const todayRevenue = todayOrders.reduce((s, o) => s + o.total, 0);
+  const todayStr = new Date().toISOString().split("T")[0];
+  const todayOrders = allOrders.filter((o: any) => o.date === todayStr);
+  const todayRevenue = todayOrders.reduce((s: number, o: any) => s + o.total, 0);
 
-  const advanceStatus = (order: Order) => {
+  const advanceStatus = async (order: any) => {
     const next: Record<string, OrderStatus> = { pending: "preparing", preparing: "ready", ready: "completed" };
-    const nextStatus = next[order.status];
+    const nextStatus = next[order.status] as OrderStatus;
     if (!nextStatus) return;
-    updateOrderStatus(order.id, nextStatus);
-    toast.success(`${order.orderNumber} moved to ${statusConfig[nextStatus].label}`);
+    // optimistic update
+    setAllOrders(prev => prev.map(o => o.id === order.id ? { ...o, status: nextStatus } : o));
     if (selectedOrder?.id === order.id) setSelectedOrder({ ...order, status: nextStatus });
+    try {
+      await orderService.updateOrderStatus(order.id, nextStatus);
+      toast.success(`${order.orderNumber} moved to ${statusConfig[nextStatus].label}`);
+    } catch {
+      loadOrders();
+      toast.error("Update failed");
+    }
   };
 
-  const getElapsed = (order: Order) => {
+  const getElapsed = (order: any) => {
     try {
       const [h, m] = order.time.replace(/ (AM|PM)/, "").split(":").map(Number);
       const isPM = order.time.includes("PM");
@@ -73,7 +106,7 @@ const OrderStatusBoard = () => {
     } catch { return "—"; }
   };
 
-  const getCookingInfo = (order: Order) => {
+  const getCookingInfo = (order: any) => {
     const maxCookTime = Math.max(...order.items.map(i => {
       const ct = (i as any).cookingTime;
       if (ct) return ct;
@@ -154,7 +187,7 @@ const OrderStatusBoard = () => {
                   : "bg-card border-border/50 text-muted-foreground hover:text-foreground hover:border-border"
               )}
             >
-              {s !== "all" && (() => { const Icon = statusConfig[s as OrderStatus].icon; return <Icon className="h-3 w-3" />; })()}
+              {s !== "all" && (() => { const Icon = statusConfig[s]?.icon; return Icon ? <Icon className="h-3 w-3" /> : null; })()}
               {cfg.label}
               <span className={cn("rounded-full px-1.5 py-0.5 text-[10px] font-bold ml-0.5", isActive ? "bg-background/20" : "bg-muted")}>
                 {counts[s]}

@@ -1,5 +1,9 @@
-import React, { useState, useMemo, useEffect, useRef } from "react";
+import React, { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import type { OrderItem, Order, OrderType, CustomerType, OrderModificationLog } from "@/data/mock-data";
+import { orderService, type OrderRecord } from "@/services/order.service";
+import { menuService } from "@/services/menu.service";
+import { customerService, type CustomerRecord } from "@/services/customer.service";
+import { userService } from "@/services/user.service";
 import { Search, Plus, Minus, X, ShoppingCart, FileText, Printer, ArrowLeft, Trash2, User, MapPin, Phone, Flame, Check, CreditCard, Banknote, Smartphone, Star, RotateCcw, Download, ClipboardList, AlertTriangle, UtensilsCrossed, CalendarClock, Calendar, Wifi, Timer, ChefHat, Tag, Zap, History, Monitor, BookOpen, StickyNote, Eye, Building2, Crown, CircleAlert, Bell, DollarSign, Package, Ban } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -60,8 +64,120 @@ const finalizeMethods = [
 const quickDenominations = [10, 20, 50, 100, 500, 1000];
 
 const POS = () => {
-  const { orders: allOrdersData, customers: customersList, foodMenuItems, foodCategories, modifiers, kitchens, ingredients, addOrder, addItem, updateItem: updateDataItem, shifts, settings, users, riders: deliveryRiders, deals, reservations, loyaltyMembers } = useData();
+  const { orders: localOrdersData, customers: customersList, foodMenuItems: localFoodMenuItems, foodCategories: localFoodCategories, modifiers: localModifiers, kitchens: localKitchens, ingredients, addItem, updateItem: updateDataItem, shifts, settings, users, riders: deliveryRiders, deals, reservations, loyaltyMembers } = useData();
   const { user } = useAuth();
+
+  // ── API data state (overrides localStorage) ──
+  const [apiOrders, setApiOrders] = useState<any[]>([]);
+  const [apiMenuItems, setApiMenuItems] = useState<any[]>([]);
+  const [apiCategories, setApiCategories] = useState<any[]>([]);
+  const [apiModifiers, setApiModifiers] = useState<any[]>([]);
+  const [apiKitchens, setApiKitchens] = useState<any[]>([]);
+  const [apiCustomers, setApiCustomers] = useState<CustomerRecord[]>([]);
+  const [apiStaff, setApiStaff] = useState<any[]>([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Normalize an API OrderRecord to match the mock Order field names
+  const normalizeApiOrder = useCallback((o: OrderRecord): any => ({
+    ...o,
+    customer: o.customerName || 'Walk-in',
+    staff: o.staffName || '',
+    phone: o.phone || '',
+    date: o.date ? new Date(o.date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+    time: o.time || '',
+    items: (o.items || []).map((i: any) => ({
+      id: i.id,
+      name: i.name,
+      price: Number(i.price),
+      qty: i.qty,
+      discount: Number(i.discount),
+      modifiers: i.modifiers || [],
+      cookingTime: i.cookingTime || 0,
+      notes: i.notes || '',
+    })),
+    subtotal: Number(o.subtotal),
+    discount: Number(o.discount),
+    tax: Number(o.tax),
+    total: Number(o.total),
+    advancePayment: Number(o.advancePayment),
+    tableNumber: o.tableNumber ?? undefined,
+    deliveryAddress: o.deliveryAddress ?? undefined,
+  }), []);
+
+  const allOrdersData: Order[] = apiOrders.length > 0 ? apiOrders : localOrdersData;
+
+  // Normalized menu items: convert category object → string, ensure all prices are numbers
+  const foodMenuItems = useMemo(() => {
+    const source = apiMenuItems.length > 0 ? apiMenuItems : localFoodMenuItems;
+    return source.map((item: any) => ({
+      ...item,
+      category: typeof item.category === 'object' && item.category !== null
+        ? item.category.name || ''
+        : item.category || '',
+      price: Number(item.price),
+      variants: (item.variants || []).map((v: any) => ({
+        ...v,
+        price: Number(v.price),
+      })),
+    }));
+  }, [apiMenuItems, localFoodMenuItems]);
+
+  const foodCategories = apiCategories.length > 0 ? apiCategories : localFoodCategories;
+  const modifiers = useMemo(() => {
+    const src = apiModifiers.length > 0 ? apiModifiers : localModifiers;
+    return src.map((m: any) => ({ ...m, price: Number(m.price) }));
+  }, [apiModifiers, localModifiers]);
+  // Normalize kitchens: API uses assignedCategories, mock uses categories
+  const kitchens = useMemo(() => {
+    const source = apiKitchens.length > 0 ? apiKitchens : localKitchens;
+    return source.map((k: any) => ({
+      ...k,
+      categories: k.categories ?? k.assignedCategories ?? [],
+      assignedCategories: k.assignedCategories ?? k.categories ?? [],
+    }));
+  }, [apiKitchens, localKitchens]);
+
+  const loadApiOrders = useCallback(async () => {
+    try {
+      const { data } = await orderService.getOrders({ limit: 200 });
+      setApiOrders(data.map(normalizeApiOrder));
+    } catch {
+      // fallback to localOrdersData
+    }
+  }, [normalizeApiOrder]);
+
+  useEffect(() => {
+    // Load all data from API on mount
+    loadApiOrders();
+    menuService.getMenuItems({ limit: 500 }).then(data => setApiMenuItems(data)).catch(() => {});
+    menuService.getCategories('active').then(data => setApiCategories(data)).catch(() => {});
+    menuService.getModifiers().then(data => setApiModifiers(data)).catch(() => {});
+    orderService.getKitchens().then(data => setApiKitchens(data)).catch(() => {});
+    customerService.getCustomers({ limit: 500 }).then(res => setApiCustomers(res.data)).catch(() => {});
+    const STAFF_ROLES = ['Waiter', 'Floor Manager', 'Cashier', 'Manager', 'Admin'];
+    userService.getUsers({ limit: 100 }).then(res => setApiStaff(res.data.filter((u: any) => u.status === 'active' && STAFF_ROLES.includes(u.role)))).catch(() => {});
+  }, [loadApiOrders]);
+
+  // Auto-refresh orders every 30s
+  useEffect(() => {
+    const interval = setInterval(loadApiOrders, 30000);
+    return () => clearInterval(interval);
+  }, [loadApiOrders]);
+
+  // Update order status via API + optimistic local update
+  const handleOrderStatusUpdate = useCallback(async (id: string, status: string) => {
+    // Record the exact moment an order is accepted into "preparing"
+    if (status === "preparing") {
+      posPreparingAtMap.current[id] = Date.now();
+    }
+    setApiOrders(prev => prev.map(o => o.id === id ? { ...o, status } : o));
+    try {
+      await orderService.updateOrderStatus(id, status);
+    } catch {
+      // revert on failure
+      loadApiOrders();
+    }
+  }, [loadApiOrders]);
 
   const [cart, setCart] = useState<CartItem[]>([]);
   const [activeCategory, setActiveCategory] = useState("All");
@@ -110,6 +226,10 @@ const POS = () => {
   const [sendSMS, setSendSMS] = useState(false);
   const [showCartDetails, setShowCartDetails] = useState(false);
   const orderStartTime = useRef<number>(Date.now());
+  // Tracks when each order was accepted (transitioned to "preparing") in this session
+  const posPreparingAtMap = useRef<Record<string, number>>({});
+  // Clock that ticks every second while Order Status sheet is open, for live countdowns
+  const [statusClock, setStatusClock] = useState(Date.now());
 
   // Drafts
   const [drafts, setDrafts] = useState<DraftOrder[]>([]);
@@ -124,6 +244,13 @@ const POS = () => {
 
   // Order Status
   const [showOrderStatus, setShowOrderStatus] = useState(false);
+
+  // Tick statusClock every second while Order Status sheet is open
+  useEffect(() => {
+    if (!showOrderStatus) return;
+    const interval = setInterval(() => setStatusClock(Date.now()), 1000);
+    return () => clearInterval(interval);
+  }, [showOrderStatus]);
 
   // Low Stock
   const [showLowStock, setShowLowStock] = useState(false);
@@ -248,7 +375,7 @@ const POS = () => {
   const shiftSales = useMemo(() => {
     if (!activeShift) return { total: 0, cash: 0, card: 0, online: 0, nonCash: 0, count: 0 };
     const shiftOrders = allOrdersData.filter(o => {
-      const orderDate = new Date(`${o.date}T00:00:00`);
+      const orderDate = new Date(o.date);
       const shiftStart = new Date(activeShift.openedAt);
       return orderDate >= new Date(shiftStart.toISOString().split("T")[0]) && o.status !== "cancelled";
     });
@@ -282,14 +409,15 @@ const POS = () => {
     [ingredients]
   );
 
-  const activeStaff = useMemo(() =>
-    users.filter(u => u.status === "active" && (u.role === "Waiter" || u.role === "waiter")),
-    [users]
-  );
+  const activeStaff = useMemo(() => {
+    const STAFF_ROLES = ['Waiter', 'Floor Manager', 'Cashier', 'Manager', 'Admin'];
+    if (apiStaff.length > 0) return apiStaff;
+    return users.filter(u => u.status === "active" && STAFF_ROLES.includes(u.role));
+  }, [apiStaff, users]);
 
   const selfOnlineOrders = useMemo(() =>
     allOrdersData
-      .filter(o => (o.type === "Online" || o.staff === "Self Order" || o.staff === "Website") && o.status !== "completed" && o.status !== "cancelled" && o.status !== "scheduled")
+      .filter(o => (o.type === "Online" || o.type === "Self Order" || (o as any).orderSource === "self-order" || (o as any).orderSource === "website") && o.status !== "completed" && o.status !== "cancelled" && o.status !== "scheduled")
       .sort((a, b) => b.date.localeCompare(a.date) || b.time.localeCompare(a.time)),
     [allOrdersData]
   );
@@ -317,10 +445,13 @@ const POS = () => {
     return { available: available.length, unavailable: unavailable.length, total: foodMenuItems.length };
   }, [foodMenuItems]);
 
+  // Prefer API customers; fall back to localStorage
+  const effectiveCustomers = apiCustomers.length > 0 ? apiCustomers : customersList;
+
   // Customer history
   const customerHistory = useMemo(() => {
     if (!selectedCustomer) return null;
-    const cust = customersList.find(c => c.id === selectedCustomer);
+    const cust = effectiveCustomers.find((c: any) => c.id === selectedCustomer);
     if (!cust) return null;
     const custOrders = allOrdersData.filter(o => o.customer === cust.name);
     const avgBill = custOrders.length > 0 ? Math.round(custOrders.reduce((s, o) => s + o.total, 0) / custOrders.length) : 0;
@@ -353,7 +484,7 @@ const POS = () => {
       cart: cart.map(item => ({ name: item.name, qty: item.qty, price: item.price, discount: item.discount, modifiers: item.modifiers })),
       orderType,
       tableNumber,
-      customerName: selectedCustomer ? customersList.find(c => c.id === selectedCustomer)?.name || "Walk-in" : "Walk-in",
+      customerName: selectedCustomer ? effectiveCustomers.find(c => c.id === selectedCustomer)?.name || "Walk-in" : "Walk-in",
       subtotal: itemsSubtotal,
       orderDiscount,
       tax,
@@ -377,11 +508,10 @@ const POS = () => {
     return items;
   }, [activeCategory, search, activeTag, foodMenuItems]);
 
-  const filteredCustomers = customersList.filter((c) =>
-    c.name.toLowerCase().includes(customerSearch.toLowerCase()) || c.phone.includes(customerSearch)
+  const filteredCustomers = effectiveCustomers.filter((c: any) =>
+    c.name.toLowerCase().includes(customerSearch.toLowerCase()) || (c.phone || '').includes(customerSearch)
   );
-
-  const selectedCustomerData = customersList.find((c) => c.id === selectedCustomer);
+  const selectedCustomerData = effectiveCustomers.find((c: any) => c.id === selectedCustomer);
 
   const handleTagClick = (tag: string) => {
     if (tag === "Online") { setOrderType("Online"); setActiveTag(null); }
@@ -473,7 +603,7 @@ const POS = () => {
     if (!order) return;
     setCart(order.items.map((item) => ({ ...item, id: `${item.id}-${Date.now()}` })));
     setOrderType(order.type);
-    setSelectedCustomer(customersList.find((c) => c.name === order.customer)?.id || "");
+    setSelectedCustomer(effectiveCustomers.find((c) => c.name === order.customer)?.id || "");
     if (order.tableNumber) setTableNumber(order.tableNumber);
     if (order.deliveryAddress) setDeliveryAddress(order.deliveryAddress);
     setLoadedOrderId(orderId);
@@ -546,7 +676,7 @@ const POS = () => {
 
   const removePaymentEntry = (id: string) => setPaymentEntries(prev => prev.filter(e => e.id !== id));
 
-  const handleFinalizeSubmit = () => {
+  const handleFinalizeSubmit = async () => {
     if (totalPaid < total) {
       if (!selectedCustomer || selectedCustomer === "") {
         toast.error("Payment incomplete. Select a customer for credit or pay full amount.");
@@ -554,7 +684,8 @@ const POS = () => {
       }
     }
 
-    const newOrderNumber = `ORD-${String(allOrdersData.length + 1).padStart(3, "0")}`;
+    setIsSubmitting(true);
+
     let payMethodStr = paymentEntries.length > 0
       ? paymentEntries.map(e => `${e.method}: Rs.${e.amount}`).join(", ")
       : finalizeMethod;
@@ -562,37 +693,50 @@ const POS = () => {
       payMethodStr = `Advance (${loadedAdvanceMethod}): Rs.${loadedAdvancePayment}, ${payMethodStr}`;
     }
 
-    const newOrder: Order = {
-      id: crypto.randomUUID(), orderNumber: newOrderNumber,
-      customer: selectedCustomerData?.name || "Walk-in",
-      phone: selectedCustomerData?.phone || deliveryPhone || "",
+    const orderPayload = {
+      customerId: selectedCustomer || undefined,
+      customerName: selectedCustomerData?.name || "Walk-in",
+      phone: (selectedCustomerData as any)?.phone || deliveryPhone || undefined,
       type: orderType,
-      items: cart.map((c) => ({ id: c.id, name: c.name, price: c.price, qty: c.qty, discount: c.discount, modifiers: c.modifiers, cookingTime: c.cookingTime || 0, notes: c.notes })),
+      items: cart.map((c) => ({
+        menuItemId: (c as any).menuItemId || null,
+        name: c.name, price: c.price, qty: c.qty, discount: c.discount,
+        modifiers: c.modifiers || [], cookingTime: c.cookingTime || null, notes: c.notes || null,
+      })),
       subtotal: itemsSubtotal, discount: orderDiscount, tax, total,
-      status: "pending", paymentMethod: payMethodStr,
-      date: new Date().toISOString().split("T")[0],
-      time: new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }),
-      staff: selectedStaff,
-      tableNumber: orderType === "Dine In" ? tableNumber || undefined : undefined,
+      paymentMethod: payMethodStr,
+      staffName: selectedStaff,
+      tableNumber: orderType === "Dine In" ? tableNumber || null : null,
       deliveryAddress: orderType === "Delivery" ? deliveryAddress : undefined,
-      rider: orderType === "Delivery" ? rider : undefined,
       isUrgent,
       customerType: (selectedCustomerData as any)?.customerType || "walk-in",
-      orderSource: "pos",
+      orderSource: "pos" as const,
     };
 
-    if (loadedOrderId) {
-      const { updateItem: updateDataItem } = useDataRef.current;
-      updateDataItem("orders", loadedOrderId, { ...newOrder, id: loadedOrderId, orderNumber: allOrdersData.find((x) => x.id === loadedOrderId)?.orderNumber || newOrderNumber });
-      toast.success(`Order updated!`);
-    } else {
-      addOrder(newOrder);
-      toast.success(`Order ${newOrderNumber} placed! Total: Rs. ${total.toLocaleString()}`);
+    let finalOrderNumber = "";
+
+    try {
+      if (loadedOrderId) {
+        await orderService.updateOrder(loadedOrderId, orderPayload);
+        finalOrderNumber = (allOrdersData as any[]).find((x) => x.id === loadedOrderId)?.orderNumber || loadedOrderId;
+        toast.success(`Order updated!`);
+      } else {
+        const created = await orderService.createOrder(orderPayload);
+        finalOrderNumber = created.orderNumber;
+        setApiOrders(prev => [normalizeApiOrder(created), ...prev]);
+        toast.success(`Order ${finalOrderNumber} placed! Total: Rs. ${total.toLocaleString()}`);
+      }
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to save order");
+      setIsSubmitting(false);
+      return;
+    } finally {
+      setIsSubmitting(false);
     }
 
     localStorage.setItem("ovenisto-pos-cart", JSON.stringify({ cart: [], status: "completed", timestamp: Date.now() }));
 
-    setKotOrderNumber(loadedOrderId ? allOrdersData.find((o) => o.id === loadedOrderId)?.orderNumber || newOrderNumber : newOrderNumber);
+    setKotOrderNumber(finalOrderNumber);
     setKotItems([...cart]);
     setKotOrderType(orderType);
     setKotTableNumber(tableNumber);
@@ -600,48 +744,46 @@ const POS = () => {
     setShowFinalizeSale(false);
     setShowKOT(true);
     cancelOrder();
+    loadApiOrders();
   };
 
-  // Store a ref to updateItem for use in handleFinalizeSubmit
-  const useDataRef = useRef({ updateItem: updateDataItem });
-  useDataRef.current = { updateItem: updateDataItem };
-
-  const handleCreateFutureSale = () => {
+  const handleCreateFutureSale = async () => {
     if (cart.length === 0) { toast.error("Add items to cart first"); return; }
     if (!selectedCustomer) { toast.error("Select a customer for future sale"); return; }
     if (!futureScheduledDate) { toast.error("Select a scheduled date"); return; }
     if (!futureScheduledTime) { toast.error("Select a scheduled time"); return; }
 
-    const newOrderNumber = `ORD-${String(allOrdersData.length + 1).padStart(3, "0")}`;
-
-    const futureOrder: Order = {
-      id: crypto.randomUUID(),
-      orderNumber: newOrderNumber,
-      customer: selectedCustomerData?.name || "Walk-in",
-      phone: selectedCustomerData?.phone || deliveryPhone || "",
-      type: orderType,
-      items: cart.map(c => ({ id: c.id, name: c.name, price: c.price, qty: c.qty, discount: c.discount, modifiers: c.modifiers, cookingTime: c.cookingTime || 0 })),
-      subtotal: itemsSubtotal,
-      discount: orderDiscount,
-      tax,
-      total,
-      status: "scheduled",
-      paymentMethod: futureAdvancePayment > 0 ? `Advance (${futureAdvanceMethod}): Rs.${futureAdvancePayment}` : "Pending",
-      date: new Date().toISOString().split("T")[0],
-      time: new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }),
-      staff: selectedStaff,
-      tableNumber: orderType === "Dine In" ? tableNumber || undefined : undefined,
-      deliveryAddress: orderType === "Delivery" ? deliveryAddress : undefined,
-      rider: orderType === "Delivery" ? rider : undefined,
-      isFutureSale: true,
-      scheduledDate: futureScheduledDate,
-      scheduledTime: futureScheduledTime,
-      futureNotes: futureNotes,
-      advancePayment: futureAdvancePayment,
-    };
-
-    addOrder(futureOrder);
-    toast.success(`Future order ${newOrderNumber} booked for ${futureScheduledDate} at ${futureScheduledTime}`);
+    try {
+      const created = await orderService.createOrder({
+        customerName: selectedCustomerData?.name || "Walk-in",
+        phone: selectedCustomerData?.phone || deliveryPhone || undefined,
+        type: orderType,
+        items: cart.map(c => ({
+          menuItemId: (c as any).menuItemId || null,
+          name: c.name, price: c.price, qty: c.qty, discount: c.discount,
+          modifiers: c.modifiers || [], cookingTime: c.cookingTime || null,
+        })),
+        subtotal: itemsSubtotal,
+        discount: orderDiscount,
+        tax,
+        total,
+        paymentMethod: futureAdvancePayment > 0 ? `Advance (${futureAdvanceMethod}): Rs.${futureAdvancePayment}` : "Pending",
+        staffName: selectedStaff,
+        tableNumber: orderType === "Dine In" ? tableNumber || null : null,
+        deliveryAddress: orderType === "Delivery" ? deliveryAddress : undefined,
+        isFutureSale: true,
+        scheduledDate: futureScheduledDate,
+        scheduledTime: futureScheduledTime,
+        futureNotes,
+        advancePayment: futureAdvancePayment,
+        orderSource: "pos",
+      });
+      setApiOrders(prev => [normalizeApiOrder(created), ...prev]);
+      toast.success(`Future order ${created.orderNumber} booked for ${futureScheduledDate} at ${futureScheduledTime}`);
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to create future order");
+      return;
+    }
 
     setShowCreateFutureSale(false);
     setFutureScheduledDate("");
@@ -650,12 +792,13 @@ const POS = () => {
     setFutureAdvancePayment(0);
     setFutureAdvanceMethod("Cash");
     cancelOrder();
+    loadApiOrders();
   };
 
   const loadFutureOrder = (order: Order) => {
     setCart(order.items.map(item => ({ ...item, id: `${item.id}-${Date.now()}` })));
     if (order.customer !== "Walk-in") {
-      const cust = customersList.find(c => c.name === order.customer);
+      const cust = effectiveCustomers.find(c => c.name === order.customer);
       if (cust) setSelectedCustomer(cust.id);
     }
     setOrderType(order.type);
@@ -674,38 +817,36 @@ const POS = () => {
       setLoadedAdvanceMethod("");
     }
 
-    updateDataItem("orders", order.id, { status: "pending", isFutureSale: false });
+    handleOrderStatusUpdate(order.id, "pending");
 
     setShowFutureSale(false);
     toast.success(`Future order ${order.orderNumber} loaded \u2014 Advance paid: Rs.${order.advancePayment || 0}`);
   };
 
-  const addNewCustomer = () => {
+  const addNewCustomer = async () => {
     if (!newCustomer.name.trim() || !newCustomer.phone.trim()) { toast.error("Name and phone required"); return; }
-    const id = crypto.randomUUID();
-    const customer = {
-      id,
-      name: newCustomer.name.trim(),
-      phone: newCustomer.phone.trim(),
-      email: newCustomer.email.trim(),
-      totalOrders: 0,
-      totalSpent: 0,
-      outstandingDue: 0,
-      lastOrder: "-",
-      address: newCustomer.address.trim(),
-      customerType: newCustomer.customerType,
-    };
-    addItem("customers", customer);
-    setSelectedCustomer(id);
-    toast.success(`Customer ${customer.name} added`);
-    setShowCustomerAdd(false);
-    setNewCustomer({ name: "", phone: "", email: "", address: "", customerType: "walk-in" });
+    try {
+      const created = await customerService.createCustomer({
+        name: newCustomer.name.trim(),
+        phone: newCustomer.phone.trim(),
+        email: newCustomer.email.trim() || undefined,
+        address: newCustomer.address.trim() || undefined,
+        customerType: newCustomer.customerType,
+      });
+      setApiCustomers(prev => [...prev, created]);
+      setSelectedCustomer(created.id);
+      toast.success(`Customer ${created.name} added`);
+      setShowCustomerAdd(false);
+      setNewCustomer({ name: "", phone: "", email: "", address: "", customerType: "walk-in" });
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to add customer");
+    }
   };
 
   const handleCustomerSelect = (customerId: string) => {
     const actualId = customerId === "walk-in" ? "" : customerId;
     setSelectedCustomer(actualId);
-    const cust = customersList.find((c) => c.id === actualId);
+    const cust = effectiveCustomers.find((c) => c.id === actualId);
     if (cust && orderType === "Delivery") {
       setDeliveryAddress(cust.address);
       setDeliveryPhone(cust.phone);
@@ -1176,7 +1317,18 @@ const POS = () => {
                         )}
                         <div>
                           <p className="font-semibold text-sm">{item.name}</p>
-                          <p className="text-primary font-bold text-sm">Rs. {selectedVariant ? (item as any).variants?.find((v: any) => v.name === selectedVariant)?.price || item.price : item.price}</p>
+                          {(() => {
+                            const basePrice = selectedVariant
+                              ? (item as any).variants?.find((v: any) => v.name === selectedVariant)?.price ?? item.price
+                              : item.price;
+                            const modCost = selectedModifiers.reduce((s, mId) => s + (modifiers.find(m => m.id === mId)?.price || 0), 0);
+                            return (
+                              <p className="text-primary font-bold text-sm">
+                                Rs. {basePrice + modCost}
+                                {modCost > 0 && <span className="text-[10px] text-muted-foreground font-normal ml-1">(+{modCost} extras)</span>}
+                              </p>
+                            );
+                          })()}
                         </div>
                       </div>
                       {/* Variants */}
@@ -1229,7 +1381,7 @@ const POS = () => {
                           }, 0);
                           const variantLabel = selectedVariant ? ` (${selectedVariant})` : "";
                           const modLabels = selectedModifiers.map((mId) => modifiers.find((m) => m.id === mId)?.name || "");
-                          setCart(prev => [...prev, { id: `${item.id}-${Date.now()}`, name: `${item.name}${variantLabel}`, price: variantPrice + modifiersCost, qty: 1, discount: 0, modifiers: modLabels }]);
+                          setCart(prev => [...prev, { id: `${item.id}-${Date.now()}`, name: `${item.name}${variantLabel}`, price: variantPrice + modifiersCost, qty: 1, discount: 0, modifiers: modLabels, cookingTime: (item as any).cookingTime || 0, menuItemId: item.id }]);
                           setExpandedItemId(null);
                           setPendingItem(null);
                           setSelectedVariant(null);
@@ -1411,9 +1563,11 @@ const POS = () => {
             </div>
           </div>
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setShowFinalizeSale(false)}>Cancel</Button>
-            <Button className="gradient-primary text-primary-foreground" onClick={handleFinalizeSubmit}>
-              <Check className="h-4 w-4 mr-1" />Confirm Payment
+            <Button variant="outline" onClick={() => setShowFinalizeSale(false)} disabled={isSubmitting}>Cancel</Button>
+            <Button className="gradient-primary text-primary-foreground min-w-[150px]" onClick={handleFinalizeSubmit} disabled={isSubmitting}>
+              {isSubmitting
+                ? <><span className="h-4 w-4 mr-2 border-2 border-white/30 border-t-white rounded-full animate-spin inline-block" />Processing...</>
+                : <><Check className="h-4 w-4 mr-1" />Confirm Payment</>}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1600,24 +1754,43 @@ const POS = () => {
                         </div>
 
                         {(() => {
-                          const maxCookTime = Math.max(...order.items.map(i => (i as any).cookingTime || 0), 0);
-                          if (maxCookTime <= 0 || status === "ready") return null;
-                          const orderTime = new Date(`${order.date}T00:00:00`);
-                          const timeParts = order.time.match(/(\d+):(\d+)\s*(AM|PM)/i);
-                          if (timeParts) {
-                            let h = parseInt(timeParts[1]);
-                            if (timeParts[3].toUpperCase() === "PM" && h !== 12) h += 12;
-                            if (timeParts[3].toUpperCase() === "AM" && h === 12) h = 0;
-                            orderTime.setHours(h, parseInt(timeParts[2]), 0);
+                          if (status === "ready") return null;
+                          // Use actual cookingTime from items; fall back to 10 min default (same as KitchenPanel)
+                          const rawCookTime = Math.max(...order.items.map((i: any) => i.cookingTime || 0), 0);
+                          const cookTime = rawCookTime > 0 ? rawCookTime : 10;
+
+                          if (status === "pending") {
+                            return (
+                              <div className="flex items-center gap-2 mb-2 text-[10px]">
+                                <Timer className="h-3 w-3 shrink-0 text-warning" />
+                                <span className="font-semibold text-warning">
+                                  Waiting · {cookTime} min est.
+                                </span>
+                              </div>
+                            );
                           }
-                          const elapsedMin = Math.floor((Date.now() - orderTime.getTime()) / 60000);
-                          const remainingMin = Math.max(0, maxCookTime - elapsedMin);
-                          const isOverdue = elapsedMin > maxCookTime;
+
+                          // "preparing": posPreparingAtMap (set from this POS session when POS clicks Accept)
+                          //              → updatedAt from API (set when kitchen accepted)
+                          //              → fallback: assume just started
+                          const startMs = posPreparingAtMap.current[order.id]
+                            ?? ((order as any).updatedAt ? new Date((order as any).updatedAt).getTime() : null)
+                            ?? statusClock;
+                          const elapsedSec = Math.floor((statusClock - startMs) / 1000);
+                          const totalSec = cookTime * 60;
+                          const remainSec = Math.max(0, totalSec - elapsedSec);
+                          const isOverdue = elapsedSec > totalSec;
+                          const mm = String(Math.floor(remainSec / 60)).padStart(2, "0");
+                          const ss = String(remainSec % 60).padStart(2, "0");
+                          const overMin = Math.floor((elapsedSec - totalSec) / 60);
+                          const overSec = (elapsedSec - totalSec) % 60;
                           return (
                             <div className="flex items-center gap-2 mb-2 text-[10px]">
                               <Timer className="h-3 w-3 shrink-0" />
-                              <span className={cn("font-semibold", isOverdue ? "text-destructive" : remainingMin <= 2 ? "text-warning" : "text-muted-foreground")}>
-                                {isOverdue ? `Overdue by ${elapsedMin - maxCookTime} min` : `~${remainingMin} min remaining`}
+                              <span className={cn("font-semibold tabular-nums", isOverdue ? "text-destructive" : remainSec <= 120 ? "text-warning" : "text-accent")}>
+                                {isOverdue
+                                  ? `Overdue ${overMin}m ${overSec}s`
+                                  : `${mm}:${ss} remaining`}
                               </span>
                             </div>
                           );
@@ -1625,17 +1798,17 @@ const POS = () => {
 
                         <div className="flex gap-1.5">
                           {status === "pending" && (
-                            <Button size="sm" className="h-7 text-xs flex-1 gradient-primary text-primary-foreground" onClick={() => { updateDataItem("orders", order.id, { status: "preparing" }); }}>
+                            <Button size="sm" className="h-7 text-xs flex-1 gradient-primary text-primary-foreground" onClick={() => { handleOrderStatusUpdate(order.id, "preparing"); }}>
                               Accept Order
                             </Button>
                           )}
                           {status === "preparing" && (
-                            <Button size="sm" className="h-7 text-xs flex-1" variant="outline" onClick={() => { updateDataItem("orders", order.id, { status: "ready" }); }}>
+                            <Button size="sm" className="h-7 text-xs flex-1" variant="outline" onClick={() => { handleOrderStatusUpdate(order.id, "ready"); }}>
                               Mark Ready
                             </Button>
                           )}
                           {status === "ready" && (
-                            <Button size="sm" className="h-7 text-xs flex-1 bg-success text-success-foreground hover:bg-success/90" onClick={() => { updateDataItem("orders", order.id, { status: "completed" }); }}>
+                            <Button size="sm" className="h-7 text-xs flex-1 bg-success text-success-foreground hover:bg-success/90" onClick={() => { handleOrderStatusUpdate(order.id, "completed"); }}>
                               Complete
                             </Button>
                           )}
@@ -1773,24 +1946,24 @@ const POS = () => {
                       <div className="grid grid-cols-2 gap-1.5">
                         {order.status === "pending" && (
                           <Button size="sm" className="h-8 w-full text-xs gradient-primary text-primary-foreground"
-                            onClick={() => { updateDataItem("orders", order.id, { status: "preparing" }); toast.success("Order accepted"); }}>
+                            onClick={() => { handleOrderStatusUpdate(order.id, "preparing"); toast.success("Order accepted"); }}>
                             Accept
                           </Button>
                         )}
                         {order.status === "preparing" && (
                           <Button size="sm" variant="outline" className="h-8 w-full text-xs"
-                            onClick={() => { updateDataItem("orders", order.id, { status: "ready" }); toast.success("Marked ready"); }}>
+                            onClick={() => { handleOrderStatusUpdate(order.id, "ready"); toast.success("Marked ready"); }}>
                             Mark Ready
                           </Button>
                         )}
                         {order.status === "ready" && (
                           <Button size="sm" className="h-8 w-full bg-success text-xs text-success-foreground hover:bg-success/90"
-                            onClick={() => { updateDataItem("orders", order.id, { status: "completed" }); toast.success("Completed"); }}>
+                            onClick={() => { handleOrderStatusUpdate(order.id, "completed"); toast.success("Completed"); }}>
                             Complete
                           </Button>
                         )}
                         <Button size="sm" variant="outline" className="h-8 w-full border-destructive/30 text-xs text-destructive hover:bg-destructive/5"
-                          onClick={() => { updateDataItem("orders", order.id, { status: "cancelled" }); toast.success("Cancelled"); }}>
+                          onClick={() => { handleOrderStatusUpdate(order.id, "cancelled"); toast.success("Cancelled"); }}>
                           Reject
                         </Button>
                       </div>
@@ -1921,7 +2094,7 @@ const POS = () => {
                       Load to POS
                     </Button>
                     <Button size="sm" variant="outline" className="h-8 text-xs px-3 border-destructive/30 text-destructive hover:bg-destructive/5"
-                      onClick={() => { updateDataItem("orders", order.id, { status: "cancelled" }); toast.success("Future order cancelled"); }}>
+                      onClick={() => { handleOrderStatusUpdate(order.id, "cancelled"); toast.success("Future order cancelled"); }}>
                       <X className="h-3 w-3" />
                     </Button>
                   </div>
@@ -2394,7 +2567,7 @@ const POS = () => {
                 </div>
                 <div className="flex gap-1.5">
                   <Button size="sm" className="h-7 text-xs flex-1 bg-success text-success-foreground hover:bg-success/90"
-                    onClick={() => { updateDataItem("orders", order.id, { status: "completed" }); toast.success(`Order ${order.orderNumber} completed`); }}>
+                    onClick={() => { handleOrderStatusUpdate(order.id, "completed"); toast.success(`Order ${order.orderNumber} completed`); }}>
                     <Check className="h-3 w-3 mr-1" />Complete & Serve
                   </Button>
                 </div>
@@ -2488,18 +2661,7 @@ const POS = () => {
                 if (!showModifyOrder) return;
                 const finalReason = modifyCancelReason === "Other" ? modifyCancelCustomReason.trim() : modifyCancelReason;
                 if (!finalReason) return;
-                const order = allOrdersData.find(o => o.id === showModifyOrder);
-                const existingLog = (order as any)?.modificationLog || [];
-                updateDataItem("orders", showModifyOrder, {
-                  status: "cancelled",
-                  modificationLog: [...existingLog, {
-                    action: "cancelled",
-                    reason: finalReason,
-                    timestamp: new Date().toISOString(),
-                    staff: selectedStaff,
-                    previousStatus: order?.status,
-                  }],
-                });
+                handleOrderStatusUpdate(showModifyOrder, "cancelled");
                 toast.success("Order cancelled with audit record");
                 setShowModifyOrder(null);
                 setModifyCancelReason("");
@@ -2513,16 +2675,6 @@ const POS = () => {
                 const finalReason = modifyCancelReason === "Other" ? modifyCancelCustomReason.trim() : modifyCancelReason;
                 if (!finalReason) return;
                 const order = allOrdersData.find(o => o.id === showModifyOrder);
-                const existingLog = (order as any)?.modificationLog || [];
-                updateDataItem("orders", showModifyOrder, {
-                  modificationLog: [...existingLog, {
-                    action: "modified",
-                    reason: finalReason,
-                    timestamp: new Date().toISOString(),
-                    staff: selectedStaff,
-                    previousStatus: order?.status,
-                  }],
-                });
                 if (order) {
                   loadRunningOrder(showModifyOrder);
                 }

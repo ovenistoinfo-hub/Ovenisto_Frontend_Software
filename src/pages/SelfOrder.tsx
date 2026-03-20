@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useData } from "@/contexts/DataContext";
+import { orderService } from "@/services/order.service";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import type { OrderType } from "@/data/mock-data";
@@ -26,7 +27,7 @@ interface CartItem {
 const SelfOrder = () => {
   const [searchParams] = useSearchParams();
   const tableNumber = searchParams.get("table") || "1";
-  const { foodMenuItems, foodCategories, settings, addOrder, modifiers: allModifiers, deals } = useData();
+  const { foodMenuItems, foodCategories, settings, modifiers: allModifiers, deals } = useData();
 
   const [search, setSearch] = useState("");
   const [catFilter, setCatFilter] = useState("All");
@@ -224,32 +225,28 @@ const SelfOrder = () => {
 
   // ── Place order ──
 
-  const placeOrder = () => {
+  const placeOrder = async () => {
     if (cart.length === 0) return;
-    const orderNumber = `SO-${Date.now().toString().slice(-6)}`;
-    addOrder({
-      id: crypto.randomUUID(),
-      orderNumber,
-      customer: customerName || "Walk-in",
-      phone: customerPhone || "",
-      type: orderType,
-      items: cart.map(i => ({
-        id: i.id, name: i.name, price: i.price, qty: i.qty, discount: 0,
-        modifiers: i.modifiers,
-      })),
-      subtotal: cartTotal,
-      discount: 0,
-      tax,
-      total: cartTotal + tax,
-      status: "pending",
-      paymentMethod: "Pay at Counter",
-      date: new Date().toISOString().split("T")[0],
-      time: new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }),
-      staff: "Self Order",
-      tableNumber: orderType === "Dine In" ? Number(tableNumber) : undefined,
-      notes,
-    } as any);
-    setOrderPlaced(orderNumber);
+    try {
+      const result = await orderService.createOrder({
+        customerName: customerName || "Walk-in",
+        phone: customerPhone || "",
+        type: orderType,
+        items: cart.map(i => ({ name: i.name, price: i.price, qty: i.qty, discount: 0, modifiers: i.modifiers || [] })),
+        subtotal: cartTotal,
+        discount: 0,
+        tax,
+        total: cartTotal + tax,
+        paymentMethod: "Pay at Counter",
+        tableNumber: orderType === "Dine In" ? Number(tableNumber) : undefined,
+        staffName: "Self Order",
+        orderSource: "self-order",
+      });
+      setOrderPlaced(result.orderNumber);
+    } catch {
+      toast.error("Failed to place order. Please try again.");
+      return;
+    }
     setTimeout(() => {
       setOrderPlaced(null);
       setCart([]);

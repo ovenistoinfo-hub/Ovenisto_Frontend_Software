@@ -1,10 +1,11 @@
-import { useState, useMemo } from "react";
-import { Globe, Check, X, ChefHat, CheckCircle } from "lucide-react";
+import { useState, useMemo, useEffect, useCallback } from "react";
+import { Globe, Check, X, CheckCircle } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/ui/page-header";
 import { useData } from "@/contexts/DataContext";
+import { orderService } from "@/services/order.service";
 import { toast } from "sonner";
 import { ORDER_STATUS_COLORS } from "@/lib/constants";
 
@@ -16,15 +17,40 @@ const statusColors: Record<string, string> = {
   cancelled: "bg-destructive/10 text-destructive border-destructive/30",
 };
 
+const normalize = (o: any) => ({
+  ...o,
+  customer: o.customerName || o.customer || "Walk-in",
+  staff: o.staffName || o.staff || "",
+  phone: o.phone || "",
+  total: Number(o.total),
+  date: o.date ? new Date(o.date).toISOString().split("T")[0] : "",
+  items: (o.items || []).map((i: any) => ({ ...i, price: Number(i.price) })),
+});
+
 const OnlineOrders = () => {
-  const { orders, updateOrderStatus, settings } = useData();
+  const { settings } = useData();
   const currency = settings.currency || "Rs.";
   const [tab, setTab] = useState("All");
+  const [apiOrders, setApiOrders] = useState<any[]>([]);
+
+  const loadOrders = useCallback(async () => {
+    try {
+      const res = await orderService.getOrders({ limit: 200 });
+      const all = (res.data || []).map(normalize);
+      // show Online type + self-order staff
+      setApiOrders(all.filter((o: any) => o.type === "Online" || o.type === "Self Order" || o.staff === "Self Order" || o.staff === "Website"));
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    loadOrders();
+    const interval = setInterval(loadOrders, 30000);
+    return () => clearInterval(interval);
+  }, [loadOrders]);
 
   const onlineOrders = useMemo(() =>
-    orders.filter(o => o.type === "Online" || o.staff === "Self Order" || o.staff === "Website")
-      .sort((a, b) => b.date.localeCompare(a.date)),
-    [orders]);
+    [...apiOrders].sort((a, b) => (b.date || "").localeCompare(a.date || "")),
+    [apiOrders]);
 
   const filtered = useMemo(() => {
     if (tab === "New") return onlineOrders.filter(o => o.status === "pending");
@@ -34,14 +60,20 @@ const OnlineOrders = () => {
   }, [onlineOrders, tab]);
 
   const newCount = onlineOrders.filter(o => o.status === "pending").length;
-  const todayOrders = onlineOrders.filter(o => o.date === new Date().toISOString().split("T")[0]);
-  const todayRevenue = todayOrders.filter(o => o.status === "completed").reduce((s, o) => s + o.total, 0);
+  const todayStr = new Date().toISOString().split("T")[0];
+  const todayOrders = onlineOrders.filter(o => o.date === todayStr);
+  const todayRevenue = todayOrders.filter(o => o.status === "completed").reduce((s: number, o: any) => s + o.total, 0);
 
-  const accept = (id: string) => { updateOrderStatus(id, "preparing"); toast.success("Order accepted"); };
-  const reject = (id: string) => { updateOrderStatus(id, "cancelled"); toast.info("Order rejected"); };
-  const startPreparing = (id: string) => { updateOrderStatus(id, "preparing"); toast.success("Preparing"); };
-  const markReady = (id: string) => { updateOrderStatus(id, "ready"); toast.success("Marked ready"); };
-  const markComplete = (id: string) => { updateOrderStatus(id, "completed"); toast.success("Completed"); };
+  const updateStatus = async (id: string, status: string, msg: string) => {
+    setApiOrders(prev => prev.map(o => o.id === id ? { ...o, status } : o));
+    try { await orderService.updateOrderStatus(id, status); toast.success(msg); }
+    catch { loadOrders(); toast.error("Update failed"); }
+  };
+
+  const accept = (id: string) => updateStatus(id, "preparing", "Order accepted");
+  const reject = (id: string) => updateStatus(id, "cancelled", "Order rejected");
+  const markReady = (id: string) => updateStatus(id, "ready", "Marked ready");
+  const markComplete = (id: string) => updateStatus(id, "completed", "Completed");
 
   const tabs = [
     { key: "All", label: "All" },

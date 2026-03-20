@@ -1,22 +1,27 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, Link } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Progress } from "@/components/ui/progress";
-import { ArrowLeft, Bell, Clock, Flame, ChefHat, CheckCircle2, Timer, Utensils } from "lucide-react";
+import { ArrowLeft, Bell, Clock, Flame, ChefHat, CheckCircle2, Timer, Utensils, Loader2, Hourglass } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { useData } from "@/contexts/DataContext";
+import { orderService, type OrderRecord, type KitchenRecord } from "@/services/order.service";
 import { ORDER_TYPE_COLORS } from "@/lib/constants";
 
 type KitchenOrderStatus = "new" | "preparing" | "ready" | "completed";
 
 interface KitchenOrder {
-  id: string; orderNumber: string; type: string;
+  id: string;
+  orderNumber: string;
+  type: string;
   items: { name: string; qty: number; cookingTime?: number }[];
-  placedAt: Date; status: KitchenOrderStatus;
+  placedAt: Date;
+  /** Set when "Accept Order" is clicked — null until then */
+  preparingAt: Date | null;
+  status: KitchenOrderStatus;
   maxCookingTime: number;
 }
 
@@ -29,58 +34,161 @@ const statusConfig: Record<KitchenOrderStatus, { border: string; bg: string; ico
   completed: { border: "border-l-muted-foreground/30", bg: "bg-muted/30 opacity-60", icon: CheckCircle2, iconColor: "text-muted-foreground", label: "Completed" },
 };
 
+const mapApiStatusToKitchen = (status: string): KitchenOrderStatus => {
+  if (status === "preparing") return "preparing";
+  if (status === "ready") return "ready";
+  if (status === "completed") return "completed";
+  return "new";
+};
+
+const mapKitchenStatusToApi = (status: KitchenOrderStatus): string => {
+  if (status === "new") return "preparing";
+  if (status === "preparing") return "ready";
+  if (status === "ready") return "completed";
+  return "completed";
+};
+
 const KitchenPanel = () => {
   const { id } = useParams();
-  const { kitchens, orders, foodMenuItems, updateOrderStatus } = useData();
-  const kitchen = kitchens.find((k) => k.id === id) || kitchens[0];
+
+  const [kitchen, setKitchen] = useState<KitchenRecord | null>(null);
+  const [kitchenOrders, setKitchenOrders] = useState<KitchenOrder[]>([]);
+  const [loading, setLoading] = useState(true);
   const [clock, setClock] = useState(new Date());
   const [statusFilter, setStatusFilter] = useState<"all" | KitchenOrderStatus>("all");
 
-  const [kitchenOrders, setKitchenOrders] = useState<KitchenOrder[]>(() => {
-    const kitchenCategories = kitchen.categories;
-    const kitchenMenuItems = foodMenuItems.filter((fi) => kitchenCategories.includes(fi.category)).map((fi) => fi.name);
+  // placedAt: when the order was received (display only)
+  const placedAtMap = useRef<Record<string, Date>>({});
+  // preparingAt: when "Accept Order" was clicked (timer starts here)
+  const preparingAtMap = useRef<Record<string, Date>>({});
+
+  const buildKitchenOrders = useCallback((orders: OrderRecord[], kitch: KitchenRecord) => {
     return orders
       .filter((o) => o.status !== "completed" && o.status !== "cancelled")
-      .filter((o) => o.items.some((item) => kitchenMenuItems.includes(item.name)))
-      .map((o, idx) => {
-        const filteredItems = o.items.filter((item) => kitchenMenuItems.includes(item.name)).map((item) => {
-          const menuItem = foodMenuItems.find(fi => fi.name === item.name);
-          return { name: item.name, qty: item.qty, cookingTime: (item as any).cookingTime || (menuItem as any)?.cookingTime || 0 };
-        });
-        const maxCookingTime = Math.max(...filteredItems.map(i => i.cookingTime || 0), 0);
+      .map((o) => {
+        const relevantItems = o.items.map((item) => ({
+          name: item.name,
+          qty: item.qty,
+          cookingTime: item.cookingTime ?? 0,
+        }));
+
+        if (!relevantItems.length) return null;
+
+        const maxCookingTime = Math.max(...relevantItems.map(i => i.cookingTime || 0), 0);
+
+        // placedAt: first time we see this order
+        if (!placedAtMap.current[o.id]) {
+          placedAtMap.current[o.id] = new Date(o.createdAt || Date.now());
+        }
+
+        // preparingAt: if already "preparing" when loaded and not yet tracked, use updatedAt as best estimate
+        if ((o.status === "preparing" || o.status === "ready") && !preparingAtMap.current[o.id]) {
+          // Use updatedAt if available, otherwise createdAt
+          preparingAtMap.current[o.id] = new Date((o as any).updatedAt || o.createdAt || Date.now());
+        }
+
         return {
-          id: o.id, orderNumber: o.orderNumber, type: o.type,
-          items: filteredItems,
-          placedAt: new Date(Date.now() - (idx + 1) * 3 * 60000),
-          status: (o.status === "preparing" ? "preparing" : "new") as KitchenOrderStatus,
+          id: o.id,
+          orderNumber: o.orderNumber,
+          type: o.type,
+          items: relevantItems,
+          placedAt: placedAtMap.current[o.id],
+          preparingAt: preparingAtMap.current[o.id] ?? null,
+          status: mapApiStatusToKitchen(o.status),
           maxCookingTime,
-        };
-      });
-  });
-
-  useEffect(() => { const interval = setInterval(() => setClock(new Date()), 1000); return () => clearInterval(interval); }, []);
-
-  const getElapsedMinutes = (placedAt: Date) => Math.floor((Date.now() - placedAt.getTime()) / 60000);
-
-  const advanceStatus = (orderId: string) => {
-    setKitchenOrders((prev) =>
-      prev.map((o) => {
-        if (o.id !== orderId) return o;
-        const next: Record<KitchenOrderStatus, KitchenOrderStatus> = { new: "preparing", preparing: "ready", ready: "completed", completed: "completed" };
-        const newStatus = next[o.status];
-        toast.success(`Order ${o.orderNumber} moved to ${newStatus}`);
-        if (newStatus === "completed") updateOrderStatus(orderId, "completed");
-        else if (newStatus === "ready") updateOrderStatus(orderId, "ready");
-        else if (newStatus === "preparing") updateOrderStatus(orderId, "preparing");
-        return { ...o, status: newStatus };
+        } as KitchenOrder;
       })
-    );
+      .filter(Boolean) as KitchenOrder[];
+  }, []);
+
+  const load = useCallback(async () => {
+    try {
+      const [kitchens, { data: orders }] = await Promise.all([
+        orderService.getKitchens(),
+        orderService.getOrders({ limit: 100 }),
+      ]);
+
+      const kitch = id ? kitchens.find(k => k.id === id) : kitchens[0];
+      if (!kitch) { setLoading(false); return; }
+
+      setKitchen(kitch);
+      setKitchenOrders(buildKitchenOrders(orders, kitch));
+    } catch {
+      toast.error("Failed to load kitchen data");
+    } finally {
+      setLoading(false);
+    }
+  }, [id, buildKitchenOrders]);
+
+  useEffect(() => { load(); }, [load]);
+
+  // Clock — ticks every second for live countdown
+  useEffect(() => {
+    const interval = setInterval(() => setClock(new Date()), 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Auto-refresh orders every 30 seconds
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      if (!kitchen) return;
+      try {
+        const { data: orders } = await orderService.getOrders({ limit: 100 });
+        setKitchenOrders(buildKitchenOrders(orders, kitchen));
+      } catch {
+        // silent
+      }
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [kitchen, buildKitchenOrders]);
+
+  /** Returns elapsed seconds since preparingAt started */
+  const getElapsedSeconds = (preparingAt: Date) =>
+    Math.floor((clock.getTime() - preparingAt.getTime()) / 1000);
+
+  const advanceStatus = async (orderId: string) => {
+    const order = kitchenOrders.find(o => o.id === orderId);
+    if (!order) return;
+
+    const nextStatusMap: Record<KitchenOrderStatus, KitchenOrderStatus> = {
+      new: "preparing",
+      preparing: "ready",
+      ready: "completed",
+      completed: "completed",
+    };
+    const newKitchenStatus = nextStatusMap[order.status];
+    const newApiStatus = mapKitchenStatusToApi(order.status);
+
+    // Record the exact moment preparation begins
+    if (order.status === "new") {
+      preparingAtMap.current[orderId] = new Date();
+    }
+
+    // Optimistic update
+    setKitchenOrders(prev => prev.map(o =>
+      o.id === orderId
+        ? { ...o, status: newKitchenStatus, preparingAt: order.status === "new" ? preparingAtMap.current[orderId] : o.preparingAt }
+        : o
+    ));
+
+    try {
+      await orderService.updateOrderStatus(orderId, newApiStatus);
+      toast.success(`Order ${order.orderNumber} moved to ${newKitchenStatus}`);
+    } catch {
+      // Revert on error
+      setKitchenOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: order.status, preparingAt: order.preparingAt } : o));
+      if (order.status === "new") delete preparingAtMap.current[orderId];
+      toast.error("Failed to update order status");
+    }
   };
 
   const newOrderCount = kitchenOrders.filter((o) => o.status === "new").length;
   const preparingCount = kitchenOrders.filter((o) => o.status === "preparing").length;
   const readyCount = kitchenOrders.filter((o) => o.status === "ready").length;
-  const displayed = kitchenOrders.filter((o) => statusFilter === "all" || o.status === statusFilter).sort((a, b) => a.placedAt.getTime() - b.placedAt.getTime());
+  const displayed = kitchenOrders
+    .filter((o) => statusFilter === "all" || o.status === statusFilter)
+    .sort((a, b) => a.placedAt.getTime() - b.placedAt.getTime());
+
   const btnLabel: Record<KitchenOrderStatus, string> = { new: "Accept Order", preparing: "Mark Ready", ready: "Complete", completed: "Done" };
   const btnColors: Record<KitchenOrderStatus, string> = {
     new: "bg-warning hover:bg-warning/90 text-warning-foreground shadow-md",
@@ -88,6 +196,22 @@ const KitchenPanel = () => {
     ready: "bg-success hover:bg-success/90 text-success-foreground shadow-md",
     completed: "bg-muted text-muted-foreground",
   };
+
+  if (loading) return (
+    <div className="fixed inset-0 z-50 bg-background flex items-center justify-center">
+      <Loader2 className="h-8 w-8 animate-spin text-primary" />
+    </div>
+  );
+
+  if (!kitchen) return (
+    <div className="fixed inset-0 z-50 bg-background flex items-center justify-center">
+      <div className="text-center">
+        <ChefHat className="h-16 w-16 text-muted-foreground/30 mx-auto mb-4" />
+        <p className="text-lg font-semibold">Kitchen not found</p>
+        <Button asChild className="mt-4"><Link to="/kitchens">Back to Kitchens</Link></Button>
+      </div>
+    </div>
+  );
 
   return (
     <div className="fixed inset-0 z-50 bg-background flex flex-col">
@@ -173,13 +297,25 @@ const KitchenPanel = () => {
         ) : (
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
             {displayed.map((order) => {
-              const elapsed = getElapsedMinutes(order.placedAt);
               const cfg = statusConfig[order.status];
               const StatusIcon = cfg.icon;
               const cookTime = order.maxCookingTime || 10;
-              const isOverdue = elapsed > cookTime;
-              const remainingMin = Math.max(0, cookTime - elapsed);
-              const progress = Math.min(100, (elapsed / cookTime) * 100);
+
+              // Timer: only active once preparation starts
+              const isPreparing = order.status === "preparing" && order.preparingAt !== null;
+              const elapsedSec = isPreparing ? getElapsedSeconds(order.preparingAt!) : 0;
+              const elapsedMin = Math.floor(elapsedSec / 60);
+              const remainingSec = Math.max(0, cookTime * 60 - elapsedSec);
+              const remainingMin = Math.floor(remainingSec / 60);
+              const remainingSecPart = remainingSec % 60;
+              const isOverdue = isPreparing && elapsedSec > cookTime * 60;
+              const progress = isPreparing ? Math.min(100, (elapsedSec / (cookTime * 60)) * 100) : 0;
+
+              // Waiting time for new orders (informational only)
+              const waitingSec = order.status === "new"
+                ? Math.floor((clock.getTime() - order.placedAt.getTime()) / 1000)
+                : 0;
+              const waitingMin = Math.floor(waitingSec / 60);
 
               return (
                 <Card
@@ -194,35 +330,62 @@ const KitchenPanel = () => {
                     {/* Card Header */}
                     <div className="px-4 pt-4 pb-3 flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <div className={cn("h-8 w-8 rounded-lg flex items-center justify-center", `bg-${order.status === "new" ? "info" : order.status === "preparing" ? "warning" : order.status === "ready" ? "success" : "muted"}/10`)}>
+                        <div className={cn("h-8 w-8 rounded-lg flex items-center justify-center",
+                          `bg-${order.status === "new" ? "info" : order.status === "preparing" ? "warning" : order.status === "ready" ? "success" : "muted"}/10`)}>
                           <StatusIcon className={cn("h-4 w-4", cfg.iconColor)} />
                         </div>
                         <span className="text-lg font-bold tracking-tight text-foreground">{order.orderNumber}</span>
                       </div>
-                      <Badge variant="secondary" className={cn("text-[10px] font-semibold rounded-full px-2.5 border", typeColors[order.type])}>
+                      <Badge variant="secondary" className={cn("text-[10px] font-semibold rounded-full px-2.5 border", (typeColors as any)[order.type] ?? "")}>
                         {order.type}
                       </Badge>
                     </div>
 
-                    {/* Timer with Countdown */}
+                    {/* Timer Row */}
                     <div className="mx-4 mb-2 space-y-1.5">
-                      <div className={cn(
-                        "flex items-center justify-between text-sm px-2.5 py-1 rounded-lg",
-                        isOverdue ? "bg-destructive/10 text-destructive font-bold" : "bg-muted/50 text-muted-foreground"
-                      )}>
-                        <div className="flex items-center gap-1.5">
-                          <Timer className="h-3.5 w-3.5" />
-                          <span className="font-medium">{elapsed} min</span>
+                      {order.status === "new" ? (
+                        /* Waiting state — no countdown, just elapsed wait time */
+                        <div className="flex items-center justify-between text-sm px-2.5 py-1 rounded-lg bg-info/5 text-info">
+                          <div className="flex items-center gap-1.5">
+                            <Hourglass className="h-3.5 w-3.5" />
+                            <span className="font-medium text-xs">Waiting {waitingMin}m</span>
+                          </div>
+                          <span className="text-[10px] font-semibold opacity-70">Not started</span>
                         </div>
-                        {order.status !== "ready" && order.status !== "completed" && (
-                          <span className={cn("text-xs font-bold", isOverdue ? "text-destructive" : remainingMin <= 2 ? "text-warning" : "text-muted-foreground")}>
-                            {isOverdue ? `+${elapsed - cookTime}m over` : `${remainingMin}m left`}
-                          </span>
-                        )}
-                      </div>
-                      {order.status !== "ready" && order.status !== "completed" && cookTime > 0 && (
-                        <Progress value={progress} className={cn("h-1.5 mx-0.5", isOverdue && "[&>div]:bg-destructive", !isOverdue && progress > 75 && "[&>div]:bg-warning")} />
-                      )}
+                      ) : order.status === "preparing" && order.preparingAt ? (
+                        /* Active countdown from moment of acceptance */
+                        <>
+                          <div className={cn(
+                            "flex items-center justify-between text-sm px-2.5 py-1 rounded-lg",
+                            isOverdue ? "bg-destructive/10 text-destructive font-bold" : "bg-muted/50 text-muted-foreground"
+                          )}>
+                            <div className="flex items-center gap-1.5">
+                              <Timer className="h-3.5 w-3.5" />
+                              <span className="font-medium">{elapsedMin}m {elapsedSec % 60}s</span>
+                            </div>
+                            <span className={cn("text-xs font-bold tabular-nums", isOverdue ? "text-destructive" : remainingMin <= 1 ? "text-warning" : "text-muted-foreground")}>
+                              {isOverdue
+                                ? `+${elapsedMin - cookTime}m over`
+                                : `${remainingMin}:${String(remainingSecPart).padStart(2, "0")} left`}
+                            </span>
+                          </div>
+                          {cookTime > 0 && (
+                            <Progress
+                              value={progress}
+                              className={cn(
+                                "h-1.5 mx-0.5",
+                                isOverdue && "[&>div]:bg-destructive",
+                                !isOverdue && progress > 75 && "[&>div]:bg-warning"
+                              )}
+                            />
+                          )}
+                        </>
+                      ) : order.status === "ready" ? (
+                        <div className="flex items-center justify-center gap-1.5 text-sm px-2.5 py-1 rounded-lg bg-success/10 text-success font-semibold">
+                          <CheckCircle2 className="h-3.5 w-3.5" />
+                          <span className="text-xs">Ready to serve</span>
+                        </div>
+                      ) : null}
                     </div>
 
                     {/* Items List */}
@@ -231,9 +394,7 @@ const KitchenPanel = () => {
                         <div key={idx} className="flex justify-between items-center text-sm">
                           <span className="font-medium text-foreground">{item.name}</span>
                           <div className="flex items-center gap-1.5">
-                            {item.cookingTime ? (
-                              <span className="text-[10px] text-muted-foreground">{item.cookingTime}m</span>
-                            ) : null}
+                            {item.cookingTime ? <span className="text-[10px] text-muted-foreground">{item.cookingTime}m</span> : null}
                             <span className="text-xs font-bold bg-muted/60 px-2 py-0.5 rounded-full text-muted-foreground">×{item.qty}</span>
                           </div>
                         </div>

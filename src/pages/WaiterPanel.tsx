@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 import { Plus, Minus, X, ShoppingCart, UtensilsCrossed, Clock, Users, Receipt, CircleDot, ChevronDown, ChevronUp } from "lucide-react";
 import { toast } from "sonner";
 import { useData } from "@/contexts/DataContext";
-import type { Order } from "@/data/mock-data";
+import { orderService } from "@/services/order.service";
 import { PageHeader } from "@/components/ui/page-header";
 
 interface OrderItem {
@@ -44,7 +44,7 @@ const statusConfig: Record<string, { card: string; dot: string; bg: string; icon
 
 const WaiterPanel = () => {
   const navigate = useNavigate();
-  const { foodMenuItems, addOrder, settings, modifiers: allModifiers } = useData();
+  const { foodMenuItems, settings, modifiers: allModifiers } = useData();
   const currency = settings.currency || "Rs.";
   const [tables, setTables] = useState<TableInfo[]>(initialTables);
   const [selectedTable, setSelectedTable] = useState<string | null>(null);
@@ -169,23 +169,27 @@ const WaiterPanel = () => {
   const updateQty = (id: string, d: number) => setOrderItems((p) => p.map((o) => o.id === id ? { ...o, qty: Math.max(1, o.qty + d) } : o));
   const removeOrderItem = (id: string) => setOrderItems((p) => p.filter((o) => o.id !== id));
 
-  const placeOrder = () => {
+  const placeOrder = async () => {
     if (orderItems.length === 0 || !selectedTable) return;
     const tableNum = tables.find(t => t.id === selectedTable)?.number || 0;
     const subtotal = orderItems.reduce((s, i) => s + i.price * i.qty, 0);
     const tax = Math.round(subtotal * (settings.taxRate / 100));
     const total = subtotal + tax;
-    const newOrder: Order = {
-      id: crypto.randomUUID(), orderNumber: `ORD-W${Date.now().toString().slice(-4)}`, customer: "Walk-in", phone: "", type: "Dine In",
-      items: orderItems.map(i => ({ id: i.id, name: i.name, price: i.price, qty: i.qty, discount: 0, modifiers: i.modifiers })),
-      subtotal, discount: 0, tax, total, status: "pending", paymentMethod: "Cash",
-      date: new Date().toISOString().split("T")[0], time: new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }),
-      staff: "Waiter", tableNumber: tableNum,
-    };
-    addOrder(newOrder);
-    setTables((p) => p.map((t) => t.id === selectedTable ? { ...t, status: "occupied", orderItems, occupiedSince: new Date() } : t));
-    toast.success("Order sent to kitchen!");
-    setOrderItems([]);
+    try {
+      await orderService.createOrder({
+        type: "Dine In",
+        staffName: "Waiter",
+        tableNumber: tableNum,
+        subtotal, discount: 0, tax, total,
+        paymentMethod: "Cash",
+        items: orderItems.map(i => ({ name: i.name, price: i.price, qty: i.qty, discount: 0, modifiers: i.modifiers || [] })),
+      });
+      setTables(p => p.map(t => t.id === selectedTable ? { ...t, status: "occupied", orderItems, occupiedSince: new Date() } : t));
+      toast.success("Order sent to kitchen!");
+      setOrderItems([]);
+    } catch {
+      toast.error("Failed to send order");
+    }
   };
 
   const requestBill = () => { setTables((p) => p.map((t) => t.id === selectedTable ? { ...t, status: "bill-requested" } : t)); toast.success("Bill requested"); };

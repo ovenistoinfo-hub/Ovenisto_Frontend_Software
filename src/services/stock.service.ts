@@ -114,10 +114,11 @@ export const stockService = {
   },
 
   // ── Productions ──
-  async getProductions(params?: { search?: string; page?: number }): Promise<{ data: ProductionRecord[]; meta: any }> {
+  async getProductions(params?: { search?: string; page?: number; limit?: number }): Promise<{ data: ProductionRecord[]; meta: any }> {
     const q = new URLSearchParams();
     if (params?.search) q.set('search', params.search);
     if (params?.page) q.set('page', String(params.page));
+    if (params?.limit) q.set('limit', String(params.limit));
     const res = await api.get<{ success: boolean; data: ProductionRecord[]; meta: any }>(`/stock/productions?${q.toString()}`);
     return { data: res.data, meta: (res as any).meta };
   },
@@ -128,10 +129,11 @@ export const stockService = {
   },
 
   // ── Transfers ──
-  async getTransfers(params?: { status?: string; page?: number }): Promise<{ data: TransferRecord[]; meta: any }> {
+  async getTransfers(params?: { status?: string; page?: number; limit?: number }): Promise<{ data: TransferRecord[]; meta: any }> {
     const q = new URLSearchParams();
     if (params?.status) q.set('status', params.status);
     if (params?.page) q.set('page', String(params.page));
+    if (params?.limit) q.set('limit', String(params.limit));
     const res = await api.get<{ success: boolean; data: TransferRecord[]; meta: any }>(`/stock/transfers?${q.toString()}`);
     return { data: res.data, meta: (res as any).meta };
   },
@@ -147,10 +149,11 @@ export const stockService = {
   },
 
   // ── Waste Records ──
-  async getWasteRecords(params?: { search?: string; page?: number }): Promise<{ data: WasteRecord[]; meta: any }> {
+  async getWasteRecords(params?: { search?: string; page?: number; limit?: number }): Promise<{ data: WasteRecord[]; meta: any }> {
     const q = new URLSearchParams();
     if (params?.search) q.set('search', params.search);
     if (params?.page) q.set('page', String(params.page));
+    if (params?.limit) q.set('limit', String(params.limit));
     const res = await api.get<{ success: boolean; data: WasteRecord[]; meta: any }>(`/stock/waste?${q.toString()}`);
     return { data: res.data, meta: (res as any).meta };
   },

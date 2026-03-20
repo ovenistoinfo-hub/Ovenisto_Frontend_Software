@@ -70,34 +70,45 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
   const [isLoading, setIsLoading] = useState(false);
 
-  // On mount: if we have a token but no user, fetch user from API
+  // On mount: validate session — re-fetch user if token exists
   useEffect(() => {
     const token = getAccessToken();
     const stored = localStorage.getItem("ovenisto_user");
 
-    if (token && !stored) {
-      setIsLoading(true);
-      authService.getMe()
-        .then((data) => {
-          const authUser: User = {
-            id: data.id,
-            name: data.name,
-            email: data.email,
-            role: data.role,
-            avatar: data.avatar,
-            phone: data.phone,
-            branch: data.branch,
-            outletId: data.outletId,
-          };
-          setUser(authUser);
-          localStorage.setItem("ovenisto_user", JSON.stringify(authUser));
-        })
-        .catch(() => {
-          clearTokens();
-          setUser(null);
-        })
-        .finally(() => setIsLoading(false));
+    if (!token) {
+      // No access token — clear stale user data and force login
+      if (stored) {
+        clearTokens();
+        localStorage.removeItem("ovenisto_user");
+        setUser(null);
+      }
+      return;
     }
+
+    // Token exists — fetch fresh user data from API (validates token against DB)
+    setIsLoading(true);
+    authService.getMe()
+      .then((data) => {
+        const authUser: User = {
+          id: data.id,
+          name: data.name,
+          email: data.email,
+          role: data.role,
+          avatar: data.avatar,
+          phone: data.phone,
+          branch: data.branch,
+          outletId: data.outletId,
+        };
+        setUser(authUser);
+        localStorage.setItem("ovenisto_user", JSON.stringify(authUser));
+      })
+      .catch(() => {
+        // Token invalid/expired and refresh failed — clear everything
+        clearTokens();
+        localStorage.removeItem("ovenisto_user");
+        setUser(null);
+      })
+      .finally(() => setIsLoading(false));
   }, []);
 
   const login = useCallback(async (email: string, password: string): Promise<boolean> => {
