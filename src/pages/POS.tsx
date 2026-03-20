@@ -717,9 +717,9 @@ const POS = () => {
 
     try {
       if (loadedOrderId) {
-        await orderService.updateOrder(loadedOrderId, orderPayload);
-        finalOrderNumber = (allOrdersData as any[]).find((x) => x.id === loadedOrderId)?.orderNumber || loadedOrderId;
-        toast.success(`Order updated!`);
+        const updated = await orderService.updateOrder(loadedOrderId, orderPayload);
+        finalOrderNumber = updated.orderNumber || (allOrdersData as any[]).find((x) => x.id === loadedOrderId)?.orderNumber || "Updated";
+        toast.success(`Order ${finalOrderNumber} updated!`);
       } else {
         const created = await orderService.createOrder(orderPayload);
         finalOrderNumber = created.orderNumber;
