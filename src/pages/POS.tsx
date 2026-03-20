@@ -872,18 +872,36 @@ const POS = () => {
           </div>
         </div>
         <div className="flex items-center gap-1 overflow-x-auto scrollbar-none flex-1 ml-2 mr-1">
-          {/* Mobile: icon-only toggle for sidebar */}
+          {/* Mobile: sidebar toggle */}
           <Button variant="outline" size="icon" className="h-8 w-8 shrink-0 rounded-lg xl:hidden" onClick={() => setShowLeftSidebar(!showLeftSidebar)}>
             <ClipboardList className="h-3.5 w-3.5" />
           </Button>
-          <Button variant="outline" size="sm" className="h-8 text-xs rounded-lg gap-1 shrink-0 px-2" asChild>
-            <Link to="/customer-display" target="_blank"><Monitor className="h-3.5 w-3.5" /><span className="hidden md:inline">Customer Screen</span></Link>
+
+          {/* Group 1: Live order operations (most used) */}
+          <Button variant="outline" size="sm" className="h-8 text-xs rounded-lg gap-1 shrink-0 px-2.5 font-medium" onClick={() => setShowOrderStatus(true)}>
+            <ClipboardList className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Order Status</span>
+            {activeOrdersCount > 0 && (
+              <Badge className="h-5 px-1 text-[10px] gradient-primary text-primary-foreground">{activeOrdersCount}</Badge>
+            )}
           </Button>
-          <Button variant="outline" size="sm" className="h-8 text-xs rounded-lg gap-1 shrink-0 px-2" onClick={() => setShowKitchenNotifications(true)}>
+          <Button variant="outline" size="sm" className="h-8 text-xs rounded-lg gap-1 shrink-0 px-2.5 font-medium" onClick={() => setShowKitchenNotifications(true)}>
             <Bell className="h-3.5 w-3.5" />
-            <span className="hidden lg:inline">Kitchen</span>
+            <span className="hidden sm:inline">Kitchen</span>
             {kitchenNotifications.length > 0 && (
               <Badge className="h-5 px-1 text-[10px] bg-success text-success-foreground animate-pulse">{kitchenNotifications.length}</Badge>
+            )}
+          </Button>
+
+          {/* Divider */}
+          <div className="h-5 w-px bg-border/60 shrink-0 hidden sm:block mx-0.5" />
+
+          {/* Group 2: Scheduling & secondary */}
+          <Button variant="outline" size="sm" className="h-8 text-xs rounded-lg gap-1 shrink-0 px-2" onClick={() => setShowFutureSale(true)}>
+            <CalendarClock className="h-3.5 w-3.5" />
+            <span className="hidden lg:inline">Future Sale</span>
+            {futureOrders.length > 0 && (
+              <Badge className="h-5 px-1 text-[10px] bg-info text-info-foreground">{futureOrders.length}</Badge>
             )}
           </Button>
           <Button variant="outline" size="sm" className="h-8 text-xs rounded-lg gap-1 shrink-0 px-2" onClick={() => setShowReservations(true)}>
@@ -893,26 +911,20 @@ const POS = () => {
               <Badge className="h-5 px-1 text-[10px] bg-info/80 text-info-foreground">{todayReservations.length}</Badge>
             )}
           </Button>
-          <Button variant="outline" size="sm" className="h-8 text-xs rounded-lg gap-1 shrink-0 px-2" onClick={() => setShowOrderStatus(true)}>
-            <ClipboardList className="h-3.5 w-3.5" />
-            <span className="hidden lg:inline">Order Status</span>
-            {activeOrdersCount > 0 && (
-              <Badge className="h-5 px-1 text-[10px] gradient-primary text-primary-foreground">{activeOrdersCount}</Badge>
-            )}
-          </Button>
-          <Button variant="outline" size="sm" className="h-8 text-xs rounded-lg gap-1 shrink-0 px-2" onClick={() => setShowFutureSale(true)}>
-            <CalendarClock className="h-3.5 w-3.5" />
-            <span className="hidden xl:inline">Future Sale</span>
-            {futureOrders.length > 0 && (
-              <Badge className="h-5 px-1 text-[10px] bg-info text-info-foreground">{futureOrders.length}</Badge>
-            )}
-          </Button>
           <Button variant="outline" size="sm" className="h-8 text-xs rounded-lg gap-1 shrink-0 px-2" onClick={() => setShowSelfOnlineOrders(true)}>
             <Wifi className="h-3.5 w-3.5" />
             <span className="hidden xl:inline">Self / Online</span>
             {selfOnlineOrders.length > 0 && (
               <Badge className="h-5 px-1 text-[10px] bg-accent text-accent-foreground">{selfOnlineOrders.length}</Badge>
             )}
+          </Button>
+
+          {/* Divider */}
+          <div className="h-5 w-px bg-border/60 shrink-0 hidden sm:block mx-0.5" />
+
+          {/* Group 3: Utilities */}
+          <Button variant="outline" size="sm" className="h-8 text-xs rounded-lg gap-1 shrink-0 px-2" asChild>
+            <Link to="/customer-display" target="_blank"><Monitor className="h-3.5 w-3.5" /><span className="hidden xl:inline">Customer Screen</span></Link>
           </Button>
           <Button variant="outline" size="sm" className="h-8 text-xs rounded-lg gap-1 shrink-0 px-2" onClick={() => setShowRegisterClose(true)}>
             <DollarSign className="h-3.5 w-3.5" />
@@ -925,15 +937,12 @@ const POS = () => {
               <Badge className="h-5 px-1 text-[10px] bg-destructive text-destructive-foreground">{lowStockItems.length}</Badge>
             </Button>
           )}
-          {(["Combo"] as const).map((tag) => {
-            const isActive = activeTag === tag;
-            return (
-              <Badge key={tag} variant="secondary" onClick={() => handleTagClick(tag)}
-                className={cn("text-[10px] cursor-pointer transition-all border px-2 py-0.5 rounded-full font-semibold shrink-0 hidden md:inline-flex bg-warning/10 text-warning border-warning/20", isActive && "ring-2 ring-primary ring-offset-1 shadow-sm")}>
-                {tag}
-              </Badge>
-            );
-          })}
+
+          {/* Combo filter tag */}
+          <Badge variant="secondary" onClick={() => handleTagClick("Combo")}
+            className={cn("text-[10px] cursor-pointer transition-all border px-2.5 py-1 rounded-full font-semibold shrink-0 hidden md:inline-flex bg-warning/10 text-warning border-warning/20 ml-0.5", activeTag === "Combo" && "ring-2 ring-primary ring-offset-1 shadow-sm")}>
+            Combo
+          </Badge>
         </div>
         {/* Mobile: toggle between menu & cart */}
         <div className="flex items-center gap-1 xl:hidden ml-1 shrink-0">
