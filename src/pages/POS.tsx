@@ -500,7 +500,7 @@ const POS = () => {
 
   // Prefer API settings; fall back to localStorage settings
   const effectiveSettings = apiSettings ?? settings;
-  const taxRate = (effectiveSettings?.taxRate || 16) / 100;
+  const taxRate = ((effectiveSettings?.taxRate ?? 16) as number) / 100;
 
   // FIX 3A: Filter by tags
   const filteredMenu = useMemo(() => {
