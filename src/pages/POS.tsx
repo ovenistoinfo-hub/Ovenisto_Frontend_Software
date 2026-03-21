@@ -7,6 +7,7 @@ import { userService } from "@/services/user.service";
 import { settingsService, type SettingsRecord } from "@/services/settings.service";
 import { inventoryService, type IngredientRecord } from "@/services/inventory.service";
 import { shiftService, type ShiftRecord } from "@/services/shift.service";
+import { deliveryService, type RiderRecord } from "@/services/delivery.service";
 import { Search, Plus, Minus, X, ShoppingCart, FileText, Printer, ArrowLeft, Trash2, User, MapPin, Phone, Flame, Check, CreditCard, Banknote, Smartphone, Star, RotateCcw, Download, ClipboardList, AlertTriangle, UtensilsCrossed, CalendarClock, Calendar, Wifi, Timer, ChefHat, Tag, Zap, History, Monitor, BookOpen, StickyNote, Eye, Building2, Crown, CircleAlert, Bell, DollarSign, Package, Ban } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -204,6 +205,8 @@ const POS = () => {
   const [deliveryAddress, setDeliveryAddress] = useState("");
   const [deliveryPhone, setDeliveryPhone] = useState("");
   const [rider, setRider] = useState("Self Pickup");
+  const [selectedRiderId, setSelectedRiderId] = useState<string>("");
+  const [apiRiders, setApiRiders] = useState<RiderRecord[]>([]);
 
   // Modifiers
   const [showModifiers, setShowModifiers] = useState(false);
@@ -370,6 +373,15 @@ const POS = () => {
   };
 
   const runningOrders = allOrdersData.filter((o) => o.status === "preparing" || o.status === "pending");
+
+  // Load available riders when delivery type is selected
+  useEffect(() => {
+    if (orderType === "Delivery") {
+      deliveryService.getRiders()
+        .then(riders => setApiRiders(riders.filter(r => r.isAvailable || r.status === "available")))
+        .catch(() => {});
+    }
+  }, [orderType]);
 
   // Check for open shift on mount via API
   useEffect(() => {
@@ -545,6 +557,7 @@ const POS = () => {
     setDeliveryAddress("");
     setDeliveryPhone("");
     setRider("Self Pickup");
+    setSelectedRiderId("");
   };
 
   const addToCart = (item: typeof foodMenuItems[0]) => {
@@ -640,6 +653,8 @@ const POS = () => {
     setTableNumber(null);
     setDeliveryAddress("");
     setDeliveryPhone("");
+    setRider("Self Pickup");
+    setSelectedRiderId("");
     setSelectedCustomer("");
     setLoadedAdvancePayment(0);
     setLoadedAdvanceMethod("");
@@ -745,6 +760,11 @@ const POS = () => {
         const created = await orderService.createOrder(orderPayload);
         finalOrderNumber = created.orderNumber;
         setApiOrders(prev => [normalizeApiOrder(created), ...prev]);
+        // Auto-assign rider if delivery order and rider selected
+        if (orderType === "Delivery" && selectedRiderId) {
+          deliveryService.assignRider({ orderId: created.id, riderId: selectedRiderId, estimatedTime: 30 })
+            .catch(() => {}); // non-blocking — cashier can assign from Delivery page too
+        }
         toast.success(`Order ${finalOrderNumber} placed! Total: Rs. ${total.toLocaleString()}`);
       }
     } catch (err: any) {
@@ -1158,13 +1178,18 @@ const POS = () => {
               <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
                 <Phone className="h-4 w-4 text-muted-foreground shrink-0" />
                 <Input value={deliveryPhone} onChange={(e) => setDeliveryPhone(e.target.value)} placeholder="Phone number" className="h-7 sm:h-8 text-xs flex-1" />
-                <Select value={rider} onValueChange={setRider}>
-                  <SelectTrigger className="w-44 h-8 text-xs"><SelectValue /></SelectTrigger>
+                <Select value={selectedRiderId || "none"} onValueChange={val => {
+                  if (val === "none") { setSelectedRiderId(""); setRider("Self Pickup"); return; }
+                  const r = apiRiders.find(r => r.id === val);
+                  if (r) { setSelectedRiderId(r.id); setRider(r.name); }
+                }}>
+                  <SelectTrigger className="w-44 h-8 text-xs"><SelectValue placeholder="Assign Rider" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="Self Pickup">Self Pickup</SelectItem>
-                    {deliveryRiders.map((r) => (
-                      <SelectItem key={r.id} value={r.name}>{r.name}{r.isAvailable ? '' : ' (Busy)'}</SelectItem>
+                    <SelectItem value="none">Self Pickup / Unassigned</SelectItem>
+                    {apiRiders.map((r) => (
+                      <SelectItem key={r.id} value={r.id}>{r.name}{r.phone ? ` — ${r.phone}` : ""}</SelectItem>
                     ))}
+                    {apiRiders.length === 0 && <SelectItem value="no-riders" disabled>No available riders</SelectItem>}
                   </SelectContent>
                 </Select>
               </div>
