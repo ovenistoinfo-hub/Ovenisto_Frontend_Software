@@ -11,7 +11,7 @@ import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PageHeader } from "@/components/ui/page-header";
 import { deliveryService, type RiderRecord, type AssignmentRecord } from "@/services/delivery.service";
-import { useSettings } from "@/contexts/SettingsContext";
+import { useData } from "@/contexts/DataContext";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
@@ -30,7 +30,7 @@ const RIDER_STATUS_COLORS: Record<string, string> = {
 };
 
 const Delivery = () => {
-  const { settings } = useSettings();
+  const { settings } = useData();
   const currency = settings?.currency || "Rs.";
 
   const [riderStats, setRiderStats]         = useState<RiderRecord[]>([]);

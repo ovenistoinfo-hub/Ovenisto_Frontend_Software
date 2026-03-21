@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { deliveryService, type RiderRecord, type AssignmentRecord } from "@/services/delivery.service";
-import { useSettings } from "@/contexts/SettingsContext";
+import { useData } from "@/contexts/DataContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -19,7 +19,7 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 const RiderPortal = () => {
-  const { settings }  = useSettings();
+  const { settings }  = useData();
   const { user }      = useAuth();
   const currency      = settings?.currency || "Rs.";
 
