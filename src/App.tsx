@@ -60,6 +60,7 @@ import OnlineOrders from "./pages/OnlineOrders";
 import Reservations from "./pages/Reservations";
 import TableLayout from "./pages/TableLayout";
 import EmployeePortal from "./pages/EmployeePortal";
+import RiderPortal from "./pages/RiderPortal";
 
 const queryClient = new QueryClient();
 
@@ -145,7 +146,7 @@ function AppRoutes() {
       <Route path="/users" element={<ProtectedRoute module="users"><AppLayout><Users /></AppLayout></ProtectedRoute>} />
       <Route path="/attendance" element={<ProtectedRoute module="attendance"><AppLayout><Attendance /></AppLayout></ProtectedRoute>} />
       <Route path="/shifts" element={<ProtectedRoute module="attendance"><AppLayout><Shifts /></AppLayout></ProtectedRoute>} />
-      <Route path="/my-portal" element={<ProtectedRoute module="my-portal"><AppLayout><EmployeePortal /></AppLayout></ProtectedRoute>} />
+      <Route path="/my-portal" element={<ProtectedRoute module="my-portal">{user?.role === 'Rider' ? <RiderPortal /> : <AppLayout><EmployeePortal /></AppLayout>}</ProtectedRoute>} />
       <Route path="/reports" element={<ProtectedRoute module="reports"><AppLayout><Reports /></AppLayout></ProtectedRoute>} />
       <Route path="/sms" element={<ProtectedRoute module="sms"><AppLayout><SMS /></AppLayout></ProtectedRoute>} />
       <Route path="/profile" element={<ProtectedRoute><AppLayout><Profile /></AppLayout></ProtectedRoute>} />
