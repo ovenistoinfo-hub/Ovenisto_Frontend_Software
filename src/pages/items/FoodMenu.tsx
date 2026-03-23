@@ -57,8 +57,8 @@ const FoodMenu = () => {
   const handleDelete = async (id: string) => {
     try {
       await menuService.deleteMenuItem(id);
+      setItems((prev) => prev.filter((i) => i.id !== id));
       toast.success("Deleted");
-      await fetchAll();
     } catch (err: any) {
       toast.error(err.message || "Failed to delete item");
     }

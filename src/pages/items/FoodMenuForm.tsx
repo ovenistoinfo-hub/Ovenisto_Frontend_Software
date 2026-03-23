@@ -10,8 +10,8 @@ import { Switch } from "@/components/ui/switch";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Trash2, Upload, ArrowLeft, Utensils, Timer, Loader2, X } from "lucide-react";
+
+import { Plus, Trash2, Upload, ArrowLeft, Utensils, Timer, Loader2, X, ChevronDown, ChevronRight } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { toast } from "sonner";
 import { menuService, type CategoryRecord, type ModifierRecord, type RecipeIngredient } from "@/services/menu.service";
@@ -122,7 +122,7 @@ const FoodMenuForm = () => {
   const [selectedModifiers, setSelectedModifiers] = useState<string[]>([]);
   // modifierVariantMap: modifierId → variantIds[] (empty = all variants)
   const [modifierVariantMap, setModifierVariantMap] = useState<Record<string, string[]>>({});
-  const [activeRecipeTab, setActiveRecipeTab] = useState("base");
+  const [expandedVariants, setExpandedVariants] = useState<Set<number>>(new Set([0]));
 
   // Reference data
   const [categories, setCategories] = useState<CategoryRecord[]>([]);
@@ -200,9 +200,16 @@ const FoodMenuForm = () => {
           // Load linked modifiers + variantIds
           if (item.modifiers && item.modifiers.length > 0) {
             setSelectedModifiers(item.modifiers.map((m: any) => m.id));
+            const isVariantPricing = item.variants && item.variants.length > 0;
+            const allVids = item.variants?.map((v: any) => v.id) || [];
             const vMap: Record<string, string[]> = {};
             item.modifiers.forEach((m: any) => {
-              if (m.variantIds?.length) vMap[m.id] = m.variantIds;
+              if (m.variantIds?.length) {
+                vMap[m.id] = m.variantIds;
+              } else if (isVariantPricing) {
+                // "All" means all variants — expand to explicit IDs for per-variant UI
+                vMap[m.id] = [...allVids];
+              }
             });
             setModifierVariantMap(vMap);
           }
@@ -216,14 +223,29 @@ const FoodMenuForm = () => {
     loadData();
   }, [isEdit, id]);
 
-  const addVariant = () => setVariants((p) => [...p, defaultVariant()]);
+  const addVariant = () => {
+    const newIndex = variants.length;
+    setVariants((p) => [...p, defaultVariant()]);
+    setExpandedVariants(prev => new Set([...prev, newIndex]));
+  };
   const removeVariant = (i: number) => {
-    const removedVariantId = savedVariantIds[i];
+    const removedVariantId = savedVariantIds[i] || `new-${i}`;
     setVariants((p) => p.filter((_, idx) => idx !== i));
     // Remove recipes linked to this variant
     if (removedVariantId) {
       setRecipe(p => p.filter(r => r.variantId !== removedVariantId));
     }
+    // Remove modifier assignments for this variant
+    setModifierVariantMap(prev => {
+      const next: Record<string, string[]> = {};
+      for (const [modId, vids] of Object.entries(prev)) {
+        next[modId] = vids.filter(v => v !== removedVariantId);
+      }
+      // Remove modifiers that have no variants left
+      const emptyMods = Object.keys(next).filter(k => next[k].length === 0);
+      setSelectedModifiers(p => p.filter(m => !emptyMods.includes(m)));
+      return next;
+    });
     // Re-index savedVariantIds
     setSavedVariantIds(prev => {
       const next: Record<number, string> = {};
@@ -231,6 +253,15 @@ const FoodMenuForm = () => {
         const idx = Number(k);
         if (idx < i) next[idx] = v;
         else if (idx > i) next[idx - 1] = v;
+      });
+      return next;
+    });
+    // Re-index expandedVariants
+    setExpandedVariants(prev => {
+      const next = new Set<number>();
+      prev.forEach(idx => {
+        if (idx < i) next.add(idx);
+        else if (idx > i) next.add(idx - 1);
       });
       return next;
     });
@@ -306,6 +337,32 @@ const FoodMenuForm = () => {
 
   const toggleModifier = (mid: string) => setSelectedModifiers((p) => p.includes(mid) ? p.filter((m) => m !== mid) : [...p, mid]);
 
+  const toggleVariantExpanded = (i: number) => {
+    setExpandedVariants(prev => {
+      const next = new Set(prev);
+      if (next.has(i)) next.delete(i); else next.add(i);
+      return next;
+    });
+  };
+
+  const getModifiersForVariant = (variantId: string): ModifierRecord[] =>
+    modifiersList.filter(m => (modifierVariantMap[m.id] || []).includes(variantId));
+
+  const isModifierForVariant = (modId: string, variantId: string): boolean =>
+    (modifierVariantMap[modId] || []).includes(variantId);
+
+  const toggleModifierForVariant = (modId: string, variantId: string) => {
+    const currentVids = modifierVariantMap[modId] || [];
+    const isAssigned = currentVids.includes(variantId);
+    const nextVids = isAssigned ? currentVids.filter(v => v !== variantId) : [...currentVids, variantId];
+    setModifierVariantMap(prev => ({ ...prev, [modId]: nextVids }));
+    if (nextVids.length === 0) {
+      setSelectedModifiers(p => p.filter(m => m !== modId));
+    } else if (!selectedModifiers.includes(modId)) {
+      setSelectedModifiers(p => [...p, modId]);
+    }
+  };
+
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -341,6 +398,8 @@ const FoodMenuForm = () => {
 
     setSaving(true);
     try {
+      // For variant pricing, omit modifiers from initial save — we'll set them
+      // after getting real variant IDs to avoid temp "new-N" IDs in DB
       const itemData: any = {
         name: form.name,
         code: form.code || undefined,
@@ -354,10 +413,9 @@ const FoodMenuForm = () => {
         image: imageUrl || null,
         cookingTime: form.cookingTime || 0,
         variants: pricingType === "variant" ? variants : [],
-        modifiers: selectedModifiers.map(mid => ({
-          id: mid,
-          variantIds: modifierVariantMap[mid] || [],
-        })),
+        modifiers: pricingType === "simple"
+          ? selectedModifiers.map(mid => ({ id: mid, variantIds: [] }))
+          : [], // set after save with real variant IDs
       };
 
       let savedId = id;
@@ -371,11 +429,31 @@ const FoodMenuForm = () => {
         toast.success("Item added successfully");
       }
 
+      // For variant pricing, fix modifier variantIds with real DB IDs
+      if (pricingType === "variant" && savedItem?.variants?.length && selectedModifiers.length > 0) {
+        const nameToRealId: Record<string, string> = {};
+        savedItem.variants.forEach((sv: any) => { nameToRealId[sv.name] = sv.id; });
+
+        const correctedModifiers = selectedModifiers.map(mid => {
+          const tempVids = modifierVariantMap[mid] || [];
+          const realVids = tempVids.map(vid => {
+            if (!vid.startsWith("new-")) return vid;
+            const idx = parseInt(vid.replace("new-", ""), 10);
+            const name = variants[idx]?.name;
+            return name ? (nameToRealId[name] || vid) : vid;
+          }).filter(vid => !vid.startsWith("new-"));
+          // If all variants selected → send empty (= "all")
+          const allSelected = savedItem.variants.every((sv: any) => realVids.includes(sv.id));
+          return { id: mid, variantIds: allSelected ? [] : realVids };
+        });
+
+        await menuService.updateMenuItem(savedId!, { modifiers: correctedModifiers });
+      }
+
       // Build variantId mapping from saved item's variants
-      const variantIdMap: Record<string, string> = {}; // old variantId or index-key → new DB id
+      const variantIdMap: Record<string, string> = {};
       if (savedItem?.variants?.length) {
-        savedItem.variants.forEach((sv: any, i: number) => {
-          // Map by variant name to the new DB id
+        savedItem.variants.forEach((sv: any) => {
           variantIdMap[sv.name] = sv.id;
         });
       }
@@ -391,9 +469,15 @@ const FoodMenuForm = () => {
               const matchingVariant = savedItem?.variants?.find((v: any) => v.id === r.variantId);
               if (matchingVariant) {
                 variantId = matchingVariant.id;
+              } else if (r.variantId.startsWith("new-")) {
+                // New item: temp ID like "new-0" → parse index → variant name → real ID
+                const idx = parseInt(r.variantId.replace("new-", ""), 10);
+                const vName = variants[idx]?.name;
+                if (vName && variantIdMap[vName]) {
+                  variantId = variantIdMap[vName];
+                }
               } else {
                 // Try mapping by variant name from the old savedVariantIds
-                // This handles newly created items where variantId was a temp key
                 const variantName = variants.find((_, i) => savedVariantIds[i] === r.variantId)?.name;
                 if (variantName && variantIdMap[variantName]) {
                   variantId = variantIdMap[variantName];
@@ -523,113 +607,120 @@ const FoodMenuForm = () => {
                 </div>
               </div>
             ) : (
-              <div className="space-y-4">
-                {variants.map((v, i) => (
-                  <div key={i} className="border rounded-lg p-3 space-y-2">
-                    <div className="flex items-center gap-3">
-                      <Input placeholder="Variant name" value={v.name} onChange={(e) => updateVariant(i, "name", e.target.value)} className="flex-1" />
-                      <div className="w-32"><Label className="text-[10px] text-muted-foreground">Base Price</Label><Input type="number" placeholder="Price" value={v.price || ""} onChange={(e) => updateVariant(i, "price", Number(e.target.value))} /></div>
-                      <Button variant="ghost" size="icon" className="text-destructive shrink-0" onClick={() => removeVariant(i)}><Trash2 className="h-4 w-4" /></Button>
+              <div className="space-y-3">
+                <p className="text-xs text-muted-foreground">Each variant has its own pricing, recipe, and modifiers. Click to expand.</p>
+                {variants.map((v, i) => {
+                  const variantId = savedVariantIds[i] || `new-${i}`;
+                  const isExpanded = expandedVariants.has(i);
+                  const cost = getRecipeCost(variantId);
+                  const recipeItems = getRecipeForVariant(variantId);
+                  const assignedMods = getModifiersForVariant(variantId);
+                  return (
+                    <div key={i} className="border rounded-lg overflow-hidden">
+                      {/* Collapsible Header */}
+                      <div
+                        className="flex items-center gap-2 p-3 bg-muted/30 cursor-pointer hover:bg-muted/50 transition-colors"
+                        onClick={() => toggleVariantExpanded(i)}
+                      >
+                        {isExpanded ? <ChevronDown className="h-4 w-4 shrink-0" /> : <ChevronRight className="h-4 w-4 shrink-0" />}
+                        <span className="font-medium flex-1 truncate">{v.name || `Variant ${i + 1}`}</span>
+                        <span className="text-sm font-medium whitespace-nowrap">Rs. {v.price.toLocaleString()}</span>
+                        {cost > 0 && <span className="text-[10px] text-muted-foreground bg-background border rounded px-1.5 py-0.5 whitespace-nowrap">Cost: Rs. {cost.toLocaleString()}</span>}
+                        <span className="text-[10px] text-muted-foreground bg-background border rounded px-1.5 py-0.5 whitespace-nowrap">{recipeItems.length} ing.</span>
+                        <span className="text-[10px] text-muted-foreground bg-background border rounded px-1.5 py-0.5 whitespace-nowrap">{assignedMods.length} mod.</span>
+                        <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive shrink-0" onClick={(e) => { e.stopPropagation(); removeVariant(i); }}>
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+
+                      {/* Expanded Content */}
+                      {isExpanded && (
+                        <div className="p-4 space-y-5 border-t">
+                          {/* Pricing */}
+                          <div className="space-y-2">
+                            <h4 className="text-sm font-medium text-primary">Pricing</h4>
+                            <div className="flex items-center gap-3">
+                              <Input placeholder="Variant name" value={v.name} onChange={(e) => updateVariant(i, "name", e.target.value)} className="flex-1" />
+                              <div className="w-32">
+                                <Label className="text-[10px] text-muted-foreground">Base Price</Label>
+                                <Input type="number" placeholder="Price" value={v.price || ""} onChange={(e) => updateVariant(i, "price", Number(e.target.value))} />
+                              </div>
+                            </div>
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                              {ORDER_TYPE_LABELS.map(({ key, label }) => (
+                                <div key={key}>
+                                  <Label className="text-[10px] text-muted-foreground">{label}</Label>
+                                  <Input type="number" placeholder="—" value={v[key] ?? ""} onChange={(e) => updateVariant(i, key, e.target.value ? Number(e.target.value) : null)} className="h-8 text-xs" />
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* Recipe / Ingredients */}
+                          <div className="space-y-2">
+                            <h4 className="text-sm font-medium text-primary">Recipe / Ingredients</h4>
+                            {renderRecipeSection(variantId, v.name)}
+                          </div>
+
+                          {/* Modifiers */}
+                          <div className="space-y-2">
+                            <h4 className="text-sm font-medium text-primary">Modifiers</h4>
+                            <div className="space-y-1.5">
+                              {modifiersList.map((m) => {
+                                const isChecked = isModifierForVariant(m.id, variantId);
+                                return (
+                                  <label key={m.id} className={`flex items-center gap-2 text-sm rounded border p-2 cursor-pointer transition-colors ${isChecked ? "border-primary/40 bg-primary/5" : "hover:bg-muted/30"}`}>
+                                    <Checkbox checked={isChecked} onCheckedChange={() => toggleModifierForVariant(m.id, variantId)} />
+                                    <span className="flex-1">{m.name}</span>
+                                    <span className="text-muted-foreground text-xs">{Number(m.price) > 0 ? `+Rs.${m.price}` : "Free"}</span>
+                                  </label>
+                                );
+                              })}
+                              {modifiersList.length === 0 && <p className="text-xs text-muted-foreground">No modifiers available.</p>}
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                      {ORDER_TYPE_LABELS.map(({ key, label }) => (
-                        <div key={key}><Label className="text-[10px] text-muted-foreground">{label}</Label><Input type="number" placeholder="—" value={v[key] ?? ""} onChange={(e) => updateVariant(i, key, e.target.value ? Number(e.target.value) : null)} className="h-8 text-xs" /></div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
                 <Button variant="outline" size="sm" onClick={addVariant}><Plus className="h-3 w-3 mr-1" />Add Variant</Button>
               </div>
             )}
           </CardContent></Card>
 
-          {/* Recipe / Ingredients */}
-          <Card className="shadow-sm">
-            <CardHeader><CardTitle className="text-base">Recipe / Ingredients</CardTitle></CardHeader>
-            <CardContent>
-              {pricingType === "simple" ? (
-                // Simple pricing: one recipe
-                renderRecipeSection(null, null)
-              ) : (
-                // Variant pricing: tab per variant
-                <Tabs value={activeRecipeTab} onValueChange={setActiveRecipeTab}>
-                  <TabsList className="mb-4 flex-wrap h-auto gap-1">
-                    {variants.filter(v => v.name.trim()).map((v, i) => (
-                      <TabsTrigger key={i} value={savedVariantIds[i] || `new-${i}`} className="text-xs">
-                        {v.name}
-                      </TabsTrigger>
-                    ))}
-                  </TabsList>
-                  {variants.filter(v => v.name.trim()).map((v, i) => {
-                    const variantId = savedVariantIds[i] || `new-${i}`;
-                    return (
-                      <TabsContent key={i} value={variantId}>
-                        <p className="text-xs text-muted-foreground mb-3">
-                          Recipe for <strong>{v.name}</strong> (Rs. {v.price})
-                        </p>
-                        {renderRecipeSection(variantId, v.name)}
-                      </TabsContent>
-                    );
-                  })}
-                </Tabs>
-              )}
-            </CardContent>
-          </Card>
+          {/* Recipe / Ingredients — only for simple pricing (variant recipes are inside each variant section) */}
+          {pricingType === "simple" && (
+            <Card className="shadow-sm">
+              <CardHeader><CardTitle className="text-base">Recipe / Ingredients</CardTitle></CardHeader>
+              <CardContent>
+                {renderRecipeSection(null, null)}
+              </CardContent>
+            </Card>
+          )}
 
-          {/* Modifiers */}
-          <Card className="shadow-sm">
-            <CardHeader>
-              <CardTitle className="text-base">Modifiers</CardTitle>
-              <p className="text-xs text-muted-foreground">Select modifiers for this item. {pricingType === "variant" && "You can assign each modifier to specific variants."}</p>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              {modifiersList.map((m) => {
-                const isSelected = selectedModifiers.includes(m.id);
-                const variantIdsForMod = modifierVariantMap[m.id] || [];
-                return (
-                  <div key={m.id} className={`rounded border p-2 ${isSelected ? "border-primary/40 bg-primary/5" : ""}`}>
-                    <label className="flex items-center gap-2 text-sm cursor-pointer">
+          {/* Modifiers — only for simple pricing (variant modifiers are inside each variant section) */}
+          {pricingType === "simple" && (
+            <Card className="shadow-sm">
+              <CardHeader>
+                <CardTitle className="text-base">Modifiers</CardTitle>
+                <p className="text-xs text-muted-foreground">Select modifiers for this item.</p>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {modifiersList.map((m) => {
+                  const isSelected = selectedModifiers.includes(m.id);
+                  return (
+                    <label key={m.id} className={`flex items-center gap-2 text-sm rounded border p-2 cursor-pointer ${isSelected ? "border-primary/40 bg-primary/5" : ""}`}>
                       <Checkbox checked={isSelected} onCheckedChange={() => toggleModifier(m.id)} />
                       <span className="flex-1">{m.name}</span>
                       <span className="text-muted-foreground text-xs">{Number(m.price) > 0 ? `+Rs.${m.price}` : "Free"}</span>
                     </label>
-                    {isSelected && pricingType === "variant" && variants.length > 0 && (
-                      <div className="ml-6 mt-1.5 flex flex-wrap gap-1.5">
-                        <span className="text-[10px] text-muted-foreground mr-1">Variants:</span>
-                        <label className="flex items-center gap-1 text-[10px] cursor-pointer">
-                          <Checkbox className="h-3 w-3" checked={variantIdsForMod.length === 0}
-                            onCheckedChange={() => setModifierVariantMap(p => ({ ...p, [m.id]: [] }))} />
-                          <span>All</span>
-                        </label>
-                        {variants.filter(v => v.name.trim()).map((v, vi) => {
-                          const vid = savedVariantIds[vi] || `new-${vi}`;
-                          const checked = variantIdsForMod.length === 0 || variantIdsForMod.includes(vid);
-                          return (
-                            <label key={vi} className="flex items-center gap-1 text-[10px] cursor-pointer">
-                              <Checkbox className="h-3 w-3" checked={checked && variantIdsForMod.length > 0}
-                                onCheckedChange={(c) => {
-                                  setModifierVariantMap(p => {
-                                    const current = p[m.id] || [];
-                                    // If switching from "All" to specific
-                                    const allVids = variants.map((_, j) => savedVariantIds[j] || `new-${j}`);
-                                    const base = current.length === 0 ? allVids : current;
-                                    const next = c ? [...new Set([...base, vid])] : base.filter(x => x !== vid);
-                                    return { ...p, [m.id]: next.length === allVids.length ? [] : next };
-                                  });
-                                }}
-                              />
-                              <span>{v.name}</span>
-                            </label>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-              {modifiersList.length === 0 && <p className="text-xs text-muted-foreground">No modifiers created yet. Go to Items &gt; Modifiers to create some.</p>}
-            </CardContent>
-          </Card>
+                  );
+                })}
+                {modifiersList.length === 0 && <p className="text-xs text-muted-foreground">No modifiers created yet. Go to Items &gt; Modifiers to create some.</p>}
+              </CardContent>
+            </Card>
+          )}
         </div>
 
         {/* Right column */}
