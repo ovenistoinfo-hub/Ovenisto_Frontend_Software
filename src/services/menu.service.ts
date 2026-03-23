@@ -16,6 +16,10 @@ export interface MenuItemVariant {
   id: string;
   name: string;
   price: number;
+  dineInPrice: number | null;
+  takeAwayPrice: number | null;
+  deliveryPrice: number | null;
+  foodpandaPrice: number | null;
   displayOrder: number;
 }
 
@@ -26,18 +30,35 @@ export interface MenuItemRecord {
   categoryId: string | null;
   category: { id: string; name: string } | null;
   price: number;
+  dineInPrice: number | null;
+  takeAwayPrice: number | null;
+  deliveryPrice: number | null;
+  foodpandaPrice: number | null;
   available: boolean;
   image: string | null;
   tags: string[];
   cookingTime: number;
   variants: MenuItemVariant[];
+  modifiers?: MenuItemModifierRecord[];
+}
+
+export interface MenuItemModifierRecord {
+  id: string;
+  name: string;
+  price: number;
+  type: string;
+  status: string;
+  variantIds: string[];
 }
 
 export interface RecipeIngredient {
   id: string;
   menuItemId: string;
+  variantId: string | null;
   ingredientId: string;
   qtyPerUnit: number;
+  usageUnitId: string | null;
+  usageUnit: { id: string; name: string } | null;
   ingredient: {
     id: string;
     name: string;
@@ -113,7 +134,7 @@ export const menuService = {
     return res.data;
   },
 
-  async updateRecipe(itemId: string, ingredients: { ingredientId: string; qtyPerUnit: number }[]): Promise<RecipeIngredient[]> {
+  async updateRecipe(itemId: string, ingredients: { ingredientId: string; qtyPerUnit: number; variantId?: string | null; usageUnitId?: string | null }[]): Promise<RecipeIngredient[]> {
     const res = await api.put<{ success: boolean; data: RecipeIngredient[] }>(`/menu/items/${itemId}/recipe`, { ingredients });
     return res.data;
   },

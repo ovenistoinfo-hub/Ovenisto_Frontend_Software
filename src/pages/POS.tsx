@@ -35,6 +35,22 @@ interface CartItem extends OrderItem {
   modifiers?: string[];
   cookingTime?: number;
   notes?: string;
+  menuItemId?: string;
+  variantId?: string | null;
+}
+
+/** Resolve price based on order type — falls back to base `price` */
+function resolvePrice(target: any, orderType: string): number {
+  if (!target) return 0;
+  const map: Record<string, string> = {
+    "Dine In": "dineInPrice",
+    "Take Away": "takeAwayPrice",
+    "Delivery": "deliveryPrice",
+    "Foodpanda": "foodpandaPrice",
+  };
+  const key = map[orderType];
+  if (key && target[key] != null) return Number(target[key]);
+  return Number(target.price ?? 0);
 }
 
 interface DraftOrder {
@@ -562,12 +578,14 @@ const POS = () => {
 
   const addToCart = (item: typeof foodMenuItems[0]) => {
     const hasVariants = (item as any).variants && (item as any).variants.length > 0;
-    const hasModifiers = modifiers.filter(m => m.status === "active").length > 0;
+    const itemModifiers = (item as any).modifiers?.filter((m: any) => m.status === "active") || [];
+    const hasModifiers = itemModifiers.length > 0;
     if (!hasVariants && !hasModifiers) {
+      const itemPrice = resolvePrice(item, orderType);
       setCart(prev => {
         const existing = prev.find(c => c.name === item.name && (!c.modifiers || c.modifiers.length === 0));
         if (existing) return prev.map(c => c === existing ? { ...c, qty: c.qty + 1 } : c);
-        return [...prev, { id: `${item.id}-${Date.now()}`, name: item.name, price: item.price, qty: 1, discount: 0, modifiers: [], cookingTime: (item as any).cookingTime || 0 }];
+        return [...prev, { id: `${item.id}-${Date.now()}`, name: item.name, price: itemPrice, qty: 1, discount: 0, modifiers: [], cookingTime: (item as any).cookingTime || 0, menuItemId: item.id }];
       });
       toast.success(`${item.name} added`);
       return;
@@ -586,15 +604,29 @@ const POS = () => {
 
   const confirmAddToCart = () => {
     if (!pendingItem) return;
+    const itemMods: any[] = (pendingItem as any).modifiers || modifiers;
     const modifiersCost = selectedModifiers.reduce((sum, mId) => {
-      const mod = modifiers.find((m) => m.id === mId);
-      return sum + (mod?.price || 0);
+      const mod = itemMods.find((m: any) => m.id === mId) || modifiers.find((m) => m.id === mId);
+      return sum + (Number(mod?.price) || 0);
     }, 0);
+
+    const variants = (pendingItem as any).variants || [];
+    const selectedVariantObj = selectedVariant ? variants.find((v: any) => v.name === selectedVariant) : null;
+    const variantPrice = selectedVariantObj ? resolvePrice(selectedVariantObj, orderType) : resolvePrice(pendingItem, orderType);
+    const variantLabel = selectedVariant ? ` (${selectedVariant})` : "";
+
     setCart((prev) => {
+      const fullName = `${pendingItem.name}${variantLabel}`;
       const modKey = selectedModifiers.sort().join("-");
-      const existingIdx = prev.findIndex((c) => c.id === pendingItem.id && (c.modifiers?.sort().join("-") || "") === modKey);
+      const existingIdx = prev.findIndex((c) => c.name === fullName && (c.modifiers?.sort().join("-") || "") === modKey);
       if (existingIdx >= 0 && selectedModifiers.length === 0) return prev.map((c, i) => i === existingIdx ? { ...c, qty: c.qty + 1 } : c);
-      return [...prev, { id: `${pendingItem.id}-${Date.now()}`, name: pendingItem.name, price: pendingItem.price + modifiersCost, qty: 1, discount: 0, modifiers: selectedModifiers.map((mId) => modifiers.find((m) => m.id === mId)?.name || ""), cookingTime: (pendingItem as any).cookingTime || 0 }];
+      const modLabels = selectedModifiers.map((mId) => (itemMods.find((m: any) => m.id === mId) || modifiers.find((m) => m.id === mId))?.name || "");
+      return [...prev, {
+        id: `${pendingItem.id}-${Date.now()}`, name: fullName,
+        price: variantPrice + modifiersCost, qty: 1, discount: 0,
+        modifiers: modLabels, cookingTime: (pendingItem as any).cookingTime || 0,
+        menuItemId: pendingItem.id, variantId: selectedVariantObj?.id || null,
+      }];
     });
     setShowModifiers(false);
     setPendingItem(null);
@@ -604,10 +636,11 @@ const POS = () => {
 
   const addDirectToCart = () => {
     if (!pendingItem) return;
+    const itemPrice = resolvePrice(pendingItem, orderType);
     setCart((prev) => {
       const existing = prev.find((c) => c.name === pendingItem.name && (!c.modifiers || c.modifiers.length === 0));
       if (existing) return prev.map((c) => c === existing ? { ...c, qty: c.qty + 1 } : c);
-      return [...prev, { id: `${pendingItem.id}-${Date.now()}`, name: pendingItem.name, price: pendingItem.price, qty: 1, discount: 0, modifiers: [], cookingTime: (pendingItem as any).cookingTime || 0 }];
+      return [...prev, { id: `${pendingItem.id}-${Date.now()}`, name: pendingItem.name, price: itemPrice, qty: 1, discount: 0, modifiers: [], cookingTime: (pendingItem as any).cookingTime || 0, menuItemId: pendingItem.id }];
     });
     setShowModifiers(false);
     setPendingItem(null);
@@ -736,6 +769,7 @@ const POS = () => {
       type: orderType,
       items: cart.map((c) => ({
         menuItemId: (c as any).menuItemId || null,
+        variantId: (c as any).variantId || null,
         name: c.name, price: c.price, qty: c.qty, discount: c.discount,
         modifiers: c.modifiers || [], cookingTime: c.cookingTime || null, notes: c.notes || null,
       })),
@@ -1355,7 +1389,7 @@ const POS = () => {
                     </div>
                     <p className="text-xs font-semibold truncate">{item.name}</p>
                     <div className="flex items-center justify-between mt-0.5">
-                      <p className="text-[11px] text-primary font-bold">{effectiveSettings.currency} {item.price}</p>
+                      <p className="text-[11px] text-primary font-bold">{effectiveSettings.currency} {resolvePrice(item, orderType)}</p>
                       {(item as any).cookingTime > 0 && (
                         <span className="text-[9px] text-muted-foreground flex items-center gap-0.5"><Timer className="h-2.5 w-2.5" />{(item as any).cookingTime}m</span>
                       )}
@@ -1372,13 +1406,13 @@ const POS = () => {
                         <div>
                           <p className="font-semibold text-sm">{item.name}</p>
                           {(() => {
-                            const basePrice = selectedVariant
-                              ? (item as any).variants?.find((v: any) => v.name === selectedVariant)?.price ?? item.price
-                              : item.price;
-                            const modCost = selectedModifiers.reduce((s, mId) => s + (modifiers.find(m => m.id === mId)?.price || 0), 0);
+                            const selectedVariantObj = selectedVariant ? (item as any).variants?.find((v: any) => v.name === selectedVariant) : null;
+                            const basePrice = selectedVariantObj ? resolvePrice(selectedVariantObj, orderType) : resolvePrice(item, orderType);
+                            const itemMods: any[] = (item as any).modifiers || [];
+                            const modCost = selectedModifiers.reduce((s, mId) => s + Number(itemMods.find((m: any) => m.id === mId)?.price || modifiers.find(m => m.id === mId)?.price || 0), 0);
                             return (
                               <p className="text-primary font-bold text-sm">
-                                Rs. {basePrice + modCost}
+                                {effectiveSettings.currency} {basePrice + modCost}
                                 {modCost > 0 && <span className="text-[10px] text-muted-foreground font-normal ml-1">(+{modCost} extras)</span>}
                               </p>
                             );
@@ -1390,52 +1424,72 @@ const POS = () => {
                         <>
                           <p className="text-xs font-medium text-muted-foreground mb-2">Select Size:</p>
                           <div className="flex flex-wrap gap-2 mb-3">
-                            {(item as any).variants.map((v: { name: string; price: number }) => (
+                            {(item as any).variants.map((v: any) => (
                               <button key={v.name} onClick={() => setSelectedVariant(selectedVariant === v.name ? null : v.name)} className={cn(
                                 "px-3 py-2 rounded-lg border text-xs font-medium transition-all",
                                 selectedVariant === v.name
                                   ? "border-primary bg-primary/10 text-primary ring-1 ring-primary"
                                   : "border-border hover:border-primary/50 hover:bg-muted/50"
                               )}>
-                                {v.name} <span className="text-muted-foreground ml-1">Rs.{v.price}</span>
+                                {v.name} <span className="text-muted-foreground ml-1">{effectiveSettings.currency}{resolvePrice(v, orderType)}</span>
                               </button>
                             ))}
                           </div>
                         </>
                       )}
-                      {/* Modifiers */}
-                      {modifiers.filter(m => m.status === "active").length > 0 && (
-                        <>
-                          <p className="text-xs font-medium text-muted-foreground mb-2">Select Modifiers (optional):</p>
-                          <div className="flex flex-wrap gap-2 mb-3">
-                            {modifiers.filter(m => m.status === "active").map(m => (
-                              <button key={m.id} onClick={() => {
-                                if (selectedModifiers.includes(m.id)) setSelectedModifiers(p => p.filter(x => x !== m.id));
-                                else setSelectedModifiers(p => [...p, m.id]);
-                              }} className={cn(
-                                "px-3 py-2 rounded-lg border text-xs font-medium transition-all",
-                                selectedModifiers.includes(m.id)
-                                  ? "border-primary bg-primary/10 text-primary ring-1 ring-primary"
-                                  : "border-border hover:border-primary/50 hover:bg-muted/50"
-                              )}>
-                                {m.name} {m.price > 0 && <span className="text-muted-foreground ml-1">+Rs.{m.price}</span>}
-                              </button>
-                            ))}
-                          </div>
-                        </>
-                      )}
+                      {/* Modifiers — filtered by active variant */}
+                      {(() => {
+                        const selectedVariantObj = selectedVariant ? (item as any).variants?.find((v: any) => v.name === selectedVariant) : null;
+                        const selectedVarId = selectedVariantObj?.id;
+                        const itemMods: any[] = ((item as any).modifiers || [])
+                          .filter((m: any) => m.status === "active")
+                          .filter((m: any) => {
+                            // If modifier has variantIds filter, only show for matching variant
+                            if (!m.variantIds || m.variantIds.length === 0) return true; // applies to all
+                            if (!selectedVarId) return true; // no variant selected, show all
+                            return m.variantIds.includes(selectedVarId);
+                          });
+                        if (itemMods.length === 0) return null;
+                        return (
+                          <>
+                            <p className="text-xs font-medium text-muted-foreground mb-2">Select Modifiers (optional):</p>
+                            <div className="flex flex-wrap gap-2 mb-3">
+                              {itemMods.map((m: any) => (
+                                <button key={m.id} onClick={() => {
+                                  if (selectedModifiers.includes(m.id)) setSelectedModifiers(p => p.filter(x => x !== m.id));
+                                  else setSelectedModifiers(p => [...p, m.id]);
+                                }} className={cn(
+                                  "px-3 py-2 rounded-lg border text-xs font-medium transition-all",
+                                  selectedModifiers.includes(m.id)
+                                    ? "border-primary bg-primary/10 text-primary ring-1 ring-primary"
+                                    : "border-border hover:border-primary/50 hover:bg-muted/50"
+                                )}>
+                                  {m.name} {Number(m.price) > 0 && <span className="text-muted-foreground ml-1">+Rs.{m.price}</span>}
+                                </button>
+                              ))}
+                            </div>
+                          </>
+                        );
+                      })()}
                       <div className="flex gap-2">
                         <Button size="sm" variant="outline" className="text-xs" onClick={() => { addDirectToCart(); }}>Add Without Extras</Button>
                         <Button size="sm" className="gradient-primary text-primary-foreground text-xs" onClick={() => {
                           if (!pendingItem) return;
-                          const variantPrice = selectedVariant ? (item as any).variants?.find((v: any) => v.name === selectedVariant)?.price || item.price : item.price;
+                          const selectedVariantObj = selectedVariant ? (item as any).variants?.find((v: any) => v.name === selectedVariant) : null;
+                          const variantPrice = selectedVariantObj ? resolvePrice(selectedVariantObj, orderType) : resolvePrice(item, orderType);
+                          const allMods: any[] = (item as any).modifiers || modifiers;
                           const modifiersCost = selectedModifiers.reduce((sum, mId) => {
-                            const mod = modifiers.find((m) => m.id === mId);
-                            return sum + (mod?.price || 0);
+                            const mod = allMods.find((m: any) => m.id === mId) || modifiers.find((m) => m.id === mId);
+                            return sum + (Number(mod?.price) || 0);
                           }, 0);
                           const variantLabel = selectedVariant ? ` (${selectedVariant})` : "";
-                          const modLabels = selectedModifiers.map((mId) => modifiers.find((m) => m.id === mId)?.name || "");
-                          setCart(prev => [...prev, { id: `${item.id}-${Date.now()}`, name: `${item.name}${variantLabel}`, price: variantPrice + modifiersCost, qty: 1, discount: 0, modifiers: modLabels, cookingTime: (item as any).cookingTime || 0, menuItemId: item.id }]);
+                          const modLabels = selectedModifiers.map((mId) => (allMods.find((m: any) => m.id === mId) || modifiers.find((m) => m.id === mId))?.name || "");
+                          setCart(prev => [...prev, {
+                            id: `${item.id}-${Date.now()}`, name: `${item.name}${variantLabel}`,
+                            price: variantPrice + modifiersCost, qty: 1, discount: 0,
+                            modifiers: modLabels, cookingTime: (item as any).cookingTime || 0,
+                            menuItemId: item.id, variantId: selectedVariantObj?.id || null,
+                          }]);
                           setExpandedItemId(null);
                           setPendingItem(null);
                           setSelectedVariant(null);
