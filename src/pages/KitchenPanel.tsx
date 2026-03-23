@@ -63,14 +63,25 @@ const KitchenPanel = () => {
   const preparingAtMap = useRef<Record<string, Date>>({});
 
   const buildKitchenOrders = useCallback((orders: OrderRecord[], kitch: KitchenRecord) => {
+    const cats = kitch.assignedCategories ?? [];
+    const hasFilter = cats.length > 0;
+
     return orders
       .filter((o) => o.status !== "completed" && o.status !== "cancelled")
+      // Exclude self-orders that are still pending (not yet approved by waiter)
+      .filter((o) => !(o.type === "Self Order" && o.status === "pending"))
       .map((o) => {
-        const relevantItems = o.items.map((item) => ({
-          name: item.name,
-          qty: item.qty,
-          cookingTime: item.cookingTime ?? 0,
-        }));
+        // Only show items whose category matches this kitchen's assigned categories
+        const relevantItems = o.items
+          .filter((item) => {
+            if (!hasFilter) return true; // no categories assigned → show all
+            return item.categoryName ? cats.includes(item.categoryName) : false;
+          })
+          .map((item) => ({
+            name: item.name,
+            qty: item.qty,
+            cookingTime: item.cookingTime ?? 0,
+          }));
 
         if (!relevantItems.length) return null;
 

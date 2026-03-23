@@ -266,9 +266,17 @@ const SelfOrder = () => {
             <Check className="h-10 w-10 text-success" />
           </div>
           <h1 className="text-2xl font-bold">Order Placed!</h1>
-          <p className="text-muted-foreground">Your order <strong>#{orderPlaced}</strong> has been sent to the kitchen.</p>
-          {orderType === "Dine In" && <p className="text-sm text-muted-foreground">Please wait at Table {tableNumber}.</p>}
-          {orderType === "Take Away" && <p className="text-sm text-muted-foreground">Please collect your order at the counter.</p>}
+          {orderType === "Dine In" ? (
+            <>
+              <p className="text-muted-foreground">Your order <strong>#{orderPlaced}</strong> has been sent to the waiter for confirmation.</p>
+              <p className="text-sm text-muted-foreground">Please wait at Table {tableNumber}.</p>
+            </>
+          ) : (
+            <>
+              <p className="text-muted-foreground">Your order <strong>#{orderPlaced}</strong> has been sent to the kitchen.</p>
+              {orderType === "Take Away" && <p className="text-sm text-muted-foreground">Please collect your order at the counter.</p>}
+            </>
+          )}
           <div className="animate-pulse text-xs text-muted-foreground">Returning to menu...</div>
         </div>
       </div>

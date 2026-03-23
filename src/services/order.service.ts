@@ -15,6 +15,7 @@ export interface OrderItemRecord {
   modifiers: string[];
   cookingTime: number | null;
   notes: string | null;
+  categoryName: string | null;
 }
 
 export interface OrderRecord {

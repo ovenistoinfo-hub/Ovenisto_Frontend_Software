@@ -8,7 +8,8 @@ import { settingsService, type SettingsRecord } from "@/services/settings.servic
 import { inventoryService, type IngredientRecord } from "@/services/inventory.service";
 import { shiftService, type ShiftRecord } from "@/services/shift.service";
 import { deliveryService, type RiderRecord } from "@/services/delivery.service";
-import { Search, Plus, Minus, X, ShoppingCart, FileText, Printer, ArrowLeft, Trash2, User, MapPin, Phone, Flame, Check, CreditCard, Banknote, Smartphone, Star, RotateCcw, Download, ClipboardList, AlertTriangle, UtensilsCrossed, CalendarClock, Calendar, Wifi, Timer, ChefHat, Tag, Zap, History, Monitor, BookOpen, StickyNote, Eye, Building2, Crown, CircleAlert, Bell, DollarSign, Package, Ban } from "lucide-react";
+import { tableService, type TableRecord } from "@/services/table.service";
+import { Search, Plus, Minus, X, ShoppingCart, FileText, Printer, ArrowLeft, Trash2, User, MapPin, Phone, Flame, Check, CreditCard, Banknote, Smartphone, Star, RotateCcw, Download, ClipboardList, AlertTriangle, UtensilsCrossed, CalendarClock, Calendar, Timer, ChefHat, Tag, Zap, History, Monitor, BookOpen, StickyNote, Eye, Building2, Crown, CircleAlert, Bell, DollarSign, Package, Ban } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -24,7 +25,7 @@ import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { generateInvoicePDF } from "@/lib/generate-invoice-pdf";
 import { useData } from "@/contexts/DataContext";
@@ -71,7 +72,7 @@ interface PaymentEntry {
 }
 
 const orderTypes: OrderType[] = ["Dine In", "Take Away", "Delivery"];
-const tableNumbers = Array.from({ length: 12 }, (_, i) => i + 1);
+// tableNumbers kept as fallback; backend tables loaded at runtime
 
 const finalizeMethods = [
   { id: "Cash", icon: Banknote, label: "Cash" },
@@ -86,6 +87,7 @@ const quickDenominations = [10, 20, 50, 100, 500, 1000];
 const POS = () => {
   const { orders: localOrdersData, customers: customersList, foodMenuItems: localFoodMenuItems, foodCategories: localFoodCategories, modifiers: localModifiers, kitchens: localKitchens, ingredients, addItem, updateItem: updateDataItem, shifts, settings, users, riders: deliveryRiders, deals, reservations, loyaltyMembers } = useData();
   const { user } = useAuth();
+  const location = useLocation();
 
   // ── API data state (overrides localStorage) ──
   const [apiOrders, setApiOrders] = useState<any[]>([]);
@@ -188,6 +190,43 @@ const POS = () => {
     return () => clearInterval(interval);
   }, [loadApiOrders]);
 
+  // ── Load order from Order Status Board (payment collection) ──
+  useEffect(() => {
+    const state = location.state as { loadOrderId?: string; paymentOnly?: boolean } | null;
+    if (state?.loadOrderId) {
+      // Delay slightly so allOrdersData is populated
+      const timer = setTimeout(() => {
+        const order = allOrdersData.find((o) => o.id === state.loadOrderId);
+        if (order) {
+          setCart(order.items.map((item: any) => ({ ...item, id: `${item.id}-${Date.now()}` })));
+          setOrderType(order.type);
+          setSelectedCustomer(effectiveCustomers.find((c: any) => c.name === order.customer)?.id || "");
+          if (order.tableNumber) setTableNumber(order.tableNumber);
+          if (order.deliveryAddress) setDeliveryAddress(order.deliveryAddress);
+          setLoadedOrderId(state.loadOrderId!);
+          setSelectedRunningOrder(state.loadOrderId!);
+          if (state.paymentOnly) setPaymentOnlyMode(true);
+          toast.info(`Loaded ${order.orderNumber} for payment`);
+        } else {
+          // Try fetching directly
+          orderService.getOrder(state.loadOrderId!).then((apiOrder) => {
+            const normalized = normalizeApiOrder(apiOrder);
+            setCart(normalized.items.map((item: any) => ({ ...item, id: `${item.id}-${Date.now()}` })));
+            setOrderType(normalized.type);
+            if (normalized.tableNumber) setTableNumber(normalized.tableNumber);
+            setLoadedOrderId(state.loadOrderId!);
+            if (state.paymentOnly) setPaymentOnlyMode(true);
+            toast.info(`Loaded ${normalized.orderNumber} for payment`);
+          }).catch(() => toast.error("Could not load order"));
+        }
+        // Clear the navigation state
+        window.history.replaceState({}, document.title);
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.state]);
+
   // Update order status via API + optimistic local update
   const handleOrderStatusUpdate = useCallback(async (id: string, status: string) => {
     // Record the exact moment an order is accepted into "preparing"
@@ -218,6 +257,7 @@ const POS = () => {
 
   // Table & Delivery
   const [tableNumber, setTableNumber] = useState<number | null>(null);
+  const [backendTables, setBackendTables] = useState<TableRecord[]>([]);
   const [deliveryAddress, setDeliveryAddress] = useState("");
   const [deliveryPhone, setDeliveryPhone] = useState("");
   const [rider, setRider] = useState("Self Pickup");
@@ -281,8 +321,8 @@ const POS = () => {
   // Low Stock
   const [showLowStock, setShowLowStock] = useState(false);
 
-  // Self & Online Orders
-  const [showSelfOnlineOrders, setShowSelfOnlineOrders] = useState(false);
+  // Payment-only mode (loaded from Order Status for collecting payment on existing order)
+  const [paymentOnlyMode, setPaymentOnlyMode] = useState(false);
 
   // Staff / Waiter
   const [selectedStaff, setSelectedStaff] = useState(user?.name || "Admin User");
@@ -390,6 +430,11 @@ const POS = () => {
 
   const runningOrders = allOrdersData.filter((o) => o.status === "preparing" || o.status === "pending");
 
+  // Load tables from backend once on mount
+  useEffect(() => {
+    tableService.getTables().then(setBackendTables).catch(() => {});
+  }, []);
+
   // Load available riders when delivery type is selected
   useEffect(() => {
     if (orderType === "Delivery") {
@@ -461,13 +506,6 @@ const POS = () => {
     if (apiStaff.length > 0) return apiStaff;
     return users.filter(u => u.status === "active" && STAFF_ROLES.includes(u.role));
   }, [apiStaff, users]);
-
-  const selfOnlineOrders = useMemo(() =>
-    allOrdersData
-      .filter(o => (o.type === "Online" || o.type === "Self Order" || (o as any).orderSource === "self-order" || (o as any).orderSource === "website") && o.status !== "completed" && o.status !== "cancelled" && o.status !== "scheduled")
-      .sort((a, b) => b.date.localeCompare(a.date) || b.time.localeCompare(a.time)),
-    [allOrdersData]
-  );
 
   // Today's reservations for POS view
   const todayStr = new Date().toISOString().split("T")[0];
@@ -692,6 +730,7 @@ const POS = () => {
     setLoadedAdvancePayment(0);
     setLoadedAdvanceMethod("");
     setIsUrgent(false);
+    setPaymentOnlyMode(false);
     orderStartTime.current = Date.now();
     localStorage.setItem("ovenisto-pos-cart", JSON.stringify({ cart: [], status: "idle", timestamp: Date.now() }));
   };
@@ -762,44 +801,56 @@ const POS = () => {
       payMethodStr = `Advance (${loadedAdvanceMethod}): Rs.${loadedAdvancePayment}, ${payMethodStr}`;
     }
 
-    const orderPayload = {
-      customerId: selectedCustomer || undefined,
-      customerName: selectedCustomerData?.name || "Walk-in",
-      phone: (selectedCustomerData as any)?.phone || deliveryPhone || undefined,
-      type: orderType,
-      items: cart.map((c) => ({
-        menuItemId: (c as any).menuItemId || null,
-        variantId: (c as any).variantId || null,
-        name: c.name, price: c.price, qty: c.qty, discount: c.discount,
-        modifiers: c.modifiers || [], cookingTime: c.cookingTime || null, notes: c.notes || null,
-      })),
-      subtotal: itemsSubtotal, discount: orderDiscount, tax, total,
-      paymentMethod: payMethodStr,
-      staffName: selectedStaff,
-      tableNumber: orderType === "Dine In" ? tableNumber || null : null,
-      deliveryAddress: orderType === "Delivery" ? deliveryAddress : undefined,
-      isUrgent,
-      customerType: (selectedCustomerData as any)?.customerType || "walk-in",
-      orderSource: "pos" as const,
-    };
-
     let finalOrderNumber = "";
 
     try {
-      if (loadedOrderId) {
-        const updated = await orderService.updateOrder(loadedOrderId, orderPayload);
-        finalOrderNumber = updated.orderNumber || (allOrdersData as any[]).find((x) => x.id === loadedOrderId)?.orderNumber || "Updated";
-        toast.success(`Order ${finalOrderNumber} updated!`);
-      } else {
-        const created = await orderService.createOrder(orderPayload);
-        finalOrderNumber = created.orderNumber;
-        setApiOrders(prev => [normalizeApiOrder(created), ...prev]);
-        // Auto-assign rider if delivery order and rider selected
-        if (orderType === "Delivery" && selectedRiderId) {
-          deliveryService.assignRider({ orderId: created.id, riderId: selectedRiderId, estimatedTime: 30 })
-            .catch(() => {}); // non-blocking — cashier can assign from Delivery page too
+      // ── Payment-only mode: just update payment + mark completed, NO re-send to kitchen ──
+      if (paymentOnlyMode && loadedOrderId) {
+        const updated = await orderService.updateOrder(loadedOrderId, { paymentMethod: payMethodStr });
+        // If order was ready, mark it completed now that payment is collected
+        const existingOrder = allOrdersData.find((o) => o.id === loadedOrderId);
+        if (existingOrder && (existingOrder.status === "ready" || existingOrder.status === "preparing")) {
+          await orderService.updateOrderStatus(loadedOrderId, "completed");
         }
-        toast.success(`Order ${finalOrderNumber} placed! Total: Rs. ${total.toLocaleString()}`);
+        finalOrderNumber = updated.orderNumber || existingOrder?.orderNumber || "Updated";
+        toast.success(`Payment collected for ${finalOrderNumber}!`);
+      } else {
+        // ── Normal flow: create or full-update order ──
+        const orderPayload = {
+          customerId: selectedCustomer || undefined,
+          customerName: selectedCustomerData?.name || "Walk-in",
+          phone: (selectedCustomerData as any)?.phone || deliveryPhone || undefined,
+          type: orderType,
+          items: cart.map((c) => ({
+            menuItemId: (c as any).menuItemId || null,
+            variantId: (c as any).variantId || null,
+            name: c.name, price: c.price, qty: c.qty, discount: c.discount,
+            modifiers: c.modifiers || [], cookingTime: c.cookingTime || null, notes: c.notes || null,
+          })),
+          subtotal: itemsSubtotal, discount: orderDiscount, tax, total,
+          paymentMethod: payMethodStr,
+          staffName: selectedStaff,
+          tableNumber: orderType === "Dine In" ? tableNumber || null : null,
+          deliveryAddress: orderType === "Delivery" ? deliveryAddress : undefined,
+          isUrgent,
+          customerType: (selectedCustomerData as any)?.customerType || "walk-in",
+          orderSource: "pos" as const,
+        };
+
+        if (loadedOrderId) {
+          const updated = await orderService.updateOrder(loadedOrderId, orderPayload);
+          finalOrderNumber = updated.orderNumber || (allOrdersData as any[]).find((x) => x.id === loadedOrderId)?.orderNumber || "Updated";
+          toast.success(`Order ${finalOrderNumber} updated!`);
+        } else {
+          const created = await orderService.createOrder(orderPayload);
+          finalOrderNumber = created.orderNumber;
+          setApiOrders(prev => [normalizeApiOrder(created), ...prev]);
+          if (orderType === "Delivery" && selectedRiderId) {
+            deliveryService.assignRider({ orderId: created.id, riderId: selectedRiderId, estimatedTime: 30 })
+              .catch(() => {});
+          }
+          toast.success(`Order ${finalOrderNumber} placed! Total: Rs. ${total.toLocaleString()}`);
+        }
       }
     } catch (err: any) {
       toast.error(err?.message || "Failed to save order");
@@ -818,6 +869,7 @@ const POS = () => {
     setKotStaffName(selectedStaff);
     setShowFinalizeSale(false);
     setShowKOT(true);
+    setPaymentOnlyMode(false);
     cancelOrder();
     loadApiOrders();
   };
@@ -984,13 +1036,6 @@ const POS = () => {
             <span className="hidden lg:inline">Reservations</span>
             {todayReservations.length > 0 && (
               <Badge className="h-5 px-1 text-[10px] bg-info/80 text-info-foreground">{todayReservations.length}</Badge>
-            )}
-          </Button>
-          <Button variant="outline" size="sm" className="h-8 text-xs rounded-lg gap-1 shrink-0 px-2" onClick={() => setShowSelfOnlineOrders(true)}>
-            <Wifi className="h-3.5 w-3.5" />
-            <span className="hidden xl:inline">Self / Online</span>
-            {selfOnlineOrders.length > 0 && (
-              <Badge className="h-5 px-1 text-[10px] bg-accent text-accent-foreground">{selfOnlineOrders.length}</Badge>
             )}
           </Button>
 
@@ -1189,15 +1234,26 @@ const POS = () => {
                   <SelectValue placeholder="Table #" />
                 </SelectTrigger>
                 <SelectContent>
-                  {tableNumbers.map((t) => (
-                    <SelectItem key={t} value={String(t)}>Table {t}</SelectItem>
-                  ))}
+                  {backendTables.length > 0
+                    ? backendTables.map((t) => (
+                        <SelectItem key={t.id} value={String(Number(t.number))}>
+                          Table {t.number}{t.floor ? ` (${t.floor})` : ""}{t.capacity ? ` · ${t.capacity}` : ""}
+                        </SelectItem>
+                      ))
+                    : Array.from({ length: 12 }, (_, i) => i + 1).map((t) => (
+                        <SelectItem key={t} value={String(t)}>Table {t}</SelectItem>
+                      ))
+                  }
                 </SelectContent>
               </Select>
             )}
             {loadedOrderId && (
-              <Badge variant="secondary" className="text-[10px] bg-info/10 text-info">
-                Editing: {allOrdersData.find((o) => o.id === loadedOrderId)?.orderNumber}
+              <Badge variant="secondary" className={cn("text-[10px]", paymentOnlyMode ? "bg-warning/15 text-warning border-warning/30" : "bg-info/10 text-info")}>
+                {paymentOnlyMode ? (
+                  <><DollarSign className="h-3 w-3 mr-0.5" />Collecting Payment: {allOrdersData.find((o) => o.id === loadedOrderId)?.orderNumber}</>
+                ) : (
+                  <>Editing: {allOrdersData.find((o) => o.id === loadedOrderId)?.orderNumber}</>
+                )}
               </Badge>
             )}
           </div>
@@ -1227,6 +1283,18 @@ const POS = () => {
                   </SelectContent>
                 </Select>
               </div>
+            </div>
+          )}
+
+          {/* Payment-only mode banner */}
+          {paymentOnlyMode && (
+            <div className="mx-2 mt-2 rounded-lg bg-warning/10 border border-warning/30 px-3 py-2 flex items-center gap-2">
+              <DollarSign className="h-4 w-4 text-warning shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-semibold text-warning">Payment Collection Mode</p>
+                <p className="text-[10px] text-muted-foreground">Select payment method and click "Collect Payment" — order will NOT be resent to kitchen</p>
+              </div>
+              <Button variant="ghost" size="sm" className="h-6 text-[10px] text-muted-foreground hover:text-foreground shrink-0" onClick={cancelOrder}>Exit</Button>
             </div>
           )}
 
@@ -1325,8 +1393,8 @@ const POS = () => {
                   setKotItems([...cart]); setKotOrderType(orderType); setKotTableNumber(tableNumber); setKotStaffName(selectedStaff);
                   setKotOrderNumber("NEW"); setShowKOT(true);
                 }}><ChefHat className="h-3.5 w-3.5 mr-1" />Print KOT</Button>
-                <Button className="w-full gradient-primary text-primary-foreground text-sm h-9 font-bold rounded-lg shadow-md hover:shadow-lg transition-shadow" onClick={handlePlaceOrder}>
-                  {loadedOrderId ? "Update Order" : "Place Order"}
+                <Button className={cn("w-full text-primary-foreground text-sm h-9 font-bold rounded-lg shadow-md hover:shadow-lg transition-shadow", paymentOnlyMode ? "bg-warning hover:bg-warning/90" : "gradient-primary")} onClick={handlePlaceOrder}>
+                  {paymentOnlyMode ? "Collect Payment" : loadedOrderId ? "Update Order" : "Place Order"}
                 </Button>
               </div>
             </div>
@@ -1945,144 +2013,6 @@ const POS = () => {
         </SheetContent>
       </Sheet>
 
-      {/* Self & Online Orders Sheet */}
-      <Sheet open={showSelfOnlineOrders} onOpenChange={setShowSelfOnlineOrders}>
-        <SheetContent side="right" className="w-full sm:w-[520px] p-0">
-          <div className="flex h-full flex-col bg-background">
-            <div className="border-b bg-card/95 px-4 py-3 backdrop-blur">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <h2 className="font-bold text-lg flex items-center gap-2">
-                    <Wifi className="h-5 w-5 text-accent" />
-                    Self & Online Orders
-                  </h2>
-                  <p className="text-xs text-muted-foreground">{selfOnlineOrders.length} active self-service / online orders</p>
-                </div>
-                <Badge variant="secondary" className="shrink-0 text-[10px]">
-                  {selfOnlineOrders.length} live
-                </Badge>
-              </div>
-            </div>
-
-            <div className="flex-1 overflow-y-auto px-3 py-3 sm:px-4 sm:py-4">
-              <div className="mb-3 grid grid-cols-2 gap-2">
-                <Card className="p-2.5">
-                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Self</p>
-                  <p className="mt-1 text-sm font-semibold">{selfOnlineOrders.filter(order => order.staff === "Self Order").length}</p>
-                </Card>
-                <Card className="p-2.5">
-                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Online</p>
-                  <p className="mt-1 text-sm font-semibold">{selfOnlineOrders.filter(order => order.staff !== "Self Order").length}</p>
-                </Card>
-              </div>
-
-              {selfOnlineOrders.length === 0 && (
-                <div className="py-12 text-center text-muted-foreground">
-                  <Wifi className="mx-auto mb-3 h-12 w-12 opacity-30" />
-                  <p className="font-medium">No Self / Online Orders</p>
-                  <p className="mt-1 text-xs">Orders from self-service kiosks and online channels will appear here</p>
-                </div>
-              )}
-
-              <div className="space-y-2.5">
-                {selfOnlineOrders.map(order => {
-                  const isSelfOrder = order.staff === "Self Order";
-                  const statusColor = order.status === "pending" ? "border-l-warning" : order.status === "preparing" ? "border-l-accent" : "border-l-success";
-                  const statusBadgeColor = order.status === "pending" ? "bg-warning/10 text-warning" : order.status === "preparing" ? "bg-accent/10 text-accent" : "bg-success/10 text-success";
-                  const sourceLabel = isSelfOrder ? "Self Order Kiosk" : order.staff || "Website";
-
-                  return (
-                    <Card key={order.id} className={cn("rounded-xl border-l-4 p-3 text-xs shadow-sm sm:p-4", statusColor)}>
-                      <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                        <div className="flex min-w-0 flex-wrap items-center gap-2">
-                          <span className="font-bold text-sm">{order.orderNumber}</span>
-                          <Badge className={cn("text-[9px] shrink-0", statusBadgeColor)}>{order.status}</Badge>
-                        </div>
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          <Badge variant="outline" className="text-[10px]">{order.type}</Badge>
-                          <Badge className={cn("text-[10px]", isSelfOrder ? "bg-primary/10 text-primary" : "bg-info/10 text-info")}>
-                            {isSelfOrder ? "🖥 Self" : "🌐 Online"}
-                          </Badge>
-                        </div>
-                      </div>
-
-                      <div className="mb-2 flex flex-col gap-1.5 text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
-                        <div className="flex min-w-0 items-center gap-2">
-                          <User className="h-3 w-3 shrink-0" />
-                          <span className="truncate font-medium text-foreground">{order.customer}</span>
-                          <span className="shrink-0">•</span>
-                          <span className="truncate">{order.phone || "No phone"}</span>
-                        </div>
-                        <span className="shrink-0 text-[11px]">{order.time}</span>
-                      </div>
-
-                      <div className="mb-2 grid gap-1.5 text-muted-foreground">
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          <Badge variant="secondary" className="text-[10px]">{sourceLabel}</Badge>
-                          {order.tableNumber && <Badge variant="outline" className="text-[10px]">Table #{order.tableNumber}</Badge>}
-                        </div>
-                        {order.deliveryAddress && (
-                          <div className="rounded-md bg-muted px-2.5 py-1.5 text-[10px] text-muted-foreground">
-                            {order.deliveryAddress}
-                          </div>
-                        )}
-                        <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                          <span>Payment: <span className="font-medium text-foreground">{order.paymentMethod}</span></span>
-                          <span>Staff: <span className="font-medium text-foreground">{sourceLabel}</span></span>
-                        </div>
-                      </div>
-
-                      <div className="mb-2 rounded-lg bg-muted/50 p-2">
-                        <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Items</p>
-                        {order.items.slice(0, 3).map((item, idx) => (
-                          <div key={idx} className="flex items-center justify-between gap-2 py-0.5">
-                            <span className="truncate text-foreground">{item.qty}x {item.name}</span>
-                            <span className="shrink-0 font-medium text-muted-foreground">Rs.{item.price * item.qty}</span>
-                          </div>
-                        ))}
-                        {order.items.length > 3 && (
-                          <p className="pt-1 text-[10px] text-muted-foreground">
-                            +{order.items.length - 3} more item{order.items.length - 3 > 1 ? "s" : ""}
-                          </p>
-                        )}
-                        <div className="mt-1.5 flex justify-between border-t border-border pt-1.5 font-bold text-foreground">
-                          <span>Total</span>
-                          <span>Rs.{order.total}</span>
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-1.5">
-                        {order.status === "pending" && (
-                          <Button size="sm" className="h-8 w-full text-xs gradient-primary text-primary-foreground"
-                            onClick={() => { handleOrderStatusUpdate(order.id, "preparing"); toast.success("Order accepted"); }}>
-                            Accept
-                          </Button>
-                        )}
-                        {order.status === "preparing" && (
-                          <Button size="sm" variant="outline" className="h-8 w-full text-xs"
-                            onClick={() => { handleOrderStatusUpdate(order.id, "ready"); toast.success("Marked ready"); }}>
-                            Mark Ready
-                          </Button>
-                        )}
-                        {order.status === "ready" && (
-                          <Button size="sm" className="h-8 w-full bg-success text-xs text-success-foreground hover:bg-success/90"
-                            onClick={() => { handleOrderStatusUpdate(order.id, "completed"); toast.success("Completed"); }}>
-                            Complete
-                          </Button>
-                        )}
-                        <Button size="sm" variant="outline" className="h-8 w-full border-destructive/30 text-xs text-destructive hover:bg-destructive/5"
-                          onClick={() => { handleOrderStatusUpdate(order.id, "cancelled"); toast.success("Cancelled"); }}>
-                          Reject
-                        </Button>
-                      </div>
-                    </Card>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-        </SheetContent>
-      </Sheet>
 
       {/* Future Sale Sheet */}
       <Sheet open={showFutureSale} onOpenChange={setShowFutureSale}>
