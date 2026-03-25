@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -45,32 +45,31 @@ interface RecipeItem {
   variantId: string | null;  // null = base item / simple, string = specific variant
 }
 
-// Unit conversion factors: from → to → multiplier
-// e.g. to convert 250 grams to kg: 250 * CONVERSIONS["gram"]["kg"] = 0.25
-const UNIT_CONVERSIONS: Record<string, Record<string, number>> = {
-  kg:    { kg: 1, gram: 1000 },
-  gram:  { gram: 1, kg: 0.001 },
-  liter: { liter: 1, ml: 1000 },
-  ml:    { ml: 1, liter: 0.001 },
-  dozen: { dozen: 1, piece: 12 },
-  piece: { piece: 1, dozen: 1 / 12 },
-};
-
-/** Get compatible units for a given base unit */
-function getCompatibleUnits(baseUnitName: string, allUnits: UnitRecord[]): UnitRecord[] {
-  const lower = baseUnitName.toLowerCase();
-  const group = UNIT_CONVERSIONS[lower];
-  if (!group) return allUnits.filter(u => u.name.toLowerCase() === lower);
-  const compatibleNames = Object.keys(group);
-  return allUnits.filter(u => compatibleNames.includes(u.name.toLowerCase()));
+/** Build dynamic conversion map from API unit data (unit ID → unit ID → factor) */
+function buildConversionMap(units: UnitRecord[]): Record<string, Record<string, number>> {
+  const map: Record<string, Record<string, number>> = {};
+  units.forEach(unit => {
+    map[unit.id] = { [unit.id]: 1 }; // self-conversion
+    if (unit.conversionsFrom) {
+      unit.conversionsFrom.forEach(conv => {
+        map[unit.id][conv.toUnit.id] = conv.factor;
+      });
+    }
+  });
+  return map;
 }
 
-/** Convert qty from usageUnit back to ingredient's base unit for cost calc */
-function convertToBaseUnit(qty: number, usageUnitName: string, baseUnitName: string): number {
-  const from = usageUnitName.toLowerCase();
-  const to = baseUnitName.toLowerCase();
-  if (from === to) return qty;
-  const factor = UNIT_CONVERSIONS[from]?.[to];
+/** Get compatible units for a given base unit (by ID) */
+function getCompatibleUnits(baseUnitId: string, allUnits: UnitRecord[], conversionMap: Record<string, Record<string, number>>): UnitRecord[] {
+  const compatibleIds = Object.keys(conversionMap[baseUnitId] || {});
+  if (compatibleIds.length === 0) return allUnits.filter(u => u.id === baseUnitId);
+  return allUnits.filter(u => compatibleIds.includes(u.id));
+}
+
+/** Convert qty from usageUnit back to ingredient's base unit for cost calc (by ID) */
+function convertToBaseUnit(qty: number, fromUnitId: string, toUnitId: string, conversionMap: Record<string, Record<string, number>>): number {
+  if (fromUnitId === toUnitId) return qty;
+  const factor = conversionMap[fromUnitId]?.[toUnitId];
   if (factor !== undefined) return qty * factor;
   return qty; // no conversion available, assume same
 }
@@ -178,17 +177,19 @@ const FoodMenuForm = () => {
           }
 
           if (item.recipes && item.recipes.length > 0) {
+            const cMap = buildConversionMap(unitsList);
             setRecipe(item.recipes.map((r: RecipeIngredient) => {
               const baseUnitName = r.ingredient?.unit?.name || "";
+              const baseUnitId = r.ingredient?.unit?.id || "";
               const usageUnitName = r.usageUnit?.name || baseUnitName;
-              const usageUnitId = r.usageUnitId || r.ingredient?.unit?.id || "";
-              const qtyInBaseUnit = convertToBaseUnit(Number(r.qtyPerUnit), usageUnitName, baseUnitName);
+              const usageUnitId = r.usageUnitId || baseUnitId;
+              const qtyInBaseUnit = convertToBaseUnit(Number(r.qtyPerUnit), usageUnitId, baseUnitId, cMap);
               return {
                 ingredientId: r.ingredientId,
                 name: r.ingredient?.name || "",
                 qty: Number(r.qtyPerUnit),
                 unit: baseUnitName,
-                unitId: r.ingredient?.unit?.id || "",
+                unitId: baseUnitId,
                 usageUnitId,
                 usageUnitName,
                 cost: qtyInBaseUnit * Number(r.ingredient?.purchasePrice || 0),
@@ -222,6 +223,9 @@ const FoodMenuForm = () => {
     };
     loadData();
   }, [isEdit, id]);
+
+  // Build dynamic conversion map from API data
+  const conversionMap = useMemo(() => buildConversionMap(units), [units]);
 
   const addVariant = () => {
     const newIndex = variants.length;
@@ -313,7 +317,7 @@ const FoodMenuForm = () => {
     setRecipe((p) => p.map((r, idx) => {
       if (idx !== globalIdx) return r;
       const ing = ingredients.find((ig) => ig.id === r.ingredientId);
-      const baseQty = convertToBaseUnit(qty, r.usageUnitName, r.unit);
+      const baseQty = convertToBaseUnit(qty, r.usageUnitId, r.unitId, conversionMap);
       return { ...r, qty, cost: baseQty * Number(ing?.purchasePrice || 0) };
     }));
   };
@@ -324,7 +328,7 @@ const FoodMenuForm = () => {
     setRecipe((p) => p.map((r, idx) => {
       if (idx !== globalIdx) return r;
       const ing = ingredients.find((ig) => ig.id === r.ingredientId);
-      const baseQty = convertToBaseUnit(r.qty, unit.name, r.unit);
+      const baseQty = convertToBaseUnit(r.qty, usageUnitId, r.unitId, conversionMap);
       return { ...r, usageUnitId, usageUnitName: unit.name, cost: baseQty * Number(ing?.purchasePrice || 0) };
     }));
   };
@@ -516,7 +520,7 @@ const FoodMenuForm = () => {
         {items.map((r, localIdx) => {
           const globalIdx = getRecipeGlobalIndex(variantId, localIdx);
           const ing = ingredients.find(ig => ig.id === r.ingredientId);
-          const compatibleUnits = ing ? getCompatibleUnits(ing.unit?.name || "", units) : [];
+          const compatibleUnits = ing ? getCompatibleUnits(ing.unit?.id || "", units, conversionMap) : [];
 
           return (
             <div key={localIdx} className="flex flex-wrap items-center gap-2">
@@ -533,7 +537,7 @@ const FoodMenuForm = () => {
                 {compatibleUnits.length > 1 ? (
                   <Select value={r.usageUnitId} onValueChange={(v) => updateRecipeUsageUnit(globalIdx, v)}>
                     <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Unit" /></SelectTrigger>
-                    <SelectContent>{compatibleUnits.map(u => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}</SelectContent>
+                    <SelectContent>{compatibleUnits.map(u => <SelectItem key={u.id} value={u.id}>{u.symbol || u.name}</SelectItem>)}</SelectContent>
                   </Select>
                 ) : (
                   <span className="text-xs text-muted-foreground px-2">{r.usageUnitName || r.unit}</span>

@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { useData } from "@/contexts/DataContext";
+import { useState, useEffect, useCallback } from "react";
+import { supplierService, type SupplierRecord } from "@/services/supplier.service";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,26 +14,64 @@ import { PageHeader } from "@/components/ui/page-header";
 import { TablePagination, paginate } from "@/components/TablePagination";
 
 const Suppliers = () => {
-  const { suppliers, addItem, updateItem, removeItem } = useData();
+  const [suppliers, setSuppliers] = useState<SupplierRecord[]>([]);
   const [showDialog, setShowDialog] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [form, setForm] = useState({ name: "", company: "", phone: "", email: "" });
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [page, setPage] = useState(1);
-  useEffect(() => { const t = setTimeout(() => setLoading(false), 500); return () => clearTimeout(t); }, []);
+
+  const fetchSuppliers = useCallback(async () => {
+    try {
+      const res = await supplierService.getAll();
+      setSuppliers(res.data);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to load suppliers");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchSuppliers(); }, [fetchSuppliers]);
 
   const filtered = suppliers.filter((s) => s.name.toLowerCase().includes(search.toLowerCase()));
   const paged = paginate(filtered, page);
 
   const openAdd = () => { setEditingId(null); setForm({ name: "", company: "", phone: "", email: "" }); setShowDialog(true); };
-  const openEdit = (s: typeof suppliers[0]) => { setEditingId(s.id); setForm({ name: s.name, company: s.company, phone: s.phone, email: s.email }); setShowDialog(true); };
+  const openEdit = (s: SupplierRecord) => { setEditingId(s.id); setForm({ name: s.name, company: s.company || "", phone: s.phone || "", email: s.email || "" }); setShowDialog(true); };
 
-  const handleSave = () => {
-    if (!form.name) return;
-    if (editingId) { updateItem("suppliers", editingId, form); toast.success("Updated successfully"); }
-    else { addItem("suppliers", { id: crypto.randomUUID(), ...form, totalPurchases: 0, totalDue: 0 }); toast.success("Supplier added"); }
-    setForm({ name: "", company: "", phone: "", email: "" }); setShowDialog(false); setEditingId(null);
+  const handleSave = async () => {
+    if (!form.name.trim()) { toast.error("Name is required"); return; }
+    setSaving(true);
+    try {
+      if (editingId) {
+        await supplierService.update(editingId, form);
+        toast.success("Updated successfully");
+      } else {
+        await supplierService.create(form);
+        toast.success("Supplier added");
+      }
+      setForm({ name: "", company: "", phone: "", email: "" });
+      setShowDialog(false);
+      setEditingId(null);
+      await fetchSuppliers();
+    } catch (err: any) {
+      toast.error(err.message || "Failed to save supplier");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    try {
+      await supplierService.delete(id);
+      toast.success("Deleted");
+      await fetchSuppliers();
+    } catch (err: any) {
+      toast.error(err.message || "Failed to delete supplier");
+    }
   };
 
   if (loading) return <div className="space-y-6"><div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">{[1,2,3,4].map(i => <Skeleton key={i} className="h-24 rounded-xl" />)}</div><Skeleton className="h-10 w-full rounded-lg" />{[1,2,3,4,5].map(i => <Skeleton key={i} className="h-12 w-full rounded-lg mt-2" />)}</div>;
@@ -51,7 +89,7 @@ const Suppliers = () => {
                 <Table>
                   <TableHeader className="sticky top-0 z-10 bg-card"><TableRow className="bg-muted/50 hover:bg-muted/50"><TableHead>SN</TableHead><TableHead>Name</TableHead><TableHead>Company</TableHead><TableHead>Phone</TableHead><TableHead>Purchases</TableHead><TableHead>Due</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader>
                   <TableBody>{paged.map((s, i) => (<TableRow key={s.id} className="hover:bg-muted/30 transition-colors"><TableCell>{(page-1)*10+i+1}</TableCell><TableCell className="font-medium">{s.name}</TableCell><TableCell>{s.company}</TableCell><TableCell>{s.phone}</TableCell><TableCell>Rs. {s.totalPurchases.toLocaleString()}</TableCell><TableCell className={s.totalDue > 0 ? "text-destructive font-medium" : ""}>Rs. {s.totalDue.toLocaleString()}</TableCell><TableCell><div className="flex gap-1"><Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(s)}><Pencil className="h-3 w-3" /></Button>
-                    <AlertDialog><AlertDialogTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"><Trash2 className="h-4 w-4" /></Button></AlertDialogTrigger><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Delete {s.name}?</AlertDialogTitle><AlertDialogDescription>This action cannot be undone.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={() => { removeItem("suppliers", s.id); toast.success("Deleted"); }} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Delete</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
+                    <AlertDialog><AlertDialogTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"><Trash2 className="h-4 w-4" /></Button></AlertDialogTrigger><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Delete {s.name}?</AlertDialogTitle><AlertDialogDescription>This action cannot be undone. Suppliers with outstanding dues cannot be deleted.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={() => handleDelete(s.id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Delete</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
                   </div></TableCell></TableRow>))}</TableBody>
                 </Table>
               </div>
@@ -64,7 +102,7 @@ const Suppliers = () => {
         <div className="space-y-1.5"><Label htmlFor="sup-company">Company</Label><Input id="sup-company" placeholder="Enter company" value={form.company} onChange={(e) => setForm(p => ({ ...p, company: e.target.value }))} /></div>
         <div className="space-y-1.5"><Label htmlFor="sup-phone">Phone</Label><Input id="sup-phone" placeholder="Enter phone" value={form.phone} onChange={(e) => setForm(p => ({ ...p, phone: e.target.value }))} /></div>
         <div className="space-y-1.5"><Label htmlFor="sup-email">Email</Label><Input id="sup-email" placeholder="Enter email" value={form.email} onChange={(e) => setForm(p => ({ ...p, email: e.target.value }))} /></div>
-      </div><DialogFooter><Button variant="outline" onClick={() => setShowDialog(false)}>Cancel</Button><Button className="gradient-primary text-primary-foreground" onClick={handleSave}>Save</Button></DialogFooter></DialogContent></Dialog>
+      </div><DialogFooter><Button variant="outline" onClick={() => setShowDialog(false)}>Cancel</Button><Button className="gradient-primary text-primary-foreground" onClick={handleSave} disabled={saving}>{saving ? "Saving..." : "Save"}</Button></DialogFooter></DialogContent></Dialog>
     </div>
   );
 };

@@ -4,11 +4,19 @@
 
 import { api } from './api';
 
+export interface UnitConversionRecord {
+  id: string;
+  toUnit: { id: string; name: string; symbol: string };
+  factor: number;
+}
+
 export interface UnitRecord {
   id: string;
   name: string;
+  symbol: string;
   status: string;
   _count?: { ingredients: number };
+  conversionsFrom?: UnitConversionRecord[];
 }
 
 export interface IngredientCategoryRecord {
@@ -49,12 +57,12 @@ export const inventoryService = {
     return res.data;
   },
 
-  async createUnit(data: { name: string; status?: string }): Promise<UnitRecord> {
+  async createUnit(data: { name: string; symbol: string; status?: string; conversions?: { toUnitId: string; factor: number }[] }): Promise<UnitRecord> {
     const res = await api.post<{ success: boolean; data: UnitRecord }>('/inventory/units', data);
     return res.data;
   },
 
-  async updateUnit(id: string, data: Partial<{ name: string; status: string }>): Promise<UnitRecord> {
+  async updateUnit(id: string, data: Partial<{ name: string; symbol: string; status: string; conversions: { toUnitId: string; factor: number }[] }>): Promise<UnitRecord> {
     const res = await api.put<{ success: boolean; data: UnitRecord }>(`/inventory/units/${id}`, data);
     return res.data;
   },

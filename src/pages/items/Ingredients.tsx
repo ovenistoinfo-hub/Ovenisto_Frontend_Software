@@ -16,7 +16,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { TablePagination, paginate } from "@/components/TablePagination";
 import { cn } from "@/lib/utils";
 
-const emptyForm = { name: "", categoryId: "", unitId: "", purchasePrice: 0, currentStock: 0, lowStockLevel: 0 };
+const emptyForm = { name: "", categoryId: "", unitId: "", lowStockLevel: 0 };
 
 const Ingredients = () => {
   const [list, setList] = useState<IngredientRecord[]>([]);
@@ -27,7 +27,7 @@ const Ingredients = () => {
   const [showDialog, setShowDialog] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
-  const [form, setForm] = useState(emptyForm);
+  const [form, setForm] = useState<{ name: string; categoryId: string; unitId: string; lowStockLevel: number; purchasePrice?: number; currentStock?: number }>(emptyForm);
   const [page, setPage] = useState(1);
 
   const fetchAll = useCallback(async () => {
@@ -65,9 +65,9 @@ const Ingredients = () => {
       name: item.name,
       categoryId: item.categoryId || "",
       unitId: item.unitId || "",
+      lowStockLevel: Number(item.lowStockLevel),
       purchasePrice: Number(item.purchasePrice) || 0,
       currentStock: Number(item.currentStock),
-      lowStockLevel: Number(item.lowStockLevel),
     });
     setShowDialog(true);
   };
@@ -76,19 +76,23 @@ const Ingredients = () => {
     if (!form.name.trim()) { toast.error("Ingredient name is required"); return; }
     setSaving(true);
     try {
-      const payload = {
-        name: form.name,
-        categoryId: form.categoryId || null,
-        unitId: form.unitId || null,
-        purchasePrice: form.purchasePrice || null,
-        currentStock: form.currentStock,
-        lowStockLevel: form.lowStockLevel,
-      };
       if (editingId) {
-        await inventoryService.updateIngredient(editingId, payload);
+        // Edit: allow updating name, category, unit, lowStockLevel only
+        await inventoryService.updateIngredient(editingId, {
+          name: form.name,
+          categoryId: form.categoryId || null,
+          unitId: form.unitId || null,
+          lowStockLevel: form.lowStockLevel,
+        });
         toast.success("Updated successfully");
       } else {
-        await inventoryService.createIngredient(payload);
+        // Create: do not send currentStock or purchasePrice — backend defaults to 0
+        await inventoryService.createIngredient({
+          name: form.name,
+          categoryId: form.categoryId || null,
+          unitId: form.unitId || null,
+          lowStockLevel: form.lowStockLevel,
+        });
         toast.success("Ingredient added");
       }
       setShowDialog(false);
@@ -132,9 +136,13 @@ const Ingredients = () => {
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5"><Label>Category</Label><Select value={form.categoryId} onValueChange={(v) => setForm((p) => ({ ...p, categoryId: v }))}><SelectTrigger><SelectValue placeholder="Category" /></SelectTrigger><SelectContent>{categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent></Select></div>
             <div className="space-y-1.5"><Label>Unit</Label><Select value={form.unitId} onValueChange={(v) => setForm((p) => ({ ...p, unitId: v }))}><SelectTrigger><SelectValue placeholder="Unit" /></SelectTrigger><SelectContent>{units.map(u => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}</SelectContent></Select></div>
-            <div className="space-y-1.5"><Label>Purchase Price</Label><Input placeholder="0" type="number" value={form.purchasePrice || ""} onChange={(e) => setForm((p) => ({ ...p, purchasePrice: Number(e.target.value) }))} /></div>
-            <div className="space-y-1.5"><Label>Current Stock</Label><Input placeholder="0" type="number" value={form.currentStock || ""} onChange={(e) => setForm((p) => ({ ...p, currentStock: Number(e.target.value) }))} /></div>
             <div className="space-y-1.5"><Label>Low Stock Level</Label><Input placeholder="0" type="number" value={form.lowStockLevel || ""} onChange={(e) => setForm((p) => ({ ...p, lowStockLevel: Number(e.target.value) }))} /></div>
+            {editingId && (
+              <>
+                <div className="space-y-1.5"><Label>Current Stock</Label><div className="h-9 px-3 flex items-center rounded-md border bg-muted/50 text-sm text-muted-foreground">{form.currentStock ?? 0} <span className="ml-1 text-xs">(updated via Purchases)</span></div></div>
+                <div className="space-y-1.5 col-span-2"><Label>Purchase Price</Label><div className="h-9 px-3 flex items-center rounded-md border bg-muted/50 text-sm text-muted-foreground">Rs. {form.purchasePrice ?? 0} <span className="ml-1 text-xs">(auto-updated from purchases)</span></div></div>
+              </>
+            )}
           </div></div>
         <DialogFooter><Button variant="outline" onClick={() => setShowDialog(false)}>Cancel</Button><Button className="gradient-primary text-primary-foreground" onClick={handleSave} disabled={saving}>{saving ? "Saving..." : "Save"}</Button></DialogFooter></DialogContent></Dialog>
     </div>
