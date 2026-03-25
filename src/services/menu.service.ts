@@ -38,6 +38,7 @@ export interface MenuItemRecord {
   image: string | null;
   tags: string[];
   cookingTime: number;
+  mealTypeIds: string[];
   variants: MenuItemVariant[];
   modifiers?: MenuItemModifierRecord[];
 }

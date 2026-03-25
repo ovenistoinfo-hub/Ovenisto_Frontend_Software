@@ -68,7 +68,7 @@ const FoodMenu = () => {
 
   return (
     <div className="space-y-6">
-      <PageHeader icon={<Utensils className="h-5 w-5" />} title="Food Menu" subtitle="Manage menu items" actions={<Button className="gradient-primary text-primary-foreground" onClick={() => navigate("/items/food-menu/add")}><Plus className="h-4 w-4 mr-2" />Add Food Item</Button>} />
+      <PageHeader icon={<Utensils className="h-5 w-5" />} title="Food Menu" subtitle="Manage menu items" />
       <Card className="shadow-sm">
         <CardHeader className="pb-3">
           <div className="flex items-center gap-3 flex-wrap">

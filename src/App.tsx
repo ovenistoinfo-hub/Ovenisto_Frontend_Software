@@ -24,6 +24,7 @@ import Modifiers from "./pages/items/Modifiers";
 import MenuCategories from "./pages/items/MenuCategories";
 import FoodMenu from "./pages/items/FoodMenu";
 import FoodMenuForm from "./pages/items/FoodMenuForm";
+import MealTypes from "./pages/items/MealTypes";
 import PreMadeFood from "./pages/items/PreMadeFood";
 import Production from "./pages/Production";
 import StockOverview from "./pages/stock/StockOverview";
@@ -118,6 +119,7 @@ function AppRoutes() {
       <Route path="/items/ingredients" element={<ProtectedRoute module="items"><AppLayout><Ingredients /></AppLayout></ProtectedRoute>} />
       <Route path="/items/modifiers" element={<ProtectedRoute module="items"><AppLayout><Modifiers /></AppLayout></ProtectedRoute>} />
       <Route path="/items/menu-categories" element={<ProtectedRoute module="items"><AppLayout><MenuCategories /></AppLayout></ProtectedRoute>} />
+      <Route path="/items/meal-types" element={<ProtectedRoute module="items"><AppLayout><MealTypes /></AppLayout></ProtectedRoute>} />
       <Route path="/items/food-menu" element={<ProtectedRoute module="items"><AppLayout><FoodMenu /></AppLayout></ProtectedRoute>} />
       <Route path="/items/food-menu/add" element={<ProtectedRoute module="items"><AppLayout><FoodMenuForm /></AppLayout></ProtectedRoute>} />
       <Route path="/items/food-menu/edit/:id" element={<ProtectedRoute module="items"><AppLayout><FoodMenuForm /></AppLayout></ProtectedRoute>} />
