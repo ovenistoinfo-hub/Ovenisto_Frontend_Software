@@ -13,6 +13,8 @@ export interface PurchaseRecord {
   id: string;
   supplierId: string | null;
   supplierName: string | null;
+  warehouseId?: string | null;
+  warehouseName?: string | null;
   invoiceNumber: string | null;
   items: PurchaseItem[];
   subtotal: number | null;
@@ -37,6 +39,7 @@ export interface CreatePurchaseInput {
   paid?: number;
   status: 'paid' | 'unpaid' | 'partial';
   notes?: string;
+  warehouseId?: string;
 }
 
 export const purchaseService = {

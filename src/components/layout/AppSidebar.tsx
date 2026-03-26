@@ -54,6 +54,8 @@ const navSections = [
     { title: "Deals & Combos", url: "/deals", icon: Tag, module: "items" },
     { title: "Production", url: "/production", icon: Factory, module: "production" },
     { title: "Stock", icon: Package, module: "stock", children: [
+      { title: "Warehouses", url: "/warehouses" },
+      { title: "Kitchen Stock", url: "/kitchen-stock" },
       { title: "Stock Overview", url: "/stock" },
       { title: "Low Stock Alerts", url: "/stock/low-stock" },
       { title: "Stock Adjustments", url: "/stock/adjustments" },
@@ -77,6 +79,7 @@ const navSections = [
   ]},
   { label: "Transfer / Damage", items: [
     { title: "Transfers", url: "/transfers", icon: ArrowLeftRight, module: "transfers" },
+    { title: "Demand Lists", url: "/demands", icon: ClipboardList, module: "demands" },
     { title: "Waste", url: "/waste", icon: Trash2, module: "waste" },
   ]},
   { label: "Account / HR", items: [

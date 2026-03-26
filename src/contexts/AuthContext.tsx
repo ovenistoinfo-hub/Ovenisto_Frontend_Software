@@ -8,9 +8,9 @@ const rolePermissions: Record<string, string[]> = {
   "Admin": ["*"],
   "Manager": [
     "dashboard", "analytics", "pos", "kitchens", "waiter", "order-status",
-    "customer-display", "outlets", "items", "production", "stock", "sales",
-    "customers", "customer-dues", "purchases", "suppliers", "supplier-dues",
-    "expenses", "transfers", "waste", "attendance", "reports", "sms",
+    "customer-display", "outlets", "items", "production", "stock", "warehouses",
+    "sales", "customers", "customer-dues", "purchases", "suppliers", "supplier-dues",
+    "expenses", "transfers", "demands", "waste", "attendance", "reports", "sms",
     "settings", "my-portal",
   ],
   "Floor Manager": [
@@ -19,12 +19,12 @@ const rolePermissions: Record<string, string[]> = {
   ],
   "Cashier": ["dashboard", "pos", "sales", "customers", "customer-dues", "attendance", "my-portal"],
   "Waiter": ["waiter", "attendance", "my-portal"],
-  "Kitchen Manager": ["kitchens", "order-status", "items", "production", "attendance", "my-portal"],
+  "Kitchen Manager": ["kitchens", "order-status", "items", "production", "stock", "warehouses", "transfers", "demands", "attendance", "my-portal"],
   "Kitchen Staff": ["kitchens", "attendance", "my-portal"],
   "Delivery Manager": ["delivery", "online-orders", "order-status", "sales", "attendance", "my-portal"],
   "Store Manager": [
-    "items", "stock", "production", "purchases", "suppliers",
-    "supplier-dues", "transfers", "waste", "attendance", "my-portal",
+    "items", "stock", "warehouses", "production", "purchases", "suppliers",
+    "supplier-dues", "transfers", "demands", "waste", "attendance", "my-portal",
   ],
   "Accountant": [
     "sales", "customer-dues", "purchases", "suppliers", "supplier-dues",

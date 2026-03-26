@@ -26,6 +26,9 @@ import FoodMenu from "./pages/items/FoodMenu";
 import FoodMenuForm from "./pages/items/FoodMenuForm";
 import MealTypes from "./pages/items/MealTypes";
 import PreMadeFood from "./pages/items/PreMadeFood";
+import Warehouses from "./pages/Warehouses";
+import WarehouseStock from "./pages/WarehouseStock";
+import KitchenStock from "./pages/KitchenStock";
 import Production from "./pages/Production";
 import StockOverview from "./pages/stock/StockOverview";
 import LowStock from "./pages/stock/LowStock";
@@ -39,6 +42,7 @@ import Suppliers from "./pages/Suppliers";
 import SupplierDues from "./pages/SupplierDues";
 import Expenses from "./pages/Expenses";
 import Transfers from "./pages/Transfers";
+import Demands from "./pages/Demands";
 import Waste from "./pages/Waste";
 import Users from "./pages/Users";
 import Attendance from "./pages/Attendance";
@@ -112,6 +116,9 @@ function AppRoutes() {
       <Route path="/waiter" element={<ProtectedRoute module="waiter"><AppLayout><WaiterPanel /></AppLayout></ProtectedRoute>} />
       <Route path="/table-layout" element={<ProtectedRoute module="settings"><AppLayout><TableLayout /></AppLayout></ProtectedRoute>} />
       <Route path="/outlets" element={<ProtectedRoute module="outlets"><AppLayout><Outlets /></AppLayout></ProtectedRoute>} />
+      <Route path="/warehouses" element={<ProtectedRoute module="warehouses"><AppLayout><Warehouses /></AppLayout></ProtectedRoute>} />
+      <Route path="/warehouses/:id/stock" element={<ProtectedRoute module="warehouses"><AppLayout><WarehouseStock /></AppLayout></ProtectedRoute>} />
+      <Route path="/kitchen-stock" element={<ProtectedRoute module="kitchens"><AppLayout><KitchenStock /></AppLayout></ProtectedRoute>} />
       <Route path="/settings" element={<ProtectedRoute module="settings"><AppLayout><SettingsPage /></AppLayout></ProtectedRoute>} />
       <Route path="/settings/*" element={<ProtectedRoute module="settings"><AppLayout><SettingsPage /></AppLayout></ProtectedRoute>} />
       <Route path="/items/ingredient-units" element={<ProtectedRoute module="items"><AppLayout><IngredientUnits /></AppLayout></ProtectedRoute>} />
@@ -144,6 +151,7 @@ function AppRoutes() {
       <Route path="/supplier-dues" element={<ProtectedRoute module="supplier-dues"><AppLayout><SupplierDues /></AppLayout></ProtectedRoute>} />
       <Route path="/expenses" element={<ProtectedRoute module="expenses"><AppLayout><Expenses /></AppLayout></ProtectedRoute>} />
       <Route path="/transfers" element={<ProtectedRoute module="transfers"><AppLayout><Transfers /></AppLayout></ProtectedRoute>} />
+      <Route path="/demands" element={<ProtectedRoute module="demands"><AppLayout><Demands /></AppLayout></ProtectedRoute>} />
       <Route path="/waste" element={<ProtectedRoute module="waste"><AppLayout><Waste /></AppLayout></ProtectedRoute>} />
       <Route path="/users" element={<ProtectedRoute module="users"><AppLayout><Users /></AppLayout></ProtectedRoute>} />
       <Route path="/attendance" element={<ProtectedRoute module="attendance"><AppLayout><Attendance /></AppLayout></ProtectedRoute>} />
@@ -165,7 +173,7 @@ const App = () => (
           <ErrorBoundary>
             <Toaster />
             <Sonner />
-            <BrowserRouter>
+            <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
               <AppRoutes />
             </BrowserRouter>
           </ErrorBoundary>

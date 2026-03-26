@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { purchaseService, type PurchaseRecord } from "@/services/purchase.service";
 import { supplierService, type SupplierRecord } from "@/services/supplier.service";
 import { inventoryService, type IngredientRecord, type IngredientCategoryRecord, type UnitRecord } from "@/services/inventory.service";
+import { warehouseService, type WarehouseRecord } from "@/services/warehouse.service";
 import { useData } from "@/contexts/DataContext";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -37,6 +38,7 @@ const Purchases = () => {
   const [ingredients, setIngredients] = useState<IngredientRecord[]>([]);
   const [categories, setCategories] = useState<IngredientCategoryRecord[]>([]);
   const [units, setUnits] = useState<UnitRecord[]>([]);
+  const [warehouses, setWarehouses] = useState<WarehouseRecord[]>([]);
 
   // UI state
   const [loading, setLoading] = useState(true);
@@ -52,6 +54,7 @@ const Purchases = () => {
   // Add form state
   const [form, setForm] = useState({ supplierId: "", invoiceNumber: "" });
   const [items, setItems] = useState<FormItem[]>([{ ingredientId: "", name: "", qty: 0, unit: "", unitPrice: 0 }]);
+  const [selectedWarehouseId, setSelectedWarehouseId] = useState("");
 
   // Edit form state (payment only)
   const [editPayment, setEditPayment] = useState({ paid: 0, status: "unpaid" as "paid" | "unpaid" | "partial" });
@@ -83,12 +86,17 @@ const Purchases = () => {
       inventoryService.getIngredients(),
       inventoryService.getIngredientCategories(),
       inventoryService.getUnits(),
+      warehouseService.getAll(),
     ])
-      .then(([supRes, ingList, catList, unitList]) => {
+      .then(([supRes, ingList, catList, unitList, whList]) => {
         setSuppliers(supRes.data);
         setIngredients(ingList);
         setCategories(catList);
         setUnits(unitList);
+        setWarehouses(whList);
+        // Default to Main warehouse if exists
+        const main = whList.find(w => w.type === "MAIN");
+        if (main) setSelectedWarehouseId(main.id);
       })
       .catch((err: any) => toast.error(err.message || "Failed to load data"));
   }, []);
@@ -125,6 +133,9 @@ const Purchases = () => {
     setEditingId(null);
     setForm({ supplierId: "", invoiceNumber: "" });
     setItems([{ ingredientId: "", name: "", qty: 0, unit: "", unitPrice: 0 }]);
+    // Default to Main warehouse if exists
+    const main = warehouses.find(w => w.type === "MAIN");
+    setSelectedWarehouseId(main?.id || "");
     setShowDialog(true);
   };
 
@@ -174,6 +185,7 @@ const Purchases = () => {
         total: itemsTotal,
         paid: status === "paid" ? itemsTotal : 0,
         status,
+        warehouseId: selectedWarehouseId || undefined,
       });
       toast.success("Purchase added");
       setShowDialog(false);
@@ -255,13 +267,14 @@ const Purchases = () => {
             <>
               <div className="rounded-lg border overflow-auto max-h-[calc(100vh-300px)]">
                 <Table>
-                  <TableHeader className="sticky top-0 z-10 bg-card"><TableRow className="bg-muted/50 hover:bg-muted/50"><TableHead>SN</TableHead><TableHead>Date</TableHead><TableHead>Invoice #</TableHead><TableHead>Supplier</TableHead><TableHead>Items</TableHead><TableHead>Total</TableHead><TableHead>Status</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader>
+                  <TableHeader className="sticky top-0 z-10 bg-card"><TableRow className="bg-muted/50 hover:bg-muted/50"><TableHead>SN</TableHead><TableHead>Date</TableHead><TableHead>Invoice #</TableHead><TableHead>Supplier</TableHead><TableHead>Warehouse</TableHead><TableHead>Items</TableHead><TableHead>Total</TableHead><TableHead>Status</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader>
                   <TableBody>{filtered.map((p, i) => (
                     <TableRow key={p.id} className="hover:bg-muted/30 transition-colors">
                       <TableCell>{(page - 1) * 20 + i + 1}</TableCell>
                       <TableCell>{formatDate(p.date)}</TableCell>
                       <TableCell className="font-medium">{p.invoiceNumber || "—"}</TableCell>
                       <TableCell>{p.supplierName || "—"}</TableCell>
+                      <TableCell className="text-sm">{p.warehouseName || "—"}</TableCell>
                       <TableCell>{Array.isArray(p.items) ? p.items.length : 0}</TableCell>
                       <TableCell className="font-medium">{currency} {(p.total ?? 0).toLocaleString()}</TableCell>
                       <TableCell><Badge variant="secondary" className={payColor[p.status] || ""}>{p.status}</Badge></TableCell>
@@ -288,6 +301,23 @@ const Purchases = () => {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1.5"><Label>Supplier</Label><Select value={form.supplierId} onValueChange={(v) => setForm(p => ({ ...p, supplierId: v }))}><SelectTrigger><SelectValue placeholder="Select Supplier (optional)" /></SelectTrigger><SelectContent>{suppliers.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent></Select></div>
               <div className="space-y-1.5"><Label>Invoice Number</Label><Input placeholder="Invoice Number" value={form.invoiceNumber} onChange={(e) => setForm(p => ({ ...p, invoiceNumber: e.target.value }))} /></div>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Warehouse *</Label>
+              <Select
+                value={selectedWarehouseId || "__none__"}
+                onValueChange={(v) => setSelectedWarehouseId(v === "__none__" ? "" : v)}
+              >
+                <SelectTrigger><SelectValue placeholder="Select warehouse" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">No warehouse</SelectItem>
+                  {warehouses.map(w => (
+                    <SelectItem key={w.id} value={w.id}>
+                      {w.name} ({w.type})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div>
               <Label className="mb-2 block">Items</Label>
