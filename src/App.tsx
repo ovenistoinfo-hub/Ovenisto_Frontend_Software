@@ -27,11 +27,8 @@ import FoodMenuForm from "./pages/items/FoodMenuForm";
 import MealTypes from "./pages/items/MealTypes";
 import PreMadeFood from "./pages/items/PreMadeFood";
 import Warehouses from "./pages/Warehouses";
-import WarehouseStock from "./pages/WarehouseStock";
 import KitchenStock from "./pages/KitchenStock";
 import Production from "./pages/Production";
-import StockOverview from "./pages/stock/StockOverview";
-import LowStock from "./pages/stock/LowStock";
 import StockAdjustments from "./pages/stock/StockAdjustments";
 import Sales from "./pages/Sales";
 import Customers from "./pages/Customers";
@@ -58,7 +55,6 @@ import SelfOrder from "./pages/SelfOrder";
 import Deals from "./pages/Deals";
 import Delivery from "./pages/Delivery";
 import Loyalty from "./pages/Loyalty";
-import StockTake from "./pages/stock/StockTake";
 import Shifts from "./pages/Shifts";
 import Coupons from "./pages/Coupons";
 import OnlineOrders from "./pages/OnlineOrders";
@@ -77,7 +73,7 @@ function getDefaultRouteForRole(role?: string): string {
     case 'Kitchen Manager':  return '/kitchens';
     case 'Cashier':          return '/pos';
     case 'Delivery Manager': return '/delivery';
-    case 'Store Manager':    return '/stock';
+    case 'Store Manager':    return '/warehouses';
     case 'Accountant':       return '/sales';
     case 'Rider':            return '/my-portal';
     case 'Customer Screen':  return '/customer-display';
@@ -117,7 +113,6 @@ function AppRoutes() {
       <Route path="/table-layout" element={<ProtectedRoute module="settings"><AppLayout><TableLayout /></AppLayout></ProtectedRoute>} />
       <Route path="/outlets" element={<ProtectedRoute module="outlets"><AppLayout><Outlets /></AppLayout></ProtectedRoute>} />
       <Route path="/warehouses" element={<ProtectedRoute module="warehouses"><AppLayout><Warehouses /></AppLayout></ProtectedRoute>} />
-      <Route path="/warehouses/:id/stock" element={<ProtectedRoute module="warehouses"><AppLayout><WarehouseStock /></AppLayout></ProtectedRoute>} />
       <Route path="/kitchen-stock" element={<ProtectedRoute module="kitchens"><AppLayout><KitchenStock /></AppLayout></ProtectedRoute>} />
       <Route path="/settings" element={<ProtectedRoute module="settings"><AppLayout><SettingsPage /></AppLayout></ProtectedRoute>} />
       <Route path="/settings/*" element={<ProtectedRoute module="settings"><AppLayout><SettingsPage /></AppLayout></ProtectedRoute>} />
@@ -133,10 +128,7 @@ function AppRoutes() {
       <Route path="/items/pre-made-food" element={<ProtectedRoute module="items"><AppLayout><PreMadeFood /></AppLayout></ProtectedRoute>} />
       <Route path="/deals" element={<ProtectedRoute module="items"><AppLayout><Deals /></AppLayout></ProtectedRoute>} />
       <Route path="/production" element={<ProtectedRoute module="production"><AppLayout><Production /></AppLayout></ProtectedRoute>} />
-      <Route path="/stock" element={<ProtectedRoute module="stock"><AppLayout><StockOverview /></AppLayout></ProtectedRoute>} />
-      <Route path="/stock/low-stock" element={<ProtectedRoute module="stock"><AppLayout><LowStock /></AppLayout></ProtectedRoute>} />
       <Route path="/stock/adjustments" element={<ProtectedRoute module="stock"><AppLayout><StockAdjustments /></AppLayout></ProtectedRoute>} />
-      <Route path="/stock/stock-take" element={<ProtectedRoute module="stock"><AppLayout><StockTake /></AppLayout></ProtectedRoute>} />
       <Route path="/sales" element={<ProtectedRoute module="sales"><AppLayout><Sales /></AppLayout></ProtectedRoute>} />
       <Route path="/customers" element={<ProtectedRoute module="customers"><AppLayout><Customers /></AppLayout></ProtectedRoute>} />
       <Route path="/customers/:id" element={<ProtectedRoute module="customers"><AppLayout><CustomerDetail /></AppLayout></ProtectedRoute>} />

@@ -38,6 +38,7 @@ const navSections = [
     { title: "Self Order", url: "/settings/self-order", icon: Link2, module: "settings" },
     { title: "Website Order", url: "/settings/website-order", icon: Globe, module: "settings" },
     { title: "Reservations", url: "/settings/reservations", icon: CalendarDays, module: "settings" },
+    { title: "Warehouses", url: "/settings/warehouses", icon: Package, module: "settings" },
   ]},
   { label: "Item / Stock", items: [
     { title: "Items", icon: Pizza, module: "items", children: [
@@ -54,12 +55,9 @@ const navSections = [
     { title: "Deals & Combos", url: "/deals", icon: Tag, module: "items" },
     { title: "Production", url: "/production", icon: Factory, module: "production" },
     { title: "Stock", icon: Package, module: "stock", children: [
-      { title: "Warehouses", url: "/warehouses" },
+      { title: "Branch Stock", url: "/warehouses" },
       { title: "Kitchen Stock", url: "/kitchen-stock" },
-      { title: "Stock Overview", url: "/stock" },
-      { title: "Low Stock Alerts", url: "/stock/low-stock" },
       { title: "Stock Adjustments", url: "/stock/adjustments" },
-      { title: "Stock Take", url: "/stock/stock-take" },
     ]},
   ]},
   { label: "Sale / Customer", items: [
