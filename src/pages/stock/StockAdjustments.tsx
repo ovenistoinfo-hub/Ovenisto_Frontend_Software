@@ -7,8 +7,10 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Search, ArrowUpDown } from "lucide-react";
-import { Textarea } from "@/components/ui/textarea";
+import { Plus, Search, ArrowUpDown, Check, ChevronsUpDown } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { TablePagination, paginate } from "@/components/TablePagination";
@@ -23,6 +25,40 @@ const TYPE_LABELS: Record<string, { label: string; cls: string }> = {
   correction: { label: "Correction", cls: "bg-info/10 text-info" },
 };
 
+const COMMON_REASONS: Record<string, string[]> = {
+  add: [
+    "New purchase received",
+    "Stock transfer from main warehouse",
+    "Returned from kitchen",
+    "Opening stock entry",
+    "Supplier replacement",
+    "Inventory count correction",
+  ],
+  deduct: [
+    "Used in kitchen",
+    "Given to another branch",
+    "Consumed for testing",
+    "Staff meal deduction",
+    "Complimentary / free sample",
+    "Inventory count correction",
+  ],
+  damage: [
+    "Expired / shelf life over",
+    "Spoiled / quality issue",
+    "Broken / packaging damage",
+    "Pest contamination",
+    "Freezer / storage failure",
+    "Accidental spillage",
+  ],
+  correction: [
+    "Physical count mismatch",
+    "System error correction",
+    "Wrong entry adjustment",
+    "Duplicate entry fix",
+    "Opening balance correction",
+  ],
+};
+
 const StockAdjustments = () => {
   const [list, setList] = useState<StockAdjustmentRecord[]>([]);
   const [ingredients, setIngredients] = useState<IngredientRecord[]>([]);
@@ -32,6 +68,7 @@ const StockAdjustments = () => {
   const [saving, setSaving] = useState(false);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
+  const [reasonOpen, setReasonOpen] = useState(false);
 
   const fetchData = useCallback(async () => {
     try {
@@ -110,7 +147,36 @@ const StockAdjustments = () => {
               ))}
             </div></div>
             <div className="space-y-1.5"><Label>Quantity{selectedIng ? ` (${selectedIng.unit?.name || ""})` : ""}</Label><Input type="number" value={form.quantity || ""} onChange={(e) => setForm(p => ({ ...p, quantity: Number(e.target.value) }))} /></div>
-            <div className="space-y-1.5"><Label>Reason</Label><Textarea placeholder="Enter reason" value={form.reason} onChange={(e) => setForm(p => ({ ...p, reason: e.target.value }))} /></div>
+            <div className="space-y-1.5"><Label>Reason</Label>
+              <Popover open={reasonOpen} onOpenChange={setReasonOpen}>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" role="combobox" aria-expanded={reasonOpen} className="w-full justify-between font-normal h-auto min-h-[2.5rem] whitespace-normal text-left">
+                    <span className={form.reason ? "" : "text-muted-foreground"}>{form.reason || "Select or type a reason..."}</span>
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+                  <Command>
+                    <CommandInput placeholder="Search or type custom reason..." value={form.reason} onValueChange={(v) => setForm(p => ({ ...p, reason: v }))} />
+                    <CommandList>
+                      <CommandEmpty>
+                        <button type="button" className="w-full text-left px-2 py-1.5 text-sm hover:bg-accent rounded cursor-pointer" onClick={() => setReasonOpen(false)}>
+                          Use: "{form.reason}"
+                        </button>
+                      </CommandEmpty>
+                      <CommandGroup heading="Common reasons">
+                        {(COMMON_REASONS[form.type] || COMMON_REASONS.correction).map((reason) => (
+                          <CommandItem key={reason} value={reason} onSelect={() => { setForm(p => ({ ...p, reason })); setReasonOpen(false); }}>
+                            <Check className={cn("mr-2 h-4 w-4", form.reason === reason ? "opacity-100" : "opacity-0")} />
+                            {reason}
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+            </div>
           </div>
           <DialogFooter><Button variant="outline" onClick={() => setShowAdd(false)}>Cancel</Button><Button className="gradient-primary text-primary-foreground" onClick={handleSave} disabled={saving}>{saving ? "Saving..." : "Save"}</Button></DialogFooter>
         </DialogContent>
