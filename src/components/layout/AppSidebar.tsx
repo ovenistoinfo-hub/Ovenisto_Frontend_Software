@@ -55,8 +55,8 @@ const navSections = [
     { title: "Deals & Combos", url: "/deals", icon: Tag, module: "items" },
     { title: "Production", url: "/production", icon: Factory, module: "production" },
     { title: "Stock", icon: Package, module: "stock", children: [
-      { title: "Branch Stock", url: "/warehouses" },
-      { title: "Kitchen Stock", url: "/kitchen-stock" },
+      { title: "Branch Stock", url: "/warehouses", module: "warehouses" },
+      { title: "Kitchen Stock", url: "/kitchen-stock", module: "kitchens" },
       { title: "Stock Adjustments", url: "/stock/adjustments" },
     ]},
   ]},
@@ -161,9 +161,13 @@ export function AppSidebar() {
 }
 
 function CollapsibleMenuItem({ item, collapsed, isActive }: { item: any; collapsed: boolean; isActive: (url?: string) => boolean }) {
-  const hasActiveChild = item.children?.some((c: any) => isActive(c.url));
+  const { hasPermission } = useAuth();
+  const visibleChildren = item.children?.filter((c: any) => !c.module || hasPermission(c.module)) || [];
+  const hasActiveChild = visibleChildren.some((c: any) => isActive(c.url));
   const [open, setOpen] = useState(hasActiveChild);
   const Icon = item.icon;
+
+  if (visibleChildren.length === 0) return null;
 
   if (collapsed) {
     return (
@@ -176,7 +180,7 @@ function CollapsibleMenuItem({ item, collapsed, isActive }: { item: any; collaps
           </HoverCardTrigger>
           <HoverCardContent side="right" align="start" className="w-48 p-1">
             <p className="text-xs font-semibold text-muted-foreground px-2 py-1">{item.title}</p>
-            {item.children.map((child: any) => (
+            {visibleChildren.map((child: any) => (
               <Link
                 key={child.title}
                 to={child.url}
@@ -208,7 +212,7 @@ function CollapsibleMenuItem({ item, collapsed, isActive }: { item: any; collaps
         </CollapsibleTrigger>
         <CollapsibleContent>
           <SidebarMenuSub>
-            {item.children.map((child: any) => (
+            {visibleChildren.map((child: any) => (
               <SidebarMenuSubItem key={child.title}>
                 <SidebarMenuSubButton asChild className={cn(
                   isActive(child.url) && "bg-sidebar-accent text-primary font-medium"

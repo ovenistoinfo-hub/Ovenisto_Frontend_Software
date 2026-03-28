@@ -19,7 +19,7 @@ const rolePermissions: Record<string, string[]> = {
   ],
   "Cashier": ["dashboard", "pos", "sales", "customers", "customer-dues", "attendance", "my-portal"],
   "Waiter": ["waiter", "attendance", "my-portal"],
-  "Kitchen Manager": ["kitchens", "order-status", "items", "production", "stock", "warehouses", "transfers", "demands", "attendance", "my-portal"],
+  "Kitchen Manager": ["kitchens", "order-status", "items", "production", "stock", "transfers", "demands", "attendance", "my-portal"],
   "Kitchen Staff": ["kitchens", "attendance", "my-portal"],
   "Delivery Manager": ["delivery", "online-orders", "order-status", "sales", "attendance", "my-portal"],
   "Store Manager": [

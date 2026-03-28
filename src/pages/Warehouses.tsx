@@ -36,6 +36,7 @@ const Warehouses = () => {
   const { settings } = useData();
   const currency = settings.currency || "Rs.";
   const isSuperAdmin = user?.role === "Super Admin";
+  // Admin sees only their outlet (backend scopes), Super Admin sees all
 
   const [warehouses, setWarehouses] = useState<WarehouseRecord[]>([]);
   const [selectedId, setSelectedId] = useState("");
