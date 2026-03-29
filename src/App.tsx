@@ -35,6 +35,7 @@ import Customers from "./pages/Customers";
 import CustomerDetail from "./pages/CustomerDetail";
 import CustomerDues from "./pages/CustomerDues";
 import Purchases from "./pages/Purchases";
+import PurchaseRequests from "./pages/PurchaseRequests";
 import Suppliers from "./pages/Suppliers";
 import SupplierDues from "./pages/SupplierDues";
 import Expenses from "./pages/Expenses";
@@ -138,6 +139,7 @@ function AppRoutes() {
       <Route path="/coupons" element={<ProtectedRoute module="sales"><AppLayout><Coupons /></AppLayout></ProtectedRoute>} />
       <Route path="/reservations" element={<ProtectedRoute module="customers"><AppLayout><Reservations /></AppLayout></ProtectedRoute>} />
       <Route path="/online-orders" element={<ProtectedRoute module="sales"><AppLayout><OnlineOrders /></AppLayout></ProtectedRoute>} />
+      <Route path="/purchase-requests" element={<ProtectedRoute module="purchase-requests"><AppLayout><PurchaseRequests /></AppLayout></ProtectedRoute>} />
       <Route path="/purchases" element={<ProtectedRoute module="purchases"><AppLayout><Purchases /></AppLayout></ProtectedRoute>} />
       <Route path="/suppliers" element={<ProtectedRoute module="suppliers"><AppLayout><Suppliers /></AppLayout></ProtectedRoute>} />
       <Route path="/supplier-dues" element={<ProtectedRoute module="supplier-dues"><AppLayout><SupplierDues /></AppLayout></ProtectedRoute>} />

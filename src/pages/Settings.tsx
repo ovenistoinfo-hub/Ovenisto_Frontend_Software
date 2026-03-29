@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
 import { QRCodeSVG } from "qrcode.react";
 import { Settings as SettingsIcon, Download, Printer, Plus, Pencil, Trash2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -43,6 +44,8 @@ const TYPE_COLOR: Record<WarehouseType, string> = {
 };
 
 function WarehousesTab() {
+  const { user } = useAuth();
+  const canEdit = ['Super Admin', 'Admin'].includes(user?.role ?? '');
   const [list, setList] = useState<WarehouseRecord[]>([]);
   const [outlets, setOutlets] = useState<{ id: string; name: string }[]>([]);
   const [loading, setLoading] = useState(true);
@@ -115,7 +118,7 @@ function WarehousesTab() {
       <Card className="shadow-sm">
         <CardHeader className="flex flex-row items-center justify-between pb-2">
           <CardTitle>Warehouse Management</CardTitle>
-          <Button size="sm" className="gradient-primary text-primary-foreground" onClick={openAdd}><Plus className="h-4 w-4 mr-1" />Add Warehouse</Button>
+          {canEdit && <Button size="sm" className="gradient-primary text-primary-foreground" onClick={openAdd}><Plus className="h-4 w-4 mr-1" />Add Warehouse</Button>}
         </CardHeader>
         <CardContent>
           {list.length === 0 ? (
@@ -133,6 +136,7 @@ function WarehousesTab() {
                     <TableCell className="text-sm">{w.outlet?.name || "—"}</TableCell>
                     <TableCell><Badge variant="secondary" className={w.isActive ? "bg-success/10 text-success" : "bg-muted text-muted-foreground"}>{w.isActive ? "Active" : "Inactive"}</Badge></TableCell>
                     <TableCell>
+                      {canEdit ? (
                       <div className="flex gap-1">
                         <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(w)}><Pencil className="h-3 w-3" /></Button>
                         <AlertDialog>
@@ -140,6 +144,7 @@ function WarehousesTab() {
                           <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Delete {w.name}?</AlertDialogTitle><AlertDialogDescription>This action cannot be undone.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={() => handleDelete(w.id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Delete</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
                         </AlertDialog>
                       </div>
+                      ) : <span className="text-xs text-muted-foreground">View only</span>}
                     </TableCell>
                   </TableRow>
                 ))}</TableBody>

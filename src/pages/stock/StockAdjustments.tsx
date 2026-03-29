@@ -70,22 +70,26 @@ const StockAdjustments = () => {
   const [loading, setLoading] = useState(true);
   const [reasonOpen, setReasonOpen] = useState(false);
 
-  const fetchData = useCallback(async () => {
+  const fetchAdjustments = useCallback(async () => {
     try {
-      const [adjRes, ings] = await Promise.all([
-        stockService.getAdjustments({ limit: 200 }),
-        inventoryService.getIngredients(),
-      ]);
+      const adjRes = await stockService.getAdjustments({ limit: 200 });
       setList(adjRes.data);
-      setIngredients(ings);
-    } catch (err: any) {
-      toast.error(err.message || "Failed to load adjustments");
-    } finally {
-      setLoading(false);
+    } catch (err: Error | unknown) {
+      toast.error((err as Error).message || "Failed to load adjustments");
     }
   }, []);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => {
+    Promise.all([
+      stockService.getAdjustments({ limit: 200 }),
+      inventoryService.getIngredients(),
+    ]).then(([adjRes, ings]) => {
+      setList(adjRes.data);
+      setIngredients(ings);
+    }).catch((err: Error | unknown) => {
+      toast.error((err as Error).message || "Failed to load data");
+    }).finally(() => setLoading(false));
+  }, []);
 
   const filtered = list.filter((a) => (a.ingredient?.name || "").toLowerCase().includes(search.toLowerCase()));
   const paged = paginate(filtered, page);
@@ -99,7 +103,7 @@ const StockAdjustments = () => {
       toast.success("Stock adjustment recorded");
       setForm({ ingredientId: "", type: "add", quantity: 0, reason: "" });
       setShowAdd(false);
-      fetchData();
+      fetchAdjustments();
     } catch (err: any) {
       toast.error(err.message || "Failed to save adjustment");
     } finally {

@@ -131,29 +131,126 @@ async function tryRefreshToken(): Promise<boolean> {
   }
 }
 
+// --- GET Request Cache ---
+
+interface CacheEntry {
+  data: unknown;
+  timestamp: number;
+  inflight?: Promise<unknown>;
+}
+
+const cache = new Map<string, CacheEntry>();
+const DEFAULT_TTL = 30_000; // 30 seconds
+
+// Endpoints that change rarely — cache longer (5 min)
+const LONG_TTL_PATTERNS = [
+  '/inventory/ingredient-categories',
+  '/inventory/units',
+  '/inventory/ingredients',
+  '/warehouses',
+  '/suppliers',
+];
+
+function getCacheTTL(endpoint: string): number {
+  if (LONG_TTL_PATTERNS.some(p => endpoint.startsWith(p) && !endpoint.includes('stock'))) {
+    return 300_000; // 5 minutes for reference data
+  }
+  return DEFAULT_TTL;
+}
+
+function getCacheKey(endpoint: string): string {
+  return endpoint;
+}
+
+// Get base path for invalidation: "/purchases/abc123" → "/purchases"
+function getBasePath(endpoint: string): string {
+  const parts = endpoint.split('?')[0].split('/').filter(Boolean);
+  return '/' + (parts[0] || '');
+}
+
+function invalidateCache(endpoint: string): void {
+  const base = getBasePath(endpoint);
+  const keysToDelete: string[] = [];
+  cache.forEach((_, key) => {
+    if (key.startsWith(base)) keysToDelete.push(key);
+  });
+  keysToDelete.forEach(k => cache.delete(k));
+}
+
+async function cachedGet<T>(endpoint: string): Promise<T> {
+  const key = getCacheKey(endpoint);
+  const ttl = getCacheTTL(endpoint);
+  const now = Date.now();
+
+  const cached = cache.get(key);
+
+  // Return cached data if fresh
+  if (cached && (now - cached.timestamp) < ttl) {
+    return cached.data as T;
+  }
+
+  // Deduplicate: if same request is already in-flight, wait for it
+  if (cached?.inflight) {
+    return cached.inflight as Promise<T>;
+  }
+
+  // Make the request and cache the promise for deduplication
+  const promise = request<T>(endpoint).then(data => {
+    cache.set(key, { data, timestamp: Date.now() });
+    return data;
+  }).catch(err => {
+    // Remove failed entry
+    cache.delete(key);
+    throw err;
+  });
+
+  cache.set(key, { data: cached?.data, timestamp: cached?.timestamp ?? 0, inflight: promise });
+  return promise;
+}
+
 // --- Exported API methods ---
 
 export const api = {
-  get: <T = unknown>(endpoint: string) => request<T>(endpoint),
+  get: <T = unknown>(endpoint: string) => cachedGet<T>(endpoint),
 
-  post: <T = unknown>(endpoint: string, data?: unknown) =>
-    request<T>(endpoint, {
+  /** Bypass cache — always fetch fresh */
+  getFresh: <T = unknown>(endpoint: string) => {
+    cache.delete(getCacheKey(endpoint));
+    return cachedGet<T>(endpoint);
+  },
+
+  post: <T = unknown>(endpoint: string, data?: unknown) => {
+    invalidateCache(endpoint);
+    return request<T>(endpoint, {
       method: 'POST',
       body: data ? JSON.stringify(data) : undefined,
-    }),
+    });
+  },
 
-  put: <T = unknown>(endpoint: string, data?: unknown) =>
-    request<T>(endpoint, {
+  put: <T = unknown>(endpoint: string, data?: unknown) => {
+    invalidateCache(endpoint);
+    return request<T>(endpoint, {
       method: 'PUT',
       body: data ? JSON.stringify(data) : undefined,
-    }),
+    });
+  },
 
-  patch: <T = unknown>(endpoint: string, data?: unknown) =>
-    request<T>(endpoint, {
+  patch: <T = unknown>(endpoint: string, data?: unknown) => {
+    invalidateCache(endpoint);
+    return request<T>(endpoint, {
       method: 'PATCH',
       body: data ? JSON.stringify(data) : undefined,
-    }),
+    });
+  },
 
-  delete: <T = unknown>(endpoint: string) =>
-    request<T>(endpoint, { method: 'DELETE' }),
+  delete: <T = unknown>(endpoint: string) => {
+    invalidateCache(endpoint);
+    return request<T>(endpoint, { method: 'DELETE' });
+  },
+
+  /** Manually clear all cache or specific endpoint */
+  clearCache: (endpoint?: string) => {
+    if (endpoint) invalidateCache(endpoint);
+    else cache.clear();
+  },
 };

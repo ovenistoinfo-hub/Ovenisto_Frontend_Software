@@ -40,6 +40,7 @@ export interface CreatePurchaseInput {
   status: 'paid' | 'unpaid' | 'partial';
   notes?: string;
   warehouseId?: string;
+  purchaseRequestId?: string;
 }
 
 export const purchaseService = {

@@ -63,7 +63,12 @@ export const warehouseService = {
     return res.data;
   },
   async getStock(id: string, params?: { categoryId?: string; search?: string; lowStockOnly?: boolean }): Promise<WarehouseStockRecord[]> {
-    const res = await api.get<{ success: boolean; data: WarehouseStockRecord[] }>(`/warehouses/${id}/stock`, { params });
+    const query = new URLSearchParams();
+    if (params?.categoryId) query.set('categoryId', params.categoryId);
+    if (params?.search) query.set('search', params.search);
+    if (params?.lowStockOnly) query.set('lowStockOnly', 'true');
+    const qs = query.toString();
+    const res = await api.get<{ success: boolean; data: WarehouseStockRecord[] }>(`/warehouses/${id}/stock${qs ? `?${qs}` : ''}`);
     return res.data;
   },
   async create(data: { name: string; code?: string; type: WarehouseType; outletId?: string; managerId?: string }): Promise<WarehouseRecord> {
