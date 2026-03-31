@@ -7,6 +7,11 @@ export interface PurchaseItem {
   unit: string;
   unitPrice: number;
   total: number;
+  approvedQty?: number;
+  expiryDate?: string;
+  wasteQty?: number;
+  wasteReason?: string;
+  source?: 'approved' | 'manual';
 }
 
 export interface PurchaseRecord {
@@ -19,6 +24,8 @@ export interface PurchaseRecord {
   items: PurchaseItem[];
   subtotal: number | null;
   tax: number | null;
+  shippingCost: number | null;
+  miscAmount: number | null;
   total: number | null;
   paid: number;
   due: number;
@@ -26,6 +33,10 @@ export interface PurchaseRecord {
   date: string;
   notes: string | null;
   createdAt: string;
+  createdByName: string | null;
+  createdByRole: string | null;
+  createdByPhone: string | null;
+  createdByEmail: string | null;
 }
 
 export interface CreatePurchaseInput {
@@ -35,6 +46,8 @@ export interface CreatePurchaseInput {
   items: PurchaseItem[];
   subtotal?: number;
   tax?: number;
+  shippingCost?: number;
+  miscAmount?: number;
   total: number;
   paid?: number;
   status: 'paid' | 'unpaid' | 'partial';
