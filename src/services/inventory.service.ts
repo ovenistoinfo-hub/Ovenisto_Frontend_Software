@@ -30,6 +30,7 @@ export interface IngredientCategoryRecord {
 export interface IngredientRecord {
   id: string;
   name: string;
+  brand: string | null;
   categoryId: string | null;
   category: { id: string; name: string } | null;
   unitId: string | null;
@@ -104,6 +105,7 @@ export const inventoryService = {
 
   async createIngredient(data: {
     name: string;
+    brand?: string | null;
     categoryId?: string | null;
     unitId?: string | null;
     purchasePrice?: number | null;
@@ -117,6 +119,7 @@ export const inventoryService = {
 
   async updateIngredient(id: string, data: Partial<{
     name: string;
+    brand: string | null;
     categoryId: string | null;
     unitId: string | null;
     purchasePrice: number | null;

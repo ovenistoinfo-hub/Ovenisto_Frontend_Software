@@ -23,6 +23,7 @@ export interface WarehouseStockRecord {
   ingredient: {
     id: string;
     name: string;
+    brand?: string | null;
     purchasePrice: number | null;
     unit?: { id: string; name: string; symbol: string };
     category?: { id: string; name: string };
@@ -37,6 +38,37 @@ export interface WarehouseStockItem {
   currentStock: number;
   lowStockLevel: number;
   isLow: boolean;
+}
+
+export interface ExpiryBatchRecord {
+  id: string;
+  ingredientId: string;
+  ingredientName: string;
+  brand: string | null;
+  unit: string;
+  batchQty: number;
+  remainingQty: number;
+  expiryDate: string;
+  purchasedAt: string;
+  totalCurrentStock: number;
+}
+
+export interface ExpiryIngredientGroup {
+  ingredientId: string;
+  ingredientName: string;
+  brand: string | null;
+  unit: string;
+  totalCurrentStock: number;
+  affectedQty: number;
+  safeQty: number;
+  batches: ExpiryBatchRecord[];
+}
+
+export interface ExpirySummary {
+  expiredCount: number;
+  nearExpiryCount: number;
+  expired: ExpiryIngredientGroup[];
+  nearExpiry: ExpiryIngredientGroup[];
 }
 
 export interface ConsumptionLogItem {
@@ -81,6 +113,10 @@ export const warehouseService = {
   },
   async delete(id: string): Promise<void> {
     await api.delete(`/warehouses/${id}`);
+  },
+  async getExpirySummary(id: string): Promise<ExpirySummary> {
+    const res = await api.get<{ success: boolean; data: ExpirySummary }>(`/warehouses/${id}/expiry-summary`);
+    return res.data;
   },
   async getKitchenStock(id: string): Promise<WarehouseStockItem[]> {
     const res = await api.get<{ success: boolean; data: WarehouseStockRecord[] }>(`/warehouses/${id}/stock`);

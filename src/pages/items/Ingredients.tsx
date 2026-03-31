@@ -16,7 +16,8 @@ import { PageHeader } from "@/components/ui/page-header";
 import { TablePagination, paginate } from "@/components/TablePagination";
 import { cn } from "@/lib/utils";
 
-const emptyForm = { name: "", categoryId: "", unitId: "", lowStockLevel: 0 };
+const COMMON_BRANDS = ["Shan", "National", "Nestle", "Olper's", "Dalda", "Sufi", "Rafhan", "Knorr", "Nurpur", "Millac", "Haleeb", "K&N's", "Dawn", "Menu", "Lays"];
+const emptyForm = { name: "", brand: "", categoryId: "", unitId: "", lowStockLevel: 0 };
 
 const Ingredients = () => {
   const [list, setList] = useState<IngredientRecord[]>([]);
@@ -27,7 +28,7 @@ const Ingredients = () => {
   const [showDialog, setShowDialog] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
-  const [form, setForm] = useState<{ name: string; categoryId: string; unitId: string; lowStockLevel: number; purchasePrice?: number; currentStock?: number }>(emptyForm);
+  const [form, setForm] = useState<{ name: string; brand: string; categoryId: string; unitId: string; lowStockLevel: number; purchasePrice?: number; currentStock?: number }>(emptyForm);
   const [page, setPage] = useState(1);
 
   const fetchAll = useCallback(async () => {
@@ -63,6 +64,7 @@ const Ingredients = () => {
     setEditingId(item.id);
     setForm({
       name: item.name,
+      brand: item.brand || "",
       categoryId: item.categoryId || "",
       unitId: item.unitId || "",
       lowStockLevel: Number(item.lowStockLevel),
@@ -77,18 +79,18 @@ const Ingredients = () => {
     setSaving(true);
     try {
       if (editingId) {
-        // Edit: allow updating name, category, unit, lowStockLevel only
         await inventoryService.updateIngredient(editingId, {
           name: form.name,
+          brand: form.brand || null,
           categoryId: form.categoryId || null,
           unitId: form.unitId || null,
           lowStockLevel: form.lowStockLevel,
         });
         toast.success("Updated successfully");
       } else {
-        // Create: do not send currentStock or purchasePrice — backend defaults to 0
         await inventoryService.createIngredient({
           name: form.name,
+          brand: form.brand || null,
           categoryId: form.categoryId || null,
           unitId: form.unitId || null,
           lowStockLevel: form.lowStockLevel,
@@ -132,8 +134,9 @@ const Ingredients = () => {
         )}</CardContent></Card>
       <Dialog open={showDialog} onOpenChange={setShowDialog}><DialogContent><DialogHeader><DialogTitle>{editingId ? "Edit" : "Add"} Ingredient</DialogTitle></DialogHeader>
         <div className="space-y-3">
-          <div className="space-y-1.5"><Label>Ingredient Name</Label><Input placeholder="Enter name" value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} /></div>
           <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5"><Label>Ingredient Name *</Label><Input placeholder="Enter name" value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} /></div>
+            <div className="space-y-1.5"><Label>Brand</Label><Input list="brand-list" placeholder="Select or type brand" value={form.brand} onChange={(e) => setForm((p) => ({ ...p, brand: e.target.value }))} /><datalist id="brand-list">{[...new Set([...COMMON_BRANDS, ...ingredients.map(i => i.brand).filter(Boolean)])].map(b => <option key={b!} value={b!} />)}</datalist></div>
             <div className="space-y-1.5"><Label>Category</Label><Select value={form.categoryId} onValueChange={(v) => setForm((p) => ({ ...p, categoryId: v }))}><SelectTrigger><SelectValue placeholder="Category" /></SelectTrigger><SelectContent>{categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent></Select></div>
             <div className="space-y-1.5"><Label>Unit</Label><Select value={form.unitId} onValueChange={(v) => setForm((p) => ({ ...p, unitId: v }))}><SelectTrigger><SelectValue placeholder="Unit" /></SelectTrigger><SelectContent>{units.map(u => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}</SelectContent></Select></div>
             <div className="space-y-1.5"><Label>Low Stock Level</Label><Input placeholder="0" type="number" value={form.lowStockLevel || ""} onChange={(e) => setForm((p) => ({ ...p, lowStockLevel: Number(e.target.value) }))} /></div>

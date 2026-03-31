@@ -24,7 +24,7 @@ import { PageHeader } from "@/components/ui/page-header";
 
 const payColor: Record<string, string> = { paid: "bg-success/10 text-success", partial: "bg-warning/10 text-warning", unpaid: "bg-destructive/10 text-destructive" };
 
-interface FormItem { ingredientId: string; name: string; qty: number; unit: string; unitPrice: number; approvedQty?: number; }
+interface FormItem { ingredientId: string; name: string; qty: number; unit: string; unitPrice: number; approvedQty?: number; expiryDate?: string; }
 
 const formatDate = (d: string) => (d ? d.split("T")[0] : "");
 
@@ -215,6 +215,7 @@ const Purchases = () => {
         unitPrice: i.unitPrice,
         total: i.qty * i.unitPrice,
         ...(i.approvedQty !== undefined && { approvedQty: i.approvedQty }),
+        ...(i.expiryDate && { expiryDate: i.expiryDate }),
       }));
       await purchaseService.create({
         supplierId: form.supplierId || undefined,
@@ -420,6 +421,7 @@ const Purchases = () => {
                         <TableHead className="text-right">Approved Qty</TableHead>
                         <TableHead className="text-right">Purchased Qty</TableHead>
                         <TableHead className="text-right">Unit Price</TableHead>
+                        <TableHead>Expiry Date</TableHead>
                         <TableHead className="text-right">Total</TableHead>
                       </TableRow></TableHeader>
                       <TableBody>
@@ -431,6 +433,7 @@ const Purchases = () => {
                             <TableCell className="text-right text-sm text-muted-foreground">{item.approvedQty ?? item.qty}</TableCell>
                             <TableCell className="text-right"><Input className="h-8 w-20 text-xs ml-auto" type="number" min={0} value={item.qty || ""} onChange={(e) => updateItemRow(idx, "qty", Number(e.target.value))} /></TableCell>
                             <TableCell className="text-right"><Input className="h-8 w-24 text-xs ml-auto" type="number" min={0} value={item.unitPrice || ""} onChange={(e) => updateItemRow(idx, "unitPrice", Number(e.target.value))} /></TableCell>
+                            <TableCell><Input className="h-8 w-32 text-xs" type="date" value={item.expiryDate || ""} onChange={(e) => updateItemRow(idx, "expiryDate", e.target.value)} /></TableCell>
                             <TableCell className="text-right text-sm font-medium">{currency} {(item.qty * item.unitPrice).toLocaleString()}</TableCell>
                           </TableRow>
                         ))}
@@ -459,6 +462,7 @@ const Purchases = () => {
                           <Input className="h-9 text-xs flex-1" type="number" placeholder="Qty" value={item.qty || ""} onChange={(e) => updateItemRow(idx, "qty", Number(e.target.value))} />
                           <span className="text-xs text-muted-foreground w-10 text-center shrink-0">{item.unit || "—"}</span>
                           <Input className="h-9 text-xs flex-1" type="number" placeholder="Unit Price" value={item.unitPrice || ""} onChange={(e) => updateItemRow(idx, "unitPrice", Number(e.target.value))} />
+                          <Input className="h-9 text-xs w-32 shrink-0" type="date" placeholder="Expiry" title="Expiry Date (optional)" value={item.expiryDate || ""} onChange={(e) => updateItemRow(idx, "expiryDate", e.target.value)} />
                         </div>
                         <div className="flex items-center justify-between w-full sm:w-auto sm:flex-[2] gap-2">
                           <span className="text-xs font-medium whitespace-nowrap">{currency} {(item.qty * item.unitPrice).toLocaleString()}</span>

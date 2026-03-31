@@ -143,7 +143,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!user) return false;
     const perms = rolePermissions[user.role] || [];
     if (perms.includes("*")) return true;
-    return perms.some(p => module.startsWith(p));
+    return perms.includes(module);
   }, [user]);
 
   const updateUser = useCallback((updates: Partial<User>) => {

@@ -122,7 +122,7 @@ const PurchaseRequests = () => {
       const map: Record<string, number> = {};
       for (const s of stockData) map[s.ingredient.id] = Number(s.currentStock);
       setWarehouseStockMap(map);
-    }).catch(() => setWarehouseStockMap({}));
+    }).catch((err: Error | unknown) => { setWarehouseStockMap({}); toast.error((err as Error).message || "Failed to load warehouse stock"); });
   }, [selectedWarehouse]);
 
   // Get warehouse stock for an ingredient (0 if not found in warehouse)
