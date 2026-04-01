@@ -24,7 +24,7 @@ const rolePermissions: Record<string, string[]> = {
   "Delivery Manager": ["delivery", "online-orders", "order-status", "sales", "attendance", "my-portal"],
   "Store Manager": [
     "items", "stock", "warehouses", "production", "purchases", "suppliers",
-    "supplier-dues", "transfers", "demands", "waste", "attendance", "my-portal",
+    "transfers", "demands", "waste", "attendance", "my-portal",
   ],
   "Accountant": [
     "sales", "customer-dues", "purchases", "suppliers", "supplier-dues",

@@ -73,7 +73,6 @@ const navSections = [
     { title: "Purchase Requests", url: "/purchase-requests", icon: ClipboardList, module: "purchase-requests" },
     { title: "Purchases", url: "/purchases", icon: ShoppingBag, module: "purchases" },
     { title: "Suppliers", url: "/suppliers", icon: Store, module: "suppliers" },
-    { title: "Supplier Dues", url: "/supplier-dues", icon: CreditCard, module: "supplier-dues" },
     { title: "Expenses", url: "/expenses", icon: CreditCard, module: "expenses" },
   ]},
   { label: "Transfer / Damage", items: [

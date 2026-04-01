@@ -16,7 +16,7 @@ import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { Plus, Search, Eye, Trash2, ShoppingCart, Printer, CalendarIcon } from "lucide-react";
+import { Plus, Search, Eye, Trash2, ShoppingCart, Printer, CalendarIcon, User, Phone, Mail } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { format, parseISO } from "date-fns";
@@ -58,31 +58,35 @@ const DatePickerField = ({
   onChange: (v: string) => void;
   placeholder?: string;
 }) => {
+  const [open, setOpen] = useState(false);
   const selected = value ? parseISO(value) : undefined;
   return (
-    <Popover>
+    <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button
           variant="outline"
           className={cn(
-            "h-10 w-full justify-start text-left font-normal text-sm",
+            "h-10 w-full justify-start text-left font-normal text-sm truncate",
             !selected && "text-muted-foreground"
           )}
         >
           <CalendarIcon className="mr-2 h-4 w-4 shrink-0 opacity-60" />
-          {selected ? format(selected, "dd MMM yyyy") : placeholder}
+          <span className="truncate">{selected ? format(selected, "dd MMM yyyy") : placeholder}</span>
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-auto p-0" align="start" side="bottom">
         <Calendar
           mode="single"
           selected={selected}
-          onSelect={(d) => onChange(d ? format(d, "yyyy-MM-dd") : "")}
+          onSelect={(d) => {
+            onChange(d ? format(d, "yyyy-MM-dd") : "");
+            setOpen(false);
+          }}
           initialFocus
         />
         {selected && (
           <div className="p-2 border-t flex justify-end">
-            <Button variant="ghost" size="sm" className="text-xs h-7 text-muted-foreground" onClick={() => onChange("")}>
+            <Button variant="ghost" size="sm" className="text-xs h-7 text-muted-foreground" onClick={() => { onChange(""); setOpen(false); }}>
               Clear
             </Button>
           </div>
@@ -675,8 +679,8 @@ const Purchases = () => {
                               key={originalIdx}
                               className="border rounded-lg p-3 space-y-2 border-l-2 border-l-primary/40 bg-primary/5"
                             >
-                              <div className="flex items-center justify-between gap-2 flex-wrap">
-                                <span className="font-medium text-sm">{item.name}</span>
+                              <div className="flex items-center justify-between gap-2 flex-wrap min-w-0">
+                                <span className="font-medium text-sm truncate min-w-0">{item.name}</span>
                                 <Badge variant="secondary" className="text-xs shrink-0">
                                   Approved: {item.approvedQty ?? item.qty} {item.unit}
                                 </Badge>
@@ -888,15 +892,15 @@ const Purchases = () => {
                 <Label className="text-xs text-muted-foreground uppercase tracking-wider">Billing Summary</Label>
               </CardHeader>
               <CardContent>
-                <div className="space-y-2 max-w-sm ml-auto">
+                <div className="space-y-2 w-full max-w-sm ml-auto">
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-muted-foreground">Subtotal (items)</span>
-                    <span className="font-medium">{currency} {itemsSubtotal.toLocaleString()}</span>
+                    <span className="font-medium tabular-nums">{currency} {itemsSubtotal.toLocaleString()}</span>
                   </div>
-                  <div className="flex items-center justify-between gap-4">
-                    <Label className="text-sm shrink-0 w-28">Shipping Cost</Label>
+                  <div className="flex items-center gap-3">
+                    <Label className="text-sm shrink-0 min-w-[7rem]">Shipping Cost</Label>
                     <Input
-                      className="h-9 text-sm text-right w-36"
+                      className="h-9 text-sm text-right flex-1 min-w-0"
                       type="number"
                       min={0}
                       step={1}
@@ -905,10 +909,10 @@ const Purchases = () => {
                       onChange={(e) => setShippingCost(Number(e.target.value))}
                     />
                   </div>
-                  <div className="flex items-center justify-between gap-4">
-                    <Label className="text-sm shrink-0 w-28">Tax Amount</Label>
+                  <div className="flex items-center gap-3">
+                    <Label className="text-sm shrink-0 min-w-[7rem]">Tax Amount</Label>
                     <Input
-                      className="h-9 text-sm text-right w-36"
+                      className="h-9 text-sm text-right flex-1 min-w-0"
                       type="number"
                       min={0}
                       step={1}
@@ -917,10 +921,10 @@ const Purchases = () => {
                       onChange={(e) => setTaxAmount(Number(e.target.value))}
                     />
                   </div>
-                  <div className="flex items-center justify-between gap-4">
-                    <Label className="text-sm shrink-0 w-28">Miscellaneous</Label>
+                  <div className="flex items-center gap-3">
+                    <Label className="text-sm shrink-0 min-w-[7rem]">Miscellaneous</Label>
                     <Input
-                      className="h-9 text-sm text-right w-36"
+                      className="h-9 text-sm text-right flex-1 min-w-0"
                       type="number"
                       min={0}
                       step={1}
@@ -932,7 +936,7 @@ const Purchases = () => {
                   <Separator />
                   <div className="flex items-center justify-between font-semibold text-base">
                     <span>Grand Total</span>
-                    <span className="text-lg">{currency} {grandTotal.toLocaleString()}</span>
+                    <span className="text-lg tabular-nums">{currency} {grandTotal.toLocaleString()}</span>
                   </div>
                 </div>
               </CardContent>
@@ -1048,29 +1052,34 @@ const Purchases = () => {
                 </DialogHeader>
 
                 <div className="space-y-4">
-                  {/* Info Cards — PR-style layout */}
+                  {/* Info Cards — exactly matches PR invoice design */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     {/* Purchased By */}
                     <Card className="shadow-sm">
                       <CardHeader className="pb-2">
                         <Label className="text-xs text-muted-foreground uppercase tracking-wider">Purchased By</Label>
                       </CardHeader>
-                      <CardContent className="space-y-1 text-sm">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-medium">{sd.createdByName || "—"}</span>
+                      <CardContent className="space-y-1 min-w-0">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <User className="h-4 w-4 text-muted-foreground shrink-0" />
+                          <span className="font-medium truncate">{sd.createdByName || "—"}</span>
                           {sd.createdByRole && (
-                            <Badge variant="secondary" className="text-xs">{sd.createdByRole}</Badge>
+                            <Badge variant="secondary" className="text-xs shrink-0">{sd.createdByRole}</Badge>
                           )}
                         </div>
                         {sd.createdByPhone && (
-                          <p className="text-muted-foreground">{sd.createdByPhone}</p>
+                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                            <Phone className="h-3 w-3 shrink-0" /><span className="truncate">{sd.createdByPhone}</span>
+                          </div>
                         )}
                         {sd.createdByEmail && (
-                          <p className="text-muted-foreground">{sd.createdByEmail}</p>
+                          <div className="flex items-center gap-2 text-sm text-muted-foreground min-w-0">
+                            <Mail className="h-3 w-3 shrink-0" /><span className="break-all text-xs">{sd.createdByEmail}</span>
+                          </div>
                         )}
-                        <p className="text-xs text-muted-foreground mt-1">
-                          Date: {new Date(sd.createdAt).toLocaleString()}
-                        </p>
+                        <div className="text-xs text-muted-foreground mt-1 break-words">
+                          Purchased: {new Date(sd.createdAt).toLocaleString()}
+                        </div>
                       </CardContent>
                     </Card>
                     {/* Supplier */}
@@ -1078,20 +1087,27 @@ const Purchases = () => {
                       <CardHeader className="pb-2">
                         <Label className="text-xs text-muted-foreground uppercase tracking-wider">Supplier</Label>
                       </CardHeader>
-                      <CardContent className="space-y-1 text-sm">
-                        <p className="font-medium">{sd.supplierName || "—"}</p>
+                      <CardContent className="space-y-1 min-w-0">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <User className="h-4 w-4 text-muted-foreground shrink-0" />
+                          <span className="font-medium truncate">{sd.supplierName || "—"}</span>
+                        </div>
                         {supplierRecord?.company && (
-                          <p className="text-muted-foreground">{supplierRecord.company}</p>
+                          <div className="text-sm text-muted-foreground pl-6 truncate">{supplierRecord.company}</div>
                         )}
                         {supplierRecord?.phone && (
-                          <p className="text-muted-foreground">{supplierRecord.phone}</p>
+                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                            <Phone className="h-3 w-3 shrink-0" /><span className="truncate">{supplierRecord.phone}</span>
+                          </div>
                         )}
                         {supplierRecord?.email && (
-                          <p className="text-muted-foreground">{supplierRecord.email}</p>
+                          <div className="flex items-center gap-2 text-sm text-muted-foreground min-w-0">
+                            <Mail className="h-3 w-3 shrink-0" /><span className="break-all text-xs">{supplierRecord.email}</span>
+                          </div>
                         )}
-                        <p className="text-muted-foreground">
-                          Warehouse: <span className="font-medium">{sd.warehouseName || "—"}</span>
-                        </p>
+                        <div className="text-xs text-muted-foreground mt-1">
+                          Warehouse: <span className="font-medium text-foreground">{sd.warehouseName || "—"}</span>
+                        </div>
                       </CardContent>
                     </Card>
                   </div>
@@ -1106,35 +1122,35 @@ const Purchases = () => {
                   )}
 
                   {/* Billing — no paid/due */}
-                  <div className="space-y-1.5 pt-2 border-t text-sm max-w-xs ml-auto">
+                  <div className="space-y-1.5 pt-2 border-t text-sm w-full max-w-xs ml-auto">
                     {(sd.subtotal ?? 0) > 0 && (
-                      <div className="flex justify-between text-muted-foreground">
+                      <div className="flex justify-between gap-4 text-muted-foreground">
                         <span>Subtotal:</span>
-                        <span>{currency} {(sd.subtotal ?? 0).toLocaleString()}</span>
+                        <span className="tabular-nums whitespace-nowrap">{currency} {(sd.subtotal ?? 0).toLocaleString()}</span>
                       </div>
                     )}
                     {(sd.shippingCost ?? 0) > 0 && (
-                      <div className="flex justify-between text-muted-foreground">
+                      <div className="flex justify-between gap-4 text-muted-foreground">
                         <span>Shipping:</span>
-                        <span>{currency} {(sd.shippingCost ?? 0).toLocaleString()}</span>
+                        <span className="tabular-nums whitespace-nowrap">{currency} {(sd.shippingCost ?? 0).toLocaleString()}</span>
                       </div>
                     )}
                     {(sd.tax ?? 0) > 0 && (
-                      <div className="flex justify-between text-muted-foreground">
+                      <div className="flex justify-between gap-4 text-muted-foreground">
                         <span>Tax:</span>
-                        <span>{currency} {(sd.tax ?? 0).toLocaleString()}</span>
+                        <span className="tabular-nums whitespace-nowrap">{currency} {(sd.tax ?? 0).toLocaleString()}</span>
                       </div>
                     )}
                     {(sd.miscAmount ?? 0) > 0 && (
-                      <div className="flex justify-between text-muted-foreground">
+                      <div className="flex justify-between gap-4 text-muted-foreground">
                         <span>Miscellaneous:</span>
-                        <span>{currency} {(sd.miscAmount ?? 0).toLocaleString()}</span>
+                        <span className="tabular-nums whitespace-nowrap">{currency} {(sd.miscAmount ?? 0).toLocaleString()}</span>
                       </div>
                     )}
                     <Separator />
-                    <div className="flex justify-between font-bold text-base">
+                    <div className="flex justify-between gap-4 font-bold text-base">
                       <span>Grand Total:</span>
-                      <span>{currency} {(sd.total ?? 0).toLocaleString()}</span>
+                      <span className="tabular-nums whitespace-nowrap">{currency} {(sd.total ?? 0).toLocaleString()}</span>
                     </div>
                   </div>
 

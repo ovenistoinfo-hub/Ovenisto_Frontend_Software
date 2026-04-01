@@ -56,7 +56,6 @@ const breadcrumbConfig: Record<string, { label: string; parent?: { label: string
   "/shifts": { label: "Shifts" },
   "/purchases": { label: "Purchases" },
   "/suppliers": { label: "Suppliers" },
-  "/supplier-dues": { label: "Supplier Dues" },
   "/expenses": { label: "Expenses" },
   "/transfers": { label: "Transfers" },
   "/waste": { label: "Waste" },
