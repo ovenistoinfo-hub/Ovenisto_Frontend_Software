@@ -11,13 +11,25 @@ export interface ChallanItem {
   receivedQty: number | null;
 }
 
+export interface ChallanUser {
+  id: string;
+  name: string;
+  phone: string | null;
+  role: string | null;
+}
+
 export interface ChallanRecord {
   id: string;
   challanNo: string;
   status: ChallanStatus;
   notes: string | null;
+  shippingCost: number | null;
+  miscAmount: number | null;
   fromWarehouse: { id: string; name: string; type: string; outletId: string | null };
   toWarehouse:   { id: string; name: string; type: string; outletId: string | null };
+  createdBy:    ChallanUser | null;
+  dispatchedBy: ChallanUser | null;
+  receivedBy:   ChallanUser | null;
   dispatchedAt: string | null;
   receivedAt: string | null;
   createdAt: string;
@@ -39,7 +51,7 @@ export const challanService = {
     return res.data;
   },
 
-  create: async (body: { fromWarehouseId: string; toWarehouseId: string; notes?: string; items: { ingredientId: string; qty: number }[] }): Promise<ChallanRecord> => {
+  create: async (body: { fromWarehouseId: string; toWarehouseId: string; notes?: string; shippingCost?: number; miscAmount?: number; items: { ingredientId: string; qty: number }[] }): Promise<ChallanRecord> => {
     const res = await api.post<{ success: boolean; data: ChallanRecord }>('/challans', body);
     return res.data;
   },

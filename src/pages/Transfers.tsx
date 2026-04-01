@@ -3,7 +3,7 @@ import { challanService, type ChallanRecord, type ChallanStatus } from "@/servic
 import { warehouseService, type WarehouseRecord } from "@/services/warehouse.service";
 import { inventoryService, type IngredientRecord } from "@/services/inventory.service";
 import { useAuth } from "@/contexts/AuthContext";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,7 +14,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { Plus, Search, Eye, Truck, CheckCircle, Trash2, ArrowLeftRight, XCircle, PackageCheck } from "lucide-react";
+import { Plus, Search, Eye, Truck, CheckCircle, Trash2, ArrowLeftRight, XCircle, PackageCheck, Printer, Phone, User } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/ui/page-header";
@@ -53,6 +53,8 @@ const Transfers = () => {
   const [fromWarehouseId, setFromWarehouseId] = useState("");
   const [toWarehouseId,   setToWarehouseId]   = useState("");
   const [notes,           setNotes]           = useState("");
+  const [shippingCost,    setShippingCost]    = useState<number | "">("");
+  const [miscAmount,      setMiscAmount]      = useState<number | "">("");
   const [items,           setItems]           = useState<FormItem[]>([{ ingredientId: "", name: "", qty: 0 }]);
 
   // ── Data loading ──────────────────────────────────────────────────
@@ -157,6 +159,8 @@ const Transfers = () => {
     setFromWarehouseId("");
     setToWarehouseId("");
     setNotes("");
+    setShippingCost("");
+    setMiscAmount("");
     setItems([{ ingredientId: "", name: "", qty: 0 }]);
     setShowDialog(true);
   };
@@ -192,7 +196,14 @@ const Transfers = () => {
       const validItems = items
         .filter(i => i.ingredientId && i.qty > 0)
         .map(i => ({ ingredientId: i.ingredientId, qty: i.qty }));
-      await challanService.create({ fromWarehouseId, toWarehouseId, notes: notes || undefined, items: validItems });
+      await challanService.create({
+        fromWarehouseId,
+        toWarehouseId,
+        notes: notes || undefined,
+        shippingCost: shippingCost !== "" ? shippingCost : undefined,
+        miscAmount:   miscAmount   !== "" ? miscAmount   : undefined,
+        items: validItems,
+      });
       toast.success("Transfer challan created");
       setShowDialog(false);
       await fetchChallans();
@@ -507,6 +518,30 @@ const Transfers = () => {
               <Label>Notes (optional)</Label>
               <Textarea placeholder="Any notes about this transfer..." value={notes} onChange={(e) => setNotes(e.target.value)} className="min-h-20" />
             </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>Shipping Cost (optional)</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  placeholder="0.00"
+                  value={shippingCost}
+                  onChange={(e) => setShippingCost(e.target.value === "" ? "" : Number(e.target.value))}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Misc Charges (optional)</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  placeholder="0.00"
+                  value={miscAmount}
+                  onChange={(e) => setMiscAmount(e.target.value === "" ? "" : Number(e.target.value))}
+                />
+              </div>
+            </div>
             <div>
               <Label className="mb-2 block">Items *</Label>
               <div className="space-y-2">
@@ -546,35 +581,198 @@ const Transfers = () => {
 
       {/* Detail Dialog */}
       <Dialog open={!!showDetail} onOpenChange={() => setShowDetail(null)}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>Transfer Details — {showDetail?.challanNo}</DialogTitle></DialogHeader>
-          {showDetail && (
-            <div className="space-y-4 text-sm">
-              <div className="grid grid-cols-2 gap-2">
-                <div><span className="text-muted-foreground">From:</span> <strong>{showDetail.fromWarehouse?.name}</strong> <span className="text-xs text-muted-foreground">({showDetail.fromWarehouse?.type})</span></div>
-                <div><span className="text-muted-foreground">To:</span> <strong>{showDetail.toWarehouse?.name}</strong> <span className="text-xs text-muted-foreground">({showDetail.toWarehouse?.type})</span></div>
-                <div><span className="text-muted-foreground">Status:</span> <Badge variant="secondary" className={STATUS_STYLE[showDetail.status] || ""}>{showDetail.status}</Badge></div>
-                <div><span className="text-muted-foreground">Date:</span> {new Date(showDetail.createdAt).toLocaleDateString()}</div>
-                {showDetail.dispatchedAt && <div><span className="text-muted-foreground">Dispatched:</span> {new Date(showDetail.dispatchedAt).toLocaleString()}</div>}
-                {showDetail.receivedAt   && <div><span className="text-muted-foreground">Received:</span>  {new Date(showDetail.receivedAt).toLocaleString()}</div>}
-              </div>
-              {showDetail.notes && (
-                <div className="border-t pt-2"><span className="text-muted-foreground">Notes:</span> <p>{showDetail.notes}</p></div>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-3">
+              <span>Stock Transfer Challan: {showDetail?.challanNo}</span>
+              {showDetail && (
+                <Badge variant="secondary" className={STATUS_STYLE[showDetail.status] || ""}>
+                  {showDetail.status}
+                </Badge>
               )}
-              <div className="border-t pt-2">
-                <p className="font-medium mb-2">Items</p>
-                <div className="space-y-1 text-xs">
-                  {showDetail.items.map((item, i) => (
-                    <div key={i} className="flex justify-between">
-                      <span>{item.ingredientName} × {item.qty} {item.unit}</span>
-                      {item.receivedQty !== null && <span className="text-success">Received: {item.receivedQty}</span>}
+            </DialogTitle>
+          </DialogHeader>
+          {showDetail && (
+            <div className="space-y-4">
+              {/* Created By / Dispatched By Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <Card className="shadow-sm">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-xs text-muted-foreground uppercase tracking-wider">Created By</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <User className="h-4 w-4 text-muted-foreground" />
+                      <span className="font-medium">{showDetail.createdBy?.name ?? "—"}</span>
+                      {showDetail.createdBy?.role && <Badge variant="secondary" className="text-xs">{showDetail.createdBy.role}</Badge>}
                     </div>
-                  ))}
-                </div>
+                    {showDetail.createdBy?.phone && (
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <Phone className="h-3 w-3" />{showDetail.createdBy.phone}
+                      </div>
+                    )}
+                    <div className="text-xs text-muted-foreground mt-1">Created: {new Date(showDetail.createdAt).toLocaleString()}</div>
+                  </CardContent>
+                </Card>
+                <Card className="shadow-sm">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-xs text-muted-foreground uppercase tracking-wider">
+                      {showDetail.receivedBy ? "Received By" : showDetail.dispatchedBy ? "Dispatched By" : "Pending Dispatch"}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-1">
+                    {(showDetail.dispatchedBy ?? showDetail.receivedBy) ? (
+                      <>
+                        <div className="flex items-center gap-2">
+                          <User className="h-4 w-4 text-muted-foreground" />
+                          <span className="font-medium">{(showDetail.receivedBy ?? showDetail.dispatchedBy)!.name}</span>
+                          {(showDetail.receivedBy ?? showDetail.dispatchedBy)!.role && (
+                            <Badge variant="secondary" className="text-xs">{(showDetail.receivedBy ?? showDetail.dispatchedBy)!.role}</Badge>
+                          )}
+                        </div>
+                        {(showDetail.receivedBy ?? showDetail.dispatchedBy)!.phone && (
+                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                            <Phone className="h-3 w-3" />{(showDetail.receivedBy ?? showDetail.dispatchedBy)!.phone}
+                          </div>
+                        )}
+                        {showDetail.dispatchedAt && (
+                          <div className="text-xs text-muted-foreground mt-1">Dispatched: {new Date(showDetail.dispatchedAt).toLocaleString()}</div>
+                        )}
+                        {showDetail.receivedAt && (
+                          <div className="text-xs text-muted-foreground">Received: {new Date(showDetail.receivedAt).toLocaleString()}</div>
+                        )}
+                      </>
+                    ) : (
+                      <div className="text-sm text-muted-foreground">Not yet dispatched</div>
+                    )}
+                  </CardContent>
+                </Card>
               </div>
+
+              {/* Warehouse Route */}
+              <div className="flex gap-4 text-sm flex-wrap">
+                <div><span className="text-muted-foreground">From:</span> <span className="font-medium">{showDetail.fromWarehouse?.name}</span> <Badge variant="secondary" className="text-xs ml-1">{showDetail.fromWarehouse?.type}</Badge></div>
+                <span className="text-muted-foreground">→</span>
+                <div><span className="text-muted-foreground">To:</span> <span className="font-medium">{showDetail.toWarehouse?.name}</span> <Badge variant="secondary" className="text-xs ml-1">{showDetail.toWarehouse?.type}</Badge></div>
+              </div>
+
+              {/* Notes */}
+              {showDetail.notes && (
+                <div className="flex gap-2 text-sm">
+                  <span className="text-muted-foreground">Notes:</span>
+                  <span>{showDetail.notes}</span>
+                </div>
+              )}
+
+              {/* Items Table */}
+              <div className="rounded-lg border overflow-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-muted/50 hover:bg-muted/50">
+                      <TableHead>SN</TableHead>
+                      <TableHead>Ingredient</TableHead>
+                      <TableHead className="text-right">Qty</TableHead>
+                      <TableHead>Unit</TableHead>
+                      {showDetail.status === "RECEIVED" && <TableHead className="text-right">Received Qty</TableHead>}
+                      {showDetail.status === "RECEIVED" && <TableHead className="text-right">Variance</TableHead>}
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {showDetail.items.map((item, i) => {
+                      const variance = showDetail.status === "RECEIVED" && item.receivedQty !== null
+                        ? item.qty - item.receivedQty : null;
+                      return (
+                        <TableRow key={i}>
+                          <TableCell className="text-muted-foreground">{i + 1}</TableCell>
+                          <TableCell className="font-medium">{item.ingredientName}</TableCell>
+                          <TableCell className="text-right">{item.qty}</TableCell>
+                          <TableCell className="text-sm">{item.unit}</TableCell>
+                          {showDetail.status === "RECEIVED" && (
+                            <TableCell className="text-right font-medium">
+                              {item.receivedQty !== null ? (
+                                <span className={item.receivedQty < item.qty ? "text-warning" : "text-success"}>
+                                  {item.receivedQty}
+                                </span>
+                              ) : "—"}
+                            </TableCell>
+                          )}
+                          {showDetail.status === "RECEIVED" && (
+                            <TableCell className="text-right text-sm">
+                              {variance !== null && variance > 0 ? (
+                                <span className="text-warning font-medium">-{variance}</span>
+                              ) : variance === 0 ? (
+                                <span className="text-success">✓</span>
+                              ) : "—"}
+                            </TableCell>
+                          )}
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+
+              {/* Cost Summary */}
+              {(showDetail.shippingCost != null || showDetail.miscAmount != null) && (
+                <div className="flex justify-end">
+                  <div className="w-64 space-y-1 text-sm border rounded-lg p-3 bg-muted/30">
+                    {showDetail.shippingCost != null && showDetail.shippingCost > 0 && (
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Shipping Cost</span>
+                        <span>Rs. {showDetail.shippingCost.toLocaleString()}</span>
+                      </div>
+                    )}
+                    {showDetail.miscAmount != null && showDetail.miscAmount > 0 && (
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Misc Charges</span>
+                        <span>Rs. {showDetail.miscAmount.toLocaleString()}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between border-t pt-1 font-semibold">
+                      <span>Total Extra Cost</span>
+                      <span>Rs. {((showDetail.shippingCost ?? 0) + (showDetail.miscAmount ?? 0)).toLocaleString()}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
-          <DialogFooter><Button variant="outline" onClick={() => setShowDetail(null)}>Close</Button></DialogFooter>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" size="sm" onClick={() => {
+              const c = showDetail;
+              if (!c) return;
+              const w = window.open("", "_blank", "width=800,height=700");
+              if (!w) return;
+              const st = c.status;
+              const isReceived = st === "RECEIVED";
+              const dispUser = c.receivedBy ?? c.dispatchedBy;
+              const dispLabel = c.receivedBy ? "Received By" : c.dispatchedBy ? "Dispatched By" : "Pending Dispatch";
+              const dispHtml = dispUser
+                ? `<div style="text-align:right"><p style="font-size:11px;color:#888;text-transform:uppercase;font-weight:600">${dispLabel}</p><p style="font-weight:600">${dispUser.name}</p><p style="color:#666">${dispUser.role ?? ""}</p>${dispUser.phone ? `<p style="color:#666">${dispUser.phone}</p>` : ""}${c.dispatchedAt ? `<p style="font-size:11px;color:#888">Dispatched: ${new Date(c.dispatchedAt).toLocaleString()}</p>` : ""}${c.receivedAt ? `<p style="font-size:11px;color:#888">Received: ${new Date(c.receivedAt).toLocaleString()}</p>` : ""}</div>`
+                : `<div style="text-align:right"><p style="font-size:11px;color:#888;text-transform:uppercase;font-weight:600">Status</p><p style="color:#666">Pending Dispatch</p></div>`;
+              const totalExtra = (c.shippingCost ?? 0) + (c.miscAmount ?? 0);
+              w.document.write(`<!DOCTYPE html><html><head><title>${c.challanNo}</title><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;padding:30px;color:#333;font-size:13px}h1{font-size:20px}table{width:100%;border-collapse:collapse;margin-top:16px}th,td{border:1px solid #ccc;padding:8px;text-align:left}th{background:#f0f0f0;font-weight:600;font-size:12px}.header{text-align:center;border-bottom:2px solid #333;padding-bottom:16px;margin-bottom:16px}.info-grid{display:flex;justify-content:space-between;margin-bottom:16px}.badge{display:inline-block;padding:3px 12px;border-radius:12px;font-size:11px;font-weight:600;margin-top:6px}.summary{text-align:right;margin-top:12px}.cost-box{margin-top:16px;border-top:1px solid #ccc;padding-top:12px;text-align:right}@media print{body{padding:15px}}</style></head><body>`);
+              w.document.write(`<div class="header"><h1>Stock Transfer Challan</h1><p style="color:#666;margin-top:4px">${c.challanNo}</p><span class="badge" style="background:${isReceived ? "#e6f4ea;color:#1a7f37" : st === "CANCELLED" ? "#eee;color:#666" : st === "DISPATCHED" ? "#e8f0fe;color:#1a56db" : "#fff8e1;color:#f57f17"}">${st}</span></div>`);
+              w.document.write(`<div class="info-grid"><div><p style="font-size:11px;color:#888;text-transform:uppercase;font-weight:600">Created By</p><p style="font-weight:600">${c.createdBy?.name ?? "—"}</p><p style="color:#666">${c.createdBy?.role ?? ""}</p>${c.createdBy?.phone ? `<p style="color:#666">${c.createdBy.phone}</p>` : ""}<p style="font-size:11px;color:#888;margin-top:4px">Date: ${new Date(c.createdAt).toLocaleString()}</p></div>${dispHtml}</div>`);
+              w.document.write(`<p style="margin-bottom:8px"><strong>From:</strong> ${c.fromWarehouse.name} (${c.fromWarehouse.type}) &nbsp;→&nbsp; <strong>To:</strong> ${c.toWarehouse.name} (${c.toWarehouse.type})</p>`);
+              if (c.notes) w.document.write(`<p style="background:#f5f5f5;padding:8px;border-radius:4px;margin-bottom:12px"><strong>Notes:</strong> ${c.notes}</p>`);
+              w.document.write(`<table><thead><tr><th>SN</th><th>Ingredient</th><th style="text-align:right">Qty</th><th>Unit</th>${isReceived ? '<th style="text-align:right">Received Qty</th><th style="text-align:right">Variance</th>' : ""}</tr></thead><tbody>`);
+              c.items.forEach((item, idx) => {
+                const v = isReceived && item.receivedQty !== null ? item.qty - item.receivedQty : null;
+                w.document.write(`<tr><td>${idx + 1}</td><td>${item.ingredientName}</td><td style="text-align:right">${item.qty}</td><td>${item.unit}</td>${isReceived ? `<td style="text-align:right;font-weight:600">${item.receivedQty ?? "—"}</td><td style="text-align:right;color:${v && v > 0 ? "#d97706" : "#16a34a"}">${v !== null ? (v > 0 ? `-${v}` : "✓") : "—"}</td>` : ""}</tr>`);
+              });
+              w.document.write(`</tbody></table>`);
+              if (totalExtra > 0) {
+                w.document.write(`<div class="cost-box">${c.shippingCost ? `<p>Shipping Cost: <strong>Rs. ${c.shippingCost.toLocaleString()}</strong></p>` : ""}${c.miscAmount ? `<p>Misc Charges: <strong>Rs. ${c.miscAmount.toLocaleString()}</strong></p>` : ""}<p style="font-size:14px;font-weight:700;margin-top:6px">Total Extra Cost: Rs. ${totalExtra.toLocaleString()}</p></div>`);
+              }
+              w.document.write(`<p class="summary">Total Items: <strong>${c.items.length}</strong></p></body></html>`);
+              w.document.close();
+              w.print();
+            }}>
+              <Printer className="h-4 w-4 mr-1" />Print / PDF
+            </Button>
+            <Button variant="outline" onClick={() => setShowDetail(null)}>Close</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

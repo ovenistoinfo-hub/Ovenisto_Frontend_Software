@@ -1,14 +1,23 @@
 import { api } from './api';
 
-export type DemandStatus = 'PENDING' | 'APPROVED' | 'FULFILLED' | 'REJECTED';
+export type DemandStatus = 'PENDING' | 'APPROVED' | 'FULFILLED' | 'REJECTED' | 'CANCELLED';
 
 export interface DemandItem {
   id: string;
   ingredientId: string;
   ingredientName: string;
+  category: string | null;
   unit: string;
   requestedQty: number;
   approvedQty: number | null;
+  stockAtRequest: number | null;
+}
+
+export interface DemandUser {
+  id: string;
+  name: string;
+  phone: string | null;
+  role: string | null;
 }
 
 export interface DemandRecord {
@@ -20,8 +29,8 @@ export interface DemandRecord {
   challanId: string | null;
   requestingWH: { id: string; name: string; type: string } | null;
   supplyingWH:  { id: string; name: string; type: string } | null;
-  requestedBy:  { id: string; name: string } | null;
-  approvedBy:   { id: string; name: string } | null;
+  requestedBy:  DemandUser | null;
+  approvedBy:   DemandUser | null;
   approvedAt:  string | null;
   fulfilledAt: string | null;
   rejectedAt:  string | null;
@@ -74,6 +83,11 @@ export const demandService = {
 
   reject: async (id: string, reason?: string): Promise<DemandRecord> => {
     const res = await api.patch<{ success: boolean; data: DemandRecord }>(`/demands/${id}/reject`, { reason });
+    return res.data;
+  },
+
+  cancel: async (id: string): Promise<DemandRecord> => {
+    const res = await api.patch<{ success: boolean; data: DemandRecord }>(`/demands/${id}/cancel`);
     return res.data;
   },
 };
