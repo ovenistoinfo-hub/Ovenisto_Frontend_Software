@@ -178,8 +178,14 @@ const Purchases = () => {
       setUnits(unitList);
       setWarehouses(whList);
       setApprovedRequests(prRes.data);
-      const main = whList.find((w) => w.type === "MAIN");
-      if (main && !selectedWarehouseId) setSelectedWarehouseId(main.id);
+      // Pre-select warehouse from URL param if present, otherwise fall back to MAIN
+      const paramWarehouseId = searchParams.get("warehouseId");
+      if (paramWarehouseId && whList.find((w) => w.id === paramWarehouseId)) {
+        setSelectedWarehouseId(paramWarehouseId);
+      } else {
+        const main = whList.find((w) => w.type === "MAIN");
+        if (main && !selectedWarehouseId) setSelectedWarehouseId(main.id);
+      }
       refDataLoaded.current = true;
     } catch (err: Error | unknown) {
       toast.error((err as Error).message || "Failed to load data");
@@ -190,10 +196,10 @@ const Purchases = () => {
     fetchPurchases();
   }, [fetchPurchases]);
 
-  // Low-stock auto-fill
+  // Low-stock / ingredient param auto-fill — trigger ref data load
   useEffect(() => {
     if (autoFillDone.current || loading) return;
-    if (searchParams.get("auto") === "low-stock") {
+    if (searchParams.get("auto") === "low-stock" || searchParams.get("ingredientId")) {
       loadRefData();
     }
   }, [searchParams, loading, loadRefData]);
@@ -222,6 +228,28 @@ const Purchases = () => {
       }
     }
   }, [searchParams, loading, ingredients]);
+
+  // ingredientId param auto-fill (don't conflict with auto=low-stock)
+  useEffect(() => {
+    const paramIngId = searchParams.get("ingredientId");
+    if (!paramIngId || autoFillDone.current || ingredients.length === 0) return;
+    if (searchParams.get("auto") === "low-stock") return;
+    const ing = ingredients.find((i) => i.id === paramIngId);
+    if (!ing) return;
+    autoFillDone.current = true;
+    setItems([{
+      ingredientId: ing.id,
+      name: ing.name,
+      qty: Math.max(1, Number(ing.lowStockLevel) - Number(ing.currentStock)),
+      unit: ing.unit?.name ?? "",
+      unitPrice: Number(ing.purchasePrice) || 0,
+      wasteQty: 0,
+      wasteReason: "",
+      source: "manual" as const,
+    }]);
+    setForm({ supplierId: "", invoiceNumber: "" });
+    setShowDialog(true);
+  }, [searchParams, ingredients]);
 
   const filtered = purchases.filter(
     (p) =>

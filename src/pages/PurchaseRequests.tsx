@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useData } from "@/contexts/DataContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -50,6 +51,8 @@ const PurchaseRequests = () => {
   const isSuperAdmin = user?.role === "Super Admin";
   const canApprove = ["Super Admin", "Admin"].includes(user?.role ?? "");
   const canCreate = !canApprove; // Only Manager can create requests; Admin/Super Admin supervise only
+  const [searchParams] = useSearchParams();
+  const paramAutoOpenDone = useRef(false);
 
   // List state
   const [requests, setRequests] = useState<PurchaseRequestRecord[]>([]);
@@ -94,6 +97,17 @@ const PurchaseRequests = () => {
 
   useEffect(() => { fetchRequests(); }, [fetchRequests]);
 
+  // Auto-open create dialog when arriving from Branch Stock page with URL params (only if Manager can create)
+  useEffect(() => {
+    const paramWarehouseId = searchParams.get("warehouseId");
+    const paramIngId = searchParams.get("ingredientId");
+    if ((paramWarehouseId || paramIngId) && canCreate && !paramAutoOpenDone.current) {
+      paramAutoOpenDone.current = true;
+      openCreateDialog();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Fetch warehouses + ingredients for create dialog
   const openCreateDialog = useCallback(async () => {
     setShowCreate(true);
@@ -108,12 +122,19 @@ const PurchaseRequests = () => {
       const branchWarehouses = whs.filter(w => w.type === "BRANCH");
       setWarehouses(branchWarehouses);
       setIngredients(ings);
-      if (branchWarehouses.length === 1) setSelectedWarehouse(branchWarehouses[0].id);
-      else setSelectedWarehouse("");
+      // Pre-select warehouse from URL param if available
+      const paramWarehouseId = searchParams.get("warehouseId");
+      if (paramWarehouseId && branchWarehouses.find(w => w.id === paramWarehouseId)) {
+        setSelectedWarehouse(paramWarehouseId);
+      } else if (branchWarehouses.length === 1) {
+        setSelectedWarehouse(branchWarehouses[0].id);
+      } else {
+        setSelectedWarehouse("");
+      }
     } catch (err: Error | unknown) {
       toast.error((err as Error).message || "Failed to load data");
     }
-  }, []);
+  }, [searchParams]);
 
   // Fetch warehouse stock when warehouse selection changes
   useEffect(() => {
@@ -129,6 +150,25 @@ const PurchaseRequests = () => {
   const getWarehouseStock = useCallback((ingredientId: string) => {
     return warehouseStockMap[ingredientId] ?? 0;
   }, [warehouseStockMap]);
+
+  // Pre-fill ingredient from URL param after ingredients are loaded
+  useEffect(() => {
+    const paramIngId = searchParams.get("ingredientId");
+    if (!paramIngId || ingredients.length === 0 || !showCreate) return;
+    const ing = ingredients.find(i => i.id === paramIngId);
+    if (!ing) return;
+    setCreateItems(prev => {
+      if (prev.some(i => i.ingredientId === paramIngId)) return prev;
+      return [...prev.filter(i => i.ingredientId !== ""), {
+        ingredientId: ing.id,
+        name: ing.name,
+        unit: ing.unit?.name ?? "",
+        currentStock: getWarehouseStock(ing.id),
+        requestedQty: Math.max(1, Number(ing.lowStockLevel) - Number(ing.currentStock)),
+      }];
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ingredients, showCreate]);
 
   // Add ingredient to create list
   const addItem = useCallback(() => {
