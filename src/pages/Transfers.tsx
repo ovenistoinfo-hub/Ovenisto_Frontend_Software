@@ -14,7 +14,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { Plus, Search, Eye, Truck, CheckCircle, Trash2, ArrowLeftRight, XCircle, PackageCheck, Printer, Phone, User } from "lucide-react";
+import { Plus, Search, Eye, Truck, CheckCircle, Trash2, ArrowLeftRight, XCircle, PackageCheck, Printer, Phone, User, FileText, ClipboardList } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/ui/page-header";
@@ -27,11 +27,23 @@ const STATUS_STYLE: Record<string, string> = {
 };
 
 interface FormItem { ingredientId: string; name: string; qty: number; }
+interface ReceiveFormItem { id: string; ingredientName: string; unit: string; qty: number; receivedQty: number; wasteQty: number; wasteReason: string; }
 
 const Transfers = () => {
   const { user } = useAuth();
-  const isAdmin       = ['Super Admin', 'Admin'].includes(user?.role || '');
+  const userRole      = user?.role || '';
+  const isSuperAdmin  = userRole === 'Super Admin';
+  const isAdmin       = ['Super Admin', 'Admin'].includes(userRole);
+  const isManager     = userRole === 'Manager';
+  const isKitchenMgr  = userRole === 'Kitchen Manager';
   const userOutletId  = user?.outletId ?? null;
+
+  // ── Role-based permissions ──────────────────────────────────────
+  // Kitchen Manager: receive only, no create, no dispatch
+  // Manager / Admin: create (branch→kitchen), dispatch KM demands, receive (from main)
+  // Super Admin: create (main→branch), dispatch, NO receive
+  const canDispatch = !isKitchenMgr;                    // everyone except KM
+  const canReceive  = !isSuperAdmin;                    // everyone except Super Admin
 
   // Data
   const [challans,     setChallans]     = useState<ChallanRecord[]>([]);
@@ -45,7 +57,7 @@ const Transfers = () => {
   const [showDetail,   setShowDetail]   = useState<ChallanRecord | null>(null);
   const [cancelId,     setCancelId]     = useState<string | null>(null);
   const [dispatchId,   setDispatchId]   = useState<string | null>(null);
-  const [receiveId,    setReceiveId]    = useState<string | null>(null);
+  const [receiveChallan, setReceiveChallan] = useState<ChallanRecord | null>(null);
   const [search,       setSearch]       = useState("");
   const [filterStatus, setFilterStatus] = useState<ChallanStatus | "ALL">("ALL");
 
@@ -56,6 +68,11 @@ const Transfers = () => {
   const [shippingCost,    setShippingCost]    = useState<number | "">("");
   const [miscAmount,      setMiscAmount]      = useState<number | "">("");
   const [items,           setItems]           = useState<FormItem[]>([{ ingredientId: "", name: "", qty: 0 }]);
+
+  // Receive form state
+  const [receiveItems, setReceiveItems] = useState<ReceiveFormItem[]>([]);
+  const [receiveShipping, setReceiveShipping] = useState<number | "">(0);
+  const [receiveMisc, setReceiveMisc] = useState<number | "">(0);
 
   // ── Data loading ──────────────────────────────────────────────────
   const fetchChallans = useCallback(async () => {
@@ -89,26 +106,56 @@ const Transfers = () => {
   }, [fetchChallans]);
 
   // ── Role-based tab filtering ───────────────────────────────────────
-  // Determine if a warehouse "belongs" to the current user's scope
+  // Determine which warehouse types this user "owns" for dispatch/receive
+  // Manager/Admin (outlet-linked): owns BRANCH + KITCHEN of their outlet
+  // Kitchen Manager: owns only KITCHEN of their outlet
+  // Super Admin: owns MAIN warehouse (dispatches from main)
+  function isMySourceWarehouse(wh: { outletId: string | null; type: string } | null): boolean {
+    if (!wh) return false;
+    if (isSuperAdmin) return wh.type === 'MAIN';
+    if (isKitchenMgr) return false; // KM never dispatches
+    // Manager/Admin with outlet → owns BRANCH of their outlet (dispatches from branch)
+    if (userOutletId) return wh.outletId === userOutletId && wh.type === 'BRANCH';
+    return wh.type === 'MAIN';
+  }
+
+  function isMyDestWarehouse(wh: { outletId: string | null; type: string } | null): boolean {
+    if (!wh) return false;
+    if (isSuperAdmin) return false; // Super Admin never receives
+    if (isKitchenMgr) {
+      // KM receives at KITCHEN of their outlet
+      if (userOutletId) return wh.outletId === userOutletId && wh.type === 'KITCHEN';
+      return wh.type === 'KITCHEN';
+    }
+    // Manager/Admin with outlet → receives at BRANCH (from main) — NOT kitchen
+    if (userOutletId) return wh.outletId === userOutletId && wh.type === 'BRANCH';
+    return false;
+  }
+
+  // Admin has the same permissions as Manager (outlet-scoped, dispatch + receive)
+  const outgoingChallans = useMemo(() =>
+    challans.filter(c => isMySourceWarehouse(c.fromWarehouse)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [challans, isSuperAdmin, isKitchenMgr, userOutletId]
+  );
+
+  const incomingChallans = useMemo(() =>
+    challans.filter(c => isMyDestWarehouse(c.toWarehouse)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [challans, isSuperAdmin, isKitchenMgr, userOutletId]
+  );
+
+  // Which sections to show
+  const showOutgoingSection = !isKitchenMgr;   // Everyone except KM
+  const showIncomingSection = !isSuperAdmin;    // Everyone except Super Admin
+
+  // Helper for warehouse scope check (used by create form only)
   function isMyWarehouse(wh: { outletId: string | null; type: string } | null): boolean {
     if (!wh) return false;
     if (isAdmin) return true;
     if (userOutletId) return wh.outletId === userOutletId;
-    // No outletId (main-warehouse staff) → MAIN type
     return wh.type === 'MAIN';
   }
-
-  const outgoingChallans = useMemo(() =>
-    challans.filter(c => isAdmin || isMyWarehouse(c.fromWarehouse)),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [challans, isAdmin, userOutletId]
-  );
-
-  const incomingChallans = useMemo(() =>
-    challans.filter(c => isAdmin || isMyWarehouse(c.toWarehouse)),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [challans, isAdmin, userOutletId]
-  );
 
   // Apply search filter
   function applySearch(list: ChallanRecord[]) {
@@ -116,6 +163,7 @@ const Transfers = () => {
     if (!q) return list;
     return list.filter(c =>
       (c.challanNo || "").toLowerCase().includes(q) ||
+      (c.demand?.demandNo || "").toLowerCase().includes(q) ||
       (c.fromWarehouse?.name || "").toLowerCase().includes(q) ||
       (c.toWarehouse?.name || "").toLowerCase().includes(q)
     );
@@ -144,15 +192,8 @@ const Transfers = () => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [warehouses, selectedFromWH]);
 
-  // Can this user create challans (they must have at least one valid "from" warehouse)
-  const canCreate = fromWarehouseOptions.length > 0;
-
-  // ── Stats ─────────────────────────────────────────────────────────
-  const stats = {
-    pending:    challans.filter(c => c.status === "PENDING").length,
-    dispatched: challans.filter(c => c.status === "DISPATCHED").length,
-    received:   challans.filter(c => c.status === "RECEIVED").length,
-  };
+  // Can this user create challans? KM cannot; others need at least one valid "from" warehouse
+  const canCreate = !isKitchenMgr && fromWarehouseOptions.length > 0;
 
   // ── Form helpers ──────────────────────────────────────────────────
   const openAdd = () => {
@@ -229,13 +270,44 @@ const Transfers = () => {
     }
   };
 
+  const openReceiveForm = (c: ChallanRecord) => {
+    setReceiveItems(c.items.map(item => ({
+      id: item.id,
+      ingredientName: item.ingredientName,
+      unit: item.unit,
+      qty: item.qty,
+      receivedQty: item.qty,
+      wasteQty: 0,
+      wasteReason: "",
+    })));
+    setReceiveShipping(c.shippingCost ?? 0);
+    setReceiveMisc(c.miscAmount ?? 0);
+    setReceiveChallan(c);
+  };
+
   const handleReceive = async () => {
-    if (!receiveId) return;
+    if (!receiveChallan) return;
+    // Validate
+    for (const ri of receiveItems) {
+      if (ri.wasteQty > ri.receivedQty) {
+        toast.error(`Waste qty cannot exceed received qty for "${ri.ingredientName}"`);
+        return;
+      }
+    }
     setSaving(true);
     try {
-      await challanService.receive(receiveId);
+      await challanService.receive(receiveChallan.id, {
+        items: receiveItems.map(ri => ({
+          id: ri.id,
+          receivedQty: ri.receivedQty,
+          wasteQty: ri.wasteQty || undefined,
+          wasteReason: ri.wasteReason || undefined,
+        })),
+        shippingCost: Number(receiveShipping) || undefined,
+        miscAmount: Number(receiveMisc) || undefined,
+      });
       toast.success("Challan received — stock added to destination");
-      setReceiveId(null);
+      setReceiveChallan(null);
       await fetchChallans();
     } catch (err: any) {
       toast.error(err.message || "Failed to receive");
@@ -293,7 +365,7 @@ const Transfers = () => {
           <TableHeader className="sticky top-0 z-10 bg-card">
             <TableRow className="bg-muted/50 hover:bg-muted/50">
               <TableHead>SN</TableHead>
-              <TableHead>Challan No</TableHead>
+              <TableHead>Invoice No</TableHead>
               <TableHead>From</TableHead>
               <TableHead>To</TableHead>
               <TableHead className="text-center">Items</TableHead>
@@ -306,7 +378,14 @@ const Transfers = () => {
             {list.map((c, i) => (
               <TableRow key={c.id} className="hover:bg-muted/30 transition-colors">
                 <TableCell>{i + 1}</TableCell>
-                <TableCell className="font-medium">{c.challanNo}</TableCell>
+                <TableCell className="font-medium">
+                  {c.demand ? (
+                    <div>
+                      <span>{c.demand.demandNo}</span>
+                      <div className="text-[10px] text-muted-foreground">{c.challanNo}</div>
+                    </div>
+                  ) : c.challanNo}
+                </TableCell>
                 <TableCell className="text-sm">
                   <span>{c.fromWarehouse?.name}</span>
                   <span className="ml-1 text-xs text-muted-foreground">({c.fromWarehouse?.type})</span>
@@ -325,20 +404,20 @@ const Transfers = () => {
                     <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setShowDetail(c)}>
                       <Eye className="h-3 w-3" />
                     </Button>
-                    {/* Dispatch — only in Outgoing tab, only for PENDING */}
-                    {showDispatch && c.status === "PENDING" && (
+                    {/* Dispatch — outgoing tab + role allowed + PENDING */}
+                    {showDispatch && canDispatch && c.status === "PENDING" && (
                       <Button variant="ghost" size="icon" className="h-7 w-7 text-blue-600 hover:text-blue-700 hover:bg-blue-50" onClick={() => setDispatchId(c.id)} title="Dispatch">
                         <Truck className="h-4 w-4" />
                       </Button>
                     )}
-                    {/* Receive — only in Incoming tab, only for DISPATCHED */}
-                    {showReceive && c.status === "DISPATCHED" && (
-                      <Button variant="ghost" size="icon" className="h-7 w-7 text-green-600 hover:text-green-700 hover:bg-green-50" onClick={() => setReceiveId(c.id)} title="Receive">
+                    {/* Receive — incoming tab + role allowed + DISPATCHED */}
+                    {showReceive && canReceive && c.status === "DISPATCHED" && (
+                      <Button variant="ghost" size="icon" className="h-7 w-7 text-green-600 hover:text-green-700 hover:bg-green-50" onClick={() => openReceiveForm(c)} title="Receive">
                         <PackageCheck className="h-4 w-4" />
                       </Button>
                     )}
-                    {/* Cancel — in Outgoing tab for PENDING/DISPATCHED; admin can cancel from either tab */}
-                    {(showDispatch || isAdmin) && (c.status === "PENDING" || c.status === "DISPATCHED") && (
+                    {/* Cancel — only Admin & Super Admin can cancel */}
+                    {isAdmin && (c.status === "PENDING" || c.status === "DISPATCHED") && (
                       <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => setCancelId(c.id)} title="Cancel">
                         <XCircle className="h-4 w-4" />
                       </Button>
@@ -367,107 +446,117 @@ const Transfers = () => {
         ) : undefined}
       />
 
-      {/* Stats */}
-      <div className="grid grid-cols-3 gap-4">
-        <Card className="shadow-sm">
-          <CardContent className="pt-6">
-            <div className="text-3xl font-bold text-yellow-600">{stats.pending}</div>
-            <p className="text-sm text-muted-foreground mt-1">Pending</p>
-          </CardContent>
-        </Card>
-        <Card className="shadow-sm">
-          <CardContent className="pt-6">
-            <div className="text-3xl font-bold text-blue-600">{stats.dispatched}</div>
-            <p className="text-sm text-muted-foreground mt-1">In Transit</p>
-          </CardContent>
-        </Card>
-        <Card className="shadow-sm">
-          <CardContent className="pt-6">
-            <div className="text-3xl font-bold text-green-600">{stats.received}</div>
-            <p className="text-sm text-muted-foreground mt-1">Received</p>
-          </CardContent>
-        </Card>
+      {/* Status filter pills */}
+      <div className="flex gap-1.5 flex-wrap">
+        {(["ALL", "PENDING", "DISPATCHED", "RECEIVED", "CANCELLED"] as const).map(s => (
+          <Button key={s} variant={filterStatus === s ? "default" : "outline"} size="sm"
+            onClick={() => setFilterStatus(s as ChallanStatus | "ALL")}
+            className={filterStatus === s ? "gradient-primary text-primary-foreground" : ""}>
+            {s === "ALL" ? "All" : s.charAt(0) + s.slice(1).toLowerCase()}
+          </Button>
+        ))}
       </div>
 
-      {/* Filters */}
-      <Card className="shadow-sm">
-        <CardHeader className="pb-3">
-          <div className="flex gap-4 items-end flex-wrap">
-            <div className="flex-1 min-w-[200px]">
-              <Label className="text-xs text-muted-foreground">Search</Label>
-              <div className="relative">
-                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Challan no or warehouse name..." className="pl-9" />
-              </div>
-            </div>
-            <div className="w-44">
-              <Label className="text-xs text-muted-foreground">Status</Label>
-              <Select value={filterStatus} onValueChange={(v) => setFilterStatus(v as ChallanStatus | "ALL")}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="ALL">All Status</SelectItem>
-                  <SelectItem value="PENDING">Pending</SelectItem>
-                  <SelectItem value="DISPATCHED">Dispatched</SelectItem>
-                  <SelectItem value="RECEIVED">Received</SelectItem>
-                  <SelectItem value="CANCELLED">Cancelled</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-        </CardHeader>
-      </Card>
+      {/* Search */}
+      <div className="relative max-w-sm">
+        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by invoice no, demand no or warehouse..." className="pl-9" />
+      </div>
 
-      {/* Outgoing / Incoming Tabs */}
-      <Tabs defaultValue="outgoing">
-        <TabsList>
-          <TabsTrigger value="outgoing">
-            <Truck className="h-4 w-4 mr-1.5" />
-            Outgoing ({outgoingChallans.length})
-          </TabsTrigger>
-          <TabsTrigger value="incoming">
-            <PackageCheck className="h-4 w-4 mr-1.5" />
-            Incoming ({incomingChallans.length})
-          </TabsTrigger>
-        </TabsList>
+      {/* Single-section view for KM (incoming only) and Super Admin (outgoing only) */}
+      {showOutgoingSection && showIncomingSection ? (
+        /* Both sections — Manager / Admin */
+        <Tabs defaultValue="outgoing">
+          <TabsList>
+            <TabsTrigger value="outgoing">
+              <Truck className="h-4 w-4 mr-1.5" />
+              Outgoing ({outgoingChallans.length})
+            </TabsTrigger>
+            <TabsTrigger value="incoming">
+              <PackageCheck className="h-4 w-4 mr-1.5" />
+              Incoming ({incomingChallans.length})
+            </TabsTrigger>
+          </TabsList>
 
-        <TabsContent value="outgoing" className="mt-4">
-          <Card className="shadow-sm">
-            <CardHeader className="pb-2">
-              <p className="text-xs text-muted-foreground">
-                Challans you dispatched or are pending dispatch.
-                {!isAdmin && " (From your warehouse → destination)"}
-              </p>
-            </CardHeader>
-            <CardContent>
-              <ChallanTable
-                list={displayedOutgoing}
-                emptyMsg="No outgoing transfers found"
-                showDispatch={true}
-                showReceive={false}
-              />
-            </CardContent>
-          </Card>
-        </TabsContent>
+          <TabsContent value="outgoing" className="mt-4">
+            <Card className="shadow-sm">
+              <CardHeader className="pb-2">
+                <p className="text-xs text-muted-foreground">
+                  Challans you dispatch from your branch to kitchens. Dispatch pending challans here.
+                </p>
+              </CardHeader>
+              <CardContent>
+                <ChallanTable
+                  list={displayedOutgoing}
+                  emptyMsg="No outgoing transfers found"
+                  showDispatch={true}
+                  showReceive={false}
+                />
+              </CardContent>
+            </Card>
+          </TabsContent>
 
-        <TabsContent value="incoming" className="mt-4">
-          <Card className="shadow-sm">
-            <CardHeader className="pb-2">
-              <p className="text-xs text-muted-foreground">
-                Challans sent to your warehouse. Receive them once the goods arrive.
-                {!isAdmin && " (From source → your warehouse)"}
-              </p>
-            </CardHeader>
-            <CardContent>
-              <ChallanTable
-                list={displayedIncoming}
-                emptyMsg="No incoming transfers found"
-                showDispatch={false}
-                showReceive={true}
-              />
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+          <TabsContent value="incoming" className="mt-4">
+            <Card className="shadow-sm">
+              <CardHeader className="pb-2">
+                <p className="text-xs text-muted-foreground">
+                  Stock dispatched from main warehouse to your branch. Receive once goods are verified.
+                </p>
+              </CardHeader>
+              <CardContent>
+                <ChallanTable
+                  list={displayedIncoming}
+                  emptyMsg="No incoming transfers found"
+                  showDispatch={false}
+                  showReceive={true}
+                />
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
+      ) : showOutgoingSection ? (
+        /* Super Admin — outgoing only */
+        <Card className="shadow-sm">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <Truck className="h-4 w-4" />
+              Outgoing Transfers ({outgoingChallans.length})
+            </CardTitle>
+            <p className="text-xs text-muted-foreground">
+              Challans dispatched from main warehouse to branches. Dispatch pending challans here.
+            </p>
+          </CardHeader>
+          <CardContent>
+            <ChallanTable
+              list={displayedOutgoing}
+              emptyMsg="No outgoing transfers found"
+              showDispatch={true}
+              showReceive={false}
+            />
+          </CardContent>
+        </Card>
+      ) : (
+        /* Kitchen Manager — incoming only */
+        <Card className="shadow-sm">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <PackageCheck className="h-4 w-4" />
+              Incoming Transfers ({incomingChallans.length})
+            </CardTitle>
+            <p className="text-xs text-muted-foreground">
+              Stock dispatched to your kitchen. Confirm receipt once goods are physically verified.
+            </p>
+          </CardHeader>
+          <CardContent>
+            <ChallanTable
+              list={displayedIncoming}
+              emptyMsg="No incoming transfers found"
+              showDispatch={false}
+              showReceive={true}
+            />
+          </CardContent>
+        </Card>
+      )}
 
       {/* Create Challan Dialog */}
       <Dialog open={showDialog} onOpenChange={setShowDialog}>
@@ -583,16 +672,278 @@ const Transfers = () => {
       <Dialog open={!!showDetail} onOpenChange={() => setShowDetail(null)}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-3">
-              <span>Stock Transfer Challan: {showDetail?.challanNo}</span>
-              {showDetail && (
-                <Badge variant="secondary" className={STATUS_STYLE[showDetail.status] || ""}>
-                  {showDetail.status}
-                </Badge>
+            <DialogTitle className="flex items-center gap-3 flex-wrap">
+              {showDetail?.demand ? (
+                <>
+                  <ClipboardList className="h-5 w-5 text-orange-600" />
+                  <span>Stock Demand: {showDetail.demand.demandNo}</span>
+                  <Badge variant="secondary" className={
+                    showDetail.demand.status === "APPROVED" || showDetail.demand.status === "FULFILLED"
+                      ? "bg-green-100 text-green-800"
+                      : showDetail.demand.status === "REJECTED"
+                      ? "bg-red-100 text-red-800"
+                      : showDetail.demand.status === "PENDING"
+                      ? "bg-yellow-100 text-yellow-800"
+                      : ""
+                  }>
+                    Demand: {showDetail.demand.status}
+                  </Badge>
+                  <Badge variant="secondary" className={STATUS_STYLE[showDetail.status] || ""}>
+                    Challan: {showDetail.status}
+                  </Badge>
+                </>
+              ) : (
+                <>
+                  <span>Stock Transfer Challan: {showDetail?.challanNo}</span>
+                  {showDetail && (
+                    <Badge variant="secondary" className={STATUS_STYLE[showDetail.status] || ""}>
+                      {showDetail.status}
+                    </Badge>
+                  )}
+                </>
               )}
             </DialogTitle>
           </DialogHeader>
-          {showDetail && (
+          {showDetail && showDetail.demand ? (
+            /* ── Demand-linked challan: show full demand details ── */
+            <div className="space-y-4">
+              {/* Challan ref badge */}
+              <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/40 rounded-md px-3 py-1.5 w-fit">
+                <FileText className="h-3.5 w-3.5" />
+                <span>Challan Ref: <span className="font-medium text-foreground">{showDetail.challanNo}</span></span>
+              </div>
+
+              {/* Requested By / Approved By Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <Card className="shadow-sm">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-xs text-muted-foreground uppercase tracking-wider">Requested By</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <User className="h-4 w-4 text-muted-foreground" />
+                      <span className="font-medium">{showDetail.demand.requestedBy?.name ?? "—"}</span>
+                      {showDetail.demand.requestedBy?.role && <Badge variant="secondary" className="text-xs">{showDetail.demand.requestedBy.role}</Badge>}
+                    </div>
+                    {showDetail.demand.requestedBy?.outlet && (
+                      <div className="text-xs text-muted-foreground">Outlet: <span className="font-medium text-foreground">{showDetail.demand.requestedBy.outlet}</span></div>
+                    )}
+                    {showDetail.demand.requestedBy?.phone && (
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <Phone className="h-3 w-3" />{showDetail.demand.requestedBy.phone}
+                      </div>
+                    )}
+                    <div className="text-xs text-muted-foreground mt-1">Requested: {new Date(showDetail.demand.createdAt).toLocaleString()}</div>
+                  </CardContent>
+                </Card>
+                <Card className="shadow-sm">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-xs text-muted-foreground uppercase tracking-wider">
+                      {showDetail.demand.status === "REJECTED" ? "Rejected By" : "Approved By"}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-1">
+                    {showDetail.demand.approvedBy ? (
+                      <>
+                        <div className="flex items-center gap-2">
+                          <User className="h-4 w-4 text-muted-foreground" />
+                          <span className="font-medium">{showDetail.demand.approvedBy.name}</span>
+                          {showDetail.demand.approvedBy.role && <Badge variant="secondary" className="text-xs">{showDetail.demand.approvedBy.role}</Badge>}
+                        </div>
+                        {showDetail.demand.approvedBy.outlet && (
+                          <div className="text-xs text-muted-foreground">Outlet: <span className="font-medium text-foreground">{showDetail.demand.approvedBy.outlet}</span></div>
+                        )}
+                        {showDetail.demand.approvedBy.phone && (
+                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                            <Phone className="h-3 w-3" />{showDetail.demand.approvedBy.phone}
+                          </div>
+                        )}
+                        {showDetail.demand.approvedAt && (
+                          <div className="text-xs text-muted-foreground mt-1">Approved: {new Date(showDetail.demand.approvedAt).toLocaleString()}</div>
+                        )}
+                      </>
+                    ) : (
+                      <div className="text-sm text-muted-foreground">Pending approval</div>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Dispatch / Receive info (challan lifecycle) */}
+              {(showDetail.dispatchedBy || showDetail.receivedBy) && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {showDetail.dispatchedBy && (
+                    <Card className="shadow-sm border-blue-200">
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-xs text-blue-600 uppercase tracking-wider">Dispatched By</CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <Truck className="h-4 w-4 text-blue-500" />
+                          <span className="font-medium">{showDetail.dispatchedBy.name}</span>
+                          {showDetail.dispatchedBy.role && <Badge variant="secondary" className="text-xs">{showDetail.dispatchedBy.role}</Badge>}
+                        </div>
+                        {showDetail.dispatchedBy.outlet && (
+                          <div className="text-xs text-muted-foreground">Outlet: <span className="font-medium text-foreground">{showDetail.dispatchedBy.outlet}</span></div>
+                        )}
+                        {showDetail.dispatchedBy.phone && (
+                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                            <Phone className="h-3 w-3" />{showDetail.dispatchedBy.phone}
+                          </div>
+                        )}
+                        {showDetail.dispatchedAt && (
+                          <div className="text-xs text-muted-foreground mt-1">Dispatched: {new Date(showDetail.dispatchedAt).toLocaleString()}</div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  )}
+                  {showDetail.receivedBy && (
+                    <Card className="shadow-sm border-green-200">
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-xs text-green-600 uppercase tracking-wider">Received By</CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <PackageCheck className="h-4 w-4 text-green-500" />
+                          <span className="font-medium">{showDetail.receivedBy.name}</span>
+                          {showDetail.receivedBy.role && <Badge variant="secondary" className="text-xs">{showDetail.receivedBy.role}</Badge>}
+                        </div>
+                        {showDetail.receivedBy.outlet && (
+                          <div className="text-xs text-muted-foreground">Outlet: <span className="font-medium text-foreground">{showDetail.receivedBy.outlet}</span></div>
+                        )}
+                        {showDetail.receivedBy.phone && (
+                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                            <Phone className="h-3 w-3" />{showDetail.receivedBy.phone}
+                          </div>
+                        )}
+                        {showDetail.receivedAt && (
+                          <div className="text-xs text-muted-foreground mt-1">Received: {new Date(showDetail.receivedAt).toLocaleString()}</div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  )}
+                </div>
+              )}
+
+              {/* Warehouse Route */}
+              <div className="flex gap-4 text-sm flex-wrap">
+                <div><span className="text-muted-foreground">Requesting WH:</span> <span className="font-medium">{showDetail.demand.requestingWH?.name}</span> <Badge variant="secondary" className="text-xs ml-1">{showDetail.demand.requestingWH?.type}</Badge></div>
+                <span className="text-muted-foreground">←</span>
+                <div><span className="text-muted-foreground">Supplying WH:</span> <span className="font-medium">{showDetail.demand.supplyingWH?.name}</span> <Badge variant="secondary" className="text-xs ml-1">{showDetail.demand.supplyingWH?.type}</Badge></div>
+              </div>
+
+              {/* Notes */}
+              {showDetail.demand.notes && (
+                <div className="flex gap-2 text-sm">
+                  <span className="text-muted-foreground">Notes:</span>
+                  <span>{showDetail.demand.notes}</span>
+                </div>
+              )}
+
+              {/* Demand Items Table — full detail with requested/approved/stock columns */}
+              <div className="rounded-lg border overflow-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-muted/50 hover:bg-muted/50">
+                      <TableHead>SN</TableHead>
+                      <TableHead>Ingredient</TableHead>
+                      <TableHead>Category</TableHead>
+                      <TableHead>Unit</TableHead>
+                      <TableHead className="text-right">Stock at Request</TableHead>
+                      <TableHead className="text-right">Requested Qty</TableHead>
+                      {(showDetail.demand.status === "APPROVED" || showDetail.demand.status === "FULFILLED") && (
+                        <TableHead className="text-right">Approved Qty</TableHead>
+                      )}
+                      {showDetail.status === "RECEIVED" && (
+                        <TableHead className="text-right">Received</TableHead>
+                      )}
+                      {showDetail.status === "RECEIVED" && (
+                        <TableHead className="text-right">Waste</TableHead>
+                      )}
+                      {showDetail.status === "RECEIVED" && (
+                        <TableHead className="text-right">Net to Stock</TableHead>
+                      )}
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {showDetail.demand.items.map((dItem, i) => {
+                      const cItem = showDetail.items[i];
+                      const hasApproved = showDetail.demand!.status === "APPROVED" || showDetail.demand!.status === "FULFILLED";
+                      const received = cItem?.receivedQty ?? cItem?.qty ?? 0;
+                      const waste = cItem?.wasteQty ?? 0;
+                      const netStock = received - waste;
+                      return (
+                        <TableRow key={dItem.id}>
+                          <TableCell className="text-muted-foreground">{i + 1}</TableCell>
+                          <TableCell className="font-medium">{dItem.ingredientName}</TableCell>
+                          <TableCell className="text-sm text-muted-foreground">{dItem.category ?? "—"}</TableCell>
+                          <TableCell className="text-sm">{dItem.unit}</TableCell>
+                          <TableCell className="text-right">{dItem.stockAtRequest ?? "—"}</TableCell>
+                          <TableCell className="text-right">{dItem.requestedQty}</TableCell>
+                          {hasApproved && (
+                            <TableCell className="text-right font-semibold">{dItem.approvedQty ?? "—"}</TableCell>
+                          )}
+                          {showDetail.status === "RECEIVED" && (
+                            <TableCell className="text-right font-medium">
+                              <span className={received < (cItem?.qty ?? 0) ? "text-warning" : "text-foreground"}>
+                                {received}
+                              </span>
+                            </TableCell>
+                          )}
+                          {showDetail.status === "RECEIVED" && (
+                            <TableCell className="text-right text-sm">
+                              {waste > 0 ? (
+                                <span className="text-destructive font-medium">{waste}</span>
+                              ) : (
+                                <span className="text-muted-foreground">—</span>
+                              )}
+                            </TableCell>
+                          )}
+                          {showDetail.status === "RECEIVED" && (
+                            <TableCell className="text-right font-semibold">
+                              <span className={netStock < (cItem?.qty ?? 0) ? "text-warning" : "text-success"}>
+                                {netStock}
+                              </span>
+                            </TableCell>
+                          )}
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+
+              {/* Total items */}
+              <div className="text-sm text-right text-muted-foreground">
+                Total Items: <span className="font-semibold text-foreground">{showDetail.demand.items.length}</span>
+              </div>
+
+              {/* Cost Summary */}
+              {(showDetail.shippingCost != null && showDetail.shippingCost > 0 || showDetail.miscAmount != null && showDetail.miscAmount > 0) && (
+                <div className="flex justify-end">
+                  <div className="w-64 space-y-1 text-sm border rounded-lg p-3 bg-muted/30">
+                    {showDetail.shippingCost != null && showDetail.shippingCost > 0 && (
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Shipping Cost</span>
+                        <span>Rs. {showDetail.shippingCost.toLocaleString()}</span>
+                      </div>
+                    )}
+                    {showDetail.miscAmount != null && showDetail.miscAmount > 0 && (
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Misc Charges</span>
+                        <span>Rs. {showDetail.miscAmount.toLocaleString()}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between border-t pt-1 font-semibold">
+                      <span>Total Extra Cost</span>
+                      <span>Rs. {((showDetail.shippingCost ?? 0) + (showDetail.miscAmount ?? 0)).toLocaleString()}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : showDetail ? (
+            /* ── Standalone challan (manual transfer) ── */
             <div className="space-y-4">
               {/* Created By / Dispatched By Cards */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -606,6 +957,9 @@ const Transfers = () => {
                       <span className="font-medium">{showDetail.createdBy?.name ?? "—"}</span>
                       {showDetail.createdBy?.role && <Badge variant="secondary" className="text-xs">{showDetail.createdBy.role}</Badge>}
                     </div>
+                    {showDetail.createdBy?.outlet && (
+                      <div className="text-xs text-muted-foreground">Outlet: <span className="font-medium text-foreground">{showDetail.createdBy.outlet}</span></div>
+                    )}
                     {showDetail.createdBy?.phone && (
                       <div className="flex items-center gap-2 text-sm text-muted-foreground">
                         <Phone className="h-3 w-3" />{showDetail.createdBy.phone}
@@ -630,6 +984,9 @@ const Transfers = () => {
                             <Badge variant="secondary" className="text-xs">{(showDetail.receivedBy ?? showDetail.dispatchedBy)!.role}</Badge>
                           )}
                         </div>
+                        {(showDetail.receivedBy ?? showDetail.dispatchedBy)!.outlet && (
+                          <div className="text-xs text-muted-foreground">Outlet: <span className="font-medium text-foreground">{(showDetail.receivedBy ?? showDetail.dispatchedBy)!.outlet}</span></div>
+                        )}
                         {(showDetail.receivedBy ?? showDetail.dispatchedBy)!.phone && (
                           <div className="flex items-center gap-2 text-sm text-muted-foreground">
                             <Phone className="h-3 w-3" />{(showDetail.receivedBy ?? showDetail.dispatchedBy)!.phone}
@@ -671,16 +1028,18 @@ const Transfers = () => {
                     <TableRow className="bg-muted/50 hover:bg-muted/50">
                       <TableHead>SN</TableHead>
                       <TableHead>Ingredient</TableHead>
-                      <TableHead className="text-right">Qty</TableHead>
+                      <TableHead className="text-right">Dispatched</TableHead>
                       <TableHead>Unit</TableHead>
-                      {showDetail.status === "RECEIVED" && <TableHead className="text-right">Received Qty</TableHead>}
-                      {showDetail.status === "RECEIVED" && <TableHead className="text-right">Variance</TableHead>}
+                      {showDetail.status === "RECEIVED" && <TableHead className="text-right">Received</TableHead>}
+                      {showDetail.status === "RECEIVED" && <TableHead className="text-right">Waste</TableHead>}
+                      {showDetail.status === "RECEIVED" && <TableHead className="text-right">Net to Stock</TableHead>}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {showDetail.items.map((item, i) => {
-                      const variance = showDetail.status === "RECEIVED" && item.receivedQty !== null
-                        ? item.qty - item.receivedQty : null;
+                      const received = item.receivedQty ?? item.qty;
+                      const waste = item.wasteQty ?? 0;
+                      const netStock = received - waste;
                       return (
                         <TableRow key={i}>
                           <TableCell className="text-muted-foreground">{i + 1}</TableCell>
@@ -689,20 +1048,25 @@ const Transfers = () => {
                           <TableCell className="text-sm">{item.unit}</TableCell>
                           {showDetail.status === "RECEIVED" && (
                             <TableCell className="text-right font-medium">
-                              {item.receivedQty !== null ? (
-                                <span className={item.receivedQty < item.qty ? "text-warning" : "text-success"}>
-                                  {item.receivedQty}
-                                </span>
-                              ) : "—"}
+                              <span className={received < item.qty ? "text-warning" : "text-foreground"}>
+                                {received}
+                              </span>
                             </TableCell>
                           )}
                           {showDetail.status === "RECEIVED" && (
                             <TableCell className="text-right text-sm">
-                              {variance !== null && variance > 0 ? (
-                                <span className="text-warning font-medium">-{variance}</span>
-                              ) : variance === 0 ? (
-                                <span className="text-success">✓</span>
-                              ) : "—"}
+                              {waste > 0 ? (
+                                <span className="text-destructive font-medium">{waste}</span>
+                              ) : (
+                                <span className="text-muted-foreground">—</span>
+                              )}
+                            </TableCell>
+                          )}
+                          {showDetail.status === "RECEIVED" && (
+                            <TableCell className="text-right font-semibold">
+                              <span className={netStock < item.qty ? "text-warning" : "text-success"}>
+                                {netStock}
+                              </span>
                             </TableCell>
                           )}
                         </TableRow>
@@ -736,36 +1100,78 @@ const Transfers = () => {
                 </div>
               )}
             </div>
-          )}
+          ) : null}
           <DialogFooter className="gap-2">
             <Button variant="outline" size="sm" onClick={() => {
               const c = showDetail;
               if (!c) return;
               const w = window.open("", "_blank", "width=800,height=700");
               if (!w) return;
-              const st = c.status;
-              const isReceived = st === "RECEIVED";
-              const dispUser = c.receivedBy ?? c.dispatchedBy;
-              const dispLabel = c.receivedBy ? "Received By" : c.dispatchedBy ? "Dispatched By" : "Pending Dispatch";
-              const dispHtml = dispUser
-                ? `<div style="text-align:right"><p style="font-size:11px;color:#888;text-transform:uppercase;font-weight:600">${dispLabel}</p><p style="font-weight:600">${dispUser.name}</p><p style="color:#666">${dispUser.role ?? ""}</p>${dispUser.phone ? `<p style="color:#666">${dispUser.phone}</p>` : ""}${c.dispatchedAt ? `<p style="font-size:11px;color:#888">Dispatched: ${new Date(c.dispatchedAt).toLocaleString()}</p>` : ""}${c.receivedAt ? `<p style="font-size:11px;color:#888">Received: ${new Date(c.receivedAt).toLocaleString()}</p>` : ""}</div>`
-                : `<div style="text-align:right"><p style="font-size:11px;color:#888;text-transform:uppercase;font-weight:600">Status</p><p style="color:#666">Pending Dispatch</p></div>`;
-              const totalExtra = (c.shippingCost ?? 0) + (c.miscAmount ?? 0);
-              w.document.write(`<!DOCTYPE html><html><head><title>${c.challanNo}</title><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;padding:30px;color:#333;font-size:13px}h1{font-size:20px}table{width:100%;border-collapse:collapse;margin-top:16px}th,td{border:1px solid #ccc;padding:8px;text-align:left}th{background:#f0f0f0;font-weight:600;font-size:12px}.header{text-align:center;border-bottom:2px solid #333;padding-bottom:16px;margin-bottom:16px}.info-grid{display:flex;justify-content:space-between;margin-bottom:16px}.badge{display:inline-block;padding:3px 12px;border-radius:12px;font-size:11px;font-weight:600;margin-top:6px}.summary{text-align:right;margin-top:12px}.cost-box{margin-top:16px;border-top:1px solid #ccc;padding-top:12px;text-align:right}@media print{body{padding:15px}}</style></head><body>`);
-              w.document.write(`<div class="header"><h1>Stock Transfer Challan</h1><p style="color:#666;margin-top:4px">${c.challanNo}</p><span class="badge" style="background:${isReceived ? "#e6f4ea;color:#1a7f37" : st === "CANCELLED" ? "#eee;color:#666" : st === "DISPATCHED" ? "#e8f0fe;color:#1a56db" : "#fff8e1;color:#f57f17"}">${st}</span></div>`);
-              w.document.write(`<div class="info-grid"><div><p style="font-size:11px;color:#888;text-transform:uppercase;font-weight:600">Created By</p><p style="font-weight:600">${c.createdBy?.name ?? "—"}</p><p style="color:#666">${c.createdBy?.role ?? ""}</p>${c.createdBy?.phone ? `<p style="color:#666">${c.createdBy.phone}</p>` : ""}<p style="font-size:11px;color:#888;margin-top:4px">Date: ${new Date(c.createdAt).toLocaleString()}</p></div>${dispHtml}</div>`);
-              w.document.write(`<p style="margin-bottom:8px"><strong>From:</strong> ${c.fromWarehouse.name} (${c.fromWarehouse.type}) &nbsp;→&nbsp; <strong>To:</strong> ${c.toWarehouse.name} (${c.toWarehouse.type})</p>`);
-              if (c.notes) w.document.write(`<p style="background:#f5f5f5;padding:8px;border-radius:4px;margin-bottom:12px"><strong>Notes:</strong> ${c.notes}</p>`);
-              w.document.write(`<table><thead><tr><th>SN</th><th>Ingredient</th><th style="text-align:right">Qty</th><th>Unit</th>${isReceived ? '<th style="text-align:right">Received Qty</th><th style="text-align:right">Variance</th>' : ""}</tr></thead><tbody>`);
-              c.items.forEach((item, idx) => {
-                const v = isReceived && item.receivedQty !== null ? item.qty - item.receivedQty : null;
-                w.document.write(`<tr><td>${idx + 1}</td><td>${item.ingredientName}</td><td style="text-align:right">${item.qty}</td><td>${item.unit}</td>${isReceived ? `<td style="text-align:right;font-weight:600">${item.receivedQty ?? "—"}</td><td style="text-align:right;color:${v && v > 0 ? "#d97706" : "#16a34a"}">${v !== null ? (v > 0 ? `-${v}` : "✓") : "—"}</td>` : ""}</tr>`);
-              });
-              w.document.write(`</tbody></table>`);
-              if (totalExtra > 0) {
-                w.document.write(`<div class="cost-box">${c.shippingCost ? `<p>Shipping Cost: <strong>Rs. ${c.shippingCost.toLocaleString()}</strong></p>` : ""}${c.miscAmount ? `<p>Misc Charges: <strong>Rs. ${c.miscAmount.toLocaleString()}</strong></p>` : ""}<p style="font-size:14px;font-weight:700;margin-top:6px">Total Extra Cost: Rs. ${totalExtra.toLocaleString()}</p></div>`);
+              const CSS = `*{margin:0;padding:0;box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;padding:30px;color:#333;font-size:13px}h1{font-size:20px}table{width:100%;border-collapse:collapse;margin-top:16px}th,td{border:1px solid #ccc;padding:8px;text-align:left}th{background:#f0f0f0;font-weight:600;font-size:12px}.header{text-align:center;border-bottom:2px solid #333;padding-bottom:16px;margin-bottom:16px}.info-grid{display:flex;justify-content:space-between;margin-bottom:16px}.badge{display:inline-block;padding:3px 12px;border-radius:12px;font-size:11px;font-weight:600;margin-top:6px}.summary{text-align:right;margin-top:12px}.cost-box{margin-top:16px;border-top:1px solid #ccc;padding-top:12px;text-align:right}@media print{body{padding:15px}}`;
+
+              if (c.demand) {
+                // ── Demand-linked challan → print full demand invoice with challan lifecycle ──
+                const d = c.demand;
+                const st = d.status;
+                const hasApproved = st === "APPROVED" || st === "FULFILLED";
+                const isReceived = c.status === "RECEIVED";
+                const approverHtml = d.approvedBy
+                  ? `<div style="text-align:right"><p style="font-size:11px;color:#888;text-transform:uppercase;font-weight:600">${st === "REJECTED" ? "Rejected By" : "Approved By"}</p><p style="font-weight:600">${d.approvedBy.name}</p><p style="color:#666">${d.approvedBy.role ?? ""}${d.approvedBy.outlet ? ` — ${d.approvedBy.outlet}` : ""}</p>${d.approvedBy.phone ? `<p style="color:#666">${d.approvedBy.phone}</p>` : ""}${d.approvedAt ? `<p style="font-size:11px;color:#888">${new Date(d.approvedAt).toLocaleString()}</p>` : ""}</div>`
+                  : `<div style="text-align:right"><p style="font-size:11px;color:#888;text-transform:uppercase;font-weight:600">Warehouses</p><p style="font-weight:600">${d.supplyingWH?.name} → ${d.requestingWH?.name}</p></div>`;
+                w.document.write(`<!DOCTYPE html><html><head><title>${d.demandNo}</title><style>${CSS}</style></head><body>`);
+                w.document.write(`<div class="header"><h1>Stock Demand</h1><p style="color:#666;margin-top:4px">${d.demandNo}</p><p style="font-size:11px;color:#999;margin-top:2px">Challan Ref: ${c.challanNo}</p><span class="badge" style="background:${hasApproved ? "#e6f4ea;color:#1a7f37" : st === "REJECTED" ? "#fde8e8;color:#d32f2f" : st === "PENDING" ? "#fff8e1;color:#f57f17" : "#eee;color:#666"}">${st}</span>&nbsp;<span class="badge" style="background:${isReceived ? "#e6f4ea;color:#1a7f37" : c.status === "DISPATCHED" ? "#e8f0fe;color:#1a56db" : c.status === "CANCELLED" ? "#eee;color:#666" : "#fff8e1;color:#f57f17"}">Challan: ${c.status}</span></div>`);
+                w.document.write(`<div class="info-grid"><div><p style="font-size:11px;color:#888;text-transform:uppercase;font-weight:600">Requested By</p><p style="font-weight:600">${d.requestedBy?.name ?? "—"}</p><p style="color:#666">${d.requestedBy?.role ?? ""}${d.requestedBy?.outlet ? ` — ${d.requestedBy.outlet}` : ""}</p>${d.requestedBy?.phone ? `<p style="color:#666">${d.requestedBy.phone}</p>` : ""}<p style="font-size:11px;color:#888;margin-top:4px">Date: ${new Date(d.createdAt).toLocaleString()}</p></div>${approverHtml}</div>`);
+                // Dispatch / Receive info
+                if (c.dispatchedBy || c.receivedBy) {
+                  w.document.write(`<div class="info-grid" style="border-top:1px solid #eee;padding-top:12px">`);
+                  if (c.dispatchedBy) w.document.write(`<div><p style="font-size:11px;color:#1a56db;text-transform:uppercase;font-weight:600">Dispatched By</p><p style="font-weight:600">${c.dispatchedBy.name}</p><p style="color:#666">${c.dispatchedBy.role ?? ""}${c.dispatchedBy.outlet ? ` — ${c.dispatchedBy.outlet}` : ""}</p>${c.dispatchedBy.phone ? `<p style="color:#666">${c.dispatchedBy.phone}</p>` : ""}${c.dispatchedAt ? `<p style="font-size:11px;color:#888">${new Date(c.dispatchedAt).toLocaleString()}</p>` : ""}</div>`);
+                  if (c.receivedBy) w.document.write(`<div style="text-align:right"><p style="font-size:11px;color:#1a7f37;text-transform:uppercase;font-weight:600">Received By</p><p style="font-weight:600">${c.receivedBy.name}</p><p style="color:#666">${c.receivedBy.role ?? ""}${c.receivedBy.outlet ? ` — ${c.receivedBy.outlet}` : ""}</p>${c.receivedBy.phone ? `<p style="color:#666">${c.receivedBy.phone}</p>` : ""}${c.receivedAt ? `<p style="font-size:11px;color:#888">${new Date(c.receivedAt).toLocaleString()}</p>` : ""}</div>`);
+                  w.document.write(`</div>`);
+                }
+                w.document.write(`<p style="margin-bottom:8px"><strong>Requesting WH:</strong> ${d.requestingWH?.name} (${d.requestingWH?.type}) &nbsp;&nbsp; <strong>Supplying WH:</strong> ${d.supplyingWH?.name} (${d.supplyingWH?.type})</p>`);
+                if (d.notes) w.document.write(`<p style="background:#f5f5f5;padding:8px;border-radius:4px;margin-bottom:8px"><strong>Notes:</strong> ${d.notes}</p>`);
+                w.document.write(`<table><thead><tr><th>SN</th><th>Ingredient</th><th>Category</th><th>Unit</th><th style="text-align:right">Stock at Request</th><th style="text-align:right">Requested</th>${hasApproved ? '<th style="text-align:right">Approved</th>' : ""}${isReceived ? '<th style="text-align:right">Received</th><th style="text-align:right">Waste</th><th style="text-align:right">Net to Stock</th>' : ""}</tr></thead><tbody>`);
+                d.items.forEach((item, i) => {
+                  const cItem = c.items[i];
+                  const recv = cItem?.receivedQty ?? cItem?.qty ?? 0;
+                  const waste = cItem?.wasteQty ?? 0;
+                  const net = recv - waste;
+                  w.document.write(`<tr><td>${i + 1}</td><td>${item.ingredientName}</td><td>${item.category ?? "—"}</td><td>${item.unit}</td><td style="text-align:right">${item.stockAtRequest ?? "—"}</td><td style="text-align:right">${item.requestedQty}</td>${hasApproved ? `<td style="text-align:right;font-weight:600">${item.approvedQty ?? "—"}</td>` : ""}${isReceived ? `<td style="text-align:right;font-weight:600">${recv}</td><td style="text-align:right;color:${waste > 0 ? "#d32f2f" : "#888"}">${waste > 0 ? waste : "—"}</td><td style="text-align:right;font-weight:600;color:${net < (cItem?.qty ?? 0) ? "#d97706" : "#16a34a"}">${net}</td>` : ""}</tr>`);
+                });
+                w.document.write(`</tbody></table><p class="summary">Total Items: <strong>${d.items.length}</strong></p>`);
+                const totalExtra = (c.shippingCost ?? 0) + (c.miscAmount ?? 0);
+                if (totalExtra > 0) {
+                  w.document.write(`<div class="cost-box">${c.shippingCost ? `<p>Shipping Cost: <strong>Rs. ${c.shippingCost.toLocaleString()}</strong></p>` : ""}${c.miscAmount ? `<p>Misc Charges: <strong>Rs. ${c.miscAmount.toLocaleString()}</strong></p>` : ""}<p style="font-size:14px;font-weight:700;margin-top:6px">Total Extra Cost: Rs. ${totalExtra.toLocaleString()}</p></div>`);
+                }
+                w.document.write(`</body></html>`);
+              } else {
+                // ── Manually created challan → print challan invoice ──
+                const st = c.status;
+                const isReceived = st === "RECEIVED";
+                const dispUser = c.receivedBy ?? c.dispatchedBy;
+                const dispLabel = c.receivedBy ? "Received By" : c.dispatchedBy ? "Dispatched By" : "Pending Dispatch";
+                const dispHtml = dispUser
+                  ? `<div style="text-align:right"><p style="font-size:11px;color:#888;text-transform:uppercase;font-weight:600">${dispLabel}</p><p style="font-weight:600">${dispUser.name}</p><p style="color:#666">${dispUser.role ?? ""}</p>${dispUser.phone ? `<p style="color:#666">${dispUser.phone}</p>` : ""}${c.dispatchedAt ? `<p style="font-size:11px;color:#888">Dispatched: ${new Date(c.dispatchedAt).toLocaleString()}</p>` : ""}${c.receivedAt ? `<p style="font-size:11px;color:#888">Received: ${new Date(c.receivedAt).toLocaleString()}</p>` : ""}</div>`
+                  : `<div style="text-align:right"><p style="font-size:11px;color:#888;text-transform:uppercase;font-weight:600">Status</p><p style="color:#666">Pending Dispatch</p></div>`;
+                const totalExtra = (c.shippingCost ?? 0) + (c.miscAmount ?? 0);
+                w.document.write(`<!DOCTYPE html><html><head><title>${c.challanNo}</title><style>${CSS}</style></head><body>`);
+                w.document.write(`<div class="header"><h1>Stock Transfer Challan</h1><p style="color:#666;margin-top:4px">${c.challanNo}</p><span class="badge" style="background:${isReceived ? "#e6f4ea;color:#1a7f37" : st === "CANCELLED" ? "#eee;color:#666" : st === "DISPATCHED" ? "#e8f0fe;color:#1a56db" : "#fff8e1;color:#f57f17"}">${st}</span></div>`);
+                w.document.write(`<div class="info-grid"><div><p style="font-size:11px;color:#888;text-transform:uppercase;font-weight:600">Created By</p><p style="font-weight:600">${c.createdBy?.name ?? "—"}</p><p style="color:#666">${c.createdBy?.role ?? ""}${c.createdBy?.outlet ? ` — ${c.createdBy.outlet}` : ""}</p>${c.createdBy?.phone ? `<p style="color:#666">${c.createdBy.phone}</p>` : ""}<p style="font-size:11px;color:#888;margin-top:4px">Date: ${new Date(c.createdAt).toLocaleString()}</p></div>${dispHtml}</div>`);
+                w.document.write(`<p style="margin-bottom:8px"><strong>From WH:</strong> ${c.fromWarehouse.name} (${c.fromWarehouse.type}) &nbsp;&nbsp; <strong>To WH:</strong> ${c.toWarehouse.name} (${c.toWarehouse.type})</p>`);
+                if (c.notes) w.document.write(`<p style="background:#f5f5f5;padding:8px;border-radius:4px;margin-bottom:8px"><strong>Notes:</strong> ${c.notes}</p>`);
+                w.document.write(`<table><thead><tr><th>SN</th><th>Ingredient</th><th>Category</th><th>Unit</th><th style="text-align:right">Dispatched</th>${isReceived ? '<th style="text-align:right">Received</th><th style="text-align:right">Waste</th><th style="text-align:right">Net to Stock</th>' : ""}</tr></thead><tbody>`);
+                c.items.forEach((item, idx) => {
+                  const recv = item.receivedQty ?? item.qty;
+                  const waste = item.wasteQty ?? 0;
+                  const net = recv - waste;
+                  w.document.write(`<tr><td>${idx + 1}</td><td>${item.ingredientName}</td><td>${item.category ?? "—"}</td><td>${item.unit}</td><td style="text-align:right">${item.qty}</td>${isReceived ? `<td style="text-align:right;font-weight:600">${recv}</td><td style="text-align:right;color:${waste > 0 ? "#d32f2f" : "#888"}">${waste > 0 ? waste : "—"}</td><td style="text-align:right;font-weight:600;color:${net < item.qty ? "#d97706" : "#16a34a"}">${net}</td>` : ""}</tr>`);
+                });
+                w.document.write(`</tbody></table>`);
+                if (totalExtra > 0) {
+                  w.document.write(`<div class="cost-box">${c.shippingCost ? `<p>Shipping Cost: <strong>Rs. ${c.shippingCost.toLocaleString()}</strong></p>` : ""}${c.miscAmount ? `<p>Misc Charges: <strong>Rs. ${c.miscAmount.toLocaleString()}</strong></p>` : ""}<p style="font-size:14px;font-weight:700;margin-top:6px">Total Extra Cost: Rs. ${totalExtra.toLocaleString()}</p></div>`);
+                }
+                w.document.write(`<p class="summary">Total Items: <strong>${c.items.length}</strong></p></body></html>`);
               }
-              w.document.write(`<p class="summary">Total Items: <strong>${c.items.length}</strong></p></body></html>`);
               w.document.close();
               w.print();
             }}>
@@ -790,19 +1196,144 @@ const Transfers = () => {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Receive Confirmation */}
-      <AlertDialog open={!!receiveId} onOpenChange={() => setReceiveId(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Receive this challan?</AlertDialogTitle>
-            <AlertDialogDescription>Stock will be added to your warehouse. Confirm only after physically verifying the goods.</AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleReceive} className="bg-success hover:bg-success/90">{saving ? "Receiving..." : "Confirm Received"}</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {/* Receive Form Dialog */}
+      <Dialog open={!!receiveChallan} onOpenChange={() => setReceiveChallan(null)}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <PackageCheck className="h-5 w-5 text-green-600" />
+              Receive Challan: {receiveChallan?.demand?.demandNo ?? receiveChallan?.challanNo}
+            </DialogTitle>
+          </DialogHeader>
+          {receiveChallan && (
+            <div className="space-y-4">
+              {/* Challan info summary */}
+              <div className="flex gap-4 text-sm flex-wrap bg-muted/30 rounded-lg px-3 py-2">
+                <div><span className="text-muted-foreground">From:</span> <span className="font-medium">{receiveChallan.fromWarehouse?.name}</span></div>
+                <span className="text-muted-foreground">→</span>
+                <div><span className="text-muted-foreground">To:</span> <span className="font-medium">{receiveChallan.toWarehouse?.name}</span></div>
+                <div className="ml-auto"><span className="text-muted-foreground">Items:</span> <span className="font-medium">{receiveChallan.items.length}</span></div>
+              </div>
+
+              {/* Item cards — matches purchase form pattern */}
+              <div>
+                <Label className="text-xs text-muted-foreground uppercase tracking-wider">Items to Receive</Label>
+                <div className="space-y-2 mt-2">
+                  {receiveItems.map((ri, idx) => {
+                    const netReceived = ri.receivedQty - ri.wasteQty;
+                    return (
+                      <div key={ri.id} className="border rounded-lg p-3 space-y-2 border-l-2 border-l-green-400/60 bg-green-50/30 dark:bg-green-950/10">
+                        <div className="flex items-center justify-between gap-2 flex-wrap min-w-0">
+                          <span className="font-medium text-sm truncate min-w-0">{ri.ingredientName}</span>
+                          <Badge variant="secondary" className="text-xs shrink-0">
+                            Dispatched: {ri.qty} {ri.unit}
+                          </Badge>
+                        </div>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                          <div className="space-y-1">
+                            <Label className="text-xs text-muted-foreground">Received Qty ({ri.unit})</Label>
+                            <Input
+                              className="h-10 text-sm"
+                              type="number"
+                              min={0}
+                              max={ri.qty}
+                              value={ri.receivedQty || ""}
+                              onChange={(e) => {
+                                const val = Math.min(Number(e.target.value), ri.qty);
+                                setReceiveItems(prev => prev.map((r, i) => i === idx ? { ...r, receivedQty: Math.max(0, val) } : r));
+                              }}
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-xs text-muted-foreground">Waste Qty</Label>
+                            <Input
+                              className="h-10 text-sm"
+                              type="number"
+                              min={0}
+                              max={ri.receivedQty}
+                              value={ri.wasteQty || ""}
+                              onChange={(e) => {
+                                const val = Math.min(Number(e.target.value), ri.receivedQty);
+                                setReceiveItems(prev => prev.map((r, i) => i === idx ? { ...r, wasteQty: Math.max(0, val) } : r));
+                              }}
+                            />
+                          </div>
+                          <div className="space-y-1 col-span-2 sm:col-span-1">
+                            <Label className="text-xs text-muted-foreground">Net to Stock</Label>
+                            <div className={`h-10 flex items-center px-3 text-sm font-semibold rounded-md border bg-muted/50 ${netReceived < ri.qty ? "text-warning" : "text-success"}`}>
+                              {netReceived} {ri.unit}
+                            </div>
+                          </div>
+                        </div>
+                        {ri.wasteQty > 0 && (
+                          <div className="space-y-1">
+                            <Label className="text-xs text-muted-foreground">Waste Reason</Label>
+                            <Input
+                              className="h-10 text-sm"
+                              placeholder="e.g. Broken during transport, expired..."
+                              value={ri.wasteReason}
+                              onChange={(e) => setReceiveItems(prev => prev.map((r, i) => i === idx ? { ...r, wasteReason: e.target.value } : r))}
+                            />
+                          </div>
+                        )}
+                        {ri.wasteQty > 0 && (
+                          <div className="flex items-center justify-end text-sm">
+                            <Badge variant="secondary" className="text-xs bg-success/10 text-success">
+                              Added to stock: {netReceived} {ri.unit}
+                            </Badge>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Extra Charges — matches purchase billing summary */}
+              <Card className="shadow-sm">
+                <CardHeader className="pb-2">
+                  <Label className="text-xs text-muted-foreground uppercase tracking-wider">Extra Charges (optional)</Label>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2 w-full max-w-sm ml-auto">
+                    <div className="flex items-center gap-3">
+                      <Label className="text-sm shrink-0 min-w-[7rem]">Shipping Cost</Label>
+                      <Input
+                        className="h-9 text-sm text-right flex-1 min-w-0"
+                        type="number"
+                        min={0}
+                        step={1}
+                        placeholder="0"
+                        value={receiveShipping || ""}
+                        onChange={(e) => setReceiveShipping(Number(e.target.value) || "")}
+                      />
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <Label className="text-sm shrink-0 min-w-[7rem]">Miscellaneous</Label>
+                      <Input
+                        className="h-9 text-sm text-right flex-1 min-w-0"
+                        type="number"
+                        min={0}
+                        step={1}
+                        placeholder="0"
+                        value={receiveMisc || ""}
+                        onChange={(e) => setReceiveMisc(Number(e.target.value) || "")}
+                      />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+          <DialogFooter className="flex-col sm:flex-row gap-2 pt-2">
+            <Button variant="outline" onClick={() => setReceiveChallan(null)}>Cancel</Button>
+            <Button className="bg-success hover:bg-success/90 text-white" onClick={handleReceive} disabled={saving}>
+              <PackageCheck className="h-4 w-4 mr-1.5" />
+              {saving ? "Receiving..." : "Confirm Received"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Cancel Confirmation */}
       <AlertDialog open={!!cancelId} onOpenChange={() => setCancelId(null)}>

@@ -1,4 +1,5 @@
 import { api } from './api';
+import type { ChallanUser } from './challan.service';
 
 export type DemandStatus = 'PENDING' | 'APPROVED' | 'FULFILLED' | 'REJECTED' | 'CANCELLED';
 
@@ -13,12 +14,7 @@ export interface DemandItem {
   stockAtRequest: number | null;
 }
 
-export interface DemandUser {
-  id: string;
-  name: string;
-  phone: string | null;
-  role: string | null;
-}
+export type DemandUser = ChallanUser;
 
 export interface DemandRecord {
   id: string;
