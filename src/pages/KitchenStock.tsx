@@ -5,11 +5,11 @@ import {
   type WarehouseStockRecord,
   type ExpirySummary,
 } from "@/services/warehouse.service";
-import { inventoryService, type IngredientCategoryRecord, type IngredientRecord } from "@/services/inventory.service";
+import { inventoryService, type IngredientCategoryRecord } from "@/services/inventory.service";
 import { demandService } from "@/services/demand.service";
 import { challanService } from "@/services/challan.service";
 import { useAuth } from "@/contexts/AuthContext";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -20,7 +20,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ChefHat, RefreshCw, AlertTriangle, PackageX, Search, XCircle, Clock, ClipboardList, Truck, Plus, Trash2, CheckCircle2 } from "lucide-react";
+import { ChefHat, RefreshCw, AlertTriangle, PackageX, Search, XCircle, Clock, ClipboardList, Truck, Trash2, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/ui/page-header";
 import { cn } from "@/lib/utils";

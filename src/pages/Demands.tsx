@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { demandService, type DemandRecord, type DemandStatus, type DemandItem } from "@/services/demand.service";
 import { warehouseService, type WarehouseRecord, type WarehouseStockRecord } from "@/services/warehouse.service";
 import { inventoryService, type IngredientRecord } from "@/services/inventory.service";
-import { useData } from "@/contexts/DataContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -31,7 +30,6 @@ const STATUS_STYLE: Record<string, string> = {
 interface FormItem { ingredientId: string; name: string; unit: string; currentStock: number; requestedQty: number; }
 
 const Demands = () => {
-  const { settings } = useData();
   const { user } = useAuth();
   const canCreate  = ['Kitchen Manager', 'Manager', 'Admin'].includes(user?.role ?? '');
   const canApprove = ['Super Admin', 'Admin', 'Manager'].includes(user?.role ?? '');
@@ -73,8 +71,8 @@ const Demands = () => {
         ...(filterStatus !== "ALL" && { status: filterStatus }),
       });
       setDemands(data);
-    } catch (err: any) {
-      toast.error(err.message || "Failed to load demands");
+    } catch (err: unknown) {
+      toast.error((err as Error).message || "Failed to load demands");
     } finally {
       setLoading(false);
     }
@@ -86,7 +84,7 @@ const Demands = () => {
         setWarehouses(whList);
         setIngredients(ingList);
       })
-      .catch((err: any) => toast.error(err.message || "Failed to load data"));
+      .catch((err: unknown) => toast.error((err as Error).message || "Failed to load data"));
   }, []);
 
   useEffect(() => {
@@ -267,8 +265,8 @@ const Demands = () => {
       toast.success("Demand created");
       setShowDialog(false);
       await fetchDemands();
-    } catch (err: any) {
-      toast.error(err.message || "Failed to create demand");
+    } catch (err: unknown) {
+      toast.error((err as Error).message || "Failed to create demand");
     } finally {
       setSaving(false);
     }
@@ -283,8 +281,8 @@ const Demands = () => {
       toast.success(`Demand approved${challanNo ? ` — Challan ${challanNo} created` : ""}`);
       setShowDetail(null);
       await fetchDemands();
-    } catch (err: any) {
-      toast.error(err.message || "Failed to approve demand");
+    } catch (err: unknown) {
+      toast.error((err as Error).message || "Failed to approve demand");
     } finally {
       setSaving(false);
     }
@@ -299,8 +297,8 @@ const Demands = () => {
       setRejectTarget(null);
       setRejectReason("");
       await fetchDemands();
-    } catch (err: any) {
-      toast.error(err.message || "Failed to reject demand");
+    } catch (err: unknown) {
+      toast.error((err as Error).message || "Failed to reject demand");
     } finally {
       setSaving(false);
     }
@@ -314,8 +312,8 @@ const Demands = () => {
       toast.success("Demand cancelled");
       setCancelId(null);
       await fetchDemands();
-    } catch (err: any) {
-      toast.error(err.message || "Failed to cancel demand");
+    } catch (err: unknown) {
+      toast.error((err as Error).message || "Failed to cancel demand");
     } finally {
       setSaving(false);
     }

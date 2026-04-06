@@ -152,8 +152,8 @@ const Purchases = () => {
       const res = await purchaseService.getAll({ page, limit: 20 });
       setPurchases(res.data);
       setTotalItems(res.meta.total);
-    } catch (err: any) {
-      toast.error(err.message || "Failed to load purchases");
+    } catch (err: unknown) {
+      toast.error((err as Error).message || "Failed to load purchases");
     } finally {
       setLoading(false);
     }
@@ -385,8 +385,8 @@ const Purchases = () => {
       if (selectedRequestId) {
         setApprovedRequests((prev) => prev.filter((r) => r.id !== selectedRequestId));
       }
-    } catch (err: any) {
-      toast.error(err.message || "Failed to save purchase");
+    } catch (err: unknown) {
+      toast.error((err as Error).message || "Failed to save purchase");
     } finally {
       setSaving(false);
     }
@@ -400,8 +400,8 @@ const Purchases = () => {
       setDeleteId(null);
       toast.success("Purchase deleted");
       await fetchPurchases();
-    } catch (err: any) {
-      toast.error(err.message || "Failed to delete purchase");
+    } catch (err: unknown) {
+      toast.error((err as Error).message || "Failed to delete purchase");
     }
   };
 
@@ -422,8 +422,8 @@ const Purchases = () => {
       setQuickAddOpen(false);
       setQuickAddForm({ name: "", categoryId: "", unitId: "" });
       toast.success(`"${newIngredient.name}" added successfully`);
-    } catch (err: any) {
-      toast.error(err.message || "Failed to add ingredient");
+    } catch (err: unknown) {
+      toast.error((err as Error).message || "Failed to add ingredient");
     } finally {
       setQuickAddLoading(false);
     }

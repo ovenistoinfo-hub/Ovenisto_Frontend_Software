@@ -29,7 +29,6 @@ const Expenses = () => {
 
   const [expenses, setExpenses] = useState<ExpenseRecord[]>([]);
   const [totalAmount, setTotalAmount] = useState(0);
-  const [totalPages, setTotalPages] = useState(1);
   const [totalItems, setTotalItems] = useState(0);
   const [showDialog, setShowDialog] = useState(false);
   const [showDetail, setShowDetail] = useState<ExpenseRecord | null>(null);
@@ -46,7 +45,7 @@ const Expenses = () => {
       setExpenses(res.data);
       setTotalAmount(res.totalAmount);
       setTotalItems(res.meta.total);
-      setTotalPages(res.meta.totalPages);
+
     } catch (err: unknown) {
       toast.error((err as Error).message || "Failed to load expenses");
     } finally {

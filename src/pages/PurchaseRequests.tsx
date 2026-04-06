@@ -48,7 +48,6 @@ const PurchaseRequests = () => {
   const { user } = useAuth();
   const { settings } = useData();
   const currency = settings.currency || "Rs.";
-  const isSuperAdmin = user?.role === "Super Admin";
   const canApprove = ["Super Admin", "Admin"].includes(user?.role ?? "");
   const canCreate = !canApprove; // Only Manager can create requests; Admin/Super Admin supervise only
   const [searchParams] = useSearchParams();
