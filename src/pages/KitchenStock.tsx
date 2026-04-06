@@ -772,7 +772,6 @@ const KitchenStock = () => {
                 )}
               </CardContent>
             </Card>
-          </div>
             <div className="flex justify-end gap-2 pt-1">
               <Button variant="outline" size="sm" onClick={() => setShowCreateDemand(false)}>Cancel</Button>
               <Button className="gradient-primary text-primary-foreground" size="sm" onClick={handleSaveDemand} disabled={demandSaving}>
@@ -875,7 +874,6 @@ const KitchenStock = () => {
                 )}
               </CardContent>
             </Card>
-          </div>
             <div className="flex justify-end gap-2 pt-1">
               <Button variant="outline" size="sm" onClick={() => setShowCreateTransfer(false)}>Cancel</Button>
               <Button className="gradient-primary text-primary-foreground" size="sm" onClick={handleSaveTransfer} disabled={transferSaving}>
