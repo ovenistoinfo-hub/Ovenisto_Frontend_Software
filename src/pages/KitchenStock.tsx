@@ -504,6 +504,163 @@ const KitchenStock = () => {
             </div>
           </CardHeader></Card>
 
+          {/* ── Inline Create Demand panel (KM) ── */}
+          {showCreateDemand && canDemand && (
+            <Card className="shadow-sm border-orange-400/30 bg-orange-50/[0.02] dark:bg-orange-950/[0.02]">
+              <CardHeader className="pb-2 flex flex-row items-center justify-between">
+                <Label className="text-xs text-muted-foreground uppercase tracking-wider">New Stock Demand</Label>
+                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setShowCreateDemand(false)}><ChevronUp className="h-4 w-4" /></Button>
+              </CardHeader>
+              <CardContent className="space-y-5">
+                <Card className="shadow-sm">
+                  <CardHeader className="pb-2">
+                    <Label className="text-xs text-muted-foreground uppercase tracking-wider">Demand Details</Label>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <Label>Requesting Kitchen *</Label>
+                        <Input className="h-11" value={selectedKitchenWH?.name ?? "—"} disabled />
+                        <p className="text-xs text-muted-foreground">Requesting from → {branchWH?.name ?? "Branch warehouse"}</p>
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>Supplying Warehouse</Label>
+                        <Input className="h-11" value={branchWH?.name ?? "No branch found"} disabled />
+                      </div>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Notes (optional)</Label>
+                      <Textarea placeholder="Any notes about this demand..." value={demandNotes} onChange={e => setDemandNotes(e.target.value)} className="min-h-16" />
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card className="shadow-sm">
+                  <CardHeader className="pb-2 flex flex-row items-center justify-between">
+                    <Label className="text-xs text-muted-foreground uppercase tracking-wider">Items ({demandItems.length})</Label>
+                    <Button variant="outline" size="sm" className="h-8 min-h-[32px]" onClick={addLowStockToDemand}>
+                      <AlertTriangle className="h-3 w-3 mr-1" />Add Low Stock
+                    </Button>
+                  </CardHeader>
+                  <CardContent>
+                    {demandItems.length === 0 ? (
+                      <div className="text-center py-8 text-muted-foreground text-sm">Click "Add Low Stock" or use the row buttons in the stock table to add items</div>
+                    ) : (
+                      <div className="space-y-2">
+                        {demandItems.map((item, idx) => (
+                          <div key={idx} className="border rounded-lg p-3 space-y-2 border-l-2 border-l-orange-400/60 bg-orange-50/30 dark:bg-orange-950/10">
+                            <div className="flex items-center justify-between gap-2 min-w-0">
+                              <span className="font-medium text-sm truncate">{item.name}</span>
+                              <div className="flex items-center gap-2 shrink-0">
+                                <Badge variant="secondary" className="text-xs">Kitchen: {Number(stock.find(s => s.ingredient.id === item.ingredientId)?.currentStock ?? 0).toFixed(1)} {item.unit}</Badge>
+                                <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => setDemandItems(prev => prev.filter((_, i) => i !== idx))}><Trash2 className="h-3.5 w-3.5" /></Button>
+                              </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-2">
+                              <div className="space-y-1">
+                                <Label className="text-xs text-muted-foreground">Requested Qty ({item.unit}) *</Label>
+                                <Input className="h-10 text-sm" type="number" min={1} value={item.requestedQty || ""} onChange={e => setDemandItems(prev => prev.map((it, i) => i === idx ? { ...it, requestedQty: Number(e.target.value) } : it))} />
+                              </div>
+                              <div className="space-y-1">
+                                <Label className="text-xs text-muted-foreground">Low Stock Level</Label>
+                                <div className="h-10 flex items-center px-3 text-sm rounded-md border bg-muted/50 text-muted-foreground">{Number(stock.find(s => s.ingredient.id === item.ingredientId)?.lowStockLevel ?? 0).toFixed(1)} {item.unit}</div>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+                <div className="flex justify-end gap-2 pt-1">
+                  <Button variant="outline" size="sm" onClick={() => setShowCreateDemand(false)}>Cancel</Button>
+                  <Button className="gradient-primary text-primary-foreground" size="sm" onClick={handleSaveDemand} disabled={demandSaving}>
+                    <ClipboardList className="h-4 w-4 mr-1.5" />{demandSaving ? "Creating..." : "Create Demand"}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* ── Inline Create Transfer panel (Manager/Admin) ── */}
+          {showCreateTransfer && canTransfer && (
+            <Card className="shadow-sm border-primary/30 bg-primary/[0.02]">
+              <CardHeader className="pb-2 flex flex-row items-center justify-between">
+                <Label className="text-xs text-muted-foreground uppercase tracking-wider">New Transfer to Kitchen</Label>
+                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setShowCreateTransfer(false)}><ChevronUp className="h-4 w-4" /></Button>
+              </CardHeader>
+              <CardContent className="space-y-5">
+                <Card className="shadow-sm">
+                  <CardHeader className="pb-2">
+                    <Label className="text-xs text-muted-foreground uppercase tracking-wider">Transfer Details</Label>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <Label>From (Branch Stock)</Label>
+                        <Input className="h-11" value={branchWH?.name ?? "No branch found"} disabled />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>To (Kitchen) *</Label>
+                        <Input className="h-11" value={selectedKitchenWH?.name ?? "—"} disabled />
+                      </div>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Notes (optional)</Label>
+                      <Textarea placeholder="Any notes about this transfer..." value={transferNotes} onChange={e => setTransferNotes(e.target.value)} className="min-h-16" />
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card className="shadow-sm">
+                  <CardHeader className="pb-2 flex flex-row items-center justify-between">
+                    <Label className="text-xs text-muted-foreground uppercase tracking-wider">Items ({transferItems.length})</Label>
+                    <Button variant="outline" size="sm" className="h-8 min-h-[32px]" onClick={addLowStockToTransfer}>
+                      <AlertTriangle className="h-3 w-3 mr-1" />Add Low Stock
+                    </Button>
+                  </CardHeader>
+                  <CardContent>
+                    {transferItems.length === 0 ? (
+                      <div className="text-center py-8 text-muted-foreground text-sm">Click "Add Low Stock" or use the row buttons in the stock table to add items</div>
+                    ) : (
+                      <div className="space-y-2">
+                        {transferItems.map((item, idx) => (
+                          <div key={idx} className="border rounded-lg p-3 space-y-2 border-l-2 border-l-primary/40 bg-primary/5">
+                            <div className="flex items-center justify-between gap-2 min-w-0">
+                              <span className="font-medium text-sm truncate">{item.name}</span>
+                              <div className="flex items-center gap-2 shrink-0">
+                                <Badge variant="secondary" className="text-xs">Kitchen: {Number(stock.find(s => s.ingredient.id === item.ingredientId)?.currentStock ?? 0).toFixed(1)} {item.unit}</Badge>
+                                <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => setTransferItems(prev => prev.filter((_, i) => i !== idx))}><Trash2 className="h-3.5 w-3.5" /></Button>
+                              </div>
+                            </div>
+                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                              <div className="space-y-1">
+                                <Label className="text-xs text-muted-foreground">Available in Branch</Label>
+                                <div className={`h-10 flex items-center px-3 text-sm font-semibold rounded-md border bg-muted/50 ${item.availableStock <= 0 ? "text-destructive" : "text-blue-600"}`}>{item.availableStock} {item.unit}</div>
+                              </div>
+                              <div className="space-y-1">
+                                <Label className="text-xs text-muted-foreground">Transfer Qty ({item.unit}) *</Label>
+                                <Input className={`h-10 text-sm ${item.qty > item.availableStock ? "border-destructive text-destructive" : ""}`} type="number" min={0} max={item.availableStock} value={item.qty || ""} onChange={e => { const val = Math.min(Number(e.target.value), item.availableStock); setTransferItems(prev => prev.map((it, i) => i === idx ? { ...it, qty: Math.max(0, val) } : it)); }} />
+                              </div>
+                              <div className="space-y-1 col-span-2 sm:col-span-1">
+                                <Label className="text-xs text-muted-foreground">Remaining in Branch</Label>
+                                <div className={`h-10 flex items-center px-3 text-sm font-semibold rounded-md border bg-muted/50 ${(item.availableStock - item.qty) <= 0 ? "text-warning" : "text-success"}`}>{Math.max(0, item.availableStock - item.qty)} {item.unit}</div>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+                <div className="flex justify-end gap-2 pt-1">
+                  <Button variant="outline" size="sm" onClick={() => setShowCreateTransfer(false)}>Cancel</Button>
+                  <Button className="gradient-primary text-primary-foreground" size="sm" onClick={handleSaveTransfer} disabled={transferSaving}>
+                    <Truck className="h-4 w-4 mr-1.5" />{transferSaving ? "Creating..." : "Create Transfer"}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Stock Table */}
           <Card className="shadow-sm"><CardContent>
             {/* Batch action bar */}
@@ -696,194 +853,6 @@ const KitchenStock = () => {
         </DialogContent>
       </Dialog>
 
-      {/* ── Inline Create Demand panel (KM) ── */}
-      {showCreateDemand && canDemand && (
-        <Card className="shadow-sm border-orange-400/30 bg-orange-50/[0.02] dark:bg-orange-950/[0.02]">
-          <CardHeader className="pb-2 flex flex-row items-center justify-between">
-            <Label className="text-xs text-muted-foreground uppercase tracking-wider">New Stock Demand</Label>
-            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setShowCreateDemand(false)}><ChevronUp className="h-4 w-4" /></Button>
-          </CardHeader>
-          <CardContent className="space-y-5">
-            <Card className="shadow-sm">
-              <CardHeader className="pb-2">
-                <Label className="text-xs text-muted-foreground uppercase tracking-wider">Demand Details</Label>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
-                    <Label>Requesting Kitchen *</Label>
-                    <Input className="h-11" value={selectedKitchenWH?.name ?? "—"} disabled />
-                    <p className="text-xs text-muted-foreground">Requesting from → {branchWH?.name ?? "Branch warehouse"}</p>
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label>Supplying Warehouse</Label>
-                    <Input className="h-11" value={branchWH?.name ?? "No branch found"} disabled />
-                  </div>
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Notes (optional)</Label>
-                  <Textarea placeholder="Any notes about this demand..." value={demandNotes} onChange={e => setDemandNotes(e.target.value)} className="min-h-16" />
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="shadow-sm">
-              <CardHeader className="pb-2 flex flex-row items-center justify-between">
-                <Label className="text-xs text-muted-foreground uppercase tracking-wider">Items ({demandItems.length})</Label>
-                <Button variant="outline" size="sm" className="h-8 min-h-[32px]" onClick={addLowStockToDemand}>
-                  <AlertTriangle className="h-3 w-3 mr-1" />Add Low Stock
-                </Button>
-              </CardHeader>
-              <CardContent>
-                {demandItems.length === 0 ? (
-                  <div className="text-center py-8 text-muted-foreground text-sm">
-                    Click "Add Low Stock" or use the row buttons in the stock table to add items
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {demandItems.map((item, idx) => (
-                      <div key={idx} className="border rounded-lg p-3 space-y-2 border-l-2 border-l-orange-400/60 bg-orange-50/30 dark:bg-orange-950/10">
-                        <div className="flex items-center justify-between gap-2 min-w-0">
-                          <span className="font-medium text-sm truncate">{item.name}</span>
-                          <div className="flex items-center gap-2 shrink-0">
-                            <Badge variant="secondary" className="text-xs">
-                              Kitchen Stock: {Number(stock.find(s => s.ingredient.id === item.ingredientId)?.currentStock ?? 0).toFixed(1)} {item.unit}
-                            </Badge>
-                            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => setDemandItems(prev => prev.filter((_, i) => i !== idx))}>
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
-                          </div>
-                        </div>
-                        <div className="grid grid-cols-2 gap-2">
-                          <div className="space-y-1">
-                            <Label className="text-xs text-muted-foreground">Requested Qty ({item.unit}) *</Label>
-                            <Input className="h-10 text-sm" type="number" min={1} value={item.requestedQty || ""} onChange={e => setDemandItems(prev => prev.map((it, i) => i === idx ? { ...it, requestedQty: Number(e.target.value) } : it))} />
-                          </div>
-                          <div className="space-y-1">
-                            <Label className="text-xs text-muted-foreground">Low Stock Level</Label>
-                            <div className="h-10 flex items-center px-3 text-sm rounded-md border bg-muted/50 text-muted-foreground">
-                              {Number(stock.find(s => s.ingredient.id === item.ingredientId)?.lowStockLevel ?? 0).toFixed(1)} {item.unit}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-            <div className="flex justify-end gap-2 pt-1">
-              <Button variant="outline" size="sm" onClick={() => setShowCreateDemand(false)}>Cancel</Button>
-              <Button className="gradient-primary text-primary-foreground" size="sm" onClick={handleSaveDemand} disabled={demandSaving}>
-                <ClipboardList className="h-4 w-4 mr-1.5" />
-                {demandSaving ? "Creating..." : "Create Demand"}
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* ── Inline Create Transfer panel (Manager/Admin) ── */}
-      {showCreateTransfer && canTransfer && (
-        <Card className="shadow-sm border-primary/30 bg-primary/[0.02]">
-          <CardHeader className="pb-2 flex flex-row items-center justify-between">
-            <Label className="text-xs text-muted-foreground uppercase tracking-wider">New Transfer to Kitchen</Label>
-            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setShowCreateTransfer(false)}><ChevronUp className="h-4 w-4" /></Button>
-          </CardHeader>
-          <CardContent className="space-y-5">
-            <Card className="shadow-sm">
-              <CardHeader className="pb-2">
-                <Label className="text-xs text-muted-foreground uppercase tracking-wider">Transfer Details</Label>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
-                    <Label>From (Branch Stock)</Label>
-                    <Input className="h-11" value={branchWH?.name ?? "No branch found"} disabled />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label>To (Kitchen) *</Label>
-                    <Input className="h-11" value={selectedKitchenWH?.name ?? "—"} disabled />
-                  </div>
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Notes (optional)</Label>
-                  <Textarea placeholder="Any notes about this transfer..." value={transferNotes} onChange={e => setTransferNotes(e.target.value)} className="min-h-16" />
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="shadow-sm">
-              <CardHeader className="pb-2 flex flex-row items-center justify-between">
-                <Label className="text-xs text-muted-foreground uppercase tracking-wider">Items ({transferItems.length})</Label>
-                <Button variant="outline" size="sm" className="h-8 min-h-[32px]" onClick={addLowStockToTransfer}>
-                  <AlertTriangle className="h-3 w-3 mr-1" />Add Low Stock
-                </Button>
-              </CardHeader>
-              <CardContent>
-                {transferItems.length === 0 ? (
-                  <div className="text-center py-8 text-muted-foreground text-sm">
-                    Click "Add Low Stock" or use the row buttons in the stock table to add items
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {transferItems.map((item, idx) => (
-                      <div key={idx} className="border rounded-lg p-3 space-y-2 border-l-2 border-l-primary/40 bg-primary/5">
-                        <div className="flex items-center justify-between gap-2 min-w-0">
-                          <span className="font-medium text-sm truncate">{item.name}</span>
-                          <div className="flex items-center gap-2 shrink-0">
-                            <Badge variant="secondary" className="text-xs">
-                              Kitchen: {Number(stock.find(s => s.ingredient.id === item.ingredientId)?.currentStock ?? 0).toFixed(1)} {item.unit}
-                            </Badge>
-                            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => setTransferItems(prev => prev.filter((_, i) => i !== idx))}>
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
-                          </div>
-                        </div>
-                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                          <div className="space-y-1">
-                            <Label className="text-xs text-muted-foreground">Available in Branch</Label>
-                            <div className={`h-10 flex items-center px-3 text-sm font-semibold rounded-md border bg-muted/50 ${item.availableStock <= 0 ? "text-destructive" : "text-blue-600"}`}>
-                              {item.availableStock} {item.unit}
-                            </div>
-                          </div>
-                          <div className="space-y-1">
-                            <Label className="text-xs text-muted-foreground">Transfer Qty ({item.unit}) *</Label>
-                            <Input
-                              className={`h-10 text-sm ${item.qty > item.availableStock ? "border-destructive text-destructive" : ""}`}
-                              type="number"
-                              min={0}
-                              max={item.availableStock}
-                              value={item.qty || ""}
-                              onChange={e => {
-                                const val = Math.min(Number(e.target.value), item.availableStock);
-                                setTransferItems(prev => prev.map((it, i) => i === idx ? { ...it, qty: Math.max(0, val) } : it));
-                              }}
-                            />
-                          </div>
-                          <div className="space-y-1 col-span-2 sm:col-span-1">
-                            <Label className="text-xs text-muted-foreground">Remaining in Branch</Label>
-                            <div className={`h-10 flex items-center px-3 text-sm font-semibold rounded-md border bg-muted/50 ${(item.availableStock - item.qty) <= 0 ? "text-warning" : "text-success"}`}>
-                              {Math.max(0, item.availableStock - item.qty)} {item.unit}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-            <div className="flex justify-end gap-2 pt-1">
-              <Button variant="outline" size="sm" onClick={() => setShowCreateTransfer(false)}>Cancel</Button>
-              <Button className="gradient-primary text-primary-foreground" size="sm" onClick={handleSaveTransfer} disabled={transferSaving}>
-                <Truck className="h-4 w-4 mr-1.5" />
-                {transferSaving ? "Creating..." : "Create Transfer"}
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
     </div>
   );
 };
