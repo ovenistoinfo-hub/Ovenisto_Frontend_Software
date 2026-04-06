@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Search, Trash2, TrendingDown, CalendarDays, BarChart3, Eye, User } from "lucide-react";
+import { Plus, Search, Trash2, TrendingDown, CalendarDays, BarChart3, Eye, User, ChevronUp, X } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { TablePagination, paginate } from "@/components/TablePagination";
@@ -131,7 +131,7 @@ const Waste = () => {
 
   return (
     <div className="space-y-6">
-      <PageHeader icon={<Trash2 className="h-5 w-5" />} title="Waste / Damage" subtitle="Track wasted items & losses" actions={canRecord ? <Button className="gradient-primary text-primary-foreground" onClick={() => setShowAdd(true)}><Plus className="h-4 w-4 mr-2" />Record Waste</Button> : undefined} />
+      <PageHeader icon={<Trash2 className="h-5 w-5" />} title="Waste / Damage" subtitle="Track wasted items & losses" actions={canRecord ? <Button className="gradient-primary text-primary-foreground" onClick={() => { if (showAdd) { setShowAdd(false); } else { resetForm(); setShowAdd(true); } }}>{showAdd ? <><X className="h-4 w-4 mr-2" />Close Form</> : <><Plus className="h-4 w-4 mr-2" />Record Waste</>}</Button> : undefined} />
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -167,6 +167,63 @@ const Waste = () => {
         </CardContent>
       </Card>
 
+      {/* Inline Record Waste Form */}
+      {showAdd && canRecord && (
+        <Card className="shadow-sm border-primary/30 bg-primary/[0.02]">
+          <CardHeader className="pb-2 flex flex-row items-center justify-between">
+            <Label className="text-xs text-muted-foreground uppercase tracking-wider">Record Waste</Label>
+            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setShowAdd(false)}><ChevronUp className="h-4 w-4" /></Button>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>Ingredient (Optional — select to auto-deduct stock)</Label>
+                <Select value={form.ingredientId} onValueChange={(v) => setForm(p => ({ ...p, ingredientId: v === "__none__" ? "" : v, itemName: "" }))}>
+                  <SelectTrigger><SelectValue placeholder="Select ingredient (optional)" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">— None (custom item) —</SelectItem>
+                    {ingredients.map(ig => <SelectItem key={ig.id} value={ig.id}>{ig.name} (Stock: {Number(ig.currentStock)} {ig.unit?.name || ""})</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {!form.ingredientId && (
+                <div className="space-y-1.5"><Label>Item Name</Label><Input placeholder="e.g. Chicken Tikka Pizza" value={form.itemName} onChange={(e) => setForm(p => ({ ...p, itemName: e.target.value }))} /></div>
+              )}
+
+              <div className="space-y-1.5"><Label>Quantity{selectedIng ? ` (${selectedIng.unit?.name || ""})` : ""}</Label><Input type="number" value={form.quantity || ""} onChange={(e) => setForm(p => ({ ...p, quantity: Number(e.target.value) }))} /></div>
+
+              {!form.ingredientId && (
+                <div className="space-y-1.5"><Label>Unit</Label><Input placeholder="kg, piece..." value={form.unit} onChange={(e) => setForm(p => ({ ...p, unit: e.target.value }))} /></div>
+              )}
+
+              {!form.ingredientId && (
+                <div className="space-y-1.5"><Label>Cost / Loss ({currency})</Label><Input type="number" placeholder="Enter loss value" value={form.cost || ""} onChange={(e) => setForm(p => ({ ...p, cost: Number(e.target.value) }))} /></div>
+              )}
+
+              <div className="space-y-1.5">
+                <Label>Reason</Label>
+                <Select value={form.reason} onValueChange={(v) => setForm(p => ({ ...p, reason: v }))}>
+                  <SelectTrigger><SelectValue placeholder="Select reason" /></SelectTrigger>
+                  <SelectContent>{WASTE_REASONS.map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {selectedIng && form.quantity > 0 && (
+              <p className="text-sm text-muted-foreground">Estimated Loss: <strong className="text-destructive">{currency} {estimatedCost.toLocaleString()}</strong></p>
+            )}
+
+            <div className="space-y-1.5"><Label>Notes</Label><Textarea placeholder="Additional notes" value={form.notes} onChange={(e) => setForm(p => ({ ...p, notes: e.target.value }))} /></div>
+
+            <div className="flex justify-end gap-2 pt-1">
+              <Button variant="outline" onClick={() => { resetForm(); setShowAdd(false); }}>Cancel</Button>
+              <Button className="gradient-primary text-primary-foreground" onClick={handleSave} disabled={saving}>{saving ? "Saving..." : "Save"}</Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Records Table */}
       <Card className="shadow-sm">
         <CardHeader className="pb-3"><div className="relative max-w-sm"><Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} placeholder="Search..." className="pl-9" /></div></CardHeader>
@@ -193,51 +250,6 @@ const Waste = () => {
         </CardContent>
       </Card>
 
-      {/* Record Waste Dialog */}
-      <Dialog open={showAdd} onOpenChange={(open) => { if (!open) resetForm(); setShowAdd(open); }}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto"><DialogHeader><DialogTitle>Record Waste</DialogTitle></DialogHeader>
-          <div className="space-y-3">
-            <div className="space-y-1.5">
-              <Label>Ingredient (Optional — select to auto-deduct stock)</Label>
-              <Select value={form.ingredientId} onValueChange={(v) => setForm(p => ({ ...p, ingredientId: v === "__none__" ? "" : v, itemName: "" }))}>
-                <SelectTrigger><SelectValue placeholder="Select ingredient (optional)" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">— None (custom item) —</SelectItem>
-                  {ingredients.map(ig => <SelectItem key={ig.id} value={ig.id}>{ig.name} (Stock: {Number(ig.currentStock)} {ig.unit?.name || ""})</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {!form.ingredientId && (
-              <div className="space-y-1.5"><Label>Item Name</Label><Input placeholder="e.g. Chicken Tikka Pizza" value={form.itemName} onChange={(e) => setForm(p => ({ ...p, itemName: e.target.value }))} /></div>
-            )}
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5"><Label>Quantity{selectedIng ? ` (${selectedIng.unit?.name || ""})` : ""}</Label><Input type="number" value={form.quantity || ""} onChange={(e) => setForm(p => ({ ...p, quantity: Number(e.target.value) }))} /></div>
-              {!form.ingredientId && <div className="space-y-1.5"><Label>Unit</Label><Input placeholder="kg, piece..." value={form.unit} onChange={(e) => setForm(p => ({ ...p, unit: e.target.value }))} /></div>}
-            </div>
-
-            {selectedIng && form.quantity > 0 && (
-              <p className="text-sm text-muted-foreground">Estimated Loss: <strong className="text-destructive">{currency} {estimatedCost.toLocaleString()}</strong></p>
-            )}
-
-            {!form.ingredientId && (
-              <div className="space-y-1.5"><Label>Cost / Loss ({currency})</Label><Input type="number" placeholder="Enter loss value" value={form.cost || ""} onChange={(e) => setForm(p => ({ ...p, cost: Number(e.target.value) }))} /></div>
-            )}
-
-            <div className="space-y-1.5">
-              <Label>Reason</Label>
-              <Select value={form.reason} onValueChange={(v) => setForm(p => ({ ...p, reason: v }))}>
-                <SelectTrigger><SelectValue placeholder="Select reason" /></SelectTrigger>
-                <SelectContent>{WASTE_REASONS.map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}</SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-1.5"><Label>Notes</Label><Textarea placeholder="Additional notes" value={form.notes} onChange={(e) => setForm(p => ({ ...p, notes: e.target.value }))} /></div>
-          </div>
-          <DialogFooter><Button variant="outline" onClick={() => { resetForm(); setShowAdd(false); }}>Cancel</Button><Button className="gradient-primary text-primary-foreground" onClick={handleSave} disabled={saving}>{saving ? "Saving..." : "Save"}</Button></DialogFooter>
-        </DialogContent>
-      </Dialog>
       {/* Detail Dialog */}
       <Dialog open={!!showDetail} onOpenChange={() => setShowDetail(null)}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">

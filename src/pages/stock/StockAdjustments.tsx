@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Search, ArrowUpDown, Check, ChevronsUpDown, RefreshCw, Eye, User, Phone } from "lucide-react";
+import { Plus, Search, ArrowUpDown, Check, ChevronsUpDown, RefreshCw, Eye, User, Phone, ChevronUp, X } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { cn } from "@/lib/utils";
@@ -218,8 +218,8 @@ const StockAdjustments = () => {
               <RefreshCw className={`h-4 w-4 mr-1.5 ${refreshing ? "animate-spin" : ""}`} />Refresh
             </Button>
             {canAdjust && selectedWHId && (
-              <Button className="gradient-primary text-primary-foreground" onClick={openAdd}>
-                <Plus className="h-4 w-4 mr-2" />Add Adjustment
+              <Button className="gradient-primary text-primary-foreground" onClick={() => { if (showAdd) { setShowAdd(false); } else { openAdd(); } }}>
+                {showAdd ? <><X className="h-4 w-4 mr-2" />Close Form</> : <><Plus className="h-4 w-4 mr-2" />Add Adjustment</>}
               </Button>
             )}
           </div>
@@ -283,6 +283,111 @@ const StockAdjustments = () => {
         </CardHeader>
       </Card>
 
+      {/* Inline form panel — togglable, replaces dialog */}
+      {showAdd && canAdjust && (
+        <Card className="shadow-sm border-primary/30 bg-primary/[0.02]">
+          <CardHeader className="pb-2 flex flex-row items-center justify-between">
+            <Label className="text-xs text-muted-foreground uppercase tracking-wider">New Stock Adjustment — {selectedWarehouse?.name ?? "—"}</Label>
+            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setShowAdd(false)}><ChevronUp className="h-4 w-4" /></Button>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              <div className="space-y-1.5">
+                <Label>Ingredient *</Label>
+                <Select value={form.ingredientId || "__none__"} onValueChange={v => setForm(p => ({ ...p, ingredientId: v === "__none__" ? "" : v }))}>
+                  <SelectTrigger className="h-11"><SelectValue placeholder="Select Ingredient" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">Select ingredient</SelectItem>
+                    {ingredients.map(ig => (
+                      <SelectItem key={ig.id} value={ig.id}>
+                        {ig.name} — Stock: {stockMap[ig.id] ?? 0} {ig.unit?.name || ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {form.ingredientId && (
+                  <p className="text-xs text-muted-foreground">
+                    Current: <span className="font-semibold text-foreground">{stockMap[form.ingredientId] ?? 0} {selectedIng?.unit?.name || ""}</span>
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-1.5">
+                <Label>Type *</Label>
+                <div className="flex gap-1.5 flex-wrap h-11 items-center">
+                  {(["add", "deduct", "damage", "correction"] as const).map(t => (
+                    <Button
+                      key={t}
+                      variant={form.type === t ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setForm(p => ({ ...p, type: t, reason: "" }))}
+                      className={cn("h-9", form.type === t ? (
+                        t === "add" ? "bg-success hover:bg-success/90 text-white" :
+                        t === "deduct" ? "bg-destructive hover:bg-destructive/90 text-white" :
+                        t === "damage" ? "bg-warning hover:bg-warning/90 text-white" :
+                        "bg-blue-600 hover:bg-blue-700 text-white"
+                      ) : "")}
+                    >
+                      {TYPE_LABELS[t]?.label || t}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label>Quantity{selectedIng ? ` (${selectedIng.unit?.name || ""})` : ""} *</Label>
+                <Input
+                  className="h-11"
+                  type="number"
+                  min={1}
+                  value={form.quantity || ""}
+                  onChange={e => setForm(p => ({ ...p, quantity: Number(e.target.value) }))}
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label>Reason</Label>
+                <Popover open={reasonOpen} onOpenChange={setReasonOpen}>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" role="combobox" aria-expanded={reasonOpen} className="w-full justify-between font-normal h-11 whitespace-nowrap text-left overflow-hidden">
+                      <span className={cn("truncate", form.reason ? "" : "text-muted-foreground")}>{form.reason || "Select reason..."}</span>
+                      <ChevronsUpDown className="ml-1 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+                    <Command>
+                      <CommandInput placeholder="Search or type..." value={form.reason} onValueChange={v => setForm(p => ({ ...p, reason: v }))} />
+                      <CommandList>
+                        <CommandEmpty>
+                          <button type="button" className="w-full text-left px-2 py-1.5 text-sm hover:bg-accent rounded cursor-pointer" onClick={() => setReasonOpen(false)}>
+                            Use: "{form.reason}"
+                          </button>
+                        </CommandEmpty>
+                        <CommandGroup heading="Common reasons">
+                          {(COMMON_REASONS[form.type] || COMMON_REASONS.correction).map(reason => (
+                            <CommandItem key={reason} value={reason} onSelect={() => { setForm(p => ({ ...p, reason })); setReasonOpen(false); }}>
+                              <Check className={cn("mr-2 h-4 w-4", form.reason === reason ? "opacity-100" : "opacity-0")} />
+                              {reason}
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-1">
+              <Button variant="outline" size="sm" onClick={() => setShowAdd(false)}>Cancel</Button>
+              <Button className="gradient-primary text-primary-foreground" size="sm" onClick={handleSave} disabled={saving}>
+                {saving ? "Saving..." : "Save Adjustment"}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Adjustments Table */}
       <Card className="shadow-sm">
         <CardContent>
@@ -338,123 +443,6 @@ const StockAdjustments = () => {
           )}
         </CardContent>
       </Card>
-
-      {/* Add Adjustment Dialog — Card-based sections like other stock dialogs */}
-      <Dialog open={showAdd} onOpenChange={setShowAdd}>
-        <DialogContent className="w-full max-w-[95vw] sm:max-w-lg max-h-[90vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>Add Stock Adjustment</DialogTitle></DialogHeader>
-          <div className="space-y-5">
-            {/* Warehouse context */}
-            <Card className="shadow-sm">
-              <CardHeader className="pb-2">
-                <Label className="text-xs text-muted-foreground uppercase tracking-wider">Warehouse</Label>
-              </CardHeader>
-              <CardContent>
-                <Input className="h-11" value={selectedWarehouse ? `${selectedWarehouse.name} (${selectedWarehouse.type})` : "—"} disabled />
-              </CardContent>
-            </Card>
-
-            {/* Adjustment Details */}
-            <Card className="shadow-sm">
-              <CardHeader className="pb-2">
-                <Label className="text-xs text-muted-foreground uppercase tracking-wider">Adjustment Details</Label>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="space-y-1.5">
-                  <Label>Ingredient *</Label>
-                  <Select value={form.ingredientId || "__none__"} onValueChange={v => setForm(p => ({ ...p, ingredientId: v === "__none__" ? "" : v }))}>
-                    <SelectTrigger className="h-11"><SelectValue placeholder="Select Ingredient" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__none__">Select ingredient</SelectItem>
-                      {ingredients.map(ig => (
-                        <SelectItem key={ig.id} value={ig.id}>
-                          {ig.name} — Stock: {stockMap[ig.id] ?? 0} {ig.unit?.name || ""}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {form.ingredientId && (
-                    <p className="text-xs text-muted-foreground">
-                      Current stock in this warehouse: <span className="font-semibold text-foreground">{stockMap[form.ingredientId] ?? 0} {selectedIng?.unit?.name || ""}</span>
-                    </p>
-                  )}
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label>Type *</Label>
-                  <div className="flex gap-2 flex-wrap">
-                    {(["add", "deduct", "damage", "correction"] as const).map(t => (
-                      <Button
-                        key={t}
-                        variant={form.type === t ? "default" : "outline"}
-                        size="sm"
-                        onClick={() => setForm(p => ({ ...p, type: t, reason: "" }))}
-                        className={form.type === t ? (
-                          t === "add" ? "bg-success hover:bg-success/90 text-white" :
-                          t === "deduct" ? "bg-destructive hover:bg-destructive/90 text-white" :
-                          t === "damage" ? "bg-warning hover:bg-warning/90 text-white" :
-                          "bg-blue-600 hover:bg-blue-700 text-white"
-                        ) : ""}
-                      >
-                        {TYPE_LABELS[t]?.label || t}
-                      </Button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label>Quantity{selectedIng ? ` (${selectedIng.unit?.name || ""})` : ""} *</Label>
-                  <Input
-                    className="h-11"
-                    type="number"
-                    min={1}
-                    value={form.quantity || ""}
-                    onChange={e => setForm(p => ({ ...p, quantity: Number(e.target.value) }))}
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label>Reason</Label>
-                  <Popover open={reasonOpen} onOpenChange={setReasonOpen}>
-                    <PopoverTrigger asChild>
-                      <Button variant="outline" role="combobox" aria-expanded={reasonOpen} className="w-full justify-between font-normal h-auto min-h-[2.75rem] whitespace-normal text-left">
-                        <span className={form.reason ? "" : "text-muted-foreground"}>{form.reason || "Select or type a reason..."}</span>
-                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
-                      <Command>
-                        <CommandInput placeholder="Search or type custom reason..." value={form.reason} onValueChange={v => setForm(p => ({ ...p, reason: v }))} />
-                        <CommandList>
-                          <CommandEmpty>
-                            <button type="button" className="w-full text-left px-2 py-1.5 text-sm hover:bg-accent rounded cursor-pointer" onClick={() => setReasonOpen(false)}>
-                              Use: "{form.reason}"
-                            </button>
-                          </CommandEmpty>
-                          <CommandGroup heading="Common reasons">
-                            {(COMMON_REASONS[form.type] || COMMON_REASONS.correction).map(reason => (
-                              <CommandItem key={reason} value={reason} onSelect={() => { setForm(p => ({ ...p, reason })); setReasonOpen(false); }}>
-                                <Check className={cn("mr-2 h-4 w-4", form.reason === reason ? "opacity-100" : "opacity-0")} />
-                                {reason}
-                              </CommandItem>
-                            ))}
-                          </CommandGroup>
-                        </CommandList>
-                      </Command>
-                    </PopoverContent>
-                  </Popover>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-          <DialogFooter className="flex-col sm:flex-row gap-2 pt-2">
-            <Button variant="outline" onClick={() => setShowAdd(false)} className="h-11 sm:h-auto">Cancel</Button>
-            <Button className="gradient-primary text-primary-foreground h-11 sm:h-auto" onClick={handleSave} disabled={saving}>
-              {saving ? "Saving..." : "Save Adjustment"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* Detail Dialog — receipt-style like Transfers detail */}
       <Dialog open={!!showDetail} onOpenChange={() => setShowDetail(null)}>

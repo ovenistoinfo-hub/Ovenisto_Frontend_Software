@@ -11,8 +11,8 @@ import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Plus, Search, FileText, Pencil, Trash2, Wallet, Eye, User } from "lucide-react";
-import { Textarea } from "@/components/ui/textarea";
+import { Plus, Search, FileText, Pencil, Trash2, Wallet, Eye, User, ChevronUp, X } from "lucide-react";
+
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/ui/page-header";
@@ -115,8 +115,51 @@ const Expenses = () => {
 
   return (
     <div className="space-y-6">
-      <PageHeader icon={<Wallet className="h-5 w-5" />} title="Expenses" subtitle={`Total: ${currency} ${totalAmount.toLocaleString()}`} actions={canManage ? <Button className="gradient-primary text-primary-foreground" onClick={openAdd}><Plus className="h-4 w-4 mr-2" />Add Expense</Button> : undefined} />
+      <PageHeader icon={<Wallet className="h-5 w-5" />} title="Expenses" subtitle={`Total: ${currency} ${totalAmount.toLocaleString()}`} actions={canManage ? <Button className="gradient-primary text-primary-foreground" onClick={() => { if (showDialog) { setShowDialog(false); setEditingId(null); setForm({ category: "", description: "", amount: 0, paymentMethod: "Cash" }); } else { openAdd(); } }}>{showDialog ? <><X className="h-4 w-4 mr-2" />Close Form</> : <><Plus className="h-4 w-4 mr-2" />Add Expense</>}</Button> : undefined} />
       <Card className="shadow-sm"><CardContent className="p-5"><div className="flex items-center gap-4"><div className="h-11 w-11 rounded-xl bg-destructive/10 flex items-center justify-center shrink-0"><Wallet className="h-5 w-5 text-destructive" /></div><div className="min-w-0"><p className="text-sm text-muted-foreground truncate">Total Expenses</p><p className="text-2xl font-bold tracking-tight">{currency} {totalAmount.toLocaleString()}</p></div></div></CardContent></Card>
+
+      {/* Inline Create / Edit Form Panel */}
+      {showDialog && (
+        <Card className="shadow-sm border-primary/30 bg-primary/[0.02]">
+          <CardHeader className="pb-3 flex flex-row items-center justify-between">
+            <h3 className="text-base font-semibold">{editingId ? "Edit" : "Add"} Expense</h3>
+            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => { setShowDialog(false); setEditingId(null); setForm({ category: "", description: "", amount: 0, paymentMethod: "Cash" }); }}>
+              <ChevronUp className="h-4 w-4" />
+            </Button>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="space-y-1.5">
+                <Label>Category</Label>
+                <Select value={form.category} onValueChange={(v) => setForm(p => ({ ...p, category: v }))}>
+                  <SelectTrigger><SelectValue placeholder="Select category" /></SelectTrigger>
+                  <SelectContent>{categories.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Description</Label>
+                <Input placeholder="Enter description" value={form.description} onChange={(e) => setForm(p => ({ ...p, description: e.target.value }))} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Amount</Label>
+                <Input placeholder="Enter amount" type="number" value={form.amount || ""} onChange={(e) => setForm(p => ({ ...p, amount: Number(e.target.value) }))} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Payment Method</Label>
+                <Select value={form.paymentMethod} onValueChange={(v) => setForm(p => ({ ...p, paymentMethod: v }))}>
+                  <SelectTrigger><SelectValue placeholder="Payment Method" /></SelectTrigger>
+                  <SelectContent>{methods.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => { setShowDialog(false); setEditingId(null); setForm({ category: "", description: "", amount: 0, paymentMethod: "Cash" }); }}>Cancel</Button>
+              <Button className="gradient-primary text-primary-foreground" onClick={handleSave} disabled={saving}>{saving ? "Saving..." : "Save"}</Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       <Card className="shadow-sm"><CardHeader className="pb-3"><div className="relative max-w-sm"><Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} placeholder="Search..." className="pl-9" /></div></CardHeader>
         <CardContent>
           {expenses.length === 0 ? (
@@ -137,12 +180,6 @@ const Expenses = () => {
             </>
           )}
         </CardContent></Card>
-      <Dialog open={showDialog} onOpenChange={setShowDialog}><DialogContent><DialogHeader><DialogTitle>{editingId ? "Edit" : "Add"} Expense</DialogTitle></DialogHeader><div className="space-y-3">
-        <div className="space-y-1.5"><Label>Category</Label><Select value={form.category} onValueChange={(v) => setForm(p => ({ ...p, category: v }))}><SelectTrigger><SelectValue placeholder="Select category" /></SelectTrigger><SelectContent>{categories.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent></Select></div>
-        <div className="space-y-1.5"><Label>Description</Label><Textarea placeholder="Enter description" value={form.description} onChange={(e) => setForm(p => ({ ...p, description: e.target.value }))} /></div>
-        <div className="space-y-1.5"><Label>Amount</Label><Input placeholder="Enter amount" type="number" value={form.amount || ""} onChange={(e) => setForm(p => ({ ...p, amount: Number(e.target.value) }))} /></div>
-        <div className="space-y-1.5"><Label>Payment Method</Label><Select value={form.paymentMethod} onValueChange={(v) => setForm(p => ({ ...p, paymentMethod: v }))}><SelectTrigger><SelectValue placeholder="Payment Method" /></SelectTrigger><SelectContent>{methods.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent></Select></div>
-      </div><DialogFooter><Button variant="outline" onClick={() => setShowDialog(false)}>Cancel</Button><Button className="gradient-primary text-primary-foreground" onClick={handleSave} disabled={saving}>{saving ? "Saving..." : "Save"}</Button></DialogFooter></DialogContent></Dialog>
 
       {/* Detail Dialog */}
       <Dialog open={!!showDetail} onOpenChange={() => setShowDetail(null)}>

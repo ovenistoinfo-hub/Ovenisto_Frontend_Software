@@ -18,6 +18,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import {
   Building2, Search, RefreshCw, AlertTriangle, PackageX, Clock, XCircle,
   ShoppingCart, ClipboardList, Plus, Trash2, CalendarIcon, CheckCircle2,
+  ChevronUp, X,
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -654,22 +655,27 @@ const Warehouses = () => {
             </Button>
             {canRequest && (
               <Button
-                variant="outline"
+                variant={showCreatePR ? "destructive" : "outline"}
                 size="sm"
-                onClick={() => { loadCreatePRData(selectedId); setShowCreatePR(true); }}
+                onClick={() => {
+                  if (showCreatePR) { setShowCreatePR(false); }
+                  else { loadCreatePRData(selectedId); setShowCreatePR(true); }
+                }}
               >
-                <ClipboardList className="h-4 w-4 mr-1.5" />
-                Purchase Request
+                {showCreatePR ? <><X className="h-4 w-4 mr-1.5" />Close Form</> : <><ClipboardList className="h-4 w-4 mr-1.5" />Purchase Request</>}
               </Button>
             )}
             {canPurchase && (
               <Button
                 size="sm"
-                className="gradient-primary text-primary-foreground"
-                onClick={() => { loadAddPurchaseData(selectedId); setShowAddPurchase(true); }}
+                className={showAddPurchase ? "" : "gradient-primary text-primary-foreground"}
+                variant={showAddPurchase ? "destructive" : "default"}
+                onClick={() => {
+                  if (showAddPurchase) { setShowAddPurchase(false); }
+                  else { loadAddPurchaseData(selectedId); setShowAddPurchase(true); }
+                }}
               >
-                <ShoppingCart className="h-4 w-4 mr-1.5" />
-                Add Purchase
+                {showAddPurchase ? <><X className="h-4 w-4 mr-1.5" />Close Form</> : <><ShoppingCart className="h-4 w-4 mr-1.5" />Add Purchase</>}
               </Button>
             )}
           </div>
@@ -722,6 +728,391 @@ const Warehouses = () => {
               )}
             </div>
           </CardHeader></Card>
+
+          {/* ── Add Purchase Inline Panel ── */}
+          {showAddPurchase && (
+            <Card className="shadow-sm border-primary/30 bg-primary/[0.02]">
+              <CardHeader className="pb-3 flex flex-row items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <ShoppingCart className="h-5 w-5 text-primary" />
+                  <h3 className="text-base font-semibold">Add Purchase</h3>
+                </div>
+                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setShowAddPurchase(false)}>
+                  <ChevronUp className="h-4 w-4" />
+                </Button>
+              </CardHeader>
+              <CardContent className="space-y-5">
+
+                {/* Approved Request */}
+                <Card className="shadow-sm">
+                  <CardHeader className="pb-2">
+                    <Label className="text-xs text-muted-foreground uppercase tracking-wider">Link to Approved Request (Optional)</Label>
+                  </CardHeader>
+                  <CardContent>
+                    <Select
+                      value={apSelectedRequestId || "__none__"}
+                      onValueChange={(v) => handleApSelectRequest(v === "__none__" ? "" : v)}
+                    >
+                      <SelectTrigger><SelectValue placeholder="Select an approved request" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">— No Request —</SelectItem>
+                        {apApprovedRequests.map(pr => {
+                          const activeItems = pr.items.filter(i => (i.approvedQty ?? 0) > 0).length;
+                          return (
+                            <SelectItem key={pr.id} value={pr.id}>
+                              {pr.requestNo} — {pr.warehouse.name} ({activeItems} items) — by {pr.requestedBy.name}
+                            </SelectItem>
+                          );
+                        })}
+                      </SelectContent>
+                    </Select>
+                    {apSelectedRequestId && (
+                      <p className="text-xs text-muted-foreground mt-1.5">Approved items loaded below. You can still add manual items.</p>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Purchase Details */}
+                <Card className="shadow-sm">
+                  <CardHeader className="pb-2">
+                    <Label className="text-xs text-muted-foreground uppercase tracking-wider">Purchase Details</Label>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                      <div className="space-y-1.5">
+                        <Label>Supplier (optional)</Label>
+                        <Select value={apForm.supplierId} onValueChange={(v) => setApForm(p => ({ ...p, supplierId: v }))}>
+                          <SelectTrigger className="h-11"><SelectValue placeholder="Select Supplier" /></SelectTrigger>
+                          <SelectContent>
+                            {apSuppliers.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>Invoice Number</Label>
+                        <Input className="h-11" placeholder="e.g. INV-001" value={apForm.invoiceNumber} onChange={e => setApForm(p => ({ ...p, invoiceNumber: e.target.value }))} />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>Warehouse</Label>
+                        <Select
+                          value={apWarehouseId || "__none__"}
+                          onValueChange={(v) => setApWarehouseId(v === "__none__" ? "" : v)}
+                          disabled={!!apSelectedRequestId}
+                        >
+                          <SelectTrigger className="h-11"><SelectValue placeholder="Select warehouse" /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="__none__">No warehouse</SelectItem>
+                            {warehouses.filter(w => isSuperAdmin ? true : w.type === "BRANCH").map(w => (
+                              <SelectItem key={w.id} value={w.id}>{w.name} ({w.type})</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Items */}
+                <Card className="shadow-sm">
+                  <CardHeader className="pb-2 flex flex-row items-center justify-between">
+                    <Label className="text-xs text-muted-foreground uppercase tracking-wider">
+                      Items ({apItems.filter(i => i.ingredientId).length})
+                    </Label>
+                    <Button variant="outline" size="sm" onClick={apAddItemRow} className="h-8 min-h-[32px]">
+                      <Plus className="h-3 w-3 mr-1" />Add Item
+                    </Button>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    {apItems.filter(i => i.ingredientId || i.source === "manual").length === 0 && (
+                      <div className="text-center py-8 text-muted-foreground text-sm">
+                        Select an approved request above or add items manually
+                      </div>
+                    )}
+
+                    {/* Approved Items */}
+                    {apApprovedCount > 0 && (
+                      <div className="space-y-2">
+                        {apSelectedRequestId && (
+                          <div className="flex items-center gap-2">
+                            <Badge variant="outline" className="text-xs font-medium border-primary/40 text-primary">From Request</Badge>
+                            <span className="text-xs text-muted-foreground">{apApprovedRequests.find(r => r.id === apSelectedRequestId)?.requestNo}</span>
+                          </div>
+                        )}
+                        <div className="space-y-2">
+                          {apItems.map((item, originalIdx) => {
+                            if (item.source !== "approved") return null;
+                            const receivedQty = item.qty - (item.wasteQty ?? 0);
+                            return (
+                              <div key={originalIdx} className="border rounded-lg p-3 space-y-2 border-l-2 border-l-primary/40 bg-primary/5">
+                                <div className="flex items-center justify-between gap-2 flex-wrap min-w-0">
+                                  <span className="font-medium text-sm truncate min-w-0">{item.name}</span>
+                                  <Badge variant="secondary" className="text-xs shrink-0">Approved: {item.approvedQty ?? item.qty} {item.unit}</Badge>
+                                </div>
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                                  <div className="space-y-1">
+                                    <Label className="text-xs text-muted-foreground">Purchased Qty ({item.unit})</Label>
+                                    <Input className="h-10 text-sm" type="number" min={0} value={item.qty || ""} onChange={e => apUpdateItemRow(originalIdx, "qty", Number(e.target.value))} />
+                                  </div>
+                                  <div className="space-y-1">
+                                    <Label className="text-xs text-muted-foreground">Waste Qty</Label>
+                                    <Input className="h-10 text-sm" type="number" min={0} max={item.qty} value={item.wasteQty || ""} onChange={e => apUpdateItemRow(originalIdx, "wasteQty", Number(e.target.value))} />
+                                  </div>
+                                  <div className="space-y-1">
+                                    <Label className="text-xs text-muted-foreground">Unit Price</Label>
+                                    <Input className="h-10 text-sm" type="number" min={0} value={item.unitPrice || ""} onChange={e => apUpdateItemRow(originalIdx, "unitPrice", Number(e.target.value))} />
+                                  </div>
+                                  <div className="space-y-1">
+                                    <Label className="text-xs text-muted-foreground">Expiry Date</Label>
+                                    <DatePickerField value={item.expiryDate || ""} onChange={v => apUpdateItemRow(originalIdx, "expiryDate", v)} />
+                                  </div>
+                                </div>
+                                {item.wasteQty > 0 && (
+                                  <div className="space-y-1">
+                                    <Label className="text-xs text-muted-foreground">Waste Reason</Label>
+                                    <Input className="h-10 text-sm" placeholder="e.g. Broken during transport" value={item.wasteReason} onChange={e => apUpdateItemRow(originalIdx, "wasteReason", e.target.value)} />
+                                  </div>
+                                )}
+                                <div className="flex items-center justify-between pt-1 text-sm">
+                                  <span className="text-muted-foreground">Line Total:</span>
+                                  <div className="text-right">
+                                    <div className="font-medium">{currency} {(item.qty * item.unitPrice).toLocaleString()}</div>
+                                    {item.wasteQty > 0 && (
+                                      <Badge variant="secondary" className="text-xs bg-success/10 text-success mt-0.5">Received: {receivedQty} {item.unit}</Badge>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Separator between approved and manual */}
+                    {apApprovedCount > 0 && apManualCount > 0 && (
+                      <div className="flex items-center gap-2 py-1">
+                        <Separator className="flex-1" />
+                        <span className="text-xs text-muted-foreground whitespace-nowrap">Additional Items</span>
+                        <Separator className="flex-1" />
+                      </div>
+                    )}
+
+                    {/* Manual Items */}
+                    <div className="space-y-2">
+                      {apItems.map((item, originalIdx) => {
+                        if (item.source !== "manual") return null;
+                        const receivedQty = item.qty - (item.wasteQty ?? 0);
+                        return (
+                          <div key={originalIdx} className="border rounded-lg p-3 space-y-2">
+                            <div className="flex gap-2">
+                              <Select value={item.ingredientId} onValueChange={v => apUpdateItemRow(originalIdx, "ingredientId", v)}>
+                                <SelectTrigger className="h-11 text-sm flex-1"><SelectValue placeholder="Select Ingredient" /></SelectTrigger>
+                                <SelectContent>
+                                  {apIngredients.map(ig => <SelectItem key={ig.id} value={ig.id}>{ig.name}</SelectItem>)}
+                                </SelectContent>
+                              </Select>
+                              <Button
+                                type="button" variant="ghost" size="icon" className="h-11 w-11 shrink-0" title="Add new ingredient"
+                                onClick={() => { setApQuickAddTargetIdx(originalIdx); setApQuickAddForm({ name: "", categoryId: "", unitId: "" }); setApQuickAddOpen(true); }}
+                              >
+                                <Plus className="h-4 w-4" />
+                              </Button>
+                              <Button variant="ghost" size="icon" className="h-11 w-11 shrink-0 text-destructive" onClick={() => apRemoveItemRow(originalIdx)}>
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                              <div className="space-y-1">
+                                <Label className="text-xs text-muted-foreground">Qty {item.unit ? `(${item.unit})` : ""}</Label>
+                                <Input className="h-11 text-sm" type="number" min={0} placeholder="Qty" value={item.qty || ""} onChange={e => apUpdateItemRow(originalIdx, "qty", Number(e.target.value))} />
+                              </div>
+                              <div className="space-y-1">
+                                <Label className="text-xs text-muted-foreground">Waste Qty</Label>
+                                <Input className="h-11 text-sm" type="number" min={0} max={item.qty} placeholder="Waste" value={item.wasteQty || ""} onChange={e => apUpdateItemRow(originalIdx, "wasteQty", Number(e.target.value))} />
+                              </div>
+                              <div className="space-y-1">
+                                <Label className="text-xs text-muted-foreground">Unit Price</Label>
+                                <Input className="h-11 text-sm" type="number" min={0} placeholder="Price" value={item.unitPrice || ""} onChange={e => apUpdateItemRow(originalIdx, "unitPrice", Number(e.target.value))} />
+                              </div>
+                              <div className="space-y-1">
+                                <Label className="text-xs text-muted-foreground">Expiry Date</Label>
+                                <DatePickerField value={item.expiryDate || ""} onChange={v => apUpdateItemRow(originalIdx, "expiryDate", v)} />
+                              </div>
+                            </div>
+                            <div className="flex flex-col sm:flex-row gap-2 items-start sm:items-center justify-between">
+                              <div className="flex-1 w-full">
+                                {item.wasteQty > 0 && (
+                                  <Input className="h-9 text-xs" placeholder="Waste reason (e.g. Broken during transport)" value={item.wasteReason} onChange={e => apUpdateItemRow(originalIdx, "wasteReason", e.target.value)} />
+                                )}
+                              </div>
+                              <div className="text-right shrink-0">
+                                <div className="text-sm font-medium whitespace-nowrap">{currency} {(item.qty * item.unitPrice).toLocaleString()}</div>
+                                {item.wasteQty > 0 && (
+                                  <Badge variant="secondary" className="text-xs bg-success/10 text-success mt-0.5">Received: {receivedQty}</Badge>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Billing Summary */}
+                <Card className="shadow-sm">
+                  <CardHeader className="pb-2">
+                    <Label className="text-xs text-muted-foreground uppercase tracking-wider">Billing Summary</Label>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-2 w-full max-w-sm ml-auto">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground">Subtotal (items)</span>
+                        <span className="font-medium tabular-nums">{currency} {apSubtotal.toLocaleString()}</span>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <Label className="text-sm shrink-0 min-w-[7rem]">Shipping Cost</Label>
+                        <Input className="h-9 text-sm text-right flex-1 min-w-0" type="number" min={0} step={1} placeholder="0" value={apShipping || ""} onChange={e => setApShipping(Number(e.target.value))} />
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <Label className="text-sm shrink-0 min-w-[7rem]">Tax Amount</Label>
+                        <Input className="h-9 text-sm text-right flex-1 min-w-0" type="number" min={0} step={1} placeholder="0" value={apTax || ""} onChange={e => setApTax(Number(e.target.value))} />
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <Label className="text-sm shrink-0 min-w-[7rem]">Miscellaneous</Label>
+                        <Input className="h-9 text-sm text-right flex-1 min-w-0" type="number" min={0} step={1} placeholder="0" value={apMisc || ""} onChange={e => setApMisc(Number(e.target.value))} />
+                      </div>
+                      <Separator />
+                      <div className="flex items-center justify-between font-semibold text-base">
+                        <span>Grand Total</span>
+                        <span className="text-lg tabular-nums">{currency} {apGrandTotal.toLocaleString()}</span>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <div className="flex justify-end gap-2 pt-1">
+                  <Button variant="outline" onClick={() => setShowAddPurchase(false)}>Cancel</Button>
+                  <Button className="gradient-primary text-primary-foreground" onClick={handleApSave} disabled={apSaving}>
+                    {apSaving ? "Saving..." : "Save Purchase"}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* ── Create Purchase Request Inline Panel ── */}
+          {showCreatePR && (
+            <Card className="shadow-sm border-primary/30 bg-primary/[0.02]">
+              <CardHeader className="pb-3 flex flex-row items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <ClipboardList className="h-5 w-5 text-primary" />
+                  <h3 className="text-base font-semibold">New Purchase Request</h3>
+                </div>
+                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setShowCreatePR(false)}>
+                  <ChevronUp className="h-4 w-4" />
+                </Button>
+              </CardHeader>
+              <CardContent className="space-y-4">
+
+                {/* Warehouse */}
+                <div className="space-y-1.5">
+                  <Label>Target Warehouse (Branch Store) *</Label>
+                  {warehouses.filter(w => w.type === "BRANCH").length <= 1 ? (
+                    <Input value={warehouses.filter(w => w.type === "BRANCH")[0]?.name ?? "No branch warehouses"} disabled />
+                  ) : (
+                    <Select value={prWarehouseId} onValueChange={setPrWarehouseId}>
+                      <SelectTrigger><SelectValue placeholder="Select branch warehouse" /></SelectTrigger>
+                      <SelectContent>
+                        {warehouses.filter(w => w.type === "BRANCH").map(w => (
+                          <SelectItem key={w.id} value={w.id}>{w.name}{w.outlet ? ` — ${w.outlet.name}` : ""}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                </div>
+
+                {/* Add Ingredient + Low Stock */}
+                <div className="flex gap-2 items-end">
+                  <div className="flex-1">
+                    <Label className="text-xs text-muted-foreground">Add Ingredient</Label>
+                    <Select value={prAddIngId} onValueChange={setPrAddIngId}>
+                      <SelectTrigger><SelectValue placeholder="Select ingredient" /></SelectTrigger>
+                      <SelectContent>
+                        {prIngredients
+                          .filter(ig => !prItems.some(i => i.ingredientId === ig.id))
+                          .map(ig => (
+                            <SelectItem key={ig.id} value={ig.id}>
+                              {ig.name} (Stock: {warehouseStockMap[ig.id] ?? 0} {ig.unit?.name ?? ""}){Number(ig.currentStock) <= Number(ig.lowStockLevel) ? " ⚠" : ""}
+                            </SelectItem>
+                          ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <Button variant="outline" onClick={prAddIngredient} disabled={!prAddIngId}>
+                    <Plus className="h-4 w-4 mr-1" />Add
+                  </Button>
+                  <Button variant="outline" onClick={prAddLowStockItems} disabled={!prWarehouseId || prLowStockLoading}>
+                    <AlertTriangle className="h-4 w-4 mr-1" />{prLowStockLoading ? "Loading..." : "Add Low Stock"}
+                  </Button>
+                </div>
+
+                {/* Items Table */}
+                {prItems.length > 0 ? (
+                  <div className="rounded-lg border overflow-auto">
+                    <Table>
+                      <TableHeader><TableRow className="bg-muted/50">
+                        <TableHead>Ingredient</TableHead><TableHead>Unit</TableHead><TableHead>Current Stock</TableHead><TableHead>Requested Qty</TableHead><TableHead></TableHead>
+                      </TableRow></TableHeader>
+                      <TableBody>
+                        {prItems.map((item, idx) => (
+                          <TableRow key={item.ingredientId}>
+                            <TableCell className="font-medium">{item.name}</TableCell>
+                            <TableCell className="text-sm">{item.unit || "—"}</TableCell>
+                            <TableCell className="text-sm">{warehouseStockMap[item.ingredientId] ?? 0}</TableCell>
+                            <TableCell>
+                              <Input type="number" className="w-24 h-8" min={1}
+                                value={item.requestedQty || ""}
+                                onChange={e => setPrItems(prev => prev.map((it, i) => i === idx ? { ...it, requestedQty: Number(e.target.value) } : it))}
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive"
+                                onClick={() => setPrItems(prev => prev.filter((_, i) => i !== idx))}>
+                                <Trash2 className="h-3 w-3" />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                ) : (
+                  <div className="text-center py-6 text-sm text-muted-foreground border rounded-lg">
+                    Select an ingredient above or click "Add Low Stock" to populate the request
+                  </div>
+                )}
+
+                {/* Notes */}
+                <div className="space-y-1.5">
+                  <Label>Notes (optional)</Label>
+                  <Textarea
+                    placeholder="Any special instructions or reason for request..."
+                    value={prNotes}
+                    onChange={e => setPrNotes(e.target.value)}
+                    rows={2}
+                  />
+                </div>
+
+                <div className="flex justify-end gap-2 pt-1">
+                  <Button variant="outline" onClick={() => setShowCreatePR(false)}>Cancel</Button>
+                  <Button className="gradient-primary text-primary-foreground" onClick={handlePrSave} disabled={prSaving}>
+                    {prSaving ? "Submitting..." : "Submit Request"}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Stock Table */}
           <Card className="shadow-sm"><CardContent>
@@ -920,272 +1311,6 @@ const Warehouses = () => {
         </DialogContent>
       </Dialog>
 
-      {/* ── Add Purchase Dialog ── */}
-      <Dialog open={showAddPurchase} onOpenChange={setShowAddPurchase}>
-        <DialogContent className="w-full max-w-[95vw] sm:max-w-3xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Add Purchase</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-5">
-
-            {/* Approved Request */}
-            <Card className="shadow-sm">
-              <CardHeader className="pb-2">
-                <Label className="text-xs text-muted-foreground uppercase tracking-wider">Link to Approved Request (Optional)</Label>
-              </CardHeader>
-              <CardContent>
-                <Select
-                  value={apSelectedRequestId || "__none__"}
-                  onValueChange={(v) => handleApSelectRequest(v === "__none__" ? "" : v)}
-                >
-                  <SelectTrigger><SelectValue placeholder="Select an approved request" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none__">— No Request —</SelectItem>
-                    {apApprovedRequests.map(pr => {
-                      const activeItems = pr.items.filter(i => (i.approvedQty ?? 0) > 0).length;
-                      return (
-                        <SelectItem key={pr.id} value={pr.id}>
-                          {pr.requestNo} — {pr.warehouse.name} ({activeItems} items) — by {pr.requestedBy.name}
-                        </SelectItem>
-                      );
-                    })}
-                  </SelectContent>
-                </Select>
-                {apSelectedRequestId && (
-                  <p className="text-xs text-muted-foreground mt-1.5">Approved items loaded below. You can still add manual items.</p>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Purchase Details */}
-            <Card className="shadow-sm">
-              <CardHeader className="pb-2">
-                <Label className="text-xs text-muted-foreground uppercase tracking-wider">Purchase Details</Label>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                  <div className="space-y-1.5">
-                    <Label>Supplier (optional)</Label>
-                    <Select value={apForm.supplierId} onValueChange={(v) => setApForm(p => ({ ...p, supplierId: v }))}>
-                      <SelectTrigger className="h-11"><SelectValue placeholder="Select Supplier" /></SelectTrigger>
-                      <SelectContent>
-                        {apSuppliers.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label>Invoice Number</Label>
-                    <Input className="h-11" placeholder="e.g. INV-001" value={apForm.invoiceNumber} onChange={e => setApForm(p => ({ ...p, invoiceNumber: e.target.value }))} />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label>Warehouse</Label>
-                    <Select
-                      value={apWarehouseId || "__none__"}
-                      onValueChange={(v) => setApWarehouseId(v === "__none__" ? "" : v)}
-                      disabled={!!apSelectedRequestId}
-                    >
-                      <SelectTrigger className="h-11"><SelectValue placeholder="Select warehouse" /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__none__">No warehouse</SelectItem>
-                        {warehouses.filter(w => isSuperAdmin ? true : w.type === "BRANCH").map(w => (
-                          <SelectItem key={w.id} value={w.id}>{w.name} ({w.type})</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Items */}
-            <Card className="shadow-sm">
-              <CardHeader className="pb-2 flex flex-row items-center justify-between">
-                <Label className="text-xs text-muted-foreground uppercase tracking-wider">
-                  Items ({apItems.filter(i => i.ingredientId).length})
-                </Label>
-                <Button variant="outline" size="sm" onClick={apAddItemRow} className="h-8 min-h-[32px]">
-                  <Plus className="h-3 w-3 mr-1" />Add Item
-                </Button>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {apItems.filter(i => i.ingredientId || i.source === "manual").length === 0 && (
-                  <div className="text-center py-8 text-muted-foreground text-sm">
-                    Select an approved request above or add items manually
-                  </div>
-                )}
-
-                {/* Approved Items */}
-                {apApprovedCount > 0 && (
-                  <div className="space-y-2">
-                    {apSelectedRequestId && (
-                      <div className="flex items-center gap-2">
-                        <Badge variant="outline" className="text-xs font-medium border-primary/40 text-primary">From Request</Badge>
-                        <span className="text-xs text-muted-foreground">{apApprovedRequests.find(r => r.id === apSelectedRequestId)?.requestNo}</span>
-                      </div>
-                    )}
-                    <div className="space-y-2">
-                      {apItems.map((item, originalIdx) => {
-                        if (item.source !== "approved") return null;
-                        const receivedQty = item.qty - (item.wasteQty ?? 0);
-                        return (
-                          <div key={originalIdx} className="border rounded-lg p-3 space-y-2 border-l-2 border-l-primary/40 bg-primary/5">
-                            <div className="flex items-center justify-between gap-2 flex-wrap min-w-0">
-                              <span className="font-medium text-sm truncate min-w-0">{item.name}</span>
-                              <Badge variant="secondary" className="text-xs shrink-0">Approved: {item.approvedQty ?? item.qty} {item.unit}</Badge>
-                            </div>
-                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                              <div className="space-y-1">
-                                <Label className="text-xs text-muted-foreground">Purchased Qty ({item.unit})</Label>
-                                <Input className="h-10 text-sm" type="number" min={0} value={item.qty || ""} onChange={e => apUpdateItemRow(originalIdx, "qty", Number(e.target.value))} />
-                              </div>
-                              <div className="space-y-1">
-                                <Label className="text-xs text-muted-foreground">Waste Qty</Label>
-                                <Input className="h-10 text-sm" type="number" min={0} max={item.qty} value={item.wasteQty || ""} onChange={e => apUpdateItemRow(originalIdx, "wasteQty", Number(e.target.value))} />
-                              </div>
-                              <div className="space-y-1">
-                                <Label className="text-xs text-muted-foreground">Unit Price</Label>
-                                <Input className="h-10 text-sm" type="number" min={0} value={item.unitPrice || ""} onChange={e => apUpdateItemRow(originalIdx, "unitPrice", Number(e.target.value))} />
-                              </div>
-                              <div className="space-y-1">
-                                <Label className="text-xs text-muted-foreground">Expiry Date</Label>
-                                <DatePickerField value={item.expiryDate || ""} onChange={v => apUpdateItemRow(originalIdx, "expiryDate", v)} />
-                              </div>
-                            </div>
-                            {item.wasteQty > 0 && (
-                              <div className="space-y-1">
-                                <Label className="text-xs text-muted-foreground">Waste Reason</Label>
-                                <Input className="h-10 text-sm" placeholder="e.g. Broken during transport" value={item.wasteReason} onChange={e => apUpdateItemRow(originalIdx, "wasteReason", e.target.value)} />
-                              </div>
-                            )}
-                            <div className="flex items-center justify-between pt-1 text-sm">
-                              <span className="text-muted-foreground">Line Total:</span>
-                              <div className="text-right">
-                                <div className="font-medium">{currency} {(item.qty * item.unitPrice).toLocaleString()}</div>
-                                {item.wasteQty > 0 && (
-                                  <Badge variant="secondary" className="text-xs bg-success/10 text-success mt-0.5">Received: {receivedQty} {item.unit}</Badge>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-
-                {/* Separator between approved and manual */}
-                {apApprovedCount > 0 && apManualCount > 0 && (
-                  <div className="flex items-center gap-2 py-1">
-                    <Separator className="flex-1" />
-                    <span className="text-xs text-muted-foreground whitespace-nowrap">Additional Items</span>
-                    <Separator className="flex-1" />
-                  </div>
-                )}
-
-                {/* Manual Items */}
-                <div className="space-y-2">
-                  {apItems.map((item, originalIdx) => {
-                    if (item.source !== "manual") return null;
-                    const receivedQty = item.qty - (item.wasteQty ?? 0);
-                    return (
-                      <div key={originalIdx} className="border rounded-lg p-3 space-y-2">
-                        <div className="flex gap-2">
-                          <Select value={item.ingredientId} onValueChange={v => apUpdateItemRow(originalIdx, "ingredientId", v)}>
-                            <SelectTrigger className="h-11 text-sm flex-1"><SelectValue placeholder="Select Ingredient" /></SelectTrigger>
-                            <SelectContent>
-                              {apIngredients.map(ig => <SelectItem key={ig.id} value={ig.id}>{ig.name}</SelectItem>)}
-                            </SelectContent>
-                          </Select>
-                          <Button
-                            type="button" variant="ghost" size="icon" className="h-11 w-11 shrink-0" title="Add new ingredient"
-                            onClick={() => { setApQuickAddTargetIdx(originalIdx); setApQuickAddForm({ name: "", categoryId: "", unitId: "" }); setApQuickAddOpen(true); }}
-                          >
-                            <Plus className="h-4 w-4" />
-                          </Button>
-                          <Button variant="ghost" size="icon" className="h-11 w-11 shrink-0 text-destructive" onClick={() => apRemoveItemRow(originalIdx)}>
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                          <div className="space-y-1">
-                            <Label className="text-xs text-muted-foreground">Qty {item.unit ? `(${item.unit})` : ""}</Label>
-                            <Input className="h-11 text-sm" type="number" min={0} placeholder="Qty" value={item.qty || ""} onChange={e => apUpdateItemRow(originalIdx, "qty", Number(e.target.value))} />
-                          </div>
-                          <div className="space-y-1">
-                            <Label className="text-xs text-muted-foreground">Waste Qty</Label>
-                            <Input className="h-11 text-sm" type="number" min={0} max={item.qty} placeholder="Waste" value={item.wasteQty || ""} onChange={e => apUpdateItemRow(originalIdx, "wasteQty", Number(e.target.value))} />
-                          </div>
-                          <div className="space-y-1">
-                            <Label className="text-xs text-muted-foreground">Unit Price</Label>
-                            <Input className="h-11 text-sm" type="number" min={0} placeholder="Price" value={item.unitPrice || ""} onChange={e => apUpdateItemRow(originalIdx, "unitPrice", Number(e.target.value))} />
-                          </div>
-                          <div className="space-y-1">
-                            <Label className="text-xs text-muted-foreground">Expiry Date</Label>
-                            <DatePickerField value={item.expiryDate || ""} onChange={v => apUpdateItemRow(originalIdx, "expiryDate", v)} />
-                          </div>
-                        </div>
-                        <div className="flex flex-col sm:flex-row gap-2 items-start sm:items-center justify-between">
-                          <div className="flex-1 w-full">
-                            {item.wasteQty > 0 && (
-                              <Input className="h-9 text-xs" placeholder="Waste reason (e.g. Broken during transport)" value={item.wasteReason} onChange={e => apUpdateItemRow(originalIdx, "wasteReason", e.target.value)} />
-                            )}
-                          </div>
-                          <div className="text-right shrink-0">
-                            <div className="text-sm font-medium whitespace-nowrap">{currency} {(item.qty * item.unitPrice).toLocaleString()}</div>
-                            {item.wasteQty > 0 && (
-                              <Badge variant="secondary" className="text-xs bg-success/10 text-success mt-0.5">Received: {receivedQty}</Badge>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Billing Summary */}
-            <Card className="shadow-sm">
-              <CardHeader className="pb-2">
-                <Label className="text-xs text-muted-foreground uppercase tracking-wider">Billing Summary</Label>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2 w-full max-w-sm ml-auto">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">Subtotal (items)</span>
-                    <span className="font-medium tabular-nums">{currency} {apSubtotal.toLocaleString()}</span>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <Label className="text-sm shrink-0 min-w-[7rem]">Shipping Cost</Label>
-                    <Input className="h-9 text-sm text-right flex-1 min-w-0" type="number" min={0} step={1} placeholder="0" value={apShipping || ""} onChange={e => setApShipping(Number(e.target.value))} />
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <Label className="text-sm shrink-0 min-w-[7rem]">Tax Amount</Label>
-                    <Input className="h-9 text-sm text-right flex-1 min-w-0" type="number" min={0} step={1} placeholder="0" value={apTax || ""} onChange={e => setApTax(Number(e.target.value))} />
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <Label className="text-sm shrink-0 min-w-[7rem]">Miscellaneous</Label>
-                    <Input className="h-9 text-sm text-right flex-1 min-w-0" type="number" min={0} step={1} placeholder="0" value={apMisc || ""} onChange={e => setApMisc(Number(e.target.value))} />
-                  </div>
-                  <Separator />
-                  <div className="flex items-center justify-between font-semibold text-base">
-                    <span>Grand Total</span>
-                    <span className="text-lg tabular-nums">{currency} {apGrandTotal.toLocaleString()}</span>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          <DialogFooter className="flex-col sm:flex-row gap-2 pt-2">
-            <Button variant="outline" onClick={() => setShowAddPurchase(false)} className="h-11 sm:h-auto">Cancel</Button>
-            <Button className="gradient-primary text-primary-foreground h-11 sm:h-auto" onClick={handleApSave} disabled={apSaving}>
-              {apSaving ? "Saving..." : "Save Purchase"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
       {/* ── Quick Add Ingredient Dialog ── */}
       <Dialog open={apQuickAddOpen} onOpenChange={setApQuickAddOpen}>
         <DialogContent className="max-w-sm">
@@ -1224,110 +1349,6 @@ const Warehouses = () => {
         </DialogContent>
       </Dialog>
 
-      {/* ── Create Purchase Request Dialog ── */}
-      <Dialog open={showCreatePR} onOpenChange={setShowCreatePR}>
-        <DialogContent className="w-full max-w-[95vw] sm:max-w-3xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>New Purchase Request</DialogTitle></DialogHeader>
-          <div className="space-y-4">
-
-            {/* Warehouse */}
-            <div className="space-y-1.5">
-              <Label>Target Warehouse (Branch Store) *</Label>
-              {warehouses.filter(w => w.type === "BRANCH").length <= 1 ? (
-                <Input value={warehouses.filter(w => w.type === "BRANCH")[0]?.name ?? "No branch warehouses"} disabled />
-              ) : (
-                <Select value={prWarehouseId} onValueChange={setPrWarehouseId}>
-                  <SelectTrigger><SelectValue placeholder="Select branch warehouse" /></SelectTrigger>
-                  <SelectContent>
-                    {warehouses.filter(w => w.type === "BRANCH").map(w => (
-                      <SelectItem key={w.id} value={w.id}>{w.name}{w.outlet ? ` — ${w.outlet.name}` : ""}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-            </div>
-
-            {/* Add Ingredient + Low Stock */}
-            <div className="flex gap-2 items-end">
-              <div className="flex-1">
-                <Label className="text-xs text-muted-foreground">Add Ingredient</Label>
-                <Select value={prAddIngId} onValueChange={setPrAddIngId}>
-                  <SelectTrigger><SelectValue placeholder="Select ingredient" /></SelectTrigger>
-                  <SelectContent>
-                    {prIngredients
-                      .filter(ig => !prItems.some(i => i.ingredientId === ig.id))
-                      .map(ig => (
-                        <SelectItem key={ig.id} value={ig.id}>
-                          {ig.name} (Stock: {warehouseStockMap[ig.id] ?? 0} {ig.unit?.name ?? ""}){Number(ig.currentStock) <= Number(ig.lowStockLevel) ? " ⚠" : ""}
-                        </SelectItem>
-                      ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <Button variant="outline" onClick={prAddIngredient} disabled={!prAddIngId}>
-                <Plus className="h-4 w-4 mr-1" />Add
-              </Button>
-              <Button variant="outline" onClick={prAddLowStockItems} disabled={!prWarehouseId || prLowStockLoading}>
-                <AlertTriangle className="h-4 w-4 mr-1" />{prLowStockLoading ? "Loading..." : "Add Low Stock"}
-              </Button>
-            </div>
-
-            {/* Items Table — matches PurchaseRequests.tsx */}
-            {prItems.length > 0 ? (
-              <div className="rounded-lg border overflow-auto">
-                <Table>
-                  <TableHeader><TableRow className="bg-muted/50">
-                    <TableHead>Ingredient</TableHead><TableHead>Unit</TableHead><TableHead>Current Stock</TableHead><TableHead>Requested Qty</TableHead><TableHead></TableHead>
-                  </TableRow></TableHeader>
-                  <TableBody>
-                    {prItems.map((item, idx) => (
-                      <TableRow key={item.ingredientId}>
-                        <TableCell className="font-medium">{item.name}</TableCell>
-                        <TableCell className="text-sm">{item.unit || "—"}</TableCell>
-                        <TableCell className="text-sm">{warehouseStockMap[item.ingredientId] ?? 0}</TableCell>
-                        <TableCell>
-                          <Input type="number" className="w-24 h-8" min={1}
-                            value={item.requestedQty || ""}
-                            onChange={e => setPrItems(prev => prev.map((it, i) => i === idx ? { ...it, requestedQty: Number(e.target.value) } : it))}
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive"
-                            onClick={() => setPrItems(prev => prev.filter((_, i) => i !== idx))}>
-                            <Trash2 className="h-3 w-3" />
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            ) : (
-              <div className="text-center py-6 text-sm text-muted-foreground border rounded-lg">
-                Select an ingredient above or click "Add Low Stock" to populate the request
-              </div>
-            )}
-
-            {/* Notes */}
-            <div className="space-y-1.5">
-              <Label>Notes (optional)</Label>
-              <Textarea
-                placeholder="Any special instructions or reason for request..."
-                value={prNotes}
-                onChange={e => setPrNotes(e.target.value)}
-                rows={2}
-              />
-            </div>
-          </div>
-
-          <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setShowCreatePR(false)}>Cancel</Button>
-            <Button className="gradient-primary text-primary-foreground" onClick={handlePrSave} disabled={prSaving}>
-              {prSaving ? "Submitting..." : "Submit Request"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 };

@@ -16,7 +16,7 @@ import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { Plus, Search, Eye, Trash2, ShoppingCart, Printer, CalendarIcon, User, Phone, Mail } from "lucide-react";
+import { Plus, Search, Eye, Trash2, ShoppingCart, Printer, CalendarIcon, User, Phone, Mail, ChevronUp, X } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { format, parseISO } from "date-fns";
@@ -451,113 +451,20 @@ const Purchases = () => {
         title="Purchases"
         subtitle="Purchase orders and invoices"
         actions={
-          <Button className="gradient-primary text-primary-foreground" onClick={openAdd}>
-            <Plus className="h-4 w-4 mr-2" />
-            Add Purchase
+          <Button className="gradient-primary text-primary-foreground" onClick={() => { if (showDialog) { setShowDialog(false); } else { openAdd(); } }}>
+            {showDialog ? <><X className="h-4 w-4 mr-2" />Close Form</> : <><Plus className="h-4 w-4 mr-2" />Add Purchase</>}
           </Button>
         }
       />
 
-      <Card className="shadow-sm">
-        <CardHeader className="pb-3">
-          <div className="relative max-w-sm">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search by supplier or invoice..."
-              className="pl-9"
-            />
-          </div>
-        </CardHeader>
-        <CardContent>
-          {filtered.length === 0 ? (
-            <div className="text-center py-12">
-              <ShoppingCart className="h-12 w-12 text-muted-foreground mx-auto mb-3 opacity-30" />
-              <p className="text-muted-foreground">No purchases found</p>
-              <p className="text-xs text-muted-foreground mt-1.5">Add your first purchase to get started.</p>
-              <Button size="sm" className="gradient-primary text-primary-foreground mt-3" onClick={openAdd}>
-                <Plus className="h-4 w-4 mr-1" />
-                Add Purchase
-              </Button>
-            </div>
-          ) : (
-            <>
-              <div className="rounded-lg border overflow-auto max-h-[calc(100vh-300px)]">
-                <Table>
-                  <TableHeader className="sticky top-0 z-10 bg-card">
-                    <TableRow className="bg-muted/50 hover:bg-muted/50">
-                      <TableHead>SN</TableHead>
-                      <TableHead>Date</TableHead>
-                      <TableHead>Invoice #</TableHead>
-                      <TableHead>Supplier</TableHead>
-                      <TableHead>Warehouse</TableHead>
-                      <TableHead>Items</TableHead>
-                      <TableHead>Total</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filtered.map((p, i) => (
-                      <TableRow key={p.id} className="hover:bg-muted/30 transition-colors">
-                        <TableCell>{(page - 1) * 20 + i + 1}</TableCell>
-                        <TableCell>{formatDate(p.date)}</TableCell>
-                        <TableCell className="font-medium">{p.invoiceNumber || "—"}</TableCell>
-                        <TableCell>{p.supplierName || "—"}</TableCell>
-                        <TableCell className="text-sm">{p.warehouseName || "—"}</TableCell>
-                        <TableCell>{Array.isArray(p.items) ? p.items.length : 0}</TableCell>
-                        <TableCell className="font-medium">
-                          {currency} {(p.total ?? 0).toLocaleString()}
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="secondary" className={payColor[p.status] || ""}>
-                            {p.status}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex gap-1">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-7 w-7"
-                              onClick={() => setShowDetail(p)}
-                              title="View / Receipt"
-                            >
-                              <Eye className="h-3 w-3" />
-                            </Button>
-                            {isSuperAdmin && (
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-7 w-7 text-destructive"
-                                onClick={() => setDeleteId(p.id)}
-                                title="Delete"
-                              >
-                                <Trash2 className="h-3 w-3" />
-                              </Button>
-                            )}
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-              <TablePagination currentPage={page} totalItems={totalItems} onPageChange={setPage} />
-            </>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* ── Add Purchase Dialog ── */}
-      <Dialog open={showDialog} onOpenChange={setShowDialog}>
-        <DialogContent className="w-full max-w-[95vw] sm:max-w-3xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Add Purchase</DialogTitle>
-          </DialogHeader>
-
-          <div className="space-y-5">
+      {/* ── Inline Add Purchase Form Panel ── */}
+      {showDialog && (
+        <Card className="shadow-sm border-primary/30 bg-primary/[0.02]">
+          <CardHeader className="pb-2 flex flex-row items-center justify-between">
+            <Label className="text-xs text-muted-foreground uppercase tracking-wider">Add Purchase</Label>
+            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setShowDialog(false)}><ChevronUp className="h-4 w-4" /></Button>
+          </CardHeader>
+          <CardContent className="space-y-5">
             {/* ── Section: Approved Request ── */}
             {/* Admin/Super Admin: optional. Manager: required */}
             <Card className="shadow-sm">
@@ -969,22 +876,113 @@ const Purchases = () => {
                 </div>
               </CardContent>
             </Card>
-          </div>
 
-          <DialogFooter className="flex-col sm:flex-row gap-2 pt-2">
-            <Button variant="outline" onClick={() => setShowDialog(false)} className="h-11 sm:h-auto">
-              Cancel
-            </Button>
-            <Button
-              className="gradient-primary text-primary-foreground h-11 sm:h-auto"
-              onClick={() => handleSave("paid")}
-              disabled={saving}
-            >
-              {saving ? "Saving..." : "Save Purchase"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+            <div className="flex justify-end gap-2 pt-1">
+              <Button variant="outline" size="sm" onClick={() => setShowDialog(false)}>Cancel</Button>
+              <Button
+                className="gradient-primary text-primary-foreground"
+                size="sm"
+                onClick={() => handleSave("paid")}
+                disabled={saving}
+              >
+                {saving ? "Saving..." : "Save Purchase"}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      <Card className="shadow-sm">
+        <CardHeader className="pb-3">
+          <div className="relative max-w-sm">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search by supplier or invoice..."
+              className="pl-9"
+            />
+          </div>
+        </CardHeader>
+        <CardContent>
+          {filtered.length === 0 ? (
+            <div className="text-center py-12">
+              <ShoppingCart className="h-12 w-12 text-muted-foreground mx-auto mb-3 opacity-30" />
+              <p className="text-muted-foreground">No purchases found</p>
+              <p className="text-xs text-muted-foreground mt-1.5">Add your first purchase to get started.</p>
+              <Button size="sm" className="gradient-primary text-primary-foreground mt-3" onClick={openAdd}>
+                <Plus className="h-4 w-4 mr-1" />
+                Add Purchase
+              </Button>
+            </div>
+          ) : (
+            <>
+              <div className="rounded-lg border overflow-auto max-h-[calc(100vh-300px)]">
+                <Table>
+                  <TableHeader className="sticky top-0 z-10 bg-card">
+                    <TableRow className="bg-muted/50 hover:bg-muted/50">
+                      <TableHead>SN</TableHead>
+                      <TableHead>Date</TableHead>
+                      <TableHead>Invoice #</TableHead>
+                      <TableHead>Supplier</TableHead>
+                      <TableHead>Warehouse</TableHead>
+                      <TableHead>Items</TableHead>
+                      <TableHead>Total</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filtered.map((p, i) => (
+                      <TableRow key={p.id} className="hover:bg-muted/30 transition-colors">
+                        <TableCell>{(page - 1) * 20 + i + 1}</TableCell>
+                        <TableCell>{formatDate(p.date)}</TableCell>
+                        <TableCell className="font-medium">{p.invoiceNumber || "—"}</TableCell>
+                        <TableCell>{p.supplierName || "—"}</TableCell>
+                        <TableCell className="text-sm">{p.warehouseName || "—"}</TableCell>
+                        <TableCell>{Array.isArray(p.items) ? p.items.length : 0}</TableCell>
+                        <TableCell className="font-medium">
+                          {currency} {(p.total ?? 0).toLocaleString()}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="secondary" className={payColor[p.status] || ""}>
+                            {p.status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex gap-1">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7"
+                              onClick={() => setShowDetail(p)}
+                              title="View / Receipt"
+                            >
+                              <Eye className="h-3 w-3" />
+                            </Button>
+                            {isSuperAdmin && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 text-destructive"
+                                onClick={() => setDeleteId(p.id)}
+                                title="Delete"
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </Button>
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+              <TablePagination currentPage={page} totalItems={totalItems} onPageChange={setPage} />
+            </>
+          )}
+        </CardContent>
+      </Card>
 
       {/* ── Detail / Receipt Dialog ── */}
       <Dialog open={!!showDetail} onOpenChange={() => setShowDetail(null)}>

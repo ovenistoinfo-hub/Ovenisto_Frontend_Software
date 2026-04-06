@@ -14,7 +14,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { Plus, Search, Eye, Truck, Trash2, ArrowLeftRight, XCircle, PackageCheck, Printer, Phone, User, FileText, ClipboardList, AlertTriangle } from "lucide-react";
+import { Plus, Search, Eye, Truck, Trash2, ArrowLeftRight, XCircle, PackageCheck, Printer, Phone, User, FileText, ClipboardList, AlertTriangle, ChevronUp, X } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/ui/page-header";
@@ -500,8 +500,8 @@ const Transfers = () => {
         title="Stock Transfers"
         subtitle="Warehouse-to-warehouse challan management"
         actions={canCreate ? (
-          <Button className="gradient-primary text-primary-foreground" onClick={openAdd}>
-            <Plus className="h-4 w-4 mr-2" />New Transfer
+          <Button className="gradient-primary text-primary-foreground" onClick={() => { if (showDialog) { setShowDialog(false); } else { openAdd(); } }}>
+            {showDialog ? <><X className="h-4 w-4 mr-2" />Close Form</> : <><Plus className="h-4 w-4 mr-2" />New Transfer</>}
           </Button>
         ) : undefined}
       />
@@ -523,110 +523,15 @@ const Transfers = () => {
         <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by invoice no, demand no or warehouse..." className="pl-9" />
       </div>
 
-      {/* Single-section view for KM (incoming only) and Super Admin (outgoing only) */}
-      {showOutgoingSection && showIncomingSection ? (
-        /* Both sections — Manager / Admin */
-        <Tabs defaultValue="outgoing">
-          <TabsList>
-            <TabsTrigger value="outgoing">
-              <Truck className="h-4 w-4 mr-1.5" />
-              Outgoing ({outgoingChallans.length})
-            </TabsTrigger>
-            <TabsTrigger value="incoming">
-              <PackageCheck className="h-4 w-4 mr-1.5" />
-              Incoming ({incomingChallans.length})
-            </TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="outgoing" className="mt-4">
-            <Card className="shadow-sm">
-              <CardHeader className="pb-2">
-                <p className="text-xs text-muted-foreground">
-                  Challans you dispatch from your branch to kitchens. Dispatch pending challans here.
-                </p>
-              </CardHeader>
-              <CardContent>
-                <ChallanTable
-                  list={displayedOutgoing}
-                  emptyMsg="No outgoing transfers found"
-                  showDispatch={true}
-                  showReceive={false}
-                />
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="incoming" className="mt-4">
-            <Card className="shadow-sm">
-              <CardHeader className="pb-2">
-                <p className="text-xs text-muted-foreground">
-                  Stock dispatched from main warehouse to your branch. Receive once goods are verified.
-                </p>
-              </CardHeader>
-              <CardContent>
-                <ChallanTable
-                  list={displayedIncoming}
-                  emptyMsg="No incoming transfers found"
-                  showDispatch={false}
-                  showReceive={true}
-                />
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
-      ) : showOutgoingSection ? (
-        /* Super Admin — outgoing only */
-        <Card className="shadow-sm">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm flex items-center gap-2">
-              <Truck className="h-4 w-4" />
-              Outgoing Transfers ({outgoingChallans.length})
-            </CardTitle>
-            <p className="text-xs text-muted-foreground">
-              Challans dispatched from main warehouse to branches. Dispatch pending challans here.
-            </p>
+      {/* Inline create form — togglable panel */}
+      {showDialog && canCreate && (
+        <Card className="shadow-sm border-primary/30 bg-primary/[0.02]">
+          <CardHeader className="pb-2 flex flex-row items-center justify-between">
+            <Label className="text-xs text-muted-foreground uppercase tracking-wider">New Stock Transfer</Label>
+            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setShowDialog(false)}><ChevronUp className="h-4 w-4" /></Button>
           </CardHeader>
-          <CardContent>
-            <ChallanTable
-              list={displayedOutgoing}
-              emptyMsg="No outgoing transfers found"
-              showDispatch={true}
-              showReceive={false}
-            />
-          </CardContent>
-        </Card>
-      ) : (
-        /* Kitchen Manager — incoming only */
-        <Card className="shadow-sm">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm flex items-center gap-2">
-              <PackageCheck className="h-4 w-4" />
-              Incoming Transfers ({incomingChallans.length})
-            </CardTitle>
-            <p className="text-xs text-muted-foreground">
-              Stock dispatched to your kitchen. Confirm receipt once goods are physically verified.
-            </p>
-          </CardHeader>
-          <CardContent>
-            <ChallanTable
-              list={displayedIncoming}
-              emptyMsg="No incoming transfers found"
-              showDispatch={false}
-              showReceive={true}
-            />
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Create Challan Dialog — purchase-form-style layout */}
-      <Dialog open={showDialog} onOpenChange={setShowDialog}>
-        <DialogContent className="w-full max-w-[95vw] sm:max-w-3xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Create Stock Transfer</DialogTitle>
-          </DialogHeader>
-
-          <div className="space-y-5">
-            {/* ── Section: Transfer Details ── */}
+          <CardContent className="space-y-5">
+            {/* ── Transfer Details ── */}
             <Card className="shadow-sm">
               <CardHeader className="pb-2">
                 <Label className="text-xs text-muted-foreground uppercase tracking-wider">Transfer Details</Label>
@@ -765,17 +670,111 @@ const Transfers = () => {
               </CardContent>
             </Card>
 
-          </div>
+            <div className="flex justify-end gap-2 pt-1">
+              <Button variant="outline" size="sm" onClick={() => setShowDialog(false)}>Cancel</Button>
+              <Button className="gradient-primary text-primary-foreground" size="sm" onClick={handleCreateChallan} disabled={saving}>
+                <Truck className="h-4 w-4 mr-1.5" />
+                {saving ? "Creating..." : "Create Transfer"}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
-          <DialogFooter className="flex-col sm:flex-row gap-2 pt-2">
-            <Button variant="outline" onClick={() => setShowDialog(false)} className="h-11 sm:h-auto">Cancel</Button>
-            <Button className="gradient-primary text-primary-foreground h-11 sm:h-auto" onClick={handleCreateChallan} disabled={saving}>
+      {/* Single-section view for KM (incoming only) and Super Admin (outgoing only) */}
+      {showOutgoingSection && showIncomingSection ? (
+        /* Both sections — Manager / Admin */
+        <Tabs defaultValue="outgoing">
+          <TabsList>
+            <TabsTrigger value="outgoing">
               <Truck className="h-4 w-4 mr-1.5" />
-              {saving ? "Creating..." : "Create Transfer"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+              Outgoing ({outgoingChallans.length})
+            </TabsTrigger>
+            <TabsTrigger value="incoming">
+              <PackageCheck className="h-4 w-4 mr-1.5" />
+              Incoming ({incomingChallans.length})
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="outgoing" className="mt-4">
+            <Card className="shadow-sm">
+              <CardHeader className="pb-2">
+                <p className="text-xs text-muted-foreground">
+                  Challans you dispatch from your branch to kitchens. Dispatch pending challans here.
+                </p>
+              </CardHeader>
+              <CardContent>
+                <ChallanTable
+                  list={displayedOutgoing}
+                  emptyMsg="No outgoing transfers found"
+                  showDispatch={true}
+                  showReceive={false}
+                />
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="incoming" className="mt-4">
+            <Card className="shadow-sm">
+              <CardHeader className="pb-2">
+                <p className="text-xs text-muted-foreground">
+                  Stock dispatched from main warehouse to your branch. Receive once goods are verified.
+                </p>
+              </CardHeader>
+              <CardContent>
+                <ChallanTable
+                  list={displayedIncoming}
+                  emptyMsg="No incoming transfers found"
+                  showDispatch={false}
+                  showReceive={true}
+                />
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
+      ) : showOutgoingSection ? (
+        /* Super Admin — outgoing only */
+        <Card className="shadow-sm">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <Truck className="h-4 w-4" />
+              Outgoing Transfers ({outgoingChallans.length})
+            </CardTitle>
+            <p className="text-xs text-muted-foreground">
+              Challans dispatched from main warehouse to branches. Dispatch pending challans here.
+            </p>
+          </CardHeader>
+          <CardContent>
+            <ChallanTable
+              list={displayedOutgoing}
+              emptyMsg="No outgoing transfers found"
+              showDispatch={true}
+              showReceive={false}
+            />
+          </CardContent>
+        </Card>
+      ) : (
+        /* Kitchen Manager — incoming only */
+        <Card className="shadow-sm">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <PackageCheck className="h-4 w-4" />
+              Incoming Transfers ({incomingChallans.length})
+            </CardTitle>
+            <p className="text-xs text-muted-foreground">
+              Stock dispatched to your kitchen. Confirm receipt once goods are physically verified.
+            </p>
+          </CardHeader>
+          <CardContent>
+            <ChallanTable
+              list={displayedIncoming}
+              emptyMsg="No incoming transfers found"
+              showDispatch={false}
+              showReceive={true}
+            />
+          </CardContent>
+        </Card>
+      )}
 
       {/* Detail Dialog */}
       <Dialog open={!!showDetail} onOpenChange={() => setShowDetail(null)}>

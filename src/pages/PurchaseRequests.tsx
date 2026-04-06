@@ -18,7 +18,7 @@ import { TablePagination, paginate } from "@/components/TablePagination";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import {
-  ClipboardList, Plus, Search, Eye, PackageX, Trash2, Check, X, AlertTriangle, User, Phone, Mail, Printer,
+  ClipboardList, Plus, Search, Eye, PackageX, Trash2, Check, X, AlertTriangle, User, Phone, Mail, Printer, ChevronUp,
 } from "lucide-react";
 import {
   purchaseRequestService,
@@ -321,7 +321,11 @@ const PurchaseRequests = () => {
         icon={<ClipboardList className="h-5 w-5" />}
         title="Purchase Requests"
         subtitle="Ingredient requisition workflow"
-        actions={canCreate ? <Button className="gradient-primary text-primary-foreground" onClick={openCreateDialog}><Plus className="h-4 w-4 mr-2" />New Request</Button> : undefined}
+        actions={canCreate ? (
+          showCreate
+            ? <Button variant="outline" onClick={() => setShowCreate(false)}><X className="h-4 w-4 mr-2" />Close Form</Button>
+            : <Button className="gradient-primary text-primary-foreground" onClick={openCreateDialog}><Plus className="h-4 w-4 mr-2" />New Request</Button>
+        ) : undefined}
       />
 
       {/* Status Filters */}
@@ -335,76 +339,16 @@ const PurchaseRequests = () => {
         ))}
       </div>
 
-      {/* Search + List */}
-      <Card className="shadow-sm">
-        <CardHeader className="pb-3">
-          <div className="relative max-w-sm">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} placeholder="Search by request # or requester..." className="pl-9" />
-          </div>
-        </CardHeader>
-        <CardContent>
-          {filtered.length === 0 ? (
-            <div className="text-center py-12">
-              <ClipboardList className="h-12 w-12 text-muted-foreground mx-auto mb-3 opacity-30" />
-              <p className="text-muted-foreground">No purchase requests found</p>
-            </div>
-          ) : (
-            <>
-              <div className="rounded-lg border overflow-auto max-h-[calc(100vh-350px)]">
-                <Table>
-                  <TableHeader className="sticky top-0 z-10 bg-card">
-                    <TableRow className="bg-muted/50 hover:bg-muted/50">
-                      <TableHead>SN</TableHead>
-                      <TableHead>Request #</TableHead>
-                      <TableHead>Date</TableHead>
-                      <TableHead>Requester</TableHead>
-                      <TableHead>Warehouse</TableHead>
-                      <TableHead className="text-center">Items</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {paged.map((pr, i) => {
-                      const st = STATUS_STYLE[pr.status] ?? { label: pr.status, cls: "" };
-                      return (
-                        <TableRow key={pr.id} className="hover:bg-muted/30 transition-colors">
-                          <TableCell className="text-muted-foreground">{(page - 1) * 15 + i + 1}</TableCell>
-                          <TableCell className="font-mono text-sm font-medium">{pr.requestNo}</TableCell>
-                          <TableCell className="text-sm">{new Date(pr.createdAt).toLocaleDateString()}</TableCell>
-                          <TableCell>
-                            <div className="text-sm font-medium">{pr.requestedBy.name}</div>
-                            <div className="text-xs text-muted-foreground">{pr.requestedBy.role}</div>
-                          </TableCell>
-                          <TableCell className="text-sm">{pr.warehouse.name}</TableCell>
-                          <TableCell className="text-center">{pr.items.length}</TableCell>
-                          <TableCell><Badge variant="secondary" className={st.cls}>{st.label}</Badge></TableCell>
-                          <TableCell>
-                            <div className="flex gap-1">
-                              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openDetail(pr)} title="View / Receipt"><Eye className="h-3 w-3" /></Button>
-                              {pr.status === "PENDING" && pr.requestedBy.id === user?.id && (
-                                <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => setCancelId(pr.id)} title="Cancel"><X className="h-3 w-3" /></Button>
-                              )}
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
-              </div>
-              <TablePagination currentPage={page} totalItems={filtered.length} onPageChange={setPage} pageSize={15} />
-            </>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* ─── Create Request Dialog ─── */}
-      <Dialog open={showCreate} onOpenChange={setShowCreate}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>New Purchase Request</DialogTitle></DialogHeader>
-          <div className="space-y-4">
+      {/* ─── Create Request Inline Form ─── */}
+      {showCreate && (
+        <Card className="shadow-sm border-primary/30 bg-primary/[0.02]">
+          <CardHeader className="flex flex-row items-center justify-between pb-3">
+            <CardTitle className="text-base">New Purchase Request</CardTitle>
+            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setShowCreate(false)}>
+              <ChevronUp className="h-4 w-4" />
+            </Button>
+          </CardHeader>
+          <CardContent className="space-y-4">
             {/* Warehouse */}
             <div className="space-y-1.5">
               <Label>Target Warehouse (Branch Store) *</Label>
@@ -471,13 +415,79 @@ const PurchaseRequests = () => {
               <Label>Notes (optional)</Label>
               <Textarea placeholder="Any additional info..." value={createNotes} onChange={e => setCreateNotes(e.target.value)} />
             </div>
-          </div>
-          <DialogFooter>
+          </CardContent>
+          <div className="flex justify-end gap-2 px-6 pb-6">
             <Button variant="outline" onClick={() => setShowCreate(false)}>Cancel</Button>
             <Button className="gradient-primary text-primary-foreground" onClick={handleCreate} disabled={saving}>{saving ? "Submitting..." : "Submit Request"}</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </div>
+        </Card>
+      )}
+
+      {/* Search + List */}
+      <Card className="shadow-sm">
+        <CardHeader className="pb-3">
+          <div className="relative max-w-sm">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} placeholder="Search by request # or requester..." className="pl-9" />
+          </div>
+        </CardHeader>
+        <CardContent>
+          {filtered.length === 0 ? (
+            <div className="text-center py-12">
+              <ClipboardList className="h-12 w-12 text-muted-foreground mx-auto mb-3 opacity-30" />
+              <p className="text-muted-foreground">No purchase requests found</p>
+            </div>
+          ) : (
+            <>
+              <div className="rounded-lg border overflow-auto max-h-[calc(100vh-350px)]">
+                <Table>
+                  <TableHeader className="sticky top-0 z-10 bg-card">
+                    <TableRow className="bg-muted/50 hover:bg-muted/50">
+                      <TableHead>SN</TableHead>
+                      <TableHead>Request #</TableHead>
+                      <TableHead>Date</TableHead>
+                      <TableHead>Requester</TableHead>
+                      <TableHead>Warehouse</TableHead>
+                      <TableHead className="text-center">Items</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {paged.map((pr, i) => {
+                      const st = STATUS_STYLE[pr.status] ?? { label: pr.status, cls: "" };
+                      return (
+                        <TableRow key={pr.id} className="hover:bg-muted/30 transition-colors">
+                          <TableCell className="text-muted-foreground">{(page - 1) * 15 + i + 1}</TableCell>
+                          <TableCell className="font-mono text-sm font-medium">{pr.requestNo}</TableCell>
+                          <TableCell className="text-sm">{new Date(pr.createdAt).toLocaleDateString()}</TableCell>
+                          <TableCell>
+                            <div className="text-sm font-medium">{pr.requestedBy.name}</div>
+                            <div className="text-xs text-muted-foreground">{pr.requestedBy.role}</div>
+                          </TableCell>
+                          <TableCell className="text-sm">{pr.warehouse.name}</TableCell>
+                          <TableCell className="text-center">{pr.items.length}</TableCell>
+                          <TableCell><Badge variant="secondary" className={st.cls}>{st.label}</Badge></TableCell>
+                          <TableCell>
+                            <div className="flex gap-1">
+                              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openDetail(pr)} title="View / Receipt"><Eye className="h-3 w-3" /></Button>
+                              {pr.status === "PENDING" && pr.requestedBy.id === user?.id && (
+                                <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => setCancelId(pr.id)} title="Cancel"><X className="h-3 w-3" /></Button>
+                              )}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+              <TablePagination currentPage={page} totalItems={filtered.length} onPageChange={setPage} pageSize={15} />
+            </>
+          )}
+        </CardContent>
+      </Card>
+
 
       {/* ─── Detail / Approval Dialog ─── */}
       <Dialog open={!!viewRequest} onOpenChange={() => setViewRequest(null)}>

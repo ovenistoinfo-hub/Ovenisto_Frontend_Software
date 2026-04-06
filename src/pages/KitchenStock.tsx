@@ -20,7 +20,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ChefHat, RefreshCw, AlertTriangle, PackageX, Search, XCircle, Clock, ClipboardList, Truck, Trash2, CheckCircle2 } from "lucide-react";
+import { ChefHat, RefreshCw, AlertTriangle, PackageX, Search, XCircle, Clock, ClipboardList, Truck, Trash2, CheckCircle2, ChevronUp, X } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/ui/page-header";
 import { cn } from "@/lib/utils";
@@ -435,13 +435,13 @@ const KitchenStock = () => {
               <RefreshCw className={`h-4 w-4 mr-1.5 ${refreshing ? "animate-spin" : ""}`} />Refresh
             </Button>
             {canDemand && selectedId && (
-              <Button variant="outline" size="sm" onClick={() => openDemandForm()}>
-                <ClipboardList className="h-4 w-4 mr-1.5" />Create Demand
+              <Button variant="outline" size="sm" onClick={() => { if (showCreateDemand) { setShowCreateDemand(false); } else { openDemandForm(); } }}>
+                {showCreateDemand ? <><X className="h-4 w-4 mr-1.5" />Close</> : <><ClipboardList className="h-4 w-4 mr-1.5" />Create Demand</>}
               </Button>
             )}
             {canTransfer && selectedId && branchWH && (
-              <Button className="gradient-primary text-primary-foreground" size="sm" onClick={() => openTransferForm()}>
-                <Truck className="h-4 w-4 mr-1.5" />New Transfer
+              <Button className="gradient-primary text-primary-foreground" size="sm" onClick={() => { if (showCreateTransfer) { setShowCreateTransfer(false); } else { openTransferForm(); } }}>
+                {showCreateTransfer ? <><X className="h-4 w-4 mr-1.5" />Close</> : <><Truck className="h-4 w-4 mr-1.5" />New Transfer</>}
               </Button>
             )}
           </div>
@@ -696,11 +696,14 @@ const KitchenStock = () => {
         </DialogContent>
       </Dialog>
 
-      {/* ── Create Demand Dialog (KM) — matches Branch Stock PR dialog ── */}
-      <Dialog open={showCreateDemand} onOpenChange={setShowCreateDemand}>
-        <DialogContent className="w-full max-w-[95vw] sm:max-w-3xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>Create Stock Demand</DialogTitle></DialogHeader>
-          <div className="space-y-5">
+      {/* ── Inline Create Demand panel (KM) ── */}
+      {showCreateDemand && canDemand && (
+        <Card className="shadow-sm border-orange-400/30 bg-orange-50/[0.02] dark:bg-orange-950/[0.02]">
+          <CardHeader className="pb-2 flex flex-row items-center justify-between">
+            <Label className="text-xs text-muted-foreground uppercase tracking-wider">New Stock Demand</Label>
+            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setShowCreateDemand(false)}><ChevronUp className="h-4 w-4" /></Button>
+          </CardHeader>
+          <CardContent className="space-y-5">
             <Card className="shadow-sm">
               <CardHeader className="pb-2">
                 <Label className="text-xs text-muted-foreground uppercase tracking-wider">Demand Details</Label>
@@ -770,21 +773,25 @@ const KitchenStock = () => {
               </CardContent>
             </Card>
           </div>
-          <DialogFooter className="flex-col sm:flex-row gap-2 pt-2">
-            <Button variant="outline" onClick={() => setShowCreateDemand(false)} className="h-11 sm:h-auto">Cancel</Button>
-            <Button className="gradient-primary text-primary-foreground h-11 sm:h-auto" onClick={handleSaveDemand} disabled={demandSaving}>
-              <ClipboardList className="h-4 w-4 mr-1.5" />
-              {demandSaving ? "Creating..." : "Create Demand"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+            <div className="flex justify-end gap-2 pt-1">
+              <Button variant="outline" size="sm" onClick={() => setShowCreateDemand(false)}>Cancel</Button>
+              <Button className="gradient-primary text-primary-foreground" size="sm" onClick={handleSaveDemand} disabled={demandSaving}>
+                <ClipboardList className="h-4 w-4 mr-1.5" />
+                {demandSaving ? "Creating..." : "Create Demand"}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
-      {/* ── Create Transfer Dialog (Manager/Admin) — matches Branch Stock Purchase dialog ── */}
-      <Dialog open={showCreateTransfer} onOpenChange={setShowCreateTransfer}>
-        <DialogContent className="w-full max-w-[95vw] sm:max-w-3xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>Create Transfer to Kitchen</DialogTitle></DialogHeader>
-          <div className="space-y-5">
+      {/* ── Inline Create Transfer panel (Manager/Admin) ── */}
+      {showCreateTransfer && canTransfer && (
+        <Card className="shadow-sm border-primary/30 bg-primary/[0.02]">
+          <CardHeader className="pb-2 flex flex-row items-center justify-between">
+            <Label className="text-xs text-muted-foreground uppercase tracking-wider">New Transfer to Kitchen</Label>
+            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setShowCreateTransfer(false)}><ChevronUp className="h-4 w-4" /></Button>
+          </CardHeader>
+          <CardContent className="space-y-5">
             <Card className="shadow-sm">
               <CardHeader className="pb-2">
                 <Label className="text-xs text-muted-foreground uppercase tracking-wider">Transfer Details</Label>
@@ -869,15 +876,16 @@ const KitchenStock = () => {
               </CardContent>
             </Card>
           </div>
-          <DialogFooter className="flex-col sm:flex-row gap-2 pt-2">
-            <Button variant="outline" onClick={() => setShowCreateTransfer(false)} className="h-11 sm:h-auto">Cancel</Button>
-            <Button className="gradient-primary text-primary-foreground h-11 sm:h-auto" onClick={handleSaveTransfer} disabled={transferSaving}>
-              <Truck className="h-4 w-4 mr-1.5" />
-              {transferSaving ? "Creating..." : "Create Transfer"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+            <div className="flex justify-end gap-2 pt-1">
+              <Button variant="outline" size="sm" onClick={() => setShowCreateTransfer(false)}>Cancel</Button>
+              <Button className="gradient-primary text-primary-foreground" size="sm" onClick={handleSaveTransfer} disabled={transferSaving}>
+                <Truck className="h-4 w-4 mr-1.5" />
+                {transferSaving ? "Creating..." : "Create Transfer"}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 };

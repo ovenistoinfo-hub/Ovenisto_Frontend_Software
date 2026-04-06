@@ -14,7 +14,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { Plus, Search, Eye, CheckCircle2, XCircle, Trash2, ClipboardList, Printer, User, Phone, AlertTriangle } from "lucide-react";
+import { Plus, Search, Eye, CheckCircle2, XCircle, Trash2, ClipboardList, Printer, User, Phone, AlertTriangle, ChevronUp, X } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/ui/page-header";
@@ -374,7 +374,7 @@ const Demands = () => {
 
   return (
     <div className="space-y-6">
-      <PageHeader icon={<ClipboardList className="h-5 w-5" />} title="Demand Lists" subtitle="Warehouse stock request and approval management" actions={canCreate ? (<Button className="gradient-primary text-primary-foreground" onClick={openAdd}><Plus className="h-4 w-4 mr-2" />New Demand</Button>) : undefined} />
+      <PageHeader icon={<ClipboardList className="h-5 w-5" />} title="Demand Lists" subtitle="Warehouse stock request and approval management" actions={canCreate ? (<Button className="gradient-primary text-primary-foreground" onClick={() => { if (showDialog) { setShowDialog(false); } else { openAdd(); } }}>{showDialog ? <><X className="h-4 w-4 mr-2" />Close Form</> : <><Plus className="h-4 w-4 mr-2" />New Demand</>}</Button>) : undefined} />
 
       {/* Status filter pills — PR style */}
       <div className="flex gap-1.5 flex-wrap">
@@ -393,48 +393,14 @@ const Demands = () => {
         <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by demand no or warehouse..." className="pl-9" />
       </div>
 
-      {/* Table — Super Admin: single review list; Manager/Admin: two tabs; KM: single list */}
-      {user?.role === 'Super Admin' ? (
-        <Card className="shadow-sm">
-          <CardHeader className="pb-2"><p className="text-xs text-muted-foreground">Stock requests awaiting your review.</p></CardHeader>
-          <CardContent><DemandTable list={filtered} /></CardContent>
-        </Card>
-      ) : canApprove ? (
-        <Tabs defaultValue="incoming">
-          <TabsList>
-            <TabsTrigger value="incoming">
-              <ClipboardList className="h-4 w-4 mr-1.5" />
-              Requests to Review ({incomingDemands.length})
-            </TabsTrigger>
-            <TabsTrigger value="mine">
-              <User className="h-4 w-4 mr-1.5" />
-              My Requests ({myDemands.length})
-            </TabsTrigger>
-          </TabsList>
-          <TabsContent value="incoming" className="mt-4">
-            <Card className="shadow-sm">
-              <CardHeader className="pb-2"><p className="text-xs text-muted-foreground">Stock requests from your team awaiting your review.</p></CardHeader>
-              <CardContent><DemandTable list={incomingDemands} /></CardContent>
-            </Card>
-          </TabsContent>
-          <TabsContent value="mine" className="mt-4">
-            <Card className="shadow-sm">
-              <CardHeader className="pb-2"><p className="text-xs text-muted-foreground">Your own stock requests sent upward for approval.</p></CardHeader>
-              <CardContent><DemandTable list={myDemands} /></CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
-      ) : (
-        <Card className="shadow-sm">
-          <CardContent className="pt-4"><DemandTable list={filtered} /></CardContent>
-        </Card>
-      )}
-
-      {/* Create Demand Dialog */}
-      <Dialog open={showDialog} onOpenChange={setShowDialog}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>New Stock Demand</DialogTitle></DialogHeader>
-          <div className="space-y-4">
+      {/* Inline create form — togglable panel */}
+      {showDialog && canCreate && (
+        <Card className="shadow-sm border-primary/30 bg-primary/[0.02]">
+          <CardHeader className="pb-2 flex flex-row items-center justify-between">
+            <Label className="text-xs text-muted-foreground uppercase tracking-wider">New Stock Demand</Label>
+            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setShowDialog(false)}><ChevronUp className="h-4 w-4" /></Button>
+          </CardHeader>
+          <CardContent className="space-y-4">
             {/* Warehouses */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1.5">
@@ -533,13 +499,50 @@ const Demands = () => {
                 </Table>
               </div>
             )}
-          </div>
-          <DialogFooter className="flex-col sm:flex-row gap-2">
-            <Button variant="outline" onClick={() => setShowDialog(false)}>Cancel</Button>
-            <Button className="gradient-primary text-primary-foreground" onClick={handleCreate} disabled={saving}>{saving ? "Creating..." : "Create Demand"}</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+            <div className="flex justify-end gap-2 pt-1">
+              <Button variant="outline" size="sm" onClick={() => setShowDialog(false)}>Cancel</Button>
+              <Button className="gradient-primary text-primary-foreground" size="sm" onClick={handleCreate} disabled={saving}>{saving ? "Creating..." : "Create Demand"}</Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Table — Super Admin: single review list; Manager/Admin: two tabs; KM: single list */}
+      {user?.role === 'Super Admin' ? (
+        <Card className="shadow-sm">
+          <CardHeader className="pb-2"><p className="text-xs text-muted-foreground">Stock requests awaiting your review.</p></CardHeader>
+          <CardContent><DemandTable list={filtered} /></CardContent>
+        </Card>
+      ) : canApprove ? (
+        <Tabs defaultValue="incoming">
+          <TabsList>
+            <TabsTrigger value="incoming">
+              <ClipboardList className="h-4 w-4 mr-1.5" />
+              Requests to Review ({incomingDemands.length})
+            </TabsTrigger>
+            <TabsTrigger value="mine">
+              <User className="h-4 w-4 mr-1.5" />
+              My Requests ({myDemands.length})
+            </TabsTrigger>
+          </TabsList>
+          <TabsContent value="incoming" className="mt-4">
+            <Card className="shadow-sm">
+              <CardHeader className="pb-2"><p className="text-xs text-muted-foreground">Stock requests from your team awaiting your review.</p></CardHeader>
+              <CardContent><DemandTable list={incomingDemands} /></CardContent>
+            </Card>
+          </TabsContent>
+          <TabsContent value="mine" className="mt-4">
+            <Card className="shadow-sm">
+              <CardHeader className="pb-2"><p className="text-xs text-muted-foreground">Your own stock requests sent upward for approval.</p></CardHeader>
+              <CardContent><DemandTable list={myDemands} /></CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
+      ) : (
+        <Card className="shadow-sm">
+          <CardContent className="pt-4"><DemandTable list={filtered} /></CardContent>
+        </Card>
+      )}
 
       {/* Detail Dialog */}
       <Dialog open={!!showDetail} onOpenChange={() => setShowDetail(null)}>

@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Plus, Search, Pencil, Trash2, Truck, Eye, User, Phone } from "lucide-react";
+import { Plus, Search, Pencil, Trash2, Truck, Eye, User, Phone, ChevronUp, X } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/ui/page-header";
@@ -85,7 +85,29 @@ const Suppliers = () => {
 
   return (
     <div className="space-y-6">
-      <PageHeader icon={<Truck className="h-5 w-5" />} title="Suppliers" subtitle="Manage your suppliers" actions={canManage ? <Button className="gradient-primary text-primary-foreground" onClick={openAdd}><Plus className="h-4 w-4 mr-2" />Add Supplier</Button> : undefined} />
+      <PageHeader icon={<Truck className="h-5 w-5" />} title="Suppliers" subtitle="Manage your suppliers" actions={canManage ? <Button className="gradient-primary text-primary-foreground" onClick={() => { if (showDialog) { setShowDialog(false); setEditingId(null); setForm({ name: "", company: "", phone: "", email: "" }); } else { openAdd(); } }}>{showDialog ? <><X className="h-4 w-4 mr-2" />Close Form</> : <><Plus className="h-4 w-4 mr-2" />Add Supplier</>}</Button> : undefined} />
+      {/* Inline form panel — togglable, replaces dialog */}
+      {showDialog && canManage && (
+        <Card className="shadow-sm border-primary/30 bg-primary/[0.02]">
+          <CardHeader className="pb-2 flex flex-row items-center justify-between">
+            <Label className="text-xs text-muted-foreground uppercase tracking-wider">{editingId ? "Edit" : "Add"} Supplier</Label>
+            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setShowDialog(false); setEditingId(null); setForm({ name: "", company: "", phone: "", email: "" }); }}><ChevronUp className="h-4 w-4" /></Button>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              <div className="space-y-1.5"><Label htmlFor="sup-name">Name <span className="text-destructive">*</span></Label><Input id="sup-name" placeholder="Enter name" value={form.name} onChange={(e) => setForm(p => ({ ...p, name: e.target.value }))} /></div>
+              <div className="space-y-1.5"><Label htmlFor="sup-company">Company</Label><Input id="sup-company" placeholder="Enter company" value={form.company} onChange={(e) => setForm(p => ({ ...p, company: e.target.value }))} /></div>
+              <div className="space-y-1.5"><Label htmlFor="sup-phone">Phone</Label><Input id="sup-phone" placeholder="Enter phone" value={form.phone} onChange={(e) => setForm(p => ({ ...p, phone: e.target.value }))} /></div>
+              <div className="space-y-1.5"><Label htmlFor="sup-email">Email</Label><Input id="sup-email" placeholder="Enter email" value={form.email} onChange={(e) => setForm(p => ({ ...p, email: e.target.value }))} /></div>
+            </div>
+            <div className="flex justify-end gap-2 pt-1">
+              <Button variant="outline" onClick={() => { setShowDialog(false); setEditingId(null); setForm({ name: "", company: "", phone: "", email: "" }); }}>Cancel</Button>
+              <Button className="gradient-primary text-primary-foreground" onClick={handleSave} disabled={saving}>{saving ? "Saving..." : "Save"}</Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       <Card className="shadow-sm"><CardHeader className="pb-3"><div className="relative max-w-sm"><Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} placeholder="Search..." className="pl-9" /></div></CardHeader>
         <CardContent>
           {filtered.length === 0 ? (
@@ -106,12 +128,6 @@ const Suppliers = () => {
             </>
           )}
         </CardContent></Card>
-      <Dialog open={showDialog} onOpenChange={setShowDialog}><DialogContent><DialogHeader><DialogTitle>{editingId ? "Edit" : "Add"} Supplier</DialogTitle></DialogHeader><div className="space-y-3">
-        <div className="space-y-1.5"><Label htmlFor="sup-name">Name</Label><Input id="sup-name" placeholder="Enter name" value={form.name} onChange={(e) => setForm(p => ({ ...p, name: e.target.value }))} /></div>
-        <div className="space-y-1.5"><Label htmlFor="sup-company">Company</Label><Input id="sup-company" placeholder="Enter company" value={form.company} onChange={(e) => setForm(p => ({ ...p, company: e.target.value }))} /></div>
-        <div className="space-y-1.5"><Label htmlFor="sup-phone">Phone</Label><Input id="sup-phone" placeholder="Enter phone" value={form.phone} onChange={(e) => setForm(p => ({ ...p, phone: e.target.value }))} /></div>
-        <div className="space-y-1.5"><Label htmlFor="sup-email">Email</Label><Input id="sup-email" placeholder="Enter email" value={form.email} onChange={(e) => setForm(p => ({ ...p, email: e.target.value }))} /></div>
-      </div><DialogFooter><Button variant="outline" onClick={() => setShowDialog(false)}>Cancel</Button><Button className="gradient-primary text-primary-foreground" onClick={handleSave} disabled={saving}>{saving ? "Saving..." : "Save"}</Button></DialogFooter></DialogContent></Dialog>
 
       {/* Detail Dialog */}
       <Dialog open={!!showDetail} onOpenChange={() => setShowDetail(null)}>
