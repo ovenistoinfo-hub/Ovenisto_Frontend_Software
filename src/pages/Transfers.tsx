@@ -14,7 +14,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { Plus, Search, Eye, Truck, CheckCircle, Trash2, ArrowLeftRight, XCircle, PackageCheck, Printer, Phone, User, FileText, ClipboardList } from "lucide-react";
+import { Plus, Search, Eye, Truck, Trash2, ArrowLeftRight, XCircle, PackageCheck, Printer, Phone, User, FileText, ClipboardList, AlertTriangle } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/ui/page-header";
@@ -26,7 +26,7 @@ const STATUS_STYLE: Record<string, string> = {
   CANCELLED:  "bg-muted text-muted-foreground",
 };
 
-interface FormItem { ingredientId: string; name: string; qty: number; }
+interface FormItem { ingredientId: string; name: string; unit: string; qty: number; availableStock: number; }
 interface ReceiveFormItem { id: string; ingredientName: string; unit: string; qty: number; receivedQty: number; wasteQty: number; wasteReason: string; }
 
 const Transfers = () => {
@@ -34,7 +34,6 @@ const Transfers = () => {
   const userRole      = user?.role || '';
   const isSuperAdmin  = userRole === 'Super Admin';
   const isAdmin       = ['Super Admin', 'Admin'].includes(userRole);
-  const isManager     = userRole === 'Manager';
   const isKitchenMgr  = userRole === 'Kitchen Manager';
   const userOutletId  = user?.outletId ?? null;
 
@@ -65,9 +64,9 @@ const Transfers = () => {
   const [fromWarehouseId, setFromWarehouseId] = useState("");
   const [toWarehouseId,   setToWarehouseId]   = useState("");
   const [notes,           setNotes]           = useState("");
-  const [shippingCost,    setShippingCost]    = useState<number | "">("");
-  const [miscAmount,      setMiscAmount]      = useState<number | "">("");
-  const [items,           setItems]           = useState<FormItem[]>([{ ingredientId: "", name: "", qty: 0 }]);
+  const [items,           setItems]           = useState<FormItem[]>([]);
+  const [sourceStockMap,  setSourceStockMap]  = useState<Record<string, { stock: number; unit: string }>>({});
+  const [loadingLowStock, setLoadingLowStock] = useState(false);
 
   // Receive form state
   const [receiveItems, setReceiveItems] = useState<ReceiveFormItem[]>([]);
@@ -81,8 +80,8 @@ const Transfers = () => {
         filterStatus !== "ALL" ? { status: filterStatus } : {}
       );
       setChallans(data);
-    } catch (err: any) {
-      toast.error(err.message || "Failed to load challans");
+    } catch (err: unknown) {
+      toast.error((err as Error).message || "Failed to load challans");
     } finally {
       setLoading(false);
     }
@@ -197,32 +196,95 @@ const Transfers = () => {
 
   // ── Form helpers ──────────────────────────────────────────────────
   const openAdd = () => {
-    setFromWarehouseId("");
+    // Auto-select from WH if only one option
+    const autoFrom = fromWarehouseOptions.length === 1 ? fromWarehouseOptions[0].id : "";
+    setFromWarehouseId(autoFrom);
     setToWarehouseId("");
     setNotes("");
-    setShippingCost("");
-    setMiscAmount("");
-    setItems([{ ingredientId: "", name: "", qty: 0 }]);
+    setItems([]);
+    setSourceStockMap({});
+    if (autoFrom) fetchSourceStock(autoFrom);
     setShowDialog(true);
   };
 
-  const addItemRow = () => setItems(p => [...p, { ingredientId: "", name: "", qty: 0 }]);
+  // Fetch stock levels from the source warehouse
+  const fetchSourceStock = useCallback(async (whId: string) => {
+    if (!whId) { setSourceStockMap({}); return; }
+    try {
+      const stockData = await warehouseService.getStock(whId);
+      const map: Record<string, { stock: number; unit: string }> = {};
+      for (const s of stockData) {
+        map[s.ingredient.id] = {
+          stock: Number(s.currentStock),
+          unit: s.ingredient.unit?.symbol || s.ingredient.unit?.name || "",
+        };
+      }
+      setSourceStockMap(map);
+    } catch { setSourceStockMap({}); }
+  }, []);
+
+  // Add items that are low stock in the destination warehouse
+  const addLowStockItems = useCallback(async () => {
+    if (!toWarehouseId) { toast.error("Select a destination warehouse first"); return; }
+    setLoadingLowStock(true);
+    try {
+      const stockData = await warehouseService.getStock(toWarehouseId, { lowStockOnly: true });
+      let added = 0;
+      const newItems = [...items];
+      for (const s of stockData) {
+        if (newItems.some(i => i.ingredientId === s.ingredient.id)) continue;
+        const lowLevel = Number(s.lowStockLevel);
+        const current = Number(s.currentStock);
+        const deficit = Math.max(1, Math.round(lowLevel - current));
+        const srcInfo = sourceStockMap[s.ingredient.id];
+        const available = srcInfo?.stock ?? 0;
+        const qty = Math.min(deficit, available);
+        if (qty <= 0) continue;
+        newItems.push({
+          ingredientId: s.ingredient.id,
+          name: s.ingredient.name,
+          unit: srcInfo?.unit || s.ingredient.unit?.symbol || s.ingredient.unit?.name || "",
+          qty,
+          availableStock: available,
+        });
+        added++;
+      }
+      setItems(newItems);
+      toast.success(`${added} low stock item${added !== 1 ? "s" : ""} added`);
+    } catch (err: unknown) {
+      toast.error((err as Error).message || "Failed to load low stock items");
+    } finally {
+      setLoadingLowStock(false);
+    }
+  }, [toWarehouseId, items, sourceStockMap]);
+
+  const addItemRow = () => setItems(p => [...p, { ingredientId: "", name: "", unit: "", qty: 0, availableStock: 0 }]);
   const removeItemRow = (idx: number) => setItems(p => p.filter((_, i) => i !== idx));
   const updateItemRow = (idx: number, field: string, value: string | number) => {
     setItems(p => p.map((item, i) => {
       if (i !== idx) return item;
       if (field === "ingredientId") {
         const ing = ingredients.find(ig => ig.id === value);
-        return { ...item, ingredientId: value as string, name: ing?.name || "" };
+        const srcInfo = sourceStockMap[value as string];
+        return {
+          ...item,
+          ingredientId: value as string,
+          name: ing?.name || "",
+          unit: srcInfo?.unit || ing?.unit?.name || "",
+          availableStock: srcInfo?.stock ?? 0,
+        };
       }
       return { ...item, [field]: value };
     }));
   };
 
-  // When "From" changes, reset "To"
+  // When "From" changes, reset "To" and fetch source stock
   const handleFromChange = (v: string) => {
-    setFromWarehouseId(v === "__none__" ? "" : v);
+    const id = v === "__none__" ? "" : v;
+    setFromWarehouseId(id);
     setToWarehouseId("");
+    setItems([]);
+    fetchSourceStock(id);
   };
 
   // ── Actions ───────────────────────────────────────────────────────
@@ -241,15 +303,13 @@ const Transfers = () => {
         fromWarehouseId,
         toWarehouseId,
         notes: notes || undefined,
-        shippingCost: shippingCost !== "" ? shippingCost : undefined,
-        miscAmount:   miscAmount   !== "" ? miscAmount   : undefined,
         items: validItems,
       });
       toast.success("Transfer challan created");
       setShowDialog(false);
       await fetchChallans();
-    } catch (err: any) {
-      toast.error(err.message || "Failed to create challan");
+    } catch (err: unknown) {
+      toast.error((err as Error).message || "Failed to create challan");
     } finally {
       setSaving(false);
     }
@@ -263,8 +323,8 @@ const Transfers = () => {
       toast.success("Challan dispatched — stock deducted from source");
       setDispatchId(null);
       await fetchChallans();
-    } catch (err: any) {
-      toast.error(err.message || "Failed to dispatch");
+    } catch (err: unknown) {
+      toast.error((err as Error).message || "Failed to dispatch");
     } finally {
       setSaving(false);
     }
@@ -309,8 +369,8 @@ const Transfers = () => {
       toast.success("Challan received — stock added to destination");
       setReceiveChallan(null);
       await fetchChallans();
-    } catch (err: any) {
-      toast.error(err.message || "Failed to receive");
+    } catch (err: unknown) {
+      toast.error((err as Error).message || "Failed to receive");
     } finally {
       setSaving(false);
     }
@@ -324,8 +384,8 @@ const Transfers = () => {
       toast.success("Challan cancelled");
       setCancelId(null);
       await fetchChallans();
-    } catch (err: any) {
-      toast.error(err.message || "Failed to cancel");
+    } catch (err: unknown) {
+      toast.error((err as Error).message || "Failed to cancel");
     } finally {
       setSaving(false);
     }
@@ -558,111 +618,160 @@ const Transfers = () => {
         </Card>
       )}
 
-      {/* Create Challan Dialog */}
+      {/* Create Challan Dialog — purchase-form-style layout */}
       <Dialog open={showDialog} onOpenChange={setShowDialog}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>Create Stock Transfer</DialogTitle></DialogHeader>
-          <div className="space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label>From Warehouse *</Label>
-                <Select value={fromWarehouseId || "__none__"} onValueChange={handleFromChange}>
-                  <SelectTrigger><SelectValue placeholder="Select source" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none__">Select warehouse</SelectItem>
-                    {fromWarehouseOptions.map(w => (
-                      <SelectItem key={w.id} value={w.id}>
-                        {w.name} <span className="text-muted-foreground">({w.type})</span>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {selectedFromWH && (
-                  <p className="text-xs text-muted-foreground">
-                    {selectedFromWH.type === 'MAIN'   ? 'Can transfer to: Branch warehouses' : ''}
-                    {selectedFromWH.type === 'BRANCH' ? 'Can transfer to: Kitchen of this outlet' : ''}
-                  </p>
-                )}
-              </div>
-              <div className="space-y-1.5">
-                <Label>To Warehouse *</Label>
-                <Select
-                  value={toWarehouseId || "__none__"}
-                  onValueChange={(v) => setToWarehouseId(v === "__none__" ? "" : v)}
-                  disabled={!fromWarehouseId || toWarehouseOptions.length === 0}
-                >
-                  <SelectTrigger><SelectValue placeholder={!fromWarehouseId ? "Select source first" : "Select destination"} /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none__">Select warehouse</SelectItem>
-                    {toWarehouseOptions.map(w => (
-                      <SelectItem key={w.id} value={w.id}>
-                        {w.name} <span className="text-muted-foreground">({w.type})</span>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              <Label>Notes (optional)</Label>
-              <Textarea placeholder="Any notes about this transfer..." value={notes} onChange={(e) => setNotes(e.target.value)} className="min-h-20" />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label>Shipping Cost (optional)</Label>
-                <Input
-                  type="number"
-                  min={0}
-                  step="0.01"
-                  placeholder="0.00"
-                  value={shippingCost}
-                  onChange={(e) => setShippingCost(e.target.value === "" ? "" : Number(e.target.value))}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Misc Charges (optional)</Label>
-                <Input
-                  type="number"
-                  min={0}
-                  step="0.01"
-                  placeholder="0.00"
-                  value={miscAmount}
-                  onChange={(e) => setMiscAmount(e.target.value === "" ? "" : Number(e.target.value))}
-                />
-              </div>
-            </div>
-            <div>
-              <Label className="mb-2 block">Items *</Label>
-              <div className="space-y-2">
-                {items.map((item, idx) => (
-                  <div key={idx} className="flex gap-2 items-end border rounded-lg p-2">
-                    <div className="flex-1">
-                      <Select value={item.ingredientId || "__none__"} onValueChange={(v) => updateItemRow(idx, "ingredientId", v === "__none__" ? "" : v)}>
-                        <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Ingredient" /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="__none__">Select ingredient</SelectItem>
-                          {ingredients.map(ig => <SelectItem key={ig.id} value={ig.id}>{ig.name}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="w-24">
-                      <Input className="h-9 text-xs" type="number" placeholder="Qty" value={item.qty || ""} onChange={(e) => updateItemRow(idx, "qty", Number(e.target.value))} />
-                    </div>
-                    <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive shrink-0" onClick={() => removeItemRow(idx)}>
-                      <Trash2 className="h-3 w-3" />
-                    </Button>
+        <DialogContent className="w-full max-w-[95vw] sm:max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Create Stock Transfer</DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-5">
+            {/* ── Section: Transfer Details ── */}
+            <Card className="shadow-sm">
+              <CardHeader className="pb-2">
+                <Label className="text-xs text-muted-foreground uppercase tracking-wider">Transfer Details</Label>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label>From Warehouse *</Label>
+                    <Select value={fromWarehouseId || "__none__"} onValueChange={handleFromChange}>
+                      <SelectTrigger className="h-11"><SelectValue placeholder="Select source warehouse" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">Select warehouse</SelectItem>
+                        {fromWarehouseOptions.map(w => (
+                          <SelectItem key={w.id} value={w.id}>
+                            {w.name} ({w.type})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {selectedFromWH && (
+                      <p className="text-xs text-muted-foreground">
+                        {selectedFromWH.type === 'MAIN' ? 'Transfers to → Branch warehouses' : ''}
+                        {selectedFromWH.type === 'BRANCH' ? 'Transfers to → Kitchen of this outlet' : ''}
+                      </p>
+                    )}
                   </div>
-                ))}
-              </div>
-              <Button variant="outline" size="sm" className="mt-2" onClick={addItemRow}>
-                <Plus className="h-3 w-3 mr-1" />Add Item
-              </Button>
-            </div>
+                  <div className="space-y-1.5">
+                    <Label>To Warehouse *</Label>
+                    <Select
+                      value={toWarehouseId || "__none__"}
+                      onValueChange={(v) => setToWarehouseId(v === "__none__" ? "" : v)}
+                      disabled={!fromWarehouseId || toWarehouseOptions.length === 0}
+                    >
+                      <SelectTrigger className="h-11"><SelectValue placeholder={!fromWarehouseId ? "Select source first" : "Select destination"} /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">Select warehouse</SelectItem>
+                        {toWarehouseOptions.map(w => (
+                          <SelectItem key={w.id} value={w.id}>
+                            {w.name} ({w.type})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Notes (optional)</Label>
+                  <Textarea placeholder="Any notes about this transfer..." value={notes} onChange={(e) => setNotes(e.target.value)} className="min-h-16" />
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* ── Section: Items ── */}
+            <Card className="shadow-sm">
+              <CardHeader className="pb-2 flex flex-row items-center justify-between">
+                <Label className="text-xs text-muted-foreground uppercase tracking-wider">
+                  Items ({items.filter(i => i.ingredientId).length})
+                </Label>
+                <div className="flex gap-2">
+                  {toWarehouseId && (
+                    <Button variant="outline" size="sm" className="h-8 min-h-[32px]" onClick={addLowStockItems} disabled={loadingLowStock}>
+                      <AlertTriangle className="h-3 w-3 mr-1" />
+                      {loadingLowStock ? "Loading..." : "Add Low Stock"}
+                    </Button>
+                  )}
+                  <Button variant="outline" size="sm" className="h-8 min-h-[32px]" onClick={addItemRow}>
+                    <Plus className="h-3 w-3 mr-1" />Add Item
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {items.length === 0 && (
+                  <div className="text-center py-8 text-muted-foreground text-sm">
+                    {fromWarehouseId && toWarehouseId
+                      ? 'Click "Add Item" or "Add Low Stock" to add ingredients'
+                      : "Select source and destination warehouses first"}
+                  </div>
+                )}
+
+                <div className="space-y-2">
+                  {items.map((item, idx) => (
+                    <div key={idx} className="border rounded-lg p-3 space-y-2 border-l-2 border-l-primary/40 bg-primary/5">
+                      <div className="flex items-center gap-2 flex-wrap min-w-0">
+                        <div className="flex-1 min-w-0">
+                          <Select value={item.ingredientId || "__none__"} onValueChange={(v) => updateItemRow(idx, "ingredientId", v === "__none__" ? "" : v)}>
+                            <SelectTrigger className="h-10 text-sm">
+                              <SelectValue placeholder="Select ingredient" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="__none__">Select ingredient</SelectItem>
+                              {ingredients
+                                .filter(ig => !items.some((it, ii) => ii !== idx && it.ingredientId === ig.id))
+                                .map(ig => (
+                                  <SelectItem key={ig.id} value={ig.id}>{ig.name}</SelectItem>
+                                ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive shrink-0" onClick={() => removeItemRow(idx)}>
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                      {item.ingredientId && (
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                          <div className="space-y-1">
+                            <Label className="text-xs text-muted-foreground">Available in Source</Label>
+                            <div className={`h-10 flex items-center px-3 text-sm font-semibold rounded-md border bg-muted/50 ${item.availableStock <= 0 ? "text-destructive" : "text-blue-600"}`}>
+                              {item.availableStock} {item.unit}
+                            </div>
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-xs text-muted-foreground">Transfer Qty ({item.unit}) *</Label>
+                            <Input
+                              className={`h-10 text-sm ${item.qty > item.availableStock ? "border-destructive text-destructive" : ""}`}
+                              type="number"
+                              min={0}
+                              max={item.availableStock}
+                              value={item.qty || ""}
+                              onChange={(e) => {
+                                const val = Math.min(Number(e.target.value), item.availableStock);
+                                updateItemRow(idx, "qty", Math.max(0, val));
+                              }}
+                            />
+                          </div>
+                          <div className="space-y-1 col-span-2 sm:col-span-1">
+                            <Label className="text-xs text-muted-foreground">Remaining After</Label>
+                            <div className={`h-10 flex items-center px-3 text-sm font-semibold rounded-md border bg-muted/50 ${(item.availableStock - item.qty) <= 0 ? "text-warning" : "text-success"}`}>
+                              {Math.max(0, item.availableStock - item.qty)} {item.unit}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+
           </div>
-          <DialogFooter className="flex-col sm:flex-row gap-2">
-            <Button variant="outline" onClick={() => setShowDialog(false)}>Cancel</Button>
-            <Button className="gradient-primary text-primary-foreground" onClick={handleCreateChallan} disabled={saving}>
-              {saving ? "Creating..." : "Create Challan"}
+
+          <DialogFooter className="flex-col sm:flex-row gap-2 pt-2">
+            <Button variant="outline" onClick={() => setShowDialog(false)} className="h-11 sm:h-auto">Cancel</Button>
+            <Button className="gradient-primary text-primary-foreground h-11 sm:h-auto" onClick={handleCreateChallan} disabled={saving}>
+              <Truck className="h-4 w-4 mr-1.5" />
+              {saving ? "Creating..." : "Create Transfer"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -913,13 +1022,26 @@ const Transfers = () => {
                 </Table>
               </div>
 
+              {/* Waste Reasons (if any items have waste) */}
+              {showDetail.status === "RECEIVED" && showDetail.items.some(item => (item.wasteQty ?? 0) > 0 && item.wasteReason) && (
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground uppercase tracking-wider">Waste Reasons</Label>
+                  {showDetail.items.filter(item => (item.wasteQty ?? 0) > 0 && item.wasteReason).map((item, i) => (
+                    <div key={i} className="flex gap-2 text-sm bg-destructive/5 border border-destructive/20 rounded-md px-3 py-1.5">
+                      <span className="font-medium text-destructive shrink-0">{item.ingredientName}:</span>
+                      <span className="text-muted-foreground">{item.wasteReason}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
               {/* Total items */}
               <div className="text-sm text-right text-muted-foreground">
                 Total Items: <span className="font-semibold text-foreground">{showDetail.demand.items.length}</span>
               </div>
 
               {/* Cost Summary */}
-              {(showDetail.shippingCost != null && showDetail.shippingCost > 0 || showDetail.miscAmount != null && showDetail.miscAmount > 0) && (
+              {((showDetail.shippingCost ?? 0) > 0 || (showDetail.miscAmount ?? 0) > 0) && (
                 <div className="flex justify-end">
                   <div className="w-64 space-y-1 text-sm border rounded-lg p-3 bg-muted/30">
                     {showDetail.shippingCost != null && showDetail.shippingCost > 0 && (
@@ -945,7 +1067,7 @@ const Transfers = () => {
           ) : showDetail ? (
             /* ── Standalone challan (manual transfer) ── */
             <div className="space-y-4">
-              {/* Created By / Dispatched By Cards */}
+              {/* Created By card */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <Card className="shadow-sm">
                   <CardHeader className="pb-2">
@@ -968,43 +1090,70 @@ const Transfers = () => {
                     <div className="text-xs text-muted-foreground mt-1">Created: {new Date(showDetail.createdAt).toLocaleString()}</div>
                   </CardContent>
                 </Card>
-                <Card className="shadow-sm">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-xs text-muted-foreground uppercase tracking-wider">
-                      {showDetail.receivedBy ? "Received By" : showDetail.dispatchedBy ? "Dispatched By" : "Pending Dispatch"}
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-1">
-                    {(showDetail.dispatchedBy ?? showDetail.receivedBy) ? (
-                      <>
+                {!showDetail.dispatchedBy && !showDetail.receivedBy && (
+                  <Card className="shadow-sm border-dashed">
+                    <CardContent className="flex items-center justify-center h-full py-6">
+                      <div className="text-sm text-muted-foreground">Pending Dispatch</div>
+                    </CardContent>
+                  </Card>
+                )}
+              </div>
+
+              {/* Dispatched / Received cards — same layout as demand-linked */}
+              {(showDetail.dispatchedBy || showDetail.receivedBy) && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {showDetail.dispatchedBy && (
+                    <Card className="shadow-sm border-blue-200">
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-xs text-blue-600 uppercase tracking-wider">Dispatched By</CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-1">
                         <div className="flex items-center gap-2">
-                          <User className="h-4 w-4 text-muted-foreground" />
-                          <span className="font-medium">{(showDetail.receivedBy ?? showDetail.dispatchedBy)!.name}</span>
-                          {(showDetail.receivedBy ?? showDetail.dispatchedBy)!.role && (
-                            <Badge variant="secondary" className="text-xs">{(showDetail.receivedBy ?? showDetail.dispatchedBy)!.role}</Badge>
-                          )}
+                          <Truck className="h-4 w-4 text-blue-500" />
+                          <span className="font-medium">{showDetail.dispatchedBy.name}</span>
+                          {showDetail.dispatchedBy.role && <Badge variant="secondary" className="text-xs">{showDetail.dispatchedBy.role}</Badge>}
                         </div>
-                        {(showDetail.receivedBy ?? showDetail.dispatchedBy)!.outlet && (
-                          <div className="text-xs text-muted-foreground">Outlet: <span className="font-medium text-foreground">{(showDetail.receivedBy ?? showDetail.dispatchedBy)!.outlet}</span></div>
+                        {showDetail.dispatchedBy.outlet && (
+                          <div className="text-xs text-muted-foreground">Outlet: <span className="font-medium text-foreground">{showDetail.dispatchedBy.outlet}</span></div>
                         )}
-                        {(showDetail.receivedBy ?? showDetail.dispatchedBy)!.phone && (
+                        {showDetail.dispatchedBy.phone && (
                           <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                            <Phone className="h-3 w-3" />{(showDetail.receivedBy ?? showDetail.dispatchedBy)!.phone}
+                            <Phone className="h-3 w-3" />{showDetail.dispatchedBy.phone}
                           </div>
                         )}
                         {showDetail.dispatchedAt && (
                           <div className="text-xs text-muted-foreground mt-1">Dispatched: {new Date(showDetail.dispatchedAt).toLocaleString()}</div>
                         )}
-                        {showDetail.receivedAt && (
-                          <div className="text-xs text-muted-foreground">Received: {new Date(showDetail.receivedAt).toLocaleString()}</div>
+                      </CardContent>
+                    </Card>
+                  )}
+                  {showDetail.receivedBy && (
+                    <Card className="shadow-sm border-green-200">
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-xs text-green-600 uppercase tracking-wider">Received By</CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <PackageCheck className="h-4 w-4 text-green-500" />
+                          <span className="font-medium">{showDetail.receivedBy.name}</span>
+                          {showDetail.receivedBy.role && <Badge variant="secondary" className="text-xs">{showDetail.receivedBy.role}</Badge>}
+                        </div>
+                        {showDetail.receivedBy.outlet && (
+                          <div className="text-xs text-muted-foreground">Outlet: <span className="font-medium text-foreground">{showDetail.receivedBy.outlet}</span></div>
                         )}
-                      </>
-                    ) : (
-                      <div className="text-sm text-muted-foreground">Not yet dispatched</div>
-                    )}
-                  </CardContent>
-                </Card>
-              </div>
+                        {showDetail.receivedBy.phone && (
+                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                            <Phone className="h-3 w-3" />{showDetail.receivedBy.phone}
+                          </div>
+                        )}
+                        {showDetail.receivedAt && (
+                          <div className="text-xs text-muted-foreground mt-1">Received: {new Date(showDetail.receivedAt).toLocaleString()}</div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  )}
+                </div>
+              )}
 
               {/* Warehouse Route */}
               <div className="flex gap-4 text-sm flex-wrap">
@@ -1021,15 +1170,16 @@ const Transfers = () => {
                 </div>
               )}
 
-              {/* Items Table */}
+              {/* Items Table — same detail level as demand-linked */}
               <div className="rounded-lg border overflow-auto">
                 <Table>
                   <TableHeader>
                     <TableRow className="bg-muted/50 hover:bg-muted/50">
                       <TableHead>SN</TableHead>
                       <TableHead>Ingredient</TableHead>
-                      <TableHead className="text-right">Dispatched</TableHead>
+                      <TableHead>Category</TableHead>
                       <TableHead>Unit</TableHead>
+                      <TableHead className="text-right">Dispatched Qty</TableHead>
                       {showDetail.status === "RECEIVED" && <TableHead className="text-right">Received</TableHead>}
                       {showDetail.status === "RECEIVED" && <TableHead className="text-right">Waste</TableHead>}
                       {showDetail.status === "RECEIVED" && <TableHead className="text-right">Net to Stock</TableHead>}
@@ -1044,8 +1194,9 @@ const Transfers = () => {
                         <TableRow key={i}>
                           <TableCell className="text-muted-foreground">{i + 1}</TableCell>
                           <TableCell className="font-medium">{item.ingredientName}</TableCell>
-                          <TableCell className="text-right">{item.qty}</TableCell>
+                          <TableCell className="text-sm text-muted-foreground">{item.category ?? "—"}</TableCell>
                           <TableCell className="text-sm">{item.unit}</TableCell>
+                          <TableCell className="text-right">{item.qty}</TableCell>
                           {showDetail.status === "RECEIVED" && (
                             <TableCell className="text-right font-medium">
                               <span className={received < item.qty ? "text-warning" : "text-foreground"}>
@@ -1074,6 +1225,24 @@ const Transfers = () => {
                     })}
                   </TableBody>
                 </Table>
+              </div>
+
+              {/* Waste Reasons (if any items have waste) */}
+              {showDetail.status === "RECEIVED" && showDetail.items.some(item => (item.wasteQty ?? 0) > 0 && item.wasteReason) && (
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground uppercase tracking-wider">Waste Reasons</Label>
+                  {showDetail.items.filter(item => (item.wasteQty ?? 0) > 0 && item.wasteReason).map((item, i) => (
+                    <div key={i} className="flex gap-2 text-sm bg-destructive/5 border border-destructive/20 rounded-md px-3 py-1.5">
+                      <span className="font-medium text-destructive shrink-0">{item.ingredientName}:</span>
+                      <span className="text-muted-foreground">{item.wasteReason}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Total items */}
+              <div className="text-sm text-right text-muted-foreground">
+                Total Items: <span className="font-semibold text-foreground">{showDetail.items.length}</span>
               </div>
 
               {/* Cost Summary */}
@@ -1157,7 +1326,7 @@ const Transfers = () => {
                 w.document.write(`<!DOCTYPE html><html><head><title>${c.challanNo}</title><style>${CSS}</style></head><body>`);
                 w.document.write(`<div class="header"><h1>Stock Transfer Challan</h1><p style="color:#666;margin-top:4px">${c.challanNo}</p><span class="badge" style="background:${isReceived ? "#e6f4ea;color:#1a7f37" : st === "CANCELLED" ? "#eee;color:#666" : st === "DISPATCHED" ? "#e8f0fe;color:#1a56db" : "#fff8e1;color:#f57f17"}">${st}</span></div>`);
                 w.document.write(`<div class="info-grid"><div><p style="font-size:11px;color:#888;text-transform:uppercase;font-weight:600">Created By</p><p style="font-weight:600">${c.createdBy?.name ?? "—"}</p><p style="color:#666">${c.createdBy?.role ?? ""}${c.createdBy?.outlet ? ` — ${c.createdBy.outlet}` : ""}</p>${c.createdBy?.phone ? `<p style="color:#666">${c.createdBy.phone}</p>` : ""}<p style="font-size:11px;color:#888;margin-top:4px">Date: ${new Date(c.createdAt).toLocaleString()}</p></div>${dispHtml}</div>`);
-                w.document.write(`<p style="margin-bottom:8px"><strong>From WH:</strong> ${c.fromWarehouse.name} (${c.fromWarehouse.type}) &nbsp;&nbsp; <strong>To WH:</strong> ${c.toWarehouse.name} (${c.toWarehouse.type})</p>`);
+                w.document.write(`<p style="margin-bottom:8px"><strong>From WH:</strong> ${c.fromWarehouse?.name ?? "—"} (${c.fromWarehouse?.type ?? ""}) &nbsp;&nbsp; <strong>To WH:</strong> ${c.toWarehouse?.name ?? "—"} (${c.toWarehouse?.type ?? ""})</p>`);
                 if (c.notes) w.document.write(`<p style="background:#f5f5f5;padding:8px;border-radius:4px;margin-bottom:8px"><strong>Notes:</strong> ${c.notes}</p>`);
                 w.document.write(`<table><thead><tr><th>SN</th><th>Ingredient</th><th>Category</th><th>Unit</th><th style="text-align:right">Dispatched</th>${isReceived ? '<th style="text-align:right">Received</th><th style="text-align:right">Waste</th><th style="text-align:right">Net to Stock</th>' : ""}</tr></thead><tbody>`);
                 c.items.forEach((item, idx) => {

@@ -5,20 +5,25 @@ import {
   type WarehouseStockRecord,
   type ExpirySummary,
 } from "@/services/warehouse.service";
-import { inventoryService, type IngredientCategoryRecord } from "@/services/inventory.service";
-import { useData } from "@/contexts/DataContext";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { inventoryService, type IngredientCategoryRecord, type IngredientRecord } from "@/services/inventory.service";
+import { demandService } from "@/services/demand.service";
+import { challanService } from "@/services/challan.service";
+import { useAuth } from "@/contexts/AuthContext";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ChefHat, RefreshCw, AlertTriangle, PackageX, Search, XCircle, Clock } from "lucide-react";
+import { ChefHat, RefreshCw, AlertTriangle, PackageX, Search, XCircle, Clock, ClipboardList, Truck, Plus, Trash2, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/ui/page-header";
+import { cn } from "@/lib/utils";
 
 type StockStatus = "EMPTY" | "LOW" | "NORMAL";
 type CardFilter = "all" | "low" | "out";
@@ -36,11 +41,21 @@ const STATUS_STYLE: Record<StockStatus, string> = {
 };
 const STATUS_ORDER: Record<StockStatus, number> = { EMPTY: 0, LOW: 1, NORMAL: 2 };
 
+interface DemandFormItem { ingredientId: string; name: string; unit: string; requestedQty: number; }
+interface TransferFormItem { ingredientId: string; name: string; unit: string; qty: number; availableStock: number; }
+
 const KitchenStock = () => {
-  const { settings } = useData();
-  const currency = settings.currency || "Rs.";
+  const { user } = useAuth();
+
+  // Role-based permissions (same pattern as Branch Stock)
+  const userRole = user?.role ?? '';
+  const isKitchenMgr = userRole === 'Kitchen Manager';
+  const canDemand   = isKitchenMgr;                                       // KM creates demands (kitchen→branch)
+  const canTransfer = ['Manager', 'Admin'].includes(userRole);             // M/A create transfers (branch→kitchen)
+  const hasActions  = canDemand || canTransfer;
 
   const [kitchens, setKitchens] = useState<WarehouseRecord[]>([]);
+  const [allWarehouses, setAllWarehouses] = useState<WarehouseRecord[]>([]);
   const [selectedId, setSelectedId] = useState("");
   const [stock, setStock] = useState<WarehouseStockRecord[]>([]);
   const [categories, setCategories] = useState<IngredientCategoryRecord[]>([]);
@@ -58,22 +73,41 @@ const KitchenStock = () => {
   const [expiryView, setExpiryView] = useState<"expired" | "near" | null>(null);
   const [cardFilter, setCardFilter] = useState<CardFilter>("all");
 
+  // Multi-select for batch actions
+  const [selectedStockIds, setSelectedStockIds] = useState<Set<string>>(new Set());
+
+  // Create Demand form state (KM)
+  const [showCreateDemand, setShowCreateDemand] = useState(false);
+  const [demandItems, setDemandItems] = useState<DemandFormItem[]>([]);
+  const [demandNotes, setDemandNotes] = useState("");
+  const [demandSaving, setDemandSaving] = useState(false);
+
+  // Create Transfer form state (Manager/Admin)
+  const [showCreateTransfer, setShowCreateTransfer] = useState(false);
+  const [transferItems, setTransferItems] = useState<TransferFormItem[]>([]);
+  const [transferNotes, setTransferNotes] = useState("");
+  const [transferSaving, setTransferSaving] = useState(false);
+  const [branchStockMap, setBranchStockMap] = useState<Record<string, { stock: number; unit: string }>>({});
+
   // Debounce search
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 300);
     return () => clearTimeout(t);
   }, [search]);
 
-  // Load kitchen warehouses + categories on mount
+  // Load kitchen warehouses + all warehouses + categories on mount
   useEffect(() => {
-    Promise.all([warehouseService.getAll({ type: "KITCHEN" }), inventoryService.getIngredientCategories()])
-      .then(([whs, catList]) => {
-        setKitchens(whs);
+    Promise.all([
+      warehouseService.getAll({ type: "KITCHEN" }),
+      warehouseService.getAll(),
+      inventoryService.getIngredientCategories(),
+    ])
+      .then(([kitchenWhs, allWhs, catList]) => {
+        setKitchens(kitchenWhs);
+        setAllWarehouses(allWhs);
         setCategories(catList);
-        if (whs.length > 0) setSelectedId(whs[0].id);
-        // Note: if kitchens exist, loading is set to false in fetchStock's finally block
-        // If no kitchens, set loading false here
-        if (whs.length === 0) setLoading(false);
+        if (kitchenWhs.length > 0) setSelectedId(kitchenWhs[0].id);
+        if (kitchenWhs.length === 0) setLoading(false);
       })
       .catch((err: Error) => {
         toast.error(err.message || "Failed to load kitchens");
@@ -119,6 +153,230 @@ const KitchenStock = () => {
     }
   }, [selectedId]);
 
+  // ── Demand/Transfer helpers ─────────────────────────────────────
+  // Find the BRANCH warehouse for the selected kitchen's outlet (supplying WH for demands)
+  const selectedKitchenWH = kitchens.find(k => k.id === selectedId);
+  const branchWH = useMemo(() =>
+    allWarehouses.find(w => w.type === 'BRANCH' && w.outletId === selectedKitchenWH?.outletId),
+    [allWarehouses, selectedKitchenWH]
+  );
+
+  // Track which ingredient IDs are in each form
+  const demandIngIds = useMemo(() => new Set(demandItems.map(i => i.ingredientId)), [demandItems]);
+  const transferIngIds = useMemo(() => new Set(transferItems.map(i => i.ingredientId)), [transferItems]);
+
+  // Fetch branch stock for transfer form — returns the map directly to avoid stale state
+  const fetchBranchStock = useCallback(async (): Promise<Record<string, { stock: number; unit: string }>> => {
+    if (!branchWH) { setBranchStockMap({}); return {}; }
+    try {
+      const data = await warehouseService.getStock(branchWH.id);
+      const map: Record<string, { stock: number; unit: string }> = {};
+      for (const s of data) {
+        map[s.ingredient.id] = { stock: Number(s.currentStock), unit: s.ingredient.unit?.symbol || s.ingredient.unit?.name || "" };
+      }
+      setBranchStockMap(map);
+      return map;
+    } catch { setBranchStockMap({}); return {}; }
+  }, [branchWH]);
+
+  // ── Open demand form (KM) ──
+  const openDemandForm = useCallback((preIngId?: string) => {
+    const items: DemandFormItem[] = [];
+    if (preIngId) {
+      const s = stock.find(st => st.ingredient.id === preIngId);
+      if (s) {
+        items.push({
+          ingredientId: s.ingredient.id,
+          name: s.ingredient.name,
+          unit: s.ingredient.unit?.symbol || s.ingredient.unit?.name || "",
+          requestedQty: Math.max(1, Number(s.lowStockLevel) - Number(s.currentStock)),
+        });
+      }
+    }
+    setDemandItems(items);
+    setDemandNotes("");
+    setShowCreateDemand(true);
+  }, [stock]);
+
+  // ── Open transfer form (Manager/Admin) ──
+  const openTransferForm = useCallback(async (preIngId?: string) => {
+    const freshMap = await fetchBranchStock();
+    const items: TransferFormItem[] = [];
+    if (preIngId) {
+      const s = stock.find(st => st.ingredient.id === preIngId);
+      if (s) {
+        const bStock = freshMap[s.ingredient.id]?.stock ?? 0;
+        items.push({
+          ingredientId: s.ingredient.id,
+          name: s.ingredient.name,
+          unit: s.ingredient.unit?.symbol || s.ingredient.unit?.name || "",
+          qty: Math.min(Math.max(1, Number(s.lowStockLevel) - Number(s.currentStock)), bStock),
+          availableStock: bStock,
+        });
+      }
+    }
+    setTransferItems(items);
+    setTransferNotes("");
+    setShowCreateTransfer(true);
+  }, [stock, fetchBranchStock]);
+
+  // ── Toggle per-row ingredient (demand) ──
+  const handleToggleDemand = useCallback((s: WarehouseStockRecord) => {
+    if (!showCreateDemand) { openDemandForm(s.ingredient.id); return; }
+    if (demandIngIds.has(s.ingredient.id)) {
+      setDemandItems(prev => prev.filter(i => i.ingredientId !== s.ingredient.id));
+    } else {
+      setDemandItems(prev => [...prev, {
+        ingredientId: s.ingredient.id,
+        name: s.ingredient.name,
+        unit: s.ingredient.unit?.symbol || s.ingredient.unit?.name || "",
+        requestedQty: Math.max(1, Number(s.lowStockLevel) - Number(s.currentStock)),
+      }]);
+    }
+  }, [showCreateDemand, demandIngIds, openDemandForm]);
+
+  // ── Toggle per-row ingredient (transfer) ──
+  const handleToggleTransfer = useCallback((s: WarehouseStockRecord) => {
+    if (!showCreateTransfer) { openTransferForm(s.ingredient.id); return; }
+    if (transferIngIds.has(s.ingredient.id)) {
+      setTransferItems(prev => prev.filter(i => i.ingredientId !== s.ingredient.id));
+    } else {
+      const bStock = branchStockMap[s.ingredient.id]?.stock ?? 0;
+      setTransferItems(prev => [...prev, {
+        ingredientId: s.ingredient.id,
+        name: s.ingredient.name,
+        unit: s.ingredient.unit?.symbol || s.ingredient.unit?.name || "",
+        qty: Math.min(Math.max(1, Number(s.lowStockLevel) - Number(s.currentStock)), bStock),
+        availableStock: bStock,
+      }]);
+    }
+  }, [showCreateTransfer, transferIngIds, openTransferForm, branchStockMap]);
+
+  // ── Batch actions ──
+  const handleBatchDemand = useCallback(() => {
+    const toAdd: DemandFormItem[] = [];
+    selectedStockIds.forEach(stockId => {
+      const s = stock.find(st => st.id === stockId);
+      if (!s || demandIngIds.has(s.ingredient.id)) return;
+      toAdd.push({
+        ingredientId: s.ingredient.id,
+        name: s.ingredient.name,
+        unit: s.ingredient.unit?.symbol || s.ingredient.unit?.name || "",
+        requestedQty: Math.max(1, Number(s.lowStockLevel) - Number(s.currentStock)),
+      });
+    });
+    if (!showCreateDemand) { setDemandItems([]); setDemandNotes(""); setShowCreateDemand(true); }
+    setDemandItems(prev => [...prev.filter(i => i.ingredientId), ...toAdd]);
+    setSelectedStockIds(new Set());
+  }, [selectedStockIds, stock, demandIngIds, showCreateDemand]);
+
+  const handleBatchTransfer = useCallback(async () => {
+    let map = branchStockMap;
+    if (!showCreateTransfer) {
+      map = await fetchBranchStock();
+      setTransferItems([]); setTransferNotes(""); setShowCreateTransfer(true);
+    }
+    const toAdd: TransferFormItem[] = [];
+    selectedStockIds.forEach(stockId => {
+      const s = stock.find(st => st.id === stockId);
+      if (!s || transferIngIds.has(s.ingredient.id)) return;
+      const bStock = map[s.ingredient.id]?.stock ?? 0;
+      toAdd.push({
+        ingredientId: s.ingredient.id,
+        name: s.ingredient.name,
+        unit: s.ingredient.unit?.symbol || s.ingredient.unit?.name || "",
+        qty: Math.min(Math.max(1, Number(s.lowStockLevel) - Number(s.currentStock)), bStock),
+        availableStock: bStock,
+      });
+    });
+    setTransferItems(prev => [...prev.filter(i => i.ingredientId), ...toAdd]);
+    setSelectedStockIds(new Set());
+  }, [selectedStockIds, stock, transferIngIds, showCreateTransfer, fetchBranchStock, branchStockMap]);
+
+  // ── Save demand ──
+  const handleSaveDemand = useCallback(async () => {
+    if (!selectedId || !branchWH) { toast.error("No branch warehouse found for this kitchen"); return; }
+    const validItems = demandItems.filter(i => i.ingredientId && i.requestedQty > 0);
+    if (validItems.length === 0) { toast.error("Add at least one item"); return; }
+    setDemandSaving(true);
+    try {
+      await demandService.create({
+        requestingWHId: selectedId,
+        supplyingWHId: branchWH.id,
+        notes: demandNotes || undefined,
+        items: validItems.map(i => ({ ingredientId: i.ingredientId, requestedQty: i.requestedQty })),
+      });
+      toast.success("Demand created — waiting for approval");
+      setShowCreateDemand(false);
+    } catch (err: unknown) {
+      toast.error((err as Error).message || "Failed to create demand");
+    } finally {
+      setDemandSaving(false);
+    }
+  }, [selectedId, branchWH, demandItems, demandNotes]);
+
+  // ── Save transfer ──
+  const handleSaveTransfer = useCallback(async () => {
+    if (!selectedId || !branchWH) { toast.error("No branch warehouse found"); return; }
+    const validItems = transferItems.filter(i => i.ingredientId && i.qty > 0);
+    if (validItems.length === 0) { toast.error("Add at least one item"); return; }
+    setTransferSaving(true);
+    try {
+      await challanService.create({
+        fromWarehouseId: branchWH.id,
+        toWarehouseId: selectedId,
+        notes: transferNotes || undefined,
+        items: validItems.map(i => ({ ingredientId: i.ingredientId, qty: i.qty })),
+      });
+      toast.success("Transfer challan created");
+      setShowCreateTransfer(false);
+      fetchStock(selectedId);
+    } catch (err: unknown) {
+      toast.error((err as Error).message || "Failed to create transfer");
+    } finally {
+      setTransferSaving(false);
+    }
+  }, [selectedId, branchWH, transferItems, transferNotes, fetchStock]);
+
+  // ── Add low stock items to demand form ──
+  const addLowStockToDemand = useCallback(() => {
+    const toAdd: DemandFormItem[] = [];
+    stock.forEach(s => {
+      if (demandIngIds.has(s.ingredient.id)) return;
+      if (Number(s.currentStock) > 0 && Number(s.currentStock) > Number(s.lowStockLevel)) return;
+      toAdd.push({
+        ingredientId: s.ingredient.id,
+        name: s.ingredient.name,
+        unit: s.ingredient.unit?.symbol || s.ingredient.unit?.name || "",
+        requestedQty: Math.max(1, Math.round(Number(s.lowStockLevel) - Number(s.currentStock))),
+      });
+    });
+    setDemandItems(prev => [...prev, ...toAdd]);
+    toast.success(`${toAdd.length} low stock item${toAdd.length !== 1 ? "s" : ""} added`);
+  }, [stock, demandIngIds]);
+
+  // ── Add low stock items to transfer form ──
+  const addLowStockToTransfer = useCallback(() => {
+    const toAdd: TransferFormItem[] = [];
+    stock.forEach(s => {
+      if (transferIngIds.has(s.ingredient.id)) return;
+      if (Number(s.currentStock) > 0 && Number(s.currentStock) > Number(s.lowStockLevel)) return;
+      const bStock = branchStockMap[s.ingredient.id]?.stock ?? 0;
+      const deficit = Math.max(1, Math.round(Number(s.lowStockLevel) - Number(s.currentStock)));
+      const qty = Math.min(deficit, bStock);
+      if (qty <= 0) return;
+      toAdd.push({
+        ingredientId: s.ingredient.id,
+        name: s.ingredient.name,
+        unit: s.ingredient.unit?.symbol || s.ingredient.unit?.name || "",
+        qty,
+        availableStock: bStock,
+      });
+    });
+    setTransferItems(prev => [...prev, ...toAdd]);
+    toast.success(`${toAdd.length} low stock item${toAdd.length !== 1 ? "s" : ""} added`);
+  }, [stock, transferIngIds, branchStockMap]);
+
   // Unique brands and units for filter dropdowns
   const uniqueBrands = useMemo(() => [...new Set(stock.map(s => s.ingredient.brand).filter(Boolean))] as string[], [stock]);
   const uniqueUnits = useMemo(() => {
@@ -154,7 +412,6 @@ const KitchenStock = () => {
     totalValue: stock.reduce((sum, s) => sum + Number(s.currentStock) * Number(s.ingredient.purchasePrice ?? 0), 0),
   }), [stock]);
 
-  const selectedKitchen = kitchens.find(k => k.id === selectedId);
   const isLoading = loading || stockLoading;
   const toggleCard = (filter: CardFilter) => setCardFilter(prev => prev === filter ? "all" : filter);
 
@@ -177,6 +434,16 @@ const KitchenStock = () => {
             <Button variant="outline" size="sm" onClick={handleRefresh} disabled={refreshing}>
               <RefreshCw className={`h-4 w-4 mr-1.5 ${refreshing ? "animate-spin" : ""}`} />Refresh
             </Button>
+            {canDemand && selectedId && (
+              <Button variant="outline" size="sm" onClick={() => openDemandForm()}>
+                <ClipboardList className="h-4 w-4 mr-1.5" />Create Demand
+              </Button>
+            )}
+            {canTransfer && selectedId && branchWH && (
+              <Button className="gradient-primary text-primary-foreground" size="sm" onClick={() => openTransferForm()}>
+                <Truck className="h-4 w-4 mr-1.5" />New Transfer
+              </Button>
+            )}
           </div>
         }
       />
@@ -239,6 +506,24 @@ const KitchenStock = () => {
 
           {/* Stock Table */}
           <Card className="shadow-sm"><CardContent>
+            {/* Batch action bar */}
+            {hasActions && selectedStockIds.size > 0 && (
+              <div className="flex items-center gap-2 mb-3 p-2 bg-muted/50 rounded-lg">
+                <span className="text-sm font-medium">{selectedStockIds.size} selected</span>
+                {canDemand && (
+                  <Button size="sm" variant="outline" onClick={handleBatchDemand}>
+                    <ClipboardList className="h-3.5 w-3.5 mr-1.5" />Add to Demand
+                  </Button>
+                )}
+                {canTransfer && (
+                  <Button size="sm" className="gradient-primary text-primary-foreground" onClick={handleBatchTransfer}>
+                    <Truck className="h-3.5 w-3.5 mr-1.5" />Add to Transfer
+                  </Button>
+                )}
+                <Button size="sm" variant="ghost" onClick={() => setSelectedStockIds(new Set())}>Clear</Button>
+              </div>
+            )}
+
             {stockLoading ? (
               <div className="space-y-2">{[1,2,3,4,5].map(i => <Skeleton key={i} className="h-10 w-full rounded" />)}</div>
             ) : filteredStock.length === 0 ? (
@@ -252,16 +537,32 @@ const KitchenStock = () => {
                 <Table>
                   <TableHeader className="sticky top-0 z-20 bg-card">
                     <TableRow className="bg-muted/50 hover:bg-muted/50">
+                      {hasActions && <TableHead className="w-10"><Checkbox checked={selectedStockIds.size === filteredStock.length && filteredStock.length > 0} onCheckedChange={(v) => setSelectedStockIds(v ? new Set(filteredStock.map(s => s.id)) : new Set())} /></TableHead>}
                       <TableHead className="w-12">SN</TableHead><TableHead>Ingredient</TableHead><TableHead>Brand</TableHead><TableHead>Category</TableHead><TableHead>Unit</TableHead>
                       <TableHead className="text-right">Current Stock</TableHead><TableHead className="text-right">Low Stock Level</TableHead>
                       <TableHead>Status</TableHead>
+                      {hasActions && <TableHead>Actions</TableHead>}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {filteredStock.map((s, i) => {
                       const status = getStatus(s);
+                      const inDemand = demandIngIds.has(s.ingredient.id);
+                      const inTransfer = transferIngIds.has(s.ingredient.id);
                       return (
-                        <TableRow key={s.id} className="hover:bg-muted/30 transition-colors">
+                        <TableRow key={s.id} className={cn("hover:bg-muted/30 transition-colors", (inDemand || inTransfer) && "bg-primary/5")}>
+                          {hasActions && (
+                            <TableCell>
+                              <Checkbox
+                                checked={selectedStockIds.has(s.id)}
+                                onCheckedChange={(v) => {
+                                  const next = new Set(selectedStockIds);
+                                  v ? next.add(s.id) : next.delete(s.id);
+                                  setSelectedStockIds(next);
+                                }}
+                              />
+                            </TableCell>
+                          )}
                           <TableCell className="text-muted-foreground">{i + 1}</TableCell>
                           <TableCell className="font-medium">{s.ingredient.name}</TableCell>
                           <TableCell className="text-sm text-muted-foreground">{s.ingredient.brand ?? "—"}</TableCell>
@@ -276,6 +577,32 @@ const KitchenStock = () => {
                               {status === "EMPTY" ? "Empty" : status === "LOW" ? "Low" : "Normal"}
                             </Badge>
                           </TableCell>
+                          {hasActions && (
+                            <TableCell>
+                              <div className="flex gap-1">
+                                {canDemand && (
+                                  <Button
+                                    size="sm"
+                                    variant={inDemand ? "default" : "outline"}
+                                    className={cn("h-7 text-xs px-2", inDemand ? "bg-primary text-primary-foreground" : status === "EMPTY" ? "bg-destructive text-destructive-foreground" : status === "LOW" ? "bg-yellow-500 text-white" : "")}
+                                    onClick={() => handleToggleDemand(s)}
+                                  >
+                                    {inDemand ? <><CheckCircle2 className="h-3 w-3 mr-1" />Added</> : <><ClipboardList className="h-3 w-3 mr-1" />Demand</>}
+                                  </Button>
+                                )}
+                                {canTransfer && (
+                                  <Button
+                                    size="sm"
+                                    variant={inTransfer ? "default" : "outline"}
+                                    className={cn("h-7 text-xs px-2", inTransfer ? "bg-primary text-primary-foreground" : status !== "NORMAL" ? "border-orange-400 text-orange-600" : "")}
+                                    onClick={() => handleToggleTransfer(s)}
+                                  >
+                                    {inTransfer ? <><CheckCircle2 className="h-3 w-3 mr-1" />Added</> : <><Truck className="h-3 w-3 mr-1" />Transfer</>}
+                                  </Button>
+                                )}
+                              </div>
+                            </TableCell>
+                          )}
                         </TableRow>
                       );
                     })}
@@ -365,6 +692,189 @@ const KitchenStock = () => {
           })()}
           <DialogFooter>
             <Button variant="outline" onClick={() => setExpiryView(null)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Create Demand Dialog (KM) — matches Branch Stock PR dialog ── */}
+      <Dialog open={showCreateDemand} onOpenChange={setShowCreateDemand}>
+        <DialogContent className="w-full max-w-[95vw] sm:max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>Create Stock Demand</DialogTitle></DialogHeader>
+          <div className="space-y-5">
+            <Card className="shadow-sm">
+              <CardHeader className="pb-2">
+                <Label className="text-xs text-muted-foreground uppercase tracking-wider">Demand Details</Label>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label>Requesting Kitchen *</Label>
+                    <Input className="h-11" value={selectedKitchenWH?.name ?? "—"} disabled />
+                    <p className="text-xs text-muted-foreground">Requesting from → {branchWH?.name ?? "Branch warehouse"}</p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Supplying Warehouse</Label>
+                    <Input className="h-11" value={branchWH?.name ?? "No branch found"} disabled />
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Notes (optional)</Label>
+                  <Textarea placeholder="Any notes about this demand..." value={demandNotes} onChange={e => setDemandNotes(e.target.value)} className="min-h-16" />
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="shadow-sm">
+              <CardHeader className="pb-2 flex flex-row items-center justify-between">
+                <Label className="text-xs text-muted-foreground uppercase tracking-wider">Items ({demandItems.length})</Label>
+                <Button variant="outline" size="sm" className="h-8 min-h-[32px]" onClick={addLowStockToDemand}>
+                  <AlertTriangle className="h-3 w-3 mr-1" />Add Low Stock
+                </Button>
+              </CardHeader>
+              <CardContent>
+                {demandItems.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground text-sm">
+                    Click "Add Low Stock" or use the row buttons in the stock table to add items
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {demandItems.map((item, idx) => (
+                      <div key={idx} className="border rounded-lg p-3 space-y-2 border-l-2 border-l-orange-400/60 bg-orange-50/30 dark:bg-orange-950/10">
+                        <div className="flex items-center justify-between gap-2 min-w-0">
+                          <span className="font-medium text-sm truncate">{item.name}</span>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <Badge variant="secondary" className="text-xs">
+                              Kitchen Stock: {Number(stock.find(s => s.ingredient.id === item.ingredientId)?.currentStock ?? 0).toFixed(1)} {item.unit}
+                            </Badge>
+                            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => setDemandItems(prev => prev.filter((_, i) => i !== idx))}>
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="space-y-1">
+                            <Label className="text-xs text-muted-foreground">Requested Qty ({item.unit}) *</Label>
+                            <Input className="h-10 text-sm" type="number" min={1} value={item.requestedQty || ""} onChange={e => setDemandItems(prev => prev.map((it, i) => i === idx ? { ...it, requestedQty: Number(e.target.value) } : it))} />
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-xs text-muted-foreground">Low Stock Level</Label>
+                            <div className="h-10 flex items-center px-3 text-sm rounded-md border bg-muted/50 text-muted-foreground">
+                              {Number(stock.find(s => s.ingredient.id === item.ingredientId)?.lowStockLevel ?? 0).toFixed(1)} {item.unit}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+          <DialogFooter className="flex-col sm:flex-row gap-2 pt-2">
+            <Button variant="outline" onClick={() => setShowCreateDemand(false)} className="h-11 sm:h-auto">Cancel</Button>
+            <Button className="gradient-primary text-primary-foreground h-11 sm:h-auto" onClick={handleSaveDemand} disabled={demandSaving}>
+              <ClipboardList className="h-4 w-4 mr-1.5" />
+              {demandSaving ? "Creating..." : "Create Demand"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Create Transfer Dialog (Manager/Admin) — matches Branch Stock Purchase dialog ── */}
+      <Dialog open={showCreateTransfer} onOpenChange={setShowCreateTransfer}>
+        <DialogContent className="w-full max-w-[95vw] sm:max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>Create Transfer to Kitchen</DialogTitle></DialogHeader>
+          <div className="space-y-5">
+            <Card className="shadow-sm">
+              <CardHeader className="pb-2">
+                <Label className="text-xs text-muted-foreground uppercase tracking-wider">Transfer Details</Label>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label>From (Branch Stock)</Label>
+                    <Input className="h-11" value={branchWH?.name ?? "No branch found"} disabled />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>To (Kitchen) *</Label>
+                    <Input className="h-11" value={selectedKitchenWH?.name ?? "—"} disabled />
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Notes (optional)</Label>
+                  <Textarea placeholder="Any notes about this transfer..." value={transferNotes} onChange={e => setTransferNotes(e.target.value)} className="min-h-16" />
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="shadow-sm">
+              <CardHeader className="pb-2 flex flex-row items-center justify-between">
+                <Label className="text-xs text-muted-foreground uppercase tracking-wider">Items ({transferItems.length})</Label>
+                <Button variant="outline" size="sm" className="h-8 min-h-[32px]" onClick={addLowStockToTransfer}>
+                  <AlertTriangle className="h-3 w-3 mr-1" />Add Low Stock
+                </Button>
+              </CardHeader>
+              <CardContent>
+                {transferItems.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground text-sm">
+                    Click "Add Low Stock" or use the row buttons in the stock table to add items
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {transferItems.map((item, idx) => (
+                      <div key={idx} className="border rounded-lg p-3 space-y-2 border-l-2 border-l-primary/40 bg-primary/5">
+                        <div className="flex items-center justify-between gap-2 min-w-0">
+                          <span className="font-medium text-sm truncate">{item.name}</span>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <Badge variant="secondary" className="text-xs">
+                              Kitchen: {Number(stock.find(s => s.ingredient.id === item.ingredientId)?.currentStock ?? 0).toFixed(1)} {item.unit}
+                            </Badge>
+                            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => setTransferItems(prev => prev.filter((_, i) => i !== idx))}>
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                          <div className="space-y-1">
+                            <Label className="text-xs text-muted-foreground">Available in Branch</Label>
+                            <div className={`h-10 flex items-center px-3 text-sm font-semibold rounded-md border bg-muted/50 ${item.availableStock <= 0 ? "text-destructive" : "text-blue-600"}`}>
+                              {item.availableStock} {item.unit}
+                            </div>
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-xs text-muted-foreground">Transfer Qty ({item.unit}) *</Label>
+                            <Input
+                              className={`h-10 text-sm ${item.qty > item.availableStock ? "border-destructive text-destructive" : ""}`}
+                              type="number"
+                              min={0}
+                              max={item.availableStock}
+                              value={item.qty || ""}
+                              onChange={e => {
+                                const val = Math.min(Number(e.target.value), item.availableStock);
+                                setTransferItems(prev => prev.map((it, i) => i === idx ? { ...it, qty: Math.max(0, val) } : it));
+                              }}
+                            />
+                          </div>
+                          <div className="space-y-1 col-span-2 sm:col-span-1">
+                            <Label className="text-xs text-muted-foreground">Remaining in Branch</Label>
+                            <div className={`h-10 flex items-center px-3 text-sm font-semibold rounded-md border bg-muted/50 ${(item.availableStock - item.qty) <= 0 ? "text-warning" : "text-success"}`}>
+                              {Math.max(0, item.availableStock - item.qty)} {item.unit}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+          <DialogFooter className="flex-col sm:flex-row gap-2 pt-2">
+            <Button variant="outline" onClick={() => setShowCreateTransfer(false)} className="h-11 sm:h-auto">Cancel</Button>
+            <Button className="gradient-primary text-primary-foreground h-11 sm:h-auto" onClick={handleSaveTransfer} disabled={transferSaving}>
+              <Truck className="h-4 w-4 mr-1.5" />
+              {transferSaving ? "Creating..." : "Create Transfer"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

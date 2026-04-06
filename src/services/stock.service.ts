@@ -7,12 +7,14 @@ import { api } from './api';
 export interface StockAdjustmentRecord {
   id: string;
   ingredientId: string;
-  ingredient: { id: string; name: string; unit: { name: string } | null } | null;
+  ingredient: { id: string; name: string; unit: { name: string; symbol?: string } | null; category?: { name: string } | null } | null;
   type: string; // add, deduct, damage, correction
   quantity: number;
   reason: string | null;
   adjustedById: string | null;
-  adjustedBy: { id: string; name: string } | null;
+  adjustedBy: { id: string; name: string; phone?: string | null; role?: string | null; outlet?: { name: string } | null } | null;
+  warehouseId: string | null;
+  warehouse: { id: string; name: string; type: string } | null;
   date: string;
 }
 
@@ -78,16 +80,17 @@ export interface WasteRecord {
 
 export const stockService = {
   // ── Stock Adjustments ──
-  async getAdjustments(params?: { search?: string; page?: number; limit?: number }): Promise<{ data: StockAdjustmentRecord[]; meta: any }> {
+  async getAdjustments(params?: { search?: string; warehouseId?: string; page?: number; limit?: number }): Promise<{ data: StockAdjustmentRecord[]; meta: any }> {
     const q = new URLSearchParams();
     if (params?.search) q.set('search', params.search);
+    if (params?.warehouseId) q.set('warehouseId', params.warehouseId);
     if (params?.page) q.set('page', String(params.page));
     if (params?.limit) q.set('limit', String(params.limit));
     const res = await api.get<{ success: boolean; data: StockAdjustmentRecord[]; meta: any }>(`/stock/adjustments?${q.toString()}`);
     return { data: res.data, meta: (res as any).meta };
   },
 
-  async createAdjustment(data: { ingredientId: string; type: string; quantity: number; reason?: string }): Promise<StockAdjustmentRecord> {
+  async createAdjustment(data: { ingredientId: string; type: string; quantity: number; reason?: string; warehouseId?: string }): Promise<StockAdjustmentRecord> {
     const res = await api.post<{ success: boolean; data: StockAdjustmentRecord }>('/stock/adjustments', data);
     return res.data;
   },
