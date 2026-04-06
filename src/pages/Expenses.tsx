@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { expenseService, type ExpenseRecord } from "@/services/expense.service";
 import { useData } from "@/contexts/DataContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,7 +11,7 @@ import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Plus, Search, FileText, Pencil, Trash2, Wallet } from "lucide-react";
+import { Plus, Search, FileText, Pencil, Trash2, Wallet, Eye, User } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
@@ -22,13 +23,16 @@ const methods = ["Cash", "Bank Transfer", "Online", "Card"];
 
 const Expenses = () => {
   const { settings } = useData();
+  const { user } = useAuth();
   const currency = settings.currency || "Rs.";
+  const canManage = ['Super Admin', 'Admin', 'Manager', 'Accountant'].includes(user?.role ?? '');
 
   const [expenses, setExpenses] = useState<ExpenseRecord[]>([]);
   const [totalAmount, setTotalAmount] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [totalItems, setTotalItems] = useState(0);
   const [showDialog, setShowDialog] = useState(false);
+  const [showDetail, setShowDetail] = useState<ExpenseRecord | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [form, setForm] = useState({ category: "", description: "", amount: 0, paymentMethod: "Cash" });
@@ -43,8 +47,8 @@ const Expenses = () => {
       setTotalAmount(res.totalAmount);
       setTotalItems(res.meta.total);
       setTotalPages(res.meta.totalPages);
-    } catch (err: any) {
-      toast.error(err.message || "Failed to load expenses");
+    } catch (err: unknown) {
+      toast.error((err as Error).message || "Failed to load expenses");
     } finally {
       setLoading(false);
     }
@@ -91,8 +95,8 @@ const Expenses = () => {
       setShowDialog(false);
       setEditingId(null);
       await fetchExpenses();
-    } catch (err: any) {
-      toast.error(err.message || "Failed to save expense");
+    } catch (err: unknown) {
+      toast.error((err as Error).message || "Failed to save expense");
     } finally {
       setSaving(false);
     }
@@ -103,8 +107,8 @@ const Expenses = () => {
       await expenseService.delete(id);
       toast.success("Deleted");
       await fetchExpenses();
-    } catch (err: any) {
-      toast.error(err.message || "Failed to delete expense");
+    } catch (err: unknown) {
+      toast.error((err as Error).message || "Failed to delete expense");
     }
   };
 
@@ -112,7 +116,7 @@ const Expenses = () => {
 
   return (
     <div className="space-y-6">
-      <PageHeader icon={<Wallet className="h-5 w-5" />} title="Expenses" subtitle={`Total: ${currency} ${totalAmount.toLocaleString()}`} actions={<Button className="gradient-primary text-primary-foreground" onClick={openAdd}><Plus className="h-4 w-4 mr-2" />Add Expense</Button>} />
+      <PageHeader icon={<Wallet className="h-5 w-5" />} title="Expenses" subtitle={`Total: ${currency} ${totalAmount.toLocaleString()}`} actions={canManage ? <Button className="gradient-primary text-primary-foreground" onClick={openAdd}><Plus className="h-4 w-4 mr-2" />Add Expense</Button> : undefined} />
       <Card className="shadow-sm"><CardContent className="p-5"><div className="flex items-center gap-4"><div className="h-11 w-11 rounded-xl bg-destructive/10 flex items-center justify-center shrink-0"><Wallet className="h-5 w-5 text-destructive" /></div><div className="min-w-0"><p className="text-sm text-muted-foreground truncate">Total Expenses</p><p className="text-2xl font-bold tracking-tight">{currency} {totalAmount.toLocaleString()}</p></div></div></CardContent></Card>
       <Card className="shadow-sm"><CardHeader className="pb-3"><div className="relative max-w-sm"><Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} placeholder="Search..." className="pl-9" /></div></CardHeader>
         <CardContent>
@@ -123,8 +127,10 @@ const Expenses = () => {
               <div className="rounded-lg border overflow-auto max-h-[calc(100vh-300px)]">
                 <Table>
                   <TableHeader className="sticky top-0 z-10 bg-card"><TableRow className="bg-muted/50 hover:bg-muted/50"><TableHead>SN</TableHead><TableHead>Date</TableHead><TableHead>Category</TableHead><TableHead>Description</TableHead><TableHead>Amount</TableHead><TableHead>Method</TableHead><TableHead>Receipt</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader>
-                  <TableBody>{expenses.map((e, i) => (<TableRow key={e.id} className="hover:bg-muted/30 transition-colors"><TableCell>{(page-1)*20+i+1}</TableCell><TableCell>{typeof e.date === "string" ? e.date.split("T")[0] : e.date}</TableCell><TableCell><Badge variant="secondary">{e.category}</Badge></TableCell><TableCell>{e.description}</TableCell><TableCell className="font-medium">{currency} {e.amount.toLocaleString()}</TableCell><TableCell>{e.paymentMethod}</TableCell><TableCell>{e.receipt ? <FileText className="h-4 w-4 text-success" /> : <span className="text-muted-foreground">—</span>}</TableCell><TableCell><div className="flex gap-1"><Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(e)}><Pencil className="h-3 w-3" /></Button>
-                    <AlertDialog><AlertDialogTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"><Trash2 className="h-4 w-4" /></Button></AlertDialogTrigger><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Delete this expense?</AlertDialogTitle><AlertDialogDescription>This action cannot be undone.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={() => handleDelete(e.id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Delete</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
+                  <TableBody>{expenses.map((e, i) => (<TableRow key={e.id} className="hover:bg-muted/30 transition-colors"><TableCell>{(page-1)*20+i+1}</TableCell><TableCell>{typeof e.date === "string" ? e.date.split("T")[0] : e.date}</TableCell><TableCell><Badge variant="secondary">{e.category}</Badge></TableCell><TableCell>{e.description}</TableCell><TableCell className="font-medium">{currency} {e.amount.toLocaleString()}</TableCell><TableCell>{e.paymentMethod}</TableCell><TableCell>{e.receipt ? <FileText className="h-4 w-4 text-success" /> : <span className="text-muted-foreground">—</span>}</TableCell><TableCell><div className="flex gap-1">
+                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setShowDetail(e)}><Eye className="h-3 w-3" /></Button>
+                    {canManage && <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(e)}><Pencil className="h-3 w-3" /></Button>}
+                    {canManage && <AlertDialog><AlertDialogTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"><Trash2 className="h-4 w-4" /></Button></AlertDialogTrigger><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Delete this expense?</AlertDialogTitle><AlertDialogDescription>This action cannot be undone.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={() => handleDelete(e.id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Delete</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>}
                   </div></TableCell></TableRow>))}</TableBody>
                 </Table>
               </div>
@@ -138,6 +144,58 @@ const Expenses = () => {
         <div className="space-y-1.5"><Label>Amount</Label><Input placeholder="Enter amount" type="number" value={form.amount || ""} onChange={(e) => setForm(p => ({ ...p, amount: Number(e.target.value) }))} /></div>
         <div className="space-y-1.5"><Label>Payment Method</Label><Select value={form.paymentMethod} onValueChange={(v) => setForm(p => ({ ...p, paymentMethod: v }))}><SelectTrigger><SelectValue placeholder="Payment Method" /></SelectTrigger><SelectContent>{methods.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent></Select></div>
       </div><DialogFooter><Button variant="outline" onClick={() => setShowDialog(false)}>Cancel</Button><Button className="gradient-primary text-primary-foreground" onClick={handleSave} disabled={saving}>{saving ? "Saving..." : "Save"}</Button></DialogFooter></DialogContent></Dialog>
+
+      {/* Detail Dialog */}
+      <Dialog open={!!showDetail} onOpenChange={() => setShowDetail(null)}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-3">
+              <Wallet className="h-5 w-5" />
+              <span>Expense Details</span>
+              {showDetail && <Badge variant="secondary">{showDetail.category}</Badge>}
+            </DialogTitle>
+          </DialogHeader>
+          {showDetail && (
+            <div className="space-y-4">
+              <Card className="shadow-sm">
+                <CardContent className="pt-5 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <User className="h-4 w-4 text-muted-foreground" />
+                    <span className="font-medium">{showDetail.createdBy ?? "—"}</span>
+                  </div>
+                  <div className="text-xs text-muted-foreground">Date: {typeof showDetail.date === "string" ? new Date(showDetail.date).toLocaleString() : showDetail.date}</div>
+                </CardContent>
+              </Card>
+              <div className="rounded-lg border overflow-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-muted/50 hover:bg-muted/50">
+                      <TableHead>Category</TableHead>
+                      <TableHead>Description</TableHead>
+                      <TableHead>Method</TableHead>
+                      <TableHead className="text-right">Amount</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    <TableRow>
+                      <TableCell><Badge variant="secondary">{showDetail.category}</Badge></TableCell>
+                      <TableCell className="font-medium">{showDetail.description || "—"}</TableCell>
+                      <TableCell>{showDetail.paymentMethod}</TableCell>
+                      <TableCell className="text-right text-lg font-bold">{currency} {showDetail.amount.toLocaleString()}</TableCell>
+                    </TableRow>
+                  </TableBody>
+                </Table>
+              </div>
+              {showDetail.receipt && (
+                <div className="flex items-center gap-2 text-sm text-success">
+                  <FileText className="h-4 w-4" />Receipt attached
+                </div>
+              )}
+            </div>
+          )}
+          <DialogFooter><Button variant="outline" onClick={() => setShowDetail(null)}>Close</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

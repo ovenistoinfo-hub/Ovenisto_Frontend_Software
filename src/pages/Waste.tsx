@@ -8,20 +8,27 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Search, Trash2, TrendingDown, CalendarDays, BarChart3 } from "lucide-react";
+import { Plus, Search, Trash2, TrendingDown, CalendarDays, BarChart3, Eye, User } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { TablePagination, paginate } from "@/components/TablePagination";
 import { PageHeader } from "@/components/ui/page-header";
 import { stockService, type WasteRecord } from "@/services/stock.service";
 import { inventoryService, type IngredientRecord } from "@/services/inventory.service";
+import { useData } from "@/contexts/DataContext";
+import { useAuth } from "@/contexts/AuthContext";
 
 const WASTE_REASONS = ["Expired", "Spoiled", "Overcooked", "Accidental", "Damaged", "Other"] as const;
 
 const Waste = () => {
+  const { settings } = useData();
+  const { user } = useAuth();
+  const currency = settings.currency || "Rs.";
+  const canRecord = ['Super Admin', 'Admin', 'Manager', 'Kitchen Manager', 'Store Manager'].includes(user?.role ?? '');
   const [list, setList] = useState<WasteRecord[]>([]);
   const [ingredients, setIngredients] = useState<IngredientRecord[]>([]);
   const [showAdd, setShowAdd] = useState(false);
+  const [showDetail, setShowDetail] = useState<WasteRecord | null>(null);
   const [search, setSearch] = useState("");
   const [form, setForm] = useState({
     ingredientId: "",
@@ -45,8 +52,8 @@ const Waste = () => {
       ]);
       setList(wasteRes.data);
       setIngredients(ings);
-    } catch (err: any) {
-      toast.error(err.message || "Failed to load waste records");
+    } catch (err: unknown) {
+      toast.error((err as Error).message || "Failed to load waste records");
     } finally {
       setLoading(false);
     }
@@ -113,8 +120,8 @@ const Waste = () => {
       resetForm();
       setShowAdd(false);
       fetchData();
-    } catch (err: any) {
-      toast.error(err.message || "Failed to save waste record");
+    } catch (err: unknown) {
+      toast.error((err as Error).message || "Failed to save waste record");
     } finally {
       setSaving(false);
     }
@@ -124,14 +131,14 @@ const Waste = () => {
 
   return (
     <div className="space-y-6">
-      <PageHeader icon={<Trash2 className="h-5 w-5" />} title="Waste / Damage" subtitle="Track wasted items & losses" actions={<Button className="gradient-primary text-primary-foreground" onClick={() => setShowAdd(true)}><Plus className="h-4 w-4 mr-2" />Record Waste</Button>} />
+      <PageHeader icon={<Trash2 className="h-5 w-5" />} title="Waste / Damage" subtitle="Track wasted items & losses" actions={canRecord ? <Button className="gradient-primary text-primary-foreground" onClick={() => setShowAdd(true)}><Plus className="h-4 w-4 mr-2" />Record Waste</Button> : undefined} />
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card className="shadow-sm border-destructive/20"><CardContent className="p-5"><div className="flex items-center gap-4"><div className="h-11 w-11 rounded-xl bg-destructive/10 flex items-center justify-center shrink-0"><Trash2 className="h-5 w-5 text-destructive" /></div><div className="min-w-0"><p className="text-xs text-muted-foreground">Total Waste Loss</p><p className="text-2xl font-bold tracking-tight text-destructive">Rs. {totalLoss.toLocaleString()}</p></div></div></CardContent></Card>
-        <Card className="shadow-sm"><CardContent className="p-5"><div className="flex items-center gap-4"><div className="h-11 w-11 rounded-xl bg-orange-500/10 flex items-center justify-center shrink-0"><CalendarDays className="h-5 w-5 text-orange-500" /></div><div className="min-w-0"><p className="text-xs text-muted-foreground">Today's Loss</p><p className="text-2xl font-bold tracking-tight text-orange-500">Rs. {todayLoss.toLocaleString()}</p></div></div></CardContent></Card>
-        <Card className="shadow-sm"><CardContent className="p-5"><div className="flex items-center gap-4"><div className="h-11 w-11 rounded-xl bg-warning/10 flex items-center justify-center shrink-0"><TrendingDown className="h-5 w-5 text-warning" /></div><div className="min-w-0"><p className="text-xs text-muted-foreground">This Week</p><p className="text-2xl font-bold tracking-tight text-warning">Rs. {weeklyLoss.toLocaleString()}</p></div></div></CardContent></Card>
-        <Card className="shadow-sm"><CardContent className="p-5"><div className="flex items-center gap-4"><div className="h-11 w-11 rounded-xl bg-purple-500/10 flex items-center justify-center shrink-0"><BarChart3 className="h-5 w-5 text-purple-500" /></div><div className="min-w-0"><p className="text-xs text-muted-foreground">This Month</p><p className="text-2xl font-bold tracking-tight text-purple-500">Rs. {monthlyLoss.toLocaleString()}</p></div></div></CardContent></Card>
+        <Card className="shadow-sm border-destructive/20"><CardContent className="p-5"><div className="flex items-center gap-4"><div className="h-11 w-11 rounded-xl bg-destructive/10 flex items-center justify-center shrink-0"><Trash2 className="h-5 w-5 text-destructive" /></div><div className="min-w-0"><p className="text-xs text-muted-foreground">Total Waste Loss</p><p className="text-2xl font-bold tracking-tight text-destructive">{currency} {totalLoss.toLocaleString()}</p></div></div></CardContent></Card>
+        <Card className="shadow-sm"><CardContent className="p-5"><div className="flex items-center gap-4"><div className="h-11 w-11 rounded-xl bg-orange-500/10 flex items-center justify-center shrink-0"><CalendarDays className="h-5 w-5 text-orange-500" /></div><div className="min-w-0"><p className="text-xs text-muted-foreground">Today's Loss</p><p className="text-2xl font-bold tracking-tight text-orange-500">{currency} {todayLoss.toLocaleString()}</p></div></div></CardContent></Card>
+        <Card className="shadow-sm"><CardContent className="p-5"><div className="flex items-center gap-4"><div className="h-11 w-11 rounded-xl bg-warning/10 flex items-center justify-center shrink-0"><TrendingDown className="h-5 w-5 text-warning" /></div><div className="min-w-0"><p className="text-xs text-muted-foreground">This Week</p><p className="text-2xl font-bold tracking-tight text-warning">{currency} {weeklyLoss.toLocaleString()}</p></div></div></CardContent></Card>
+        <Card className="shadow-sm"><CardContent className="p-5"><div className="flex items-center gap-4"><div className="h-11 w-11 rounded-xl bg-purple-500/10 flex items-center justify-center shrink-0"><BarChart3 className="h-5 w-5 text-purple-500" /></div><div className="min-w-0"><p className="text-xs text-muted-foreground">This Month</p><p className="text-2xl font-bold tracking-tight text-purple-500">{currency} {monthlyLoss.toLocaleString()}</p></div></div></CardContent></Card>
       </div>
 
       {/* Breakdown Report */}
@@ -152,7 +159,7 @@ const Waste = () => {
               {reasonBreakdown.map(([reason, data]) => (
                 <div key={reason} className="flex items-center justify-between text-sm border-b pb-2 last:border-0">
                   <div className="flex items-center gap-2"><span className="font-medium">{reason}</span><Badge variant="secondary" className="text-[10px]">{data.count}</Badge></div>
-                  <span className="text-destructive font-semibold">Rs. {data.loss.toLocaleString()}</span>
+                  <span className="text-destructive font-semibold">{currency} {data.loss.toLocaleString()}</span>
                 </div>
               ))}
             </div>
@@ -166,7 +173,7 @@ const Waste = () => {
         <CardContent>
           {filtered.length === 0 ? (<div className="text-center py-12"><Trash2 className="h-12 w-12 text-muted-foreground mx-auto mb-3 opacity-30" /><p className="text-muted-foreground">No waste records found</p><p className="text-xs text-muted-foreground mt-1.5">Record waste to track losses.</p></div>) : (
             <>
-              <div className="rounded-lg border overflow-auto max-h-[calc(100vh-400px)]"><Table><TableHeader className="sticky top-0 z-10 bg-card"><TableRow className="bg-muted/50 hover:bg-muted/50"><TableHead>SN</TableHead><TableHead>Date</TableHead><TableHead>Item</TableHead><TableHead>Qty</TableHead><TableHead>Unit</TableHead><TableHead>Reason</TableHead><TableHead>Cost</TableHead><TableHead>Recorded By</TableHead></TableRow></TableHeader>
+              <div className="rounded-lg border overflow-auto max-h-[calc(100vh-400px)]"><Table><TableHeader className="sticky top-0 z-10 bg-card"><TableRow className="bg-muted/50 hover:bg-muted/50"><TableHead>SN</TableHead><TableHead>Date</TableHead><TableHead>Item</TableHead><TableHead>Qty</TableHead><TableHead>Unit</TableHead><TableHead>Reason</TableHead><TableHead>Cost</TableHead><TableHead>Recorded By</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader>
                 <TableBody>{paged.map((w, i) => (
                   <TableRow key={w.id} className="hover:bg-muted/30 transition-colors">
                     <TableCell>{(page-1)*10+i+1}</TableCell>
@@ -175,8 +182,9 @@ const Waste = () => {
                     <TableCell>{w.quantity ?? "—"}</TableCell>
                     <TableCell>{w.unit || "—"}</TableCell>
                     <TableCell>{w.reason || "—"}</TableCell>
-                    <TableCell className="text-destructive font-medium">{w.cost != null ? `Rs. ${Number(w.cost).toLocaleString()}` : "—"}</TableCell>
+                    <TableCell className="text-destructive font-medium">{w.cost != null ? `${currency} ${Number(w.cost).toLocaleString()}` : "—"}</TableCell>
                     <TableCell>{w.recordedBy || "—"}</TableCell>
+                    <TableCell><Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setShowDetail(w)}><Eye className="h-3 w-3" /></Button></TableCell>
                   </TableRow>
                 ))}</TableBody></Table></div>
               <TablePagination currentPage={page} totalItems={filtered.length} onPageChange={setPage} />
@@ -210,11 +218,11 @@ const Waste = () => {
             </div>
 
             {selectedIng && form.quantity > 0 && (
-              <p className="text-sm text-muted-foreground">Estimated Loss: <strong className="text-destructive">Rs. {estimatedCost.toLocaleString()}</strong></p>
+              <p className="text-sm text-muted-foreground">Estimated Loss: <strong className="text-destructive">{currency} {estimatedCost.toLocaleString()}</strong></p>
             )}
 
             {!form.ingredientId && (
-              <div className="space-y-1.5"><Label>Cost / Loss (Rs.)</Label><Input type="number" placeholder="Enter loss value" value={form.cost || ""} onChange={(e) => setForm(p => ({ ...p, cost: Number(e.target.value) }))} /></div>
+              <div className="space-y-1.5"><Label>Cost / Loss ({currency})</Label><Input type="number" placeholder="Enter loss value" value={form.cost || ""} onChange={(e) => setForm(p => ({ ...p, cost: Number(e.target.value) }))} /></div>
             )}
 
             <div className="space-y-1.5">
@@ -228,6 +236,56 @@ const Waste = () => {
             <div className="space-y-1.5"><Label>Notes</Label><Textarea placeholder="Additional notes" value={form.notes} onChange={(e) => setForm(p => ({ ...p, notes: e.target.value }))} /></div>
           </div>
           <DialogFooter><Button variant="outline" onClick={() => { resetForm(); setShowAdd(false); }}>Cancel</Button><Button className="gradient-primary text-primary-foreground" onClick={handleSave} disabled={saving}>{saving ? "Saving..." : "Save"}</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
+      {/* Detail Dialog */}
+      <Dialog open={!!showDetail} onOpenChange={() => setShowDetail(null)}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-3">
+              <Trash2 className="h-5 w-5 text-destructive" />
+              <span>Waste Record</span>
+              {showDetail && <Badge variant="secondary" className="bg-destructive/10 text-destructive">{showDetail.reason || "Unknown"}</Badge>}
+            </DialogTitle>
+          </DialogHeader>
+          {showDetail && (
+            <div className="space-y-4">
+              <Card className="shadow-sm">
+                <CardHeader className="pb-2"><Label className="text-xs text-muted-foreground uppercase tracking-wider">Recorded By</Label></CardHeader>
+                <CardContent className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <User className="h-4 w-4 text-muted-foreground" />
+                    <span className="font-medium">{showDetail.recordedBy || "—"}</span>
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-1">Date: {new Date(showDetail.date).toLocaleString()}</div>
+                </CardContent>
+              </Card>
+
+              <div className="rounded-lg border overflow-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-muted/50 hover:bg-muted/50">
+                      <TableHead>Item</TableHead>
+                      <TableHead>Unit</TableHead>
+                      <TableHead>Reason</TableHead>
+                      <TableHead className="text-right">Quantity</TableHead>
+                      <TableHead className="text-right">Cost / Loss</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    <TableRow>
+                      <TableCell className="font-medium">{showDetail.itemName || "—"}</TableCell>
+                      <TableCell className="text-sm">{showDetail.unit || "—"}</TableCell>
+                      <TableCell><Badge variant="secondary" className="bg-destructive/10 text-destructive">{showDetail.reason || "—"}</Badge></TableCell>
+                      <TableCell className="text-right text-lg font-bold text-destructive">-{showDetail.quantity ?? 0}</TableCell>
+                      <TableCell className="text-right font-semibold text-destructive">{showDetail.cost != null ? `${currency} ${Number(showDetail.cost).toLocaleString()}` : "—"}</TableCell>
+                    </TableRow>
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
+          )}
+          <DialogFooter><Button variant="outline" onClick={() => setShowDetail(null)}>Close</Button></DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
