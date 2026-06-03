@@ -12,6 +12,8 @@ import {
 import { toast } from "sonner";
 import { useData } from "@/contexts/DataContext";
 import { orderService, type OrderRecord } from "@/services/order.service";
+import { useVisiblePolling } from "@/hooks/use-visible-polling";
+import { useOrderEvents } from "@/hooks/use-order-events";
 import { menuService, type MenuItemRecord, type CategoryRecord, type ModifierRecord, type MenuItemVariant } from "@/services/menu.service";
 import { tableService, type TableRecord } from "@/services/table.service";
 import { settingsService } from "@/services/settings.service";
@@ -52,7 +54,6 @@ const statusConfig = {
 
 type TableStatus = keyof typeof statusConfig;
 const ACTIVE_STATUSES = ["pending", "preparing", "ready"];
-const POLL_INTERVAL   = 15_000;
 
 // ─── Component ─────────────────────────────────────────────────────────────
 
@@ -79,8 +80,6 @@ const WaiterPanel = () => {
   const [selectedModifiers, setSelectedModifiers] = useState<string[]>([]);
   const [placingOrder, setPlacingOrder] = useState(false);
   const [taxRate,       setTaxRate]       = useState<number>(settings.taxRate ?? 0);
-
-  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // ── Load data ──
 
@@ -113,10 +112,12 @@ const WaiterPanel = () => {
       }
     };
     init();
-    loadOrders();
-    pollingRef.current = setInterval(loadOrders, POLL_INTERVAL);
-    return () => { if (pollingRef.current) clearInterval(pollingRef.current); };
   }, [loadOrders]);
+
+  // Orders refresh on real-time push, plus a 60s visibility-gated safety poll so a
+  // waiter's tablet stops querying when backgrounded (lets the Neon compute idle).
+  useOrderEvents(loadOrders);
+  useVisiblePolling(loadOrders, 60000);
 
   // ── Derived ──
 

@@ -6,6 +6,8 @@ import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/ui/page-header";
 import { useData } from "@/contexts/DataContext";
 import { orderService } from "@/services/order.service";
+import { useVisiblePolling } from "@/hooks/use-visible-polling";
+import { useOrderEvents } from "@/hooks/use-order-events";
 import { toast } from "sonner";
 import { ORDER_STATUS_COLORS } from "@/lib/constants";
 
@@ -42,11 +44,9 @@ const OnlineOrders = () => {
     } catch {}
   }, []);
 
-  useEffect(() => {
-    loadOrders();
-    const interval = setInterval(loadOrders, 30000);
-    return () => clearInterval(interval);
-  }, [loadOrders]);
+  // Real-time order push + 60s visibility-gated safety poll (backgrounded tab idles).
+  useOrderEvents(loadOrders);
+  useVisiblePolling(loadOrders, 60000);
 
   const onlineOrders = useMemo(() =>
     [...apiOrders].sort((a, b) => (b.date || "").localeCompare(a.date || "")),

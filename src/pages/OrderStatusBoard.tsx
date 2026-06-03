@@ -19,6 +19,8 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useData } from "@/contexts/DataContext";
 import { orderService } from "@/services/order.service";
+import { useVisiblePolling } from "@/hooks/use-visible-polling";
+import { useOrderEvents } from "@/hooks/use-order-events";
 
 // ─── Config ────────────────────────────────────────────────────────────────
 
@@ -78,11 +80,11 @@ const OrderStatusBoard = () => {
 
   useEffect(() => { setMounted(true); }, []);
   useEffect(() => { const t = setInterval(() => setTime(new Date()), 1000); return () => clearInterval(t); }, []);
-  useEffect(() => {
-    loadOrders();
-    const t = setInterval(loadOrders, 15000);
-    return () => clearInterval(t);
-  }, [loadOrders]);
+  // Real-time order push + a 60s safety poll, gated on tab visibility AND the
+  // Live/Paused (autoRefresh) toggle. A backgrounded or paused board stops
+  // querying so the Neon compute can scale to zero.
+  useOrderEvents(loadOrders);
+  useVisiblePolling(loadOrders, 60000, autoRefresh);
 
   // ── Filtering ──
 

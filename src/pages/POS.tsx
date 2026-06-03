@@ -9,6 +9,8 @@ import { inventoryService, type IngredientRecord } from "@/services/inventory.se
 import { shiftService, type ShiftRecord } from "@/services/shift.service";
 import { deliveryService, type RiderRecord } from "@/services/delivery.service";
 import { tableService, type TableRecord } from "@/services/table.service";
+import { useVisiblePolling } from "@/hooks/use-visible-polling";
+import { useOrderEvents } from "@/hooks/use-order-events";
 import { Search, Plus, Minus, X, ShoppingCart, FileText, Printer, ArrowLeft, Trash2, User, MapPin, Phone, Flame, Check, CreditCard, Banknote, Smartphone, Star, RotateCcw, Download, ClipboardList, AlertTriangle, UtensilsCrossed, CalendarClock, Calendar, Timer, ChefHat, Tag, Zap, History, Monitor, BookOpen, StickyNote, Eye, Building2, Crown, CircleAlert, Bell, DollarSign, Package, Ban } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -184,11 +186,10 @@ const POS = () => {
     inventoryService.getIngredients({ status: 'active', lowStock: true }).then(data => setApiLowStockItems(data)).catch(() => {});
   }, [loadApiOrders]);
 
-  // Auto-refresh orders every 30s
-  useEffect(() => {
-    const interval = setInterval(loadApiOrders, 30000);
-    return () => clearInterval(interval);
-  }, [loadApiOrders]);
+  // Refresh orders on real-time push (instant), plus a 60s visibility-gated safety
+  // poll so a backgrounded tab stops querying and lets the DB idle (saves CU-hrs).
+  useOrderEvents(loadApiOrders);
+  useVisiblePolling(loadApiOrders, 60000);
 
   // ── Load order from Order Status Board (payment collection) ──
   useEffect(() => {

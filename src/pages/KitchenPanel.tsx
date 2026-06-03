@@ -10,6 +10,8 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { orderService, type OrderRecord, type KitchenRecord } from "@/services/order.service";
 import { ORDER_TYPE_COLORS } from "@/lib/constants";
+import { useVisiblePolling } from "@/hooks/use-visible-polling";
+import { useOrderEvents } from "@/hooks/use-order-events";
 
 type KitchenOrderStatus = "new" | "preparing" | "ready" | "completed";
 
@@ -139,19 +141,11 @@ const KitchenPanel = () => {
     return () => clearInterval(interval);
   }, []);
 
-  // Auto-refresh orders every 30 seconds
-  useEffect(() => {
-    const interval = setInterval(async () => {
-      if (!kitchen) return;
-      try {
-        const { data: orders } = await orderService.getOrders({ limit: 100 });
-        setKitchenOrders(buildKitchenOrders(orders, kitchen));
-      } catch {
-        // silent
-      }
-    }, 30000);
-    return () => clearInterval(interval);
-  }, [kitchen, buildKitchenOrders]);
+  // KDS updates on real-time order push (instant), plus a 60s visibility-gated
+  // safety poll. A wall-mounted KDS left on overnight now stops querying when the
+  // tab is hidden, letting the Neon compute scale to zero.
+  useOrderEvents(load);
+  useVisiblePolling(load, 60000, !!kitchen);
 
   /** Returns elapsed seconds since preparingAt started */
   const getElapsedSeconds = (preparingAt: Date) =>

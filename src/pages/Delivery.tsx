@@ -11,6 +11,7 @@ import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PageHeader } from "@/components/ui/page-header";
 import { deliveryService, type RiderRecord, type AssignmentRecord } from "@/services/delivery.service";
+import { useVisiblePolling } from "@/hooks/use-visible-polling";
 import { useData } from "@/contexts/DataContext";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -54,12 +55,9 @@ const Delivery = () => {
     finally { setLoading(false); }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
-  // Auto-refresh every 20s
-  useEffect(() => {
-    const t = setInterval(load, 20000);
-    return () => clearInterval(t);
-  }, [load]);
+  // Refresh dashboard every 60s while visible (was 20s, ungated). A backgrounded
+  // manager tab now stops re-running the aggregation query, letting the DB idle.
+  useVisiblePolling(load, 60000);
 
   const openAssignDialog = async (orderId: string) => {
     setShowAssign(orderId);

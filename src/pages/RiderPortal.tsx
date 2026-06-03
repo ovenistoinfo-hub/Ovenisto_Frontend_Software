@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { deliveryService, type RiderRecord, type AssignmentRecord } from "@/services/delivery.service";
+import { useVisiblePolling } from "@/hooks/use-visible-polling";
 import { useData } from "@/contexts/DataContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
@@ -47,13 +48,10 @@ const RiderPortal = () => {
     } finally { setLoading(false); }
   }, []);
 
-  useEffect(() => { loadData(); }, [loadData]);
-
-  // Auto-refresh every 15s
-  useEffect(() => {
-    const t = setInterval(loadData, 15000);
-    return () => clearInterval(t);
-  }, [loadData]);
+  // Refresh assignments every 45s while the tab is visible. The rider's phone
+  // screen is off most of the time, so a hidden tab now stops polling and lets
+  // the Neon compute scale to zero between deliveries.
+  useVisiblePolling(loadData, 45000);
 
   const doAction = async (assignmentId: string, status: AssignmentRecord['status']) => {
     setActionIds(prev => new Set([...prev, assignmentId]));
