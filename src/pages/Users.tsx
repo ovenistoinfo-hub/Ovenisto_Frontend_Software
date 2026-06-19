@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -83,29 +84,20 @@ const rolePresets: Record<string, Record<string, string[]>> = {
 const branchScopedRoles = ["Admin", "Manager", "Floor Manager", "Kitchen Manager", "Store Manager", "Delivery Manager", "Cashier", "Waiter", "Kitchen Staff", "Accountant", "Rider", "Customer Screen"];
 
 const Users = () => {
-  const [list, setList] = useState<UserRecord[]>([]);
+  const queryClient = useQueryClient();
   const [showDialog, setShowDialog] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [filterRole, setFilterRole] = useState<string>("all");
   const [form, setForm] = useState({ name: "", email: "", phone: "", role: "Cashier", password: "", branch: "", outletId: "" });
   const [perms, setPerms] = useState<Record<string, string[]>>(rolePresets["Cashier"]);
-  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [outlets, setOutlets] = useState<OutletRecord[]>([]);
 
-  const fetchUsers = useCallback(async () => {
-    try {
-      const { data } = await userService.getUsers({ limit: 100 });
-      setList(data);
-    } catch (err: any) {
-      toast.error(err.message || "Failed to load users");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => { fetchUsers(); }, [fetchUsers]);
+  const { data: list = [], isLoading: loading } = useQuery({
+    queryKey: ["users"],
+    queryFn: () => userService.getUsers({ limit: 100 }).then(r => r.data),
+  });
 
   // Fetch outlets for the dropdown
   useEffect(() => {
@@ -165,7 +157,7 @@ const Users = () => {
       }
       setShowDialog(false);
       setEditingId(null);
-      await fetchUsers();
+      queryClient.invalidateQueries({ queryKey: ["users"] });
     } catch (err: any) {
       toast.error(err.message || "Failed to save user");
     } finally {
@@ -178,7 +170,7 @@ const Users = () => {
     try {
       await userService.deleteUser(id);
       toast.success("User deactivated");
-      await fetchUsers();
+      queryClient.invalidateQueries({ queryKey: ["users"] });
     } catch (err: any) {
       toast.error(err.message || "Failed to delete user");
     }

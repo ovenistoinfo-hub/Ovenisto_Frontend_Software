@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,7 +14,6 @@ import { TablePagination } from "@/components/TablePagination";
 import { ORDER_STATUS_COLORS, ORDER_TYPE_COLORS } from "@/lib/constants";
 import { orderService, type OrderRecord } from "@/services/order.service";
 import { useData } from "@/contexts/DataContext";
-import { toast } from "sonner";
 
 const statusColor = ORDER_STATUS_COLORS;
 const typeColor = ORDER_TYPE_COLORS;
@@ -23,10 +23,7 @@ const PAGE_SIZE = 20;
 const Sales = () => {
   const { settings } = useData();
   const currency = settings.currency || "Rs.";
-
-  const [orders, setOrders] = useState<OrderRecord[]>([]);
-  const [total, setTotal] = useState(0);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
 
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("All");
@@ -35,26 +32,19 @@ const Sales = () => {
 
   const [selectedOrder, setSelectedOrder] = useState<OrderRecord | null>(null);
 
-  const fetchOrders = useCallback(async () => {
-    setLoading(true);
-    try {
-      const { data, meta } = await orderService.getOrders({
-        search: search || undefined,
-        status: statusFilter !== "All" ? statusFilter : undefined,
-        type: typeFilter !== "All" ? typeFilter : undefined,
-        page,
-        limit: PAGE_SIZE,
-      });
-      setOrders(data);
-      setTotal(meta?.total ?? data.length);
-    } catch {
-      toast.error("Failed to load orders");
-    } finally {
-      setLoading(false);
-    }
-  }, [search, typeFilter, statusFilter, page]);
-
-  useEffect(() => { fetchOrders(); }, [fetchOrders]);
+  const { data: resp, isLoading: loading } = useQuery({
+    queryKey: ["orders", { search, typeFilter, statusFilter, page }],
+    queryFn: () => orderService.getOrders({
+      search: search || undefined,
+      status: statusFilter !== "All" ? statusFilter : undefined,
+      type: typeFilter !== "All" ? typeFilter : undefined,
+      page,
+      limit: PAGE_SIZE,
+    }),
+  });
+  const orders = resp?.data ?? [];
+  const total = resp?.meta?.total ?? orders.length;
+  const refetchOrders = () => queryClient.invalidateQueries({ queryKey: ["orders"] });
 
   // Reset to page 1 when filters change
   const handleSearch = (v: string) => { setSearch(v); setPage(1); };
@@ -91,7 +81,7 @@ const Sales = () => {
         subtitle="View all orders and history"
         actions={
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={fetchOrders}><RefreshCw className="h-4 w-4 mr-2" />Refresh</Button>
+            <Button variant="outline" size="sm" onClick={refetchOrders}><RefreshCw className="h-4 w-4 mr-2" />Refresh</Button>
             <Button variant="outline" onClick={handleExport}><Download className="h-4 w-4 mr-2" />Export</Button>
           </div>
         }

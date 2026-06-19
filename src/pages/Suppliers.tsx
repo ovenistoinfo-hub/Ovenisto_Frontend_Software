@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supplierService, type SupplierRecord } from "@/services/supplier.service";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -20,28 +21,19 @@ const Suppliers = () => {
   const { settings } = useData();
   const currency = settings.currency || "Rs.";
   const canManage = ['Super Admin', 'Admin', 'Manager', 'Store Manager'].includes(user?.role ?? '');
-  const [suppliers, setSuppliers] = useState<SupplierRecord[]>([]);
+  const queryClient = useQueryClient();
   const [showDialog, setShowDialog] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [form, setForm] = useState({ name: "", company: "", phone: "", email: "" });
-  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [page, setPage] = useState(1);
   const [showDetail, setShowDetail] = useState<SupplierRecord | null>(null);
 
-  const fetchSuppliers = useCallback(async () => {
-    try {
-      const res = await supplierService.getAll();
-      setSuppliers(res.data);
-    } catch (err: unknown) {
-      toast.error((err as Error).message || "Failed to load suppliers");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => { fetchSuppliers(); }, [fetchSuppliers]);
+  const { data: suppliers = [], isLoading: loading } = useQuery({
+    queryKey: ["suppliers"],
+    queryFn: () => supplierService.getAll().then(r => r.data),
+  });
 
   const filtered = suppliers.filter((s) => s.name.toLowerCase().includes(search.toLowerCase()));
   const paged = paginate(filtered, page);
@@ -63,7 +55,7 @@ const Suppliers = () => {
       setForm({ name: "", company: "", phone: "", email: "" });
       setShowDialog(false);
       setEditingId(null);
-      await fetchSuppliers();
+      queryClient.invalidateQueries({ queryKey: ["suppliers"] });
     } catch (err: unknown) {
       toast.error((err as Error).message || "Failed to save supplier");
     } finally {
@@ -75,7 +67,7 @@ const Suppliers = () => {
     try {
       await supplierService.delete(id);
       toast.success("Deleted");
-      await fetchSuppliers();
+      queryClient.invalidateQueries({ queryKey: ["suppliers"] });
     } catch (err: unknown) {
       toast.error((err as Error).message || "Failed to delete supplier");
     }

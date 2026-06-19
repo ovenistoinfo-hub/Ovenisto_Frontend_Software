@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { expenseService, type ExpenseRecord } from "@/services/expense.service";
 import { useData } from "@/contexts/DataContext";
 import { useAuth } from "@/contexts/AuthContext";
@@ -27,33 +28,22 @@ const Expenses = () => {
   const currency = settings.currency || "Rs.";
   const canManage = ['Super Admin', 'Admin', 'Manager', 'Accountant'].includes(user?.role ?? '');
 
-  const [expenses, setExpenses] = useState<ExpenseRecord[]>([]);
-  const [totalAmount, setTotalAmount] = useState(0);
-  const [totalItems, setTotalItems] = useState(0);
+  const queryClient = useQueryClient();
   const [showDialog, setShowDialog] = useState(false);
   const [showDetail, setShowDetail] = useState<ExpenseRecord | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [form, setForm] = useState({ category: "", description: "", amount: 0, paymentMethod: "Cash" });
-  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [page, setPage] = useState(1);
 
-  const fetchExpenses = useCallback(async () => {
-    try {
-      const res = await expenseService.getAll({ page, limit: 20, search: search || undefined });
-      setExpenses(res.data);
-      setTotalAmount(res.totalAmount);
-      setTotalItems(res.meta.total);
-
-    } catch (err: unknown) {
-      toast.error((err as Error).message || "Failed to load expenses");
-    } finally {
-      setLoading(false);
-    }
-  }, [page, search]);
-
-  useEffect(() => { fetchExpenses(); }, [fetchExpenses]);
+  const { data: resp, isLoading: loading } = useQuery({
+    queryKey: ["expenses", { page, search }],
+    queryFn: () => expenseService.getAll({ page, limit: 20, search: search || undefined }),
+  });
+  const expenses = resp?.data ?? [];
+  const totalAmount = resp?.totalAmount ?? 0;
+  const totalItems = resp?.meta.total ?? 0;
 
   const openAdd = () => { setEditingId(null); setForm({ category: "", description: "", amount: 0, paymentMethod: "Cash" }); setShowDialog(true); };
   const openEdit = (e: ExpenseRecord) => {
@@ -93,7 +83,7 @@ const Expenses = () => {
       setForm({ category: "", description: "", amount: 0, paymentMethod: "Cash" });
       setShowDialog(false);
       setEditingId(null);
-      await fetchExpenses();
+      queryClient.invalidateQueries({ queryKey: ["expenses"] });
     } catch (err: unknown) {
       toast.error((err as Error).message || "Failed to save expense");
     } finally {
@@ -105,7 +95,7 @@ const Expenses = () => {
     try {
       await expenseService.delete(id);
       toast.success("Deleted");
-      await fetchExpenses();
+      queryClient.invalidateQueries({ queryKey: ["expenses"] });
     } catch (err: unknown) {
       toast.error((err as Error).message || "Failed to delete expense");
     }
