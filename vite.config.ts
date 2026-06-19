@@ -17,4 +17,18 @@ export default defineConfig(({ mode }) => ({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        // Split heavy third-party libs into separate, content-hashed chunks so the
+        // browser caches them across deploys (only changed app code re-downloads),
+        // and they don't bloat the per-route page chunks.
+        manualChunks: {
+          "react-vendor": ["react", "react-dom", "react-router-dom"],
+          charts: ["recharts"],
+          query: ["@tanstack/react-query"],
+        },
+      },
+    },
+  },
 }));

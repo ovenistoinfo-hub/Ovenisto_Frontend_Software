@@ -3,65 +3,70 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { lazy, Suspense } from "react";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { DataProvider } from "@/contexts/DataContext";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 
+// Login stays eager — it's the first screen, so we don't want to lazy-load it.
 import Login from "./pages/Login";
-import Dashboard from "./pages/Dashboard";
-import Analytics from "./pages/Analytics";
-import POS from "./pages/POS";
-import Kitchens from "./pages/Kitchens";
-import KitchenPanel from "./pages/KitchenPanel";
-import WaiterPanel from "./pages/WaiterPanel";
-import Outlets from "./pages/Outlets";
-import SettingsPage from "./pages/Settings";
-import IngredientUnits from "./pages/items/IngredientUnits";
-import IngredientCategories from "./pages/items/IngredientCategories";
-import Ingredients from "./pages/items/Ingredients";
-import Modifiers from "./pages/items/Modifiers";
-import MenuCategories from "./pages/items/MenuCategories";
-import FoodMenu from "./pages/items/FoodMenu";
-import FoodMenuForm from "./pages/items/FoodMenuForm";
-import MealTypes from "./pages/items/MealTypes";
-import PreMadeFood from "./pages/items/PreMadeFood";
-import Warehouses from "./pages/Warehouses";
-import KitchenStock from "./pages/KitchenStock";
-import Production from "./pages/Production";
-import StockAdjustments from "./pages/stock/StockAdjustments";
-import Sales from "./pages/Sales";
-import Customers from "./pages/Customers";
-import CustomerDetail from "./pages/CustomerDetail";
-import CustomerDues from "./pages/CustomerDues";
-import Purchases from "./pages/Purchases";
-import PurchaseRequests from "./pages/PurchaseRequests";
-import Suppliers from "./pages/Suppliers";
-import Expenses from "./pages/Expenses";
-import Transfers from "./pages/Transfers";
-import Demands from "./pages/Demands";
-import Waste from "./pages/Waste";
-import Users from "./pages/Users";
-import Attendance from "./pages/Attendance";
-import Reports from "./pages/Reports";
-import SMS from "./pages/SMS";
-import Profile from "./pages/Profile";
-import CustomerDisplay from "./pages/CustomerDisplay";
-import OrderStatusBoard from "./pages/OrderStatusBoard";
-import NotFound from "./pages/NotFound";
+
+// All other pages are code-split (React.lazy) so the initial bundle is small and
+// each page's JS downloads only when its route is first visited.
+const Dashboard = lazy(() => import("./pages/Dashboard"));
+const Analytics = lazy(() => import("./pages/Analytics"));
+const POS = lazy(() => import("./pages/POS"));
+const Kitchens = lazy(() => import("./pages/Kitchens"));
+const KitchenPanel = lazy(() => import("./pages/KitchenPanel"));
+const WaiterPanel = lazy(() => import("./pages/WaiterPanel"));
+const Outlets = lazy(() => import("./pages/Outlets"));
+const SettingsPage = lazy(() => import("./pages/Settings"));
+const IngredientUnits = lazy(() => import("./pages/items/IngredientUnits"));
+const IngredientCategories = lazy(() => import("./pages/items/IngredientCategories"));
+const Ingredients = lazy(() => import("./pages/items/Ingredients"));
+const Modifiers = lazy(() => import("./pages/items/Modifiers"));
+const MenuCategories = lazy(() => import("./pages/items/MenuCategories"));
+const FoodMenu = lazy(() => import("./pages/items/FoodMenu"));
+const FoodMenuForm = lazy(() => import("./pages/items/FoodMenuForm"));
+const MealTypes = lazy(() => import("./pages/items/MealTypes"));
+const PreMadeFood = lazy(() => import("./pages/items/PreMadeFood"));
+const Warehouses = lazy(() => import("./pages/Warehouses"));
+const KitchenStock = lazy(() => import("./pages/KitchenStock"));
+const Production = lazy(() => import("./pages/Production"));
+const StockAdjustments = lazy(() => import("./pages/stock/StockAdjustments"));
+const Sales = lazy(() => import("./pages/Sales"));
+const Customers = lazy(() => import("./pages/Customers"));
+const CustomerDetail = lazy(() => import("./pages/CustomerDetail"));
+const CustomerDues = lazy(() => import("./pages/CustomerDues"));
+const Purchases = lazy(() => import("./pages/Purchases"));
+const PurchaseRequests = lazy(() => import("./pages/PurchaseRequests"));
+const Suppliers = lazy(() => import("./pages/Suppliers"));
+const Expenses = lazy(() => import("./pages/Expenses"));
+const Transfers = lazy(() => import("./pages/Transfers"));
+const Demands = lazy(() => import("./pages/Demands"));
+const Waste = lazy(() => import("./pages/Waste"));
+const Users = lazy(() => import("./pages/Users"));
+const Attendance = lazy(() => import("./pages/Attendance"));
+const Reports = lazy(() => import("./pages/Reports"));
+const SMS = lazy(() => import("./pages/SMS"));
+const Profile = lazy(() => import("./pages/Profile"));
+const CustomerDisplay = lazy(() => import("./pages/CustomerDisplay"));
+const OrderStatusBoard = lazy(() => import("./pages/OrderStatusBoard"));
+const NotFound = lazy(() => import("./pages/NotFound"));
 
 // New pages
-import SelfOrder from "./pages/SelfOrder";
-import Deals from "./pages/Deals";
-import Delivery from "./pages/Delivery";
-import Loyalty from "./pages/Loyalty";
-import Shifts from "./pages/Shifts";
-import Coupons from "./pages/Coupons";
-import OnlineOrders from "./pages/OnlineOrders";
-import Reservations from "./pages/Reservations";
-import TableLayout from "./pages/TableLayout";
-import EmployeePortal from "./pages/EmployeePortal";
-import RiderPortal from "./pages/RiderPortal";
+const SelfOrder = lazy(() => import("./pages/SelfOrder"));
+const Deals = lazy(() => import("./pages/Deals"));
+const Delivery = lazy(() => import("./pages/Delivery"));
+const Loyalty = lazy(() => import("./pages/Loyalty"));
+const Shifts = lazy(() => import("./pages/Shifts"));
+const Coupons = lazy(() => import("./pages/Coupons"));
+const OnlineOrders = lazy(() => import("./pages/OnlineOrders"));
+const Reservations = lazy(() => import("./pages/Reservations"));
+const TableLayout = lazy(() => import("./pages/TableLayout"));
+const EmployeePortal = lazy(() => import("./pages/EmployeePortal"));
+const RiderPortal = lazy(() => import("./pages/RiderPortal"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -177,7 +182,9 @@ const App = () => (
             <Toaster />
             <Sonner />
             <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-              <AppRoutes />
+              <Suspense fallback={<div className="flex h-screen items-center justify-center text-sm text-muted-foreground">Loading…</div>}>
+                <AppRoutes />
+              </Suspense>
             </BrowserRouter>
           </ErrorBoundary>
         </TooltipProvider>
