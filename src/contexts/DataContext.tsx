@@ -568,9 +568,30 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const storeRef = useRef(store);
   storeRef.current = store;
 
+  // Persist to localStorage, but DEBOUNCED. The old code re-serialized the entire
+  // ~41-collection store on every single mutation (every keystroke on data-heavy
+  // pages like POS), which janks the main thread. Coalescing rapid changes into one
+  // write every 400ms keeps persistence behaviour identical while removing the jank.
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...store, __version: STORAGE_VERSION }));
+    const handle = setTimeout(() => {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...storeRef.current, __version: STORAGE_VERSION }));
+    }, 400);
+    return () => clearTimeout(handle);
   }, [store]);
+
+  // Safety net: flush the latest store synchronously if the tab is closed/hidden
+  // before the debounce fires, so no data is lost.
+  useEffect(() => {
+    const flush = () => {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...storeRef.current, __version: STORAGE_VERSION }));
+    };
+    window.addEventListener("beforeunload", flush);
+    document.addEventListener("visibilitychange", flush);
+    return () => {
+      window.removeEventListener("beforeunload", flush);
+      document.removeEventListener("visibilitychange", flush);
+    };
+  }, []);
 
   const update = useCallback((updater: (prev: DataStore) => DataStore) => {
     setStore(updater);
