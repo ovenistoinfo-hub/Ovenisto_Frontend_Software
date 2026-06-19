@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { useData } from "@/contexts/DataContext";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -112,6 +113,7 @@ const DatePickerField = ({
 const Warehouses = () => {
   const { user } = useAuth();
   const { settings } = useData();
+  const queryClient = useQueryClient();
   const currency = settings.currency || "Rs.";
   const isSuperAdmin = user?.role === "Super Admin";
   // Manager → Purchase Request only; Admin/Super Admin → Add Purchase only
@@ -119,13 +121,7 @@ const Warehouses = () => {
   const canPurchase = ["Super Admin", "Admin"].includes(user?.role ?? "");
 
   // ── Main page state ──
-  const [warehouses, setWarehouses] = useState<WarehouseRecord[]>([]);
   const [selectedId, setSelectedId] = useState("");
-  const [stock, setStock] = useState<WarehouseStockRecord[]>([]);
-  const [categories, setCategories] = useState<IngredientCategoryRecord[]>([]);
-  const [expiry, setExpiry] = useState<ExpirySummary>({ expiredCount: 0, nearExpiryCount: 0, expired: [], nearExpiry: [] });
-  const [loading, setLoading] = useState(true);
-  const [stockLoading, setStockLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -178,51 +174,44 @@ const Warehouses = () => {
     return () => clearTimeout(t);
   }, [search]);
 
-  // Load warehouses + categories
+  // Load warehouses + categories (primary list — cached, paints instantly on revisit)
+  const { data: warehousesData, isLoading: loading } = useQuery({
+    queryKey: ["warehouses-list", { isSuperAdmin }],
+    queryFn: () =>
+      Promise.all([warehouseService.getAll(), inventoryService.getIngredientCategories()])
+        .then(([whList, catList]) => ({
+          warehouses: isSuperAdmin
+            ? whList.filter(w => w.type !== "KITCHEN")
+            : whList.filter(w => w.type === "BRANCH"),
+          categories: catList,
+        })),
+  });
+  const warehouses = useMemo(() => warehousesData?.warehouses ?? [], [warehousesData]);
+  const categories: IngredientCategoryRecord[] = warehousesData?.categories ?? [];
+
+  // Auto-select the first warehouse once the list is available
   useEffect(() => {
-    Promise.all([warehouseService.getAll(), inventoryService.getIngredientCategories()])
-      .then(([whList, catList]) => {
-        const filtered = isSuperAdmin
-          ? whList.filter(w => w.type !== "KITCHEN")
-          : whList.filter(w => w.type === "BRANCH");
-        setWarehouses(filtered);
-        setCategories(catList);
-        if (filtered.length > 0) setSelectedId(filtered[0].id);
-      })
-      .catch((err: Error) => toast.error(err.message || "Failed to load data"))
-      .finally(() => setLoading(false));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    if (!selectedId && warehouses.length > 0) setSelectedId(warehouses[0].id);
+  }, [warehouses, selectedId]);
 
-  const fetchStock = useCallback(async (whId: string) => {
-    if (!whId) return;
-    setStockLoading(true);
-    try {
-      const [data, exp] = await Promise.all([
-        warehouseService.getStock(whId),
-        warehouseService.getExpirySummary(whId),
-      ]);
-      setStock(data);
-      setExpiry(exp);
-    } catch (err: Error | unknown) {
-      toast.error((err as Error).message || "Failed to load stock");
-    } finally {
-      setStockLoading(false);
-    }
-  }, []);
-
-  useEffect(() => { if (selectedId) fetchStock(selectedId); }, [selectedId, fetchStock]);
+  // Per-warehouse stock + expiry (secondary — loads when a warehouse is selected)
+  const { data: stockData, isLoading: stockLoading } = useQuery({
+    queryKey: ["warehouse-stock", selectedId],
+    queryFn: () =>
+      Promise.all([
+        warehouseService.getStock(selectedId),
+        warehouseService.getExpirySummary(selectedId),
+      ]).then(([data, exp]) => ({ stock: data, expiry: exp })),
+    enabled: !!selectedId,
+  });
+  const stock = useMemo<WarehouseStockRecord[]>(() => stockData?.stock ?? [], [stockData]);
+  const expiry: ExpirySummary = stockData?.expiry ?? { expiredCount: 0, nearExpiryCount: 0, expired: [], nearExpiry: [] };
 
   const handleRefresh = async () => {
     if (!selectedId) return;
     setRefreshing(true);
     try {
-      const [data, exp] = await Promise.all([
-        warehouseService.getStock(selectedId),
-        warehouseService.getExpirySummary(selectedId),
-      ]);
-      setStock(data);
-      setExpiry(exp);
+      await queryClient.invalidateQueries({ queryKey: ["warehouse-stock", selectedId] });
     } catch (err: Error | unknown) {
       toast.error((err as Error).message || "Failed to refresh");
     } finally {
@@ -398,7 +387,7 @@ const Warehouses = () => {
       if (apSelectedRequestId) {
         setApApprovedRequests(prev => prev.filter(r => r.id !== apSelectedRequestId));
       }
-      fetchStock(selectedId);
+      queryClient.invalidateQueries({ queryKey: ["warehouse-stock", selectedId] });
     } catch (err: unknown) {
       toast.error((err as Error).message || "Failed to save purchase");
     } finally {

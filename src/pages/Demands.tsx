@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { demandService, type DemandRecord, type DemandStatus, type DemandItem } from "@/services/demand.service";
 import { warehouseService, type WarehouseRecord, type WarehouseStockRecord } from "@/services/warehouse.service";
 import { inventoryService, type IngredientRecord } from "@/services/inventory.service";
@@ -31,14 +32,13 @@ interface FormItem { ingredientId: string; name: string; unit: string; currentSt
 
 const Demands = () => {
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   const canCreate  = ['Kitchen Manager', 'Manager', 'Admin'].includes(user?.role ?? '');
   const canApprove = ['Super Admin', 'Admin', 'Manager'].includes(user?.role ?? '');
 
   // Data state
-  const [demands, setDemands] = useState<DemandRecord[]>([]);
   const [warehouses, setWarehouses] = useState<WarehouseRecord[]>([]);
   const [ingredients, setIngredients] = useState<IngredientRecord[]>([]);
-  const [loading, setLoading] = useState(true);
 
   // UI state
   const [saving, setSaving] = useState(false);
@@ -65,18 +65,12 @@ const Demands = () => {
   const [supplyingStockMap, setSupplyingStockMap] = useState<Record<string, number>>({});
   const [loadingSupplyStock, setLoadingSupplyStock] = useState(false);
 
-  const fetchDemands = useCallback(async () => {
-    try {
-      const data = await demandService.getAll({
-        ...(filterStatus !== "ALL" && { status: filterStatus }),
-      });
-      setDemands(data);
-    } catch (err: unknown) {
-      toast.error((err as Error).message || "Failed to load demands");
-    } finally {
-      setLoading(false);
-    }
-  }, [filterStatus]);
+  const { data: demands = [], isLoading: loading } = useQuery({
+    queryKey: ["demands", { status: filterStatus }],
+    queryFn: () => demandService.getAll({
+      ...(filterStatus !== "ALL" && { status: filterStatus }),
+    }),
+  });
 
   useEffect(() => {
     Promise.all([warehouseService.getAll(), inventoryService.getIngredients()])
@@ -86,11 +80,6 @@ const Demands = () => {
       })
       .catch((err: unknown) => toast.error((err as Error).message || "Failed to load data"));
   }, []);
-
-  useEffect(() => {
-    setLoading(true);
-    fetchDemands();
-  }, [fetchDemands]);
 
   const filtered = demands.filter(d =>
     (d.demandNo || "").toLowerCase().includes(search.toLowerCase()) ||
@@ -264,7 +253,7 @@ const Demands = () => {
       });
       toast.success("Demand created");
       setShowDialog(false);
-      await fetchDemands();
+      queryClient.invalidateQueries({ queryKey: ["demands"] });
     } catch (err: unknown) {
       toast.error((err as Error).message || "Failed to create demand");
     } finally {
@@ -280,7 +269,7 @@ const Demands = () => {
       const challanNo = (result as any).challanNo;
       toast.success(`Demand approved${challanNo ? ` — Challan ${challanNo} created` : ""}`);
       setShowDetail(null);
-      await fetchDemands();
+      queryClient.invalidateQueries({ queryKey: ["demands"] });
     } catch (err: unknown) {
       toast.error((err as Error).message || "Failed to approve demand");
     } finally {
@@ -296,7 +285,7 @@ const Demands = () => {
       toast.success("Demand rejected");
       setRejectTarget(null);
       setRejectReason("");
-      await fetchDemands();
+      queryClient.invalidateQueries({ queryKey: ["demands"] });
     } catch (err: unknown) {
       toast.error((err as Error).message || "Failed to reject demand");
     } finally {
@@ -311,7 +300,7 @@ const Demands = () => {
       await demandService.cancel(cancelId);
       toast.success("Demand cancelled");
       setCancelId(null);
-      await fetchDemands();
+      queryClient.invalidateQueries({ queryKey: ["demands"] });
     } catch (err: unknown) {
       toast.error((err as Error).message || "Failed to cancel demand");
     } finally {

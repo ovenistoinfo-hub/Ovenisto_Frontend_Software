@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { purchaseService, type PurchaseRecord } from "@/services/purchase.service";
 import { supplierService, type SupplierRecord } from "@/services/supplier.service";
 import { inventoryService, type IngredientRecord, type IngredientCategoryRecord, type UnitRecord } from "@/services/inventory.service";
@@ -99,6 +100,7 @@ const DatePickerField = ({
 const Purchases = () => {
   const { settings } = useData();
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   const currency = settings.currency || "Rs.";
   const isSuperAdmin = user?.role === "Super Admin";
   const isAdminOrAbove = ["Super Admin", "Admin"].includes(user?.role ?? "");
@@ -107,8 +109,6 @@ const Purchases = () => {
   const [searchParams] = useSearchParams();
 
   // Data state
-  const [purchases, setPurchases] = useState<PurchaseRecord[]>([]);
-  const [totalItems, setTotalItems] = useState(0);
   const [suppliers, setSuppliers] = useState<SupplierRecord[]>([]);
   const [ingredients, setIngredients] = useState<IngredientRecord[]>([]);
   const [categories, setCategories] = useState<IngredientCategoryRecord[]>([]);
@@ -118,7 +118,6 @@ const Purchases = () => {
   const [selectedRequestId, setSelectedRequestId] = useState("");
 
   // UI state
-  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [showDialog, setShowDialog] = useState(false);
   const [showDetail, setShowDetail] = useState<PurchaseRecord | null>(null);
@@ -147,17 +146,12 @@ const Purchases = () => {
 
   const autoFillDone = useRef(false);
 
-  const fetchPurchases = useCallback(async () => {
-    try {
-      const res = await purchaseService.getAll({ page, limit: 20 });
-      setPurchases(res.data);
-      setTotalItems(res.meta.total);
-    } catch (err: unknown) {
-      toast.error((err as Error).message || "Failed to load purchases");
-    } finally {
-      setLoading(false);
-    }
-  }, [page]);
+  const { data: purchasesResp, isLoading: loading } = useQuery({
+    queryKey: ["purchases", { page, limit: 20 }],
+    queryFn: () => purchaseService.getAll({ page, limit: 20 }),
+  });
+  const purchases = purchasesResp?.data ?? [];
+  const totalItems = purchasesResp?.meta.total ?? 0;
 
   // Load reference data lazily (on first dialog open, cached by api layer)
   const refDataLoaded = useRef(false);
@@ -191,10 +185,6 @@ const Purchases = () => {
       toast.error((err as Error).message || "Failed to load data");
     }
   }, [suppliers.length, selectedWarehouseId]);
-
-  useEffect(() => {
-    fetchPurchases();
-  }, [fetchPurchases]);
 
   // Low-stock / ingredient param auto-fill — trigger ref data load
   useEffect(() => {
@@ -381,7 +371,7 @@ const Purchases = () => {
       });
       toast.success("Purchase added — stock updated");
       setShowDialog(false);
-      await fetchPurchases();
+      queryClient.invalidateQueries({ queryKey: ["purchases"] });
       if (selectedRequestId) {
         setApprovedRequests((prev) => prev.filter((r) => r.id !== selectedRequestId));
       }
@@ -399,7 +389,7 @@ const Purchases = () => {
       await purchaseService.delete(deleteId);
       setDeleteId(null);
       toast.success("Purchase deleted");
-      await fetchPurchases();
+      queryClient.invalidateQueries({ queryKey: ["purchases"] });
     } catch (err: unknown) {
       toast.error((err as Error).message || "Failed to delete purchase");
     }
