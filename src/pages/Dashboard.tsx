@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import { LayoutDashboard, TrendingUp, ShoppingBag, DollarSign, Clock, AlertTriangle, Package, Wallet, ReceiptText, TrendingDown, Flame, ArrowUpCircle, ArrowDownCircle, BarChart3 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,17 +8,35 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { PageHeader } from "@/components/ui/page-header";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend, BarChart, Bar } from "recharts";
-import { useData } from "@/contexts/DataContext";
+import { useQuery } from "@tanstack/react-query";
+import { orderService } from "@/services/order.service";
+import { inventoryService } from "@/services/inventory.service";
+import { customerService } from "@/services/customer.service";
+import { supplierService } from "@/services/supplier.service";
+import { expenseService } from "@/services/expense.service";
+import { stockService } from "@/services/stock.service";
+import { settingsService } from "@/services/settings.service";
 import { ORDER_STATUS_COLORS } from "@/lib/constants";
 
 const statusColor = ORDER_STATUS_COLORS;
+const orderTypeColors = ["hsl(var(--primary))", "hsl(var(--info))", "hsl(var(--success))", "hsl(var(--warning))", "hsl(var(--accent))"];
 
 const Dashboard = () => {
-  const { orders, foodMenuItems, ingredients, expenses, wasteRecords, suppliers, customers, revenueChartData, orderTypeData, settings } = useData();
-  const currency = settings.currency || "Rs.";
-  const [loading, setLoading] = useState(true);
+  const { data: ordersResp, isLoading: ordersLoading } = useQuery({ queryKey: ["dashboard-orders"], queryFn: () => orderService.getOrders({ limit: 500 }) });
+  const orders = ordersResp?.data ?? [];
+  const { data: ingredients = [] } = useQuery({ queryKey: ["dashboard-ingredients"], queryFn: () => inventoryService.getIngredients({ status: "active" }) });
+  const { data: customersResp } = useQuery({ queryKey: ["dashboard-customers"], queryFn: () => customerService.getCustomers({ limit: 500 }) });
+  const customers = customersResp?.data ?? [];
+  const { data: suppliersResp } = useQuery({ queryKey: ["dashboard-suppliers"], queryFn: () => supplierService.getAll() });
+  const suppliers = suppliersResp?.data ?? [];
+  const { data: expensesResp } = useQuery({ queryKey: ["dashboard-expenses"], queryFn: () => expenseService.getAll({ limit: 500 }) });
+  const expenses = expensesResp?.data ?? [];
+  const { data: wasteResp } = useQuery({ queryKey: ["dashboard-waste"], queryFn: () => stockService.getWasteRecords({ limit: 500 }) });
+  const wasteRecords = wasteResp?.data ?? [];
+  const { data: settings } = useQuery({ queryKey: ["settings"], queryFn: () => settingsService.getSettings() });
+  const currency = settings?.currency || "Rs.";
+  const loading = ordersLoading;
   const [salesView, setSalesView] = useState<"hourly" | "daily" | "weekly" | "monthly" | "yearly">("hourly");
-  useEffect(() => { const t = setTimeout(() => setLoading(false), 500); return () => clearTimeout(t); }, []);
 
   const todayStr = new Date().toISOString().split("T")[0];
   const todayOrders = orders.filter(o => o.date === todayStr);
@@ -27,7 +45,7 @@ const Dashboard = () => {
   const activeOrders = orders.filter(o => o.status === "pending" || o.status === "preparing").length;
   const totalStockValue = ingredients
     .filter(i => i.status === "active")
-    .reduce((sum, i) => sum + (i.currentStock * i.purchasePrice), 0);
+    .reduce((sum, i) => sum + (i.currentStock * (i.purchasePrice ?? 0)), 0);
   const totalStockItems = ingredients.filter(i => i.status === "active").length;
 
   // A2 — Financial Overview KPIs
@@ -36,7 +54,7 @@ const Dashboard = () => {
   const totalDiscounts = activeOrders2.reduce((s, o) => s + o.discount, 0);
   const revenue = activeOrders2.reduce((s, o) => s + o.total, 0);
   const totalExpensesAmount = expenses.reduce((s, e) => s + e.amount, 0);
-  const foodLoss = wasteRecords.reduce((s, w) => s + w.estimatedLoss, 0);
+  const foodLoss = wasteRecords.reduce((s, w) => s + Number(w.cost ?? 0), 0);
   const netProfit = revenue - totalExpensesAmount - foodLoss;
 
   // A3 — Payable & Receivable
@@ -46,7 +64,7 @@ const Dashboard = () => {
   const receivableCount = customers.filter(c => c.outstandingDue > 0).length;
 
   // A4 — Top 10 Best-Selling Items
-  const itemSalesMap = new Map<string, { name: string; qty: number; revenue: number; image?: string }>();
+  const itemSalesMap = new Map<string, { name: string; qty: number; revenue: number }>();
   orders.forEach(order => {
     if (order.status !== "cancelled" && order.status !== "scheduled") {
       order.items.forEach(item => {
@@ -56,13 +74,10 @@ const Dashboard = () => {
           existing.qty += item.qty;
           existing.revenue += item.price * item.qty;
         } else {
-          const baseName = item.name.replace(/\s*\(.*\)$/, "");
-          const menuItem = foodMenuItems.find(m => m.name === baseName || m.name === item.name);
           itemSalesMap.set(key, {
             name: item.name,
             qty: item.qty,
             revenue: item.price * item.qty,
-            image: menuItem?.image
           });
         }
       });
@@ -73,7 +88,7 @@ const Dashboard = () => {
     .slice(0, 10);
 
   // A5 — Top 10 Customers
-  const topTenCustomers = customers
+  const topTenCustomers = [...customers]
     .sort((a, b) => b.totalSpent - a.totalSpent)
     .slice(0, 10);
 
@@ -124,7 +139,7 @@ const Dashboard = () => {
   validSalesOrders
     .filter(order => order.date === todayKey)
     .forEach(order => {
-      const hour = parseOrderHour(order.time);
+      const hour = parseOrderHour(order.time ?? "");
       const existing = hourlySalesMap.get(hour) || { sales: 0, orders: 0 };
       existing.sales += order.total;
       existing.orders += 1;
@@ -278,6 +293,30 @@ const Dashboard = () => {
   const activeLow = hasAnySalesData
     ? activeSalesData.filter(d => d.sales > 0).reduce((lowest, current) => current.sales < lowest.sales ? current : lowest, activeSalesData.filter(d => d.sales > 0)[0] || null)
     : null;
+
+  // Revenue (Last 7 Days) — derived from orders grouped by date
+  const revenueChartData = Array.from({ length: 7 }, (_, index) => {
+    const bucketDate = new Date(today);
+    bucketDate.setDate(today.getDate() - (6 - index));
+    const dateKey = bucketDate.toISOString().split("T")[0];
+    const revenueForDay = validSalesOrders
+      .filter(order => order.date === dateKey)
+      .reduce((sum, order) => sum + order.total, 0);
+    return { date: formatShortDate(bucketDate), revenue: Math.round(revenueForDay) };
+  });
+
+  // Order Types — % split of non-cancelled, non-scheduled orders by type
+  const orderTypeCounts = validSalesOrders.reduce((acc, order) => {
+    const key = order.type || "Other";
+    acc[key] = (acc[key] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+  const orderTypeTotal = Object.values(orderTypeCounts).reduce((s, n) => s + n, 0);
+  const orderTypeData = Object.entries(orderTypeCounts).map(([name, count], index) => ({
+    name,
+    value: orderTypeTotal > 0 ? Math.round((count / orderTypeTotal) * 100) : 0,
+    color: orderTypeColors[index % orderTypeColors.length],
+  }));
 
   const statCards = [
     { title: "Today's Sales", value: `${currency} ${todaySales.toLocaleString()}`, change: `${todayOrders.length} orders`, up: true, icon: DollarSign, iconBg: "bg-success/10", iconColor: "text-success" },
@@ -455,7 +494,6 @@ const Dashboard = () => {
                       <TableCell className="py-3 text-xs">
                         <div className="flex items-center gap-2">
                           <span className="font-semibold text-muted-foreground w-5">{idx + 1}.</span>
-                          {item.image && <img src={item.image} alt={item.name} className="h-6 w-6 rounded object-cover" />}
                           <span className="font-medium">{item.name}</span>
                         </div>
                       </TableCell>
@@ -633,7 +671,7 @@ const Dashboard = () => {
                   {recentOrders.map((o) => (
                     <TableRow key={o.id} className="hover:bg-muted/30 transition-colors">
                       <TableCell className="font-medium">{o.orderNumber}</TableCell>
-                      <TableCell>{o.customer}</TableCell>
+                      <TableCell>{o.customerName ?? "-"}</TableCell>
                       <TableCell>{currency} {o.total.toLocaleString()}</TableCell>
                       <TableCell><Badge variant="secondary" className={statusColor[o.status]}>{o.status}</Badge></TableCell>
                     </TableRow>
@@ -646,7 +684,7 @@ const Dashboard = () => {
 
         <div className="space-y-4">
           {lowStockItems.length > 0 && (
-            <Card className="shadow-sm border-warning/30"><CardHeader className="pb-2 flex-row items-center gap-2"><AlertTriangle className="h-4 w-4 text-warning" /><CardTitle className="text-base">Low Stock Alerts</CardTitle></CardHeader><CardContent><div className="space-y-2">{lowStockItems.slice(0, 6).map((item) => (<div key={item.id} className="flex items-center justify-between text-sm"><span>{item.name}</span><div className="flex items-center gap-2"><span className="text-destructive font-medium">{item.currentStock} {item.unit}</span><Badge variant="secondary" className={item.currentStock === 0 ? "bg-destructive/10 text-destructive" : "bg-warning/10 text-warning"}>{item.currentStock === 0 ? "Out" : "Low"}</Badge></div></div>))}</div></CardContent></Card>
+            <Card className="shadow-sm border-warning/30"><CardHeader className="pb-2 flex-row items-center gap-2"><AlertTriangle className="h-4 w-4 text-warning" /><CardTitle className="text-base">Low Stock Alerts</CardTitle></CardHeader><CardContent><div className="space-y-2">{lowStockItems.slice(0, 6).map((item) => (<div key={item.id} className="flex items-center justify-between text-sm"><span>{item.name}</span><div className="flex items-center gap-2"><span className="text-destructive font-medium">{item.currentStock} {item.unit?.name}</span><Badge variant="secondary" className={item.currentStock === 0 ? "bg-destructive/10 text-destructive" : "bg-warning/10 text-warning"}>{item.currentStock === 0 ? "Out" : "Low"}</Badge></div></div>))}</div></CardContent></Card>
           )}
         </div>
       </div>
