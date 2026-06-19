@@ -5,10 +5,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Plus, Search, Pencil, Trash2, Ruler } from "lucide-react";
+import { Plus, Search, Pencil, Trash2, Ruler, X, ChevronUp } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
@@ -205,32 +204,17 @@ const IngredientUnits = () => {
 
   return (
     <div className="space-y-6">
-      <PageHeader icon={<Ruler className="h-5 w-5" />} title="Ingredient Units" subtitle="Measurement units & conversions" actions={<Button className="gradient-primary text-primary-foreground" onClick={openAdd}><Plus className="h-4 w-4 mr-2" />Add Unit</Button>} />
-      <Card className="shadow-sm"><CardHeader className="pb-3"><div className="relative max-w-sm"><Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search..." className="pl-9" /></div></CardHeader>
-        <CardContent>{filtered.length === 0 ? (<div className="text-center py-12"><Ruler className="h-12 w-12 text-muted-foreground mx-auto mb-3 opacity-30" /><p className="text-muted-foreground">No units found</p><p className="text-xs text-muted-foreground mt-1.5">Add your first unit to get started.</p><Button size="sm" className="gradient-primary text-primary-foreground mt-3" onClick={openAdd}><Plus className="h-4 w-4 mr-1" />Add Unit</Button></div>) : (
-          <div className="rounded-lg border overflow-auto max-h-[calc(100vh-300px)]"><Table><TableHeader className="sticky top-0 z-10 bg-card"><TableRow className="bg-muted/50 hover:bg-muted/50"><TableHead>SN</TableHead><TableHead>Name</TableHead><TableHead>Symbol</TableHead><TableHead>Conversions</TableHead><TableHead>Ingredients</TableHead><TableHead>Status</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader>
-            <TableBody>{filtered.map((u, i) => (
-              <TableRow key={u.id} className="hover:bg-muted/30 transition-colors">
-                <TableCell>{i+1}</TableCell>
-                <TableCell className="font-medium">{u.name}</TableCell>
-                <TableCell><Badge variant="outline" className="font-mono">{u.symbol || "—"}</Badge></TableCell>
-                <TableCell className="text-muted-foreground text-sm">
-                  {u.conversionsFrom && u.conversionsFrom.length > 0
-                    ? `${u.conversionsFrom.length} conversion${u.conversionsFrom.length > 1 ? "s" : ""}`
-                    : "None"}
-                </TableCell>
-                <TableCell className="text-muted-foreground text-sm">{u._count?.ingredients ?? 0}</TableCell>
-                <TableCell><Badge variant="secondary" className={u.status === "active" ? "bg-success/10 text-success" : "bg-muted text-muted-foreground"}>{u.status}</Badge></TableCell>
-                <TableCell><div className="flex gap-1"><Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(u)}><Pencil className="h-3 w-3" /></Button>
-              <AlertDialog><AlertDialogTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"><Trash2 className="h-4 w-4" /></Button></AlertDialogTrigger><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Delete {u.name}?</AlertDialogTitle><AlertDialogDescription>This action cannot be undone. All conversions for this unit will also be removed.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={() => handleDelete(u.id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Delete</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
-            </div></TableCell></TableRow>))}</TableBody></Table></div>
-        )}</CardContent></Card>
-
-      {/* Add/Edit Dialog */}
-      <Dialog open={showDialog} onOpenChange={setShowDialog}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>{editingId ? "Edit" : "Add"} Ingredient Unit</DialogTitle></DialogHeader>
-          <div className="space-y-4">
+      <PageHeader icon={<Ruler className="h-5 w-5" />} title="Ingredient Units" subtitle="Measurement units & conversions" actions={<Button className="gradient-primary text-primary-foreground" onClick={() => { if (showDialog) { setShowDialog(false); setEditingId(null); } else { openAdd(); } }}>{showDialog ? <><X className="h-4 w-4 mr-2" />Close Form</> : <><Plus className="h-4 w-4 mr-2" />Add Unit</>}</Button>} />
+      {/* Inline Create / Edit Form Panel */}
+      {showDialog && (
+        <Card className="shadow-sm border-primary/30 bg-primary/[0.02]">
+          <CardHeader className="pb-3 flex flex-row items-center justify-between">
+            <h3 className="text-base font-semibold">{editingId ? "Edit" : "Add"} Ingredient Unit</h3>
+            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => { setShowDialog(false); setEditingId(null); }}>
+              <ChevronUp className="h-4 w-4" />
+            </Button>
+          </CardHeader>
+          <CardContent className="space-y-4">
             {/* Standard unit selector */}
             {!editingId && (
               <div className="space-y-1.5">
@@ -308,13 +292,33 @@ const IngredientUnits = () => {
               )}
               <p className="text-[11px] text-muted-foreground">Reverse conversions are created automatically.</p>
             </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowDialog(false)}>Cancel</Button>
-            <Button className="gradient-primary text-primary-foreground" onClick={handleSave} disabled={saving}>{saving ? "Saving..." : "Save"}</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => { setShowDialog(false); setEditingId(null); }}>Cancel</Button>
+              <Button className="gradient-primary text-primary-foreground" onClick={handleSave} disabled={saving}>{saving ? "Saving..." : "Save"}</Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+      <Card className="shadow-sm"><CardHeader className="pb-3"><div className="relative max-w-sm"><Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search..." className="pl-9" /></div></CardHeader>
+        <CardContent>{filtered.length === 0 ? (<div className="text-center py-12"><Ruler className="h-12 w-12 text-muted-foreground mx-auto mb-3 opacity-30" /><p className="text-muted-foreground">No units found</p><p className="text-xs text-muted-foreground mt-1.5">Add your first unit to get started.</p><Button size="sm" className="gradient-primary text-primary-foreground mt-3" onClick={openAdd}><Plus className="h-4 w-4 mr-1" />Add Unit</Button></div>) : (
+          <div className="rounded-lg border overflow-auto max-h-[calc(100vh-300px)]"><Table><TableHeader className="sticky top-0 z-10 bg-card"><TableRow className="bg-muted/50 hover:bg-muted/50"><TableHead>SN</TableHead><TableHead>Name</TableHead><TableHead>Symbol</TableHead><TableHead>Conversions</TableHead><TableHead>Ingredients</TableHead><TableHead>Status</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader>
+            <TableBody>{filtered.map((u, i) => (
+              <TableRow key={u.id} className="hover:bg-muted/30 transition-colors">
+                <TableCell>{i+1}</TableCell>
+                <TableCell className="font-medium">{u.name}</TableCell>
+                <TableCell><Badge variant="outline" className="font-mono">{u.symbol || "—"}</Badge></TableCell>
+                <TableCell className="text-muted-foreground text-sm">
+                  {u.conversionsFrom && u.conversionsFrom.length > 0
+                    ? `${u.conversionsFrom.length} conversion${u.conversionsFrom.length > 1 ? "s" : ""}`
+                    : "None"}
+                </TableCell>
+                <TableCell className="text-muted-foreground text-sm">{u._count?.ingredients ?? 0}</TableCell>
+                <TableCell><Badge variant="secondary" className={u.status === "active" ? "bg-success/10 text-success" : "bg-muted text-muted-foreground"}>{u.status}</Badge></TableCell>
+                <TableCell><div className="flex gap-1"><Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(u)}><Pencil className="h-3 w-3" /></Button>
+              <AlertDialog><AlertDialogTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"><Trash2 className="h-4 w-4" /></Button></AlertDialogTrigger><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Delete {u.name}?</AlertDialogTitle><AlertDialogDescription>This action cannot be undone. All conversions for this unit will also be removed.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={() => handleDelete(u.id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Delete</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
+            </div></TableCell></TableRow>))}</TableBody></Table></div>
+        )}</CardContent></Card>
     </div>
   );
 };

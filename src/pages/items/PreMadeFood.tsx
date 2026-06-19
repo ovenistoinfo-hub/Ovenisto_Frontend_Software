@@ -5,9 +5,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Plus, Search, Pencil, Trash2, Package } from "lucide-react";
+import { Plus, Search, Pencil, Trash2, Package, X, ChevronUp } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { inventoryService, type PreMadeFoodRecord } from "@/services/inventory.service";
@@ -94,7 +93,31 @@ const PreMadeFood = () => {
 
   return (
     <div className="space-y-6">
-      <PageHeader icon={<Package className="h-5 w-5" />} title="Pre-Made Food" subtitle="Ready-made items" actions={<Button className="gradient-primary text-primary-foreground" onClick={openAdd}><Plus className="h-4 w-4 mr-2" />Add Item</Button>} />
+      <PageHeader icon={<Package className="h-5 w-5" />} title="Pre-Made Food" subtitle="Ready-made items" actions={<Button className="gradient-primary text-primary-foreground" onClick={() => { if (showDialog) { setShowDialog(false); setEditingId(null); } else { openAdd(); } }}>{showDialog ? <><X className="h-4 w-4 mr-2" />Close Form</> : <><Plus className="h-4 w-4 mr-2" />Add Item</>}</Button>} />
+      {/* Inline Create / Edit Form Panel */}
+      {showDialog && (
+        <Card className="shadow-sm border-primary/30 bg-primary/[0.02]">
+          <CardHeader className="pb-3 flex flex-row items-center justify-between">
+            <h3 className="text-base font-semibold">{editingId ? "Edit" : "Add"} Pre-Made Food</h3>
+            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => { setShowDialog(false); setEditingId(null); }}>
+              <ChevronUp className="h-4 w-4" />
+            </Button>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="space-y-1.5"><Label>Item Name</Label><Input placeholder="Enter name" value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} /></div>
+              <div className="space-y-1.5"><Label>Unit</Label><Input placeholder="e.g. kg, pcs" value={form.unit} onChange={(e) => setForm((p) => ({ ...p, unit: e.target.value }))} /></div>
+              <div className="space-y-1.5"><Label>Cost Per Unit</Label><Input placeholder="0" type="number" value={form.costPerUnit || ""} onChange={(e) => setForm((p) => ({ ...p, costPerUnit: Number(e.target.value) }))} /></div>
+              <div className="space-y-1.5"><Label>Current Stock</Label><Input placeholder="0" type="number" value={form.currentStock || ""} onChange={(e) => setForm((p) => ({ ...p, currentStock: Number(e.target.value) }))} /></div>
+              <div className="space-y-1.5"><Label>Low Stock Level</Label><Input placeholder="0" type="number" value={form.lowStockLevel || ""} onChange={(e) => setForm((p) => ({ ...p, lowStockLevel: Number(e.target.value) }))} /></div>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => { setShowDialog(false); setEditingId(null); }}>Cancel</Button>
+              <Button className="gradient-primary text-primary-foreground" onClick={handleSave} disabled={saving}>{saving ? "Saving..." : "Save"}</Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
       <Card className="shadow-sm"><CardHeader className="pb-3"><div className="relative max-w-sm"><Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search..." className="pl-9" /></div></CardHeader>
         <CardContent>{filtered.length === 0 ? (<div className="text-center py-12"><Package className="h-12 w-12 text-muted-foreground mx-auto mb-3 opacity-30" /><p className="text-muted-foreground">No items found</p><p className="text-xs text-muted-foreground mt-1.5">Add your first pre-made item to get started.</p><Button size="sm" className="gradient-primary text-primary-foreground mt-3" onClick={openAdd}><Plus className="h-4 w-4 mr-1" />Add Item</Button></div>) : (
           <div className="rounded-lg border overflow-auto max-h-[calc(100vh-300px)]"><Table><TableHeader className="sticky top-0 z-10 bg-card"><TableRow className="bg-muted/50 hover:bg-muted/50"><TableHead>SN</TableHead><TableHead>Name</TableHead><TableHead>Unit</TableHead><TableHead>Cost/Unit</TableHead><TableHead>Stock</TableHead><TableHead>Min Level</TableHead><TableHead>Status</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader>
@@ -102,9 +125,6 @@ const PreMadeFood = () => {
               <AlertDialog><AlertDialogTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"><Trash2 className="h-4 w-4" /></Button></AlertDialogTrigger><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Delete {item.name}?</AlertDialogTitle><AlertDialogDescription>This action cannot be undone.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={() => handleDelete(item.id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Delete</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
             </div></TableCell></TableRow>))}</TableBody></Table></div>
         )}</CardContent></Card>
-      <Dialog open={showDialog} onOpenChange={setShowDialog}><DialogContent><DialogHeader><DialogTitle>{editingId ? "Edit" : "Add"} Pre-Made Food</DialogTitle></DialogHeader>
-        <div className="space-y-3"><div className="space-y-1.5"><Label>Item Name</Label><Input placeholder="Enter name" value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} /></div><div className="space-y-1.5"><Label>Unit</Label><Input placeholder="e.g. kg, pcs" value={form.unit} onChange={(e) => setForm((p) => ({ ...p, unit: e.target.value }))} /></div><div className="grid grid-cols-2 gap-3"><div className="space-y-1.5"><Label>Cost Per Unit</Label><Input placeholder="0" type="number" value={form.costPerUnit || ""} onChange={(e) => setForm((p) => ({ ...p, costPerUnit: Number(e.target.value) }))} /></div><div className="space-y-1.5"><Label>Current Stock</Label><Input placeholder="0" type="number" value={form.currentStock || ""} onChange={(e) => setForm((p) => ({ ...p, currentStock: Number(e.target.value) }))} /></div><div className="space-y-1.5"><Label>Low Stock Level</Label><Input placeholder="0" type="number" value={form.lowStockLevel || ""} onChange={(e) => setForm((p) => ({ ...p, lowStockLevel: Number(e.target.value) }))} /></div></div></div>
-        <DialogFooter><Button variant="outline" onClick={() => setShowDialog(false)}>Cancel</Button><Button className="gradient-primary text-primary-foreground" onClick={handleSave} disabled={saving}>{saving ? "Saving..." : "Save"}</Button></DialogFooter></DialogContent></Dialog>
     </div>
   );
 };
