@@ -1,7 +1,9 @@
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient } from "@tanstack/react-query";
+import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
+import { createSyncStoragePersister } from "@tanstack/query-sync-storage-persister";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { lazy, Suspense } from "react";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
@@ -74,11 +76,21 @@ const queryClient = new QueryClient({
       // Serve cached data instantly on remount, revalidate in background.
       // This is what stops the blank "loading" flash on every navigation.
       staleTime: 60_000, // 1 min — repeat visits within this window are instant
-      gcTime: 300_000, // keep cached data 5 min after last use
+      gcTime: 1000 * 60 * 60 * 24, // 24h — must be >= persister maxAge so cached
+                                   // entries aren't GC'd before they can be persisted
       refetchOnWindowFocus: false, // don't refetch just because the tab regained focus
       retry: 1,
     },
   },
+});
+
+// Persist the react-query cache to localStorage so a PAGE REFRESH (F5) still paints
+// instantly from the last-seen data, then revalidates in the background — instead of
+// re-fetching everything from scratch. `buster` invalidates the whole persisted cache
+// when bumped (e.g. after a breaking data-shape change).
+const persister = createSyncStoragePersister({
+  storage: window.localStorage,
+  key: "ovenisto-rq-cache",
 });
 
 // Returns the default landing page for each role
@@ -174,7 +186,14 @@ function AppRoutes() {
 }
 
 const App = () => (
-  <QueryClientProvider client={queryClient}>
+  <PersistQueryClientProvider
+    client={queryClient}
+    persistOptions={{
+      persister,
+      maxAge: 1000 * 60 * 60 * 24, // discard persisted cache older than 24h
+      buster: "v1", // bump this string to force-drop the persisted cache after a breaking change
+    }}
+  >
     <AuthProvider>
       <DataProvider>
         <TooltipProvider>
@@ -190,7 +209,7 @@ const App = () => (
         </TooltipProvider>
       </DataProvider>
     </AuthProvider>
-  </QueryClientProvider>
+  </PersistQueryClientProvider>
 );
 
 export default App;
