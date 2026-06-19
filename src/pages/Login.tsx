@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Flame, Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -35,6 +35,15 @@ const Login = () => {
   const [forgotEmail, setForgotEmail] = useState("");
   const { login } = useAuth();
   const navigate = useNavigate();
+
+  // Warm up the Neon DB while the user is typing credentials, so it's already
+  // awake by the time we POST /auth/login (hides the ~3-10s scale-to-zero cold-start).
+  // Fire-and-forget; /health/db lives at the server root, not under /api.
+  useEffect(() => {
+    const apiBase = import.meta.env.VITE_API_URL || "http://localhost:3001/api";
+    const root = apiBase.replace(/\/api\/?$/, "");
+    fetch(`${root}/health/db`).catch(() => {});
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
