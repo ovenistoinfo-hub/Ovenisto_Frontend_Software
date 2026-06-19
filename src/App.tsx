@@ -63,7 +63,18 @@ import TableLayout from "./pages/TableLayout";
 import EmployeePortal from "./pages/EmployeePortal";
 import RiderPortal from "./pages/RiderPortal";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      // Serve cached data instantly on remount, revalidate in background.
+      // This is what stops the blank "loading" flash on every navigation.
+      staleTime: 60_000, // 1 min — repeat visits within this window are instant
+      gcTime: 300_000, // keep cached data 5 min after last use
+      refetchOnWindowFocus: false, // don't refetch just because the tab regained focus
+      retry: 1,
+    },
+  },
+});
 
 // Returns the default landing page for each role
 function getDefaultRouteForRole(role?: string): string {
