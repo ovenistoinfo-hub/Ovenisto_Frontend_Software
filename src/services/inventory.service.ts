@@ -39,6 +39,7 @@ export interface IngredientRecord {
   currentStock: number;
   lowStockLevel: number;
   status: string;
+  shelfLifeHours?: number | null;
 }
 
 export interface PreMadeFoodRecord {
