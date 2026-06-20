@@ -5,12 +5,20 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@
 import { PageHeader } from "@/components/ui/page-header";
 import { XAxis, YAxis, Tooltip, ResponsiveContainer, BarChart, Bar } from "recharts";
 import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 import { reportService } from "@/services/report.service";
+import { outletService } from "@/services/outlet.service";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const Dashboard = () => {
+  const [outletId, setOutletId] = useState<string>("all");
+  const { data: outlets = [] } = useQuery({
+    queryKey: ["outlets"],
+    queryFn: () => outletService.getOutlets(),
+  });
   const { data: d, isLoading: loading } = useQuery({
-    queryKey: ["dashboard"],
-    queryFn: () => reportService.getDashboard(),
+    queryKey: ["dashboard", outletId],
+    queryFn: () => reportService.getDashboard({ outletId }),
   });
   const currency = "Rs.";
 
@@ -31,12 +39,21 @@ const Dashboard = () => {
     <div className="space-y-6">
       {/* Header + Day-wise Sales */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
-        <div className="lg:col-span-2">
+        <div className="lg:col-span-2 flex items-start justify-between gap-3 flex-wrap">
           <PageHeader
             icon={<LayoutDashboard className="h-5 w-5" />}
             title="Dashboard"
             subtitle={d?.branchName ?? "Welcome back, here's your overview"}
           />
+          <Select value={outletId} onValueChange={setOutletId}>
+            <SelectTrigger className="w-[180px] h-9 text-sm"><SelectValue placeholder="Outlet" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Outlets</SelectItem>
+              {outlets.map((o: { id: string; name: string }) => (
+                <SelectItem key={o.id} value={o.id}>{o.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
         <Card className="shadow-sm">
           <CardHeader className="pb-2">
