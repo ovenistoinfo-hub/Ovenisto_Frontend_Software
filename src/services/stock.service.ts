@@ -52,6 +52,18 @@ export interface ProductionRecord {
   notes: string | null;
 }
 
+export interface DoughBatch {
+  id: string;
+  ingredientId: string;
+  ingredientName: string;
+  unit: string | null;
+  remainingQty: number;
+  madeAt: string;
+  expiresAt: string;
+  minutesRemaining: number;
+  status: 'active' | 'near-expiry' | 'expired';
+}
+
 export interface TransferRecord {
   id: string;
   fromOutletId: string | null;
@@ -126,9 +138,26 @@ export const stockService = {
     return { data: res.data, meta: (res as any).meta };
   },
 
-  async createProduction(data: { itemName: string; quantity: number; unit?: string; notes?: string; menuItemId?: string; deductIngredients?: boolean }): Promise<ProductionRecord> {
+  async createProduction(data: {
+    itemName: string; quantity: number; unit?: string; notes?: string;
+    menuItemId?: string; deductIngredients?: boolean;
+    producedIngredientId?: string;
+    consumedIngredients?: { ingredientId: string; qty: number }[];
+    warehouseId?: string;
+  }): Promise<ProductionRecord> {
     const res = await api.post<{ success: boolean; data: ProductionRecord }>('/stock/productions', data);
     return res.data;
+  },
+
+  // ── Dough / Short-Life Batches ──
+  async getDoughBatches(params?: { outletId?: string }): Promise<DoughBatch[]> {
+    const q = new URLSearchParams();
+    q.set('outletId', params?.outletId && params.outletId !== 'all' ? params.outletId : 'all');
+    const res = await api.get<{ success: boolean; data: DoughBatch[] }>(`/stock/dough-batches?${q.toString()}`);
+    return res.data;
+  },
+  async wasteDoughBatch(id: string): Promise<void> {
+    await api.post(`/stock/dough-batches/${id}/waste`, {});
   },
 
   // ── Transfers ──
