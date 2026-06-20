@@ -1,13 +1,17 @@
-import { LayoutDashboard, TrendingUp, DollarSign, Wallet, ReceiptText, Flame, ArrowUpCircle, ArrowDownCircle, BarChart3, ShoppingBag } from "lucide-react";
+import { LayoutDashboard, TrendingUp, DollarSign, Wallet, ReceiptText, Flame, ArrowUpCircle, ArrowDownCircle, BarChart3, ShoppingBag, Clock } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { PageHeader } from "@/components/ui/page-header";
 import { XAxis, YAxis, Tooltip, ResponsiveContainer, BarChart, Bar } from "recharts";
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { reportService } from "@/services/report.service";
 import { outletService } from "@/services/outlet.service";
+import { stockService } from "@/services/stock.service";
+import { useVisiblePolling } from "@/hooks/use-visible-polling";
+import { Button } from "@/components/ui/button";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const Dashboard = () => {
@@ -21,6 +25,18 @@ const Dashboard = () => {
     queryFn: () => reportService.getDashboard({ outletId }),
   });
   const currency = "Rs.";
+
+  const { data: doughBatches = [], refetch: refetchDough } = useQuery({
+    queryKey: ["dough-batches", outletId],
+    queryFn: () => stockService.getDoughBatches({ outletId }),
+  });
+  useVisiblePolling(() => { refetchDough(); }, 30000);
+  // 1-minute client tick so the countdown numbers update live without network calls
+  const [, setTick] = useState(0);
+  useEffect(() => { const t = setInterval(() => setTick((n) => n + 1), 60000); return () => clearInterval(t); }, []);
+  const liveMins = (expiresAt: string) => { const ms = new Date(expiresAt).getTime() - Date.now(); return ms <= 0 ? 0 : Math.floor(ms / 60000); };
+  const fmtLeft = (m: number) => `${Math.floor(m / 60)}h ${m % 60}m left`;
+  const wasteBatch = async (id: string) => { await stockService.wasteDoughBatch(id); refetchDough(); };
 
   if (loading) return (
     <div className="space-y-6">
@@ -179,6 +195,57 @@ const Dashboard = () => {
             </CardContent>
           </Card>
         </div>
+      </div>
+
+      {/* Dough / Short-Life Batches */}
+      <div>
+        <h3 className="text-sm font-semibold text-muted-foreground mb-3 flex items-center gap-2">
+          <Clock className="h-4 w-4" />
+          Dough / Short-Life Batches
+        </h3>
+        <Card className="shadow-sm">
+          <CardContent className="p-5">
+            {doughBatches.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-4 text-center">No active dough batches</p>
+            ) : (
+              <div>
+                {doughBatches.map((b) => {
+                  const m = liveMins(b.expiresAt);
+                  const st = m <= 0 ? 'expired' : m <= 60 ? 'near-expiry' : 'active';
+                  const colour = st === 'expired' ? 'text-destructive' : st === 'near-expiry' ? 'text-warning' : 'text-success';
+                  return (
+                    <div key={b.id} className="flex items-center justify-between py-2 border-b last:border-0">
+                      <div>
+                        <p className="font-medium">{b.ingredientName}</p>
+                        <p className="text-xs text-muted-foreground">{b.remainingQty} {b.unit ?? ''}</p>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <span className={`text-sm font-semibold ${colour}`}>{st === 'expired' ? 'EXPIRED' : fmtLeft(m)}</span>
+                        {st === 'expired' && (
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button size="sm" variant="destructive">Waste</Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Waste this batch?</AlertDialogTitle>
+                                <AlertDialogDescription>{b.remainingQty} {b.unit ?? ''} of {b.ingredientName} will be removed from stock and recorded as waste.</AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction onClick={() => wasteBatch(b.id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Waste</AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
 
       {/* Payment Methods (This Month) */}
