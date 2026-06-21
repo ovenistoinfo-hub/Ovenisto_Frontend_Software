@@ -3,6 +3,8 @@
  * Handles HTTP requests, token management, and error handling
  */
 
+import { outletStore } from './outletStore';
+
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
 
 // Token storage keys
@@ -54,6 +56,7 @@ async function request<T = unknown>(
     ...options,
     headers: {
       'Content-Type': 'application/json',
+      'X-Outlet-Id': outletStore.get(),
       ...(token && { Authorization: `Bearer ${token}` }),
       ...options.headers,
     },
@@ -69,6 +72,7 @@ async function request<T = unknown>(
         ...options,
         headers: {
           'Content-Type': 'application/json',
+          'X-Outlet-Id': outletStore.get(),
           ...(newToken && { Authorization: `Bearer ${newToken}` }),
           ...options.headers,
         },
@@ -159,7 +163,8 @@ function getCacheTTL(endpoint: string): number {
 }
 
 function getCacheKey(endpoint: string): string {
-  return endpoint;
+  // Per-outlet cache: switching outlets must not serve another outlet's rows.
+  return `${outletStore.get()}::${endpoint}`;
 }
 
 // Get base path for invalidation: "/purchases/abc123" → "/purchases"
@@ -172,7 +177,9 @@ function invalidateCache(endpoint: string): void {
   const base = getBasePath(endpoint);
   const keysToDelete: string[] = [];
   cache.forEach((_, key) => {
-    if (key.startsWith(base)) keysToDelete.push(key);
+    const sep = key.indexOf('::');
+    const path = sep >= 0 ? key.slice(sep + 2) : key;
+    if (path.startsWith(base)) keysToDelete.push(key);
   });
   keysToDelete.forEach(k => cache.delete(k));
 }
