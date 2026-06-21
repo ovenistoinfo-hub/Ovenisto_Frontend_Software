@@ -9,7 +9,9 @@ import { Badge } from "@/components/ui/badge";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAuth } from "@/contexts/AuthContext";
+import { useOutlet } from "@/contexts/OutletContext";
 import { useTheme } from "@/hooks/use-theme";
 
 const quickActions = [
@@ -115,6 +117,7 @@ export function AppHeader() {
   const location = useLocation();
   const { user, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
+  const { selectedOutletId, setSelectedOutletId, outlets, isLocked } = useOutlet();
 
   useEffect(() => {
     const t = setInterval(() => setTime(new Date()), 1000);
@@ -167,6 +170,22 @@ export function AppHeader() {
             3
           </Badge>
         </Button>
+
+        <Select
+          value={selectedOutletId}
+          onValueChange={setSelectedOutletId}
+          disabled={isLocked}
+        >
+          <SelectTrigger className="w-[160px] h-9 text-sm">
+            <SelectValue placeholder="Outlet" />
+          </SelectTrigger>
+          <SelectContent>
+            {!isLocked && <SelectItem value="all">All Outlets</SelectItem>}
+            {outlets.map((o) => (
+              <SelectItem key={o.id} value={o.id}>{o.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
