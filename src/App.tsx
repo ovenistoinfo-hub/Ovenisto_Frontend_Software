@@ -7,6 +7,7 @@ import { createSyncStoragePersister } from "@tanstack/query-sync-storage-persist
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { lazy, Suspense } from "react";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
+import { OutletProvider } from "@/contexts/OutletContext";
 import { DataProvider } from "@/contexts/DataContext";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
@@ -195,19 +196,21 @@ const App = () => (
     }}
   >
     <AuthProvider>
-      <DataProvider>
-        <TooltipProvider>
-          <ErrorBoundary>
-            <Toaster />
-            <Sonner />
-            <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-              <Suspense fallback={<div className="flex h-screen items-center justify-center text-sm text-muted-foreground">Loading…</div>}>
-                <AppRoutes />
-              </Suspense>
-            </BrowserRouter>
-          </ErrorBoundary>
-        </TooltipProvider>
-      </DataProvider>
+      <OutletProvider>
+        <DataProvider>
+          <TooltipProvider>
+            <ErrorBoundary>
+              <Toaster />
+              <Sonner />
+              <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+                <Suspense fallback={<div className="flex h-screen items-center justify-center text-sm text-muted-foreground">Loading…</div>}>
+                  <AppRoutes />
+                </Suspense>
+              </BrowserRouter>
+            </ErrorBoundary>
+          </TooltipProvider>
+        </DataProvider>
+      </OutletProvider>
     </AuthProvider>
   </PersistQueryClientProvider>
 );

@@ -136,6 +136,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     await authService.logout();
     setUser(null);
     localStorage.removeItem("ovenisto_user");
+    localStorage.removeItem("ovenisto_selected_outlet");
     sessionStorage.removeItem("ovenisto_user");
   }, []);
 
