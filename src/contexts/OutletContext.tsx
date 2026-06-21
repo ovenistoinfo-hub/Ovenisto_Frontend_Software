@@ -29,10 +29,16 @@ export function OutletProvider({ children }: { children: ReactNode }) {
   });
 
   // Initialize: Super Admin → last saved or "all"; everyone else → their own outlet.
+  // Set the request-layer store synchronously here (during render, before any child
+  // page mounts and fires its first query) so the first request after a refresh
+  // already carries the correct outlet rather than the default "all".
   const [selectedOutletId, setSelected] = useState<string>(() => {
-    if (!user) return "all";
-    if (isSuperAdmin) return localStorage.getItem(STORAGE_KEY) || "all";
-    return user.outletId || "all";
+    let initial: string;
+    if (!user) initial = "all";
+    else if (isSuperAdmin) initial = localStorage.getItem(STORAGE_KEY) || "all";
+    else initial = user.outletId || "all";
+    outletStore.set(initial);
+    return initial;
   });
 
   // Re-initialize when the user changes (login/logout/role switch).
