@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "./AuthContext";
+import { api } from "@/services/api";
 import { outletService } from "@/services/outlet.service";
 import { outletStore } from "@/services/outletStore";
 
@@ -19,6 +20,7 @@ const OutletContext = createContext<OutletContextValue | undefined>(undefined);
 
 export function OutletProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   const isSuperAdmin = user?.role === "Super Admin";
   const isLocked = !isSuperAdmin;
 
@@ -61,6 +63,8 @@ export function OutletProvider({ children }: { children: ReactNode }) {
     setSelected(id);
     localStorage.setItem(STORAGE_KEY, id);
     outletStore.set(id);
+    api.clearCache();
+    queryClient.invalidateQueries();
   };
 
   return (

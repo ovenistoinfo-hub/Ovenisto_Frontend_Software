@@ -7,19 +7,14 @@ import { XAxis, YAxis, Tooltip, ResponsiveContainer, BarChart, Bar } from "recha
 import { useQuery } from "@tanstack/react-query";
 import { useState, useEffect } from "react";
 import { reportService } from "@/services/report.service";
-import { outletService } from "@/services/outlet.service";
 import { stockService } from "@/services/stock.service";
+import { useOutlet } from "@/contexts/OutletContext";
 import { useVisiblePolling } from "@/hooks/use-visible-polling";
 import { Button } from "@/components/ui/button";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const Dashboard = () => {
-  const [outletId, setOutletId] = useState<string>("all");
-  const { data: outlets = [] } = useQuery({
-    queryKey: ["outlets"],
-    queryFn: () => outletService.getOutlets(),
-  });
+  const { selectedOutletId: outletId } = useOutlet();
   const { data: d, isLoading: loading } = useQuery({
     queryKey: ["dashboard", outletId],
     queryFn: () => reportService.getDashboard({ outletId }),
@@ -61,15 +56,6 @@ const Dashboard = () => {
             title="Dashboard"
             subtitle={d?.branchName ?? "Welcome back, here's your overview"}
           />
-          <Select value={outletId} onValueChange={setOutletId}>
-            <SelectTrigger className="w-[180px] h-9 text-sm"><SelectValue placeholder="Outlet" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Outlets</SelectItem>
-              {outlets.map((o: { id: string; name: string }) => (
-                <SelectItem key={o.id} value={o.id}>{o.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
         </div>
         <Card className="shadow-sm">
           <CardHeader className="pb-2">
