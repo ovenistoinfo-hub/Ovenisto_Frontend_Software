@@ -29,10 +29,17 @@ const Production = () => {
   const [kitchenStock, setKitchenStock] = useState<Record<string, { stock: number; unit: string }>>({});
   const [showAdd, setShowAdd] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
-  const [showDough, setShowDough] = useState(false);
+  const [showProduce, setShowProduce] = useState(false);
+  const [produceForm, setProduceForm] = useState({
+    productionItemId: '',
+    quantity: 0,
+    shelfHours: 8,
+    shelfMins: 0,
+    consumed: [] as { ingredientId: string; qty: number }[],
+    notes: '',
+  });
   const [search, setSearch] = useState("");
   const [form, setForm] = useState({ menuItemId: "", itemName: "", quantity: 0, unit: "", notes: "" });
-  const [doughForm, setDoughForm] = useState<{ producedIngredientId: string; quantity: number; unit: string; consumed: { ingredientId: string; qty: number }[]; shelfHours: number; shelfMins: number }>({ producedIngredientId: "", quantity: 0, unit: "", consumed: [], shelfHours: 8, shelfMins: 0 });
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const [productionItems, setProductionItems] = useState<ProductionItemRecord[]>([]);
@@ -118,30 +125,35 @@ const Production = () => {
     }
   };
 
-  const submitDough = async () => {
-    if (!doughForm.producedIngredientId || doughForm.quantity <= 0) { toast.error("Select the dough item and a quantity"); return; }
-    const totalMins = Math.round((Number(doughForm.shelfHours) || 0) * 60 + (Number(doughForm.shelfMins) || 0));
+  const submitProduce = async () => {
+    const { productionItemId, quantity, shelfHours, shelfMins, consumed, notes } = produceForm;
+    if (!productionItemId) { toast.error('Select a production item'); return; }
+    if (!quantity || quantity <= 0) { toast.error('Enter a valid quantity'); return; }
+    const totalMinutes = shelfHours * 60 + shelfMins;
+    setSaving(true);
     try {
-      await stockService.createProduction({
-        itemName: ingredients.find(i => i.id === doughForm.producedIngredientId)?.name || "Dough",
-        quantity: doughForm.quantity,
-        unit: doughForm.unit || undefined,
-        producedIngredientId: doughForm.producedIngredientId,
-        consumedIngredients: doughForm.consumed.filter(c => c.ingredientId && c.qty > 0),
-        shelfLifeMinutes: totalMins > 0 ? totalMins : undefined,
+      await stockService.createProductionItem({
+        productionItemId,
+        quantity,
+        unit: productionItems.find(i => i.id === productionItemId)?.unit ?? '',
+        consumedIngredients: consumed.filter(c => c.ingredientId && c.qty > 0),
+        shelfLifeMinutes: totalMinutes > 0 ? totalMinutes : undefined,
+        notes: notes || undefined,
       });
-      toast.success(totalMins > 0 ? `Dough produced — expires in ${Math.floor(totalMins / 60)}h ${totalMins % 60}m` : "Dough produced — batch created with shelf-life clock started");
-      setShowDough(false);
-      setDoughForm({ producedIngredientId: "", quantity: 0, unit: "", consumed: [], shelfHours: 8, shelfMins: 0 });
+      toast.success('Production batch created');
+      setShowProduce(false);
+      setProduceForm({ productionItemId: '', quantity: 0, shelfHours: 8, shelfMins: 0, consumed: [], notes: '' });
       fetchData();
-    } catch (e: any) { toast.error(e.message || "Failed to produce dough"); }
+    } catch (err: unknown) {
+      toast.error((err as Error).message || 'Failed to create production');
+    } finally { setSaving(false); }
   };
 
   if (loading) return <div className="space-y-6"><div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">{[1,2,3,4].map(i => <Skeleton key={i} className="h-24 rounded-xl" />)}</div><Skeleton className="h-10 w-full rounded-lg" />{[1,2,3,4,5].map(i => <Skeleton key={i} className="h-12 w-full rounded-lg mt-2" />)}</div>;
 
   return (
     <div className="space-y-6">
-      <PageHeader icon={<Factory className="h-5 w-5" />} title="Production" subtitle="Production batches" actions={<div className="flex gap-2">{canManageItems && (<Button variant="outline" onClick={() => setShowManageItems(v => !v)}>{showManageItems ? 'Hide Items' : 'Manage Items'}</Button>)}<Button variant="outline" onClick={() => { setShowDough(v => !v); setShowAdd(false); }}><Plus className="h-4 w-4 mr-2" />Produce Dough</Button><Button className="gradient-primary text-primary-foreground" onClick={() => { setShowAdd(v => !v); setShowDough(false); }}><Plus className="h-4 w-4 mr-2" />New Production</Button></div>} />
+      <PageHeader icon={<Factory className="h-5 w-5" />} title="Production" subtitle="Production batches" actions={<div className="flex gap-2">{canManageItems && (<Button variant="outline" onClick={() => setShowManageItems(v => !v)}>{showManageItems ? 'Hide Items' : 'Manage Items'}</Button>)}<Button variant="outline" onClick={() => { setShowProduce(v => !v); setShowAdd(false); }}>{showProduce ? 'Cancel' : <><Plus className="h-4 w-4 mr-1" />Produce Item</>}</Button><Button className="gradient-primary text-primary-foreground" onClick={() => { setShowAdd(v => !v); setShowProduce(false); }}><Plus className="h-4 w-4 mr-2" />New Production</Button></div>} />
       {showManageItems && canManageItems && (
         <Card className="shadow-sm border-primary/30">
           <CardHeader className="pb-3">
@@ -258,73 +270,87 @@ const Production = () => {
         </Card>
       )}
 
-      {showDough && (
+      {showProduce && (
         <Card className="shadow-sm border-primary/30">
-          <CardHeader className="pb-3"><CardTitle className="text-base">Produce Dough / Short-Life Item</CardTitle></CardHeader>
+          <CardHeader className="pb-3"><CardTitle className="text-base">Produce Item</CardTitle></CardHeader>
           <CardContent className="space-y-4">
+            {/* Row 1: Production Item picker, Quantity, Unit (auto-fill) */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="space-y-1.5 sm:col-span-1">
-                <Label>Dough / Short-Life Item</Label>
-                <Select value={doughForm.producedIngredientId} onValueChange={(v) => { const ing = ingredients.find(i => i.id === v); setDoughForm(p => ({ ...p, producedIngredientId: v, shelfHours: ing?.shelfLifeHours ?? p.shelfHours, shelfMins: 0 })); }}>
+                <Label>Production Item *</Label>
+                <Select value={produceForm.productionItemId} onValueChange={(v) => {
+                  const item = productionItems.find(i => i.id === v);
+                  setProduceForm(p => ({ ...p, productionItemId: v, shelfHours: item?.shelfLifeHours ?? 8, shelfMins: 0 }));
+                }}>
                   <SelectTrigger><SelectValue placeholder="Select item" /></SelectTrigger>
                   <SelectContent>
-                    {(ingredients.filter(i => i.shelfLifeHours != null).length > 0
-                      ? ingredients.filter(i => i.shelfLifeHours != null)
-                      : ingredients
-                    ).map(i => <SelectItem key={i.id} value={i.id}>{stockLabel(i)}</SelectItem>)}
+                    {productionItems.map(i => <SelectItem key={i.id} value={i.id}>{i.name} ({i.unit})</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-1.5">
-                <Label>Quantity</Label>
-                <Input type="number" placeholder="Qty produced" value={doughForm.quantity || ""} onChange={(e) => setDoughForm(p => ({ ...p, quantity: Number(e.target.value) }))} />
+                <Label>Quantity *</Label>
+                <Input type="number" placeholder="Qty" value={produceForm.quantity || ''} onChange={e => setProduceForm(p => ({ ...p, quantity: Number(e.target.value) }))} />
               </div>
               <div className="space-y-1.5">
                 <Label>Unit</Label>
-                <Input placeholder="e.g. kg" value={doughForm.unit} onChange={(e) => setDoughForm(p => ({ ...p, unit: e.target.value }))} />
+                <Input value={productionItems.find(i => i.id === produceForm.productionItemId)?.unit ?? ''} disabled className="bg-muted/50" />
               </div>
             </div>
 
+            {/* Shelf life override */}
             <div className="space-y-1.5">
-              <Label>Shelf life (expires after)</Label>
+              <Label>Shelf life override</Label>
               <div className="flex items-end gap-2">
                 <div className="space-y-1">
                   <span className="text-xs text-muted-foreground">Hours</span>
-                  <Input type="number" min={0} className="w-24" placeholder="8" value={doughForm.shelfHours || ""} onChange={(e) => setDoughForm(p => ({ ...p, shelfHours: Math.max(0, Number(e.target.value)) }))} />
+                  <Input type="number" min={0} className="w-24" value={produceForm.shelfHours || ''} onChange={e => setProduceForm(p => ({ ...p, shelfHours: Math.max(0, Number(e.target.value)) }))} />
                 </div>
                 <div className="space-y-1">
                   <span className="text-xs text-muted-foreground">Minutes</span>
-                  <Input type="number" min={0} max={59} className="w-24" placeholder="0" value={doughForm.shelfMins || ""} onChange={(e) => setDoughForm(p => ({ ...p, shelfMins: Math.max(0, Number(e.target.value)) }))} />
+                  <Input type="number" min={0} max={59} className="w-24" value={produceForm.shelfMins || ''} onChange={e => setProduceForm(p => ({ ...p, shelfMins: Math.max(0, Number(e.target.value)) }))} />
                 </div>
               </div>
-              <p className="text-xs text-muted-foreground">Countdown starts now. Leave at the item's default for normal shelf life — e.g. 8h 0m.</p>
             </div>
 
+            {/* Consumed Ingredients */}
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <Label>Consumed Ingredients</Label>
-                <Button type="button" variant="outline" size="sm" onClick={() => setDoughForm(p => ({ ...p, consumed: [...p.consumed, { ingredientId: "", qty: 0 }] }))}>
-                  <Plus className="h-3.5 w-3.5 mr-1" />Add ingredient
+                <Label>Consumed Ingredients (from Kitchen Stock)</Label>
+                <Button type="button" variant="outline" size="sm" onClick={() => setProduceForm(p => ({ ...p, consumed: [...p.consumed, { ingredientId: '', qty: 0 }] }))}>
+                  <Plus className="h-3.5 w-3.5 mr-1" />Add
                 </Button>
               </div>
-              {doughForm.consumed.length === 0 && <p className="text-xs text-muted-foreground">No consumed ingredients added yet.</p>}
-              {doughForm.consumed.map((row, idx) => (
+              {produceForm.consumed.length === 0 && <p className="text-xs text-muted-foreground">No consumed ingredients added.</p>}
+              {produceForm.consumed.map((row, idx) => (
                 <div key={idx} className="flex gap-2 items-center">
-                  <Select value={row.ingredientId} onValueChange={(v) => setDoughForm(p => ({ ...p, consumed: p.consumed.map((c, i) => i === idx ? { ...c, ingredientId: v } : c) }))}>
+                  <Select value={row.ingredientId} onValueChange={v => setProduceForm(p => ({ ...p, consumed: p.consumed.map((c, i) => i === idx ? { ...c, ingredientId: v } : c) }))}>
                     <SelectTrigger className="flex-1"><SelectValue placeholder="Ingredient" /></SelectTrigger>
-                    <SelectContent>{ingredients.map(i => <SelectItem key={i.id} value={i.id}>{stockLabel(i)}</SelectItem>)}</SelectContent>
+                    <SelectContent>
+                      {ingredients.map(i => {
+                        const s = kitchenStock[i.id];
+                        return <SelectItem key={i.id} value={i.id}>{i.name}{s ? ` (Kitchen: ${s.stock} ${s.unit})` : ''}</SelectItem>;
+                      })}
+                    </SelectContent>
                   </Select>
-                  <Input type="number" placeholder="Qty" className="w-24" value={row.qty || ""} onChange={(e) => setDoughForm(p => ({ ...p, consumed: p.consumed.map((c, i) => i === idx ? { ...c, qty: Number(e.target.value) } : c) }))} />
-                  <Button type="button" variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => setDoughForm(p => ({ ...p, consumed: p.consumed.filter((_, i) => i !== idx) }))}>
+                  <Input type="number" placeholder="Qty" className="w-24" value={row.qty || ''} onChange={e => setProduceForm(p => ({ ...p, consumed: p.consumed.map((c, i) => i === idx ? { ...c, qty: Number(e.target.value) } : c) }))} />
+                  <Button type="button" variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => setProduceForm(p => ({ ...p, consumed: p.consumed.filter((_, i) => i !== idx) }))}>
                     <Trash2 className="h-4 w-4" />
                   </Button>
                 </div>
               ))}
             </div>
 
+            {/* Notes */}
+            <div className="space-y-1.5">
+              <Label>Notes (optional)</Label>
+              <Input placeholder="e.g. morning batch" value={produceForm.notes} onChange={e => setProduceForm(p => ({ ...p, notes: e.target.value }))} />
+            </div>
+
+            {/* Footer buttons */}
             <div className="flex gap-2 justify-end pt-1">
-              <Button variant="outline" onClick={() => { setShowDough(false); setDoughForm({ producedIngredientId: "", quantity: 0, unit: "", consumed: [], shelfHours: 8, shelfMins: 0 }); }}>Cancel</Button>
-              <Button className="gradient-primary text-primary-foreground" onClick={submitDough}>Produce</Button>
+              <Button variant="outline" onClick={() => { setShowProduce(false); setProduceForm({ productionItemId: '', quantity: 0, shelfHours: 8, shelfMins: 0, consumed: [], notes: '' }); }}>Cancel</Button>
+              <Button className="gradient-primary text-primary-foreground" onClick={submitProduce} disabled={saving}>{saving ? 'Producing...' : 'Produce'}</Button>
             </div>
           </CardContent>
         </Card>
