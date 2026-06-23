@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { Plus, Search, Factory, Trash2 } from "lucide-react";
+import { Plus, Search, Factory, Trash2, Pencil } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
@@ -15,8 +15,11 @@ import { stockService, type ProductionRecord } from "@/services/stock.service";
 import { menuService, type MenuItemRecord } from "@/services/menu.service";
 import { inventoryService, type IngredientRecord } from "@/services/inventory.service";
 import { warehouseService } from "@/services/warehouse.service";
+import { useAuth } from "@/contexts/AuthContext";
+import productionItemService, { type ProductionItemRecord } from "@/services/production-items.service";
 
 const Production = () => {
+  const { user } = useAuth();
   const [list, setList] = useState<ProductionRecord[]>([]);
   const [menuItems, setMenuItems] = useState<MenuItemRecord[]>([]);
   const [ingredients, setIngredients] = useState<IngredientRecord[]>([]);
@@ -32,6 +35,12 @@ const Production = () => {
   const [doughForm, setDoughForm] = useState<{ producedIngredientId: string; quantity: number; unit: string; consumed: { ingredientId: string; qty: number }[]; shelfHours: number; shelfMins: number }>({ producedIngredientId: "", quantity: 0, unit: "", consumed: [], shelfHours: 8, shelfMins: 0 });
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [productionItems, setProductionItems] = useState<ProductionItemRecord[]>([]);
+  const [showManageItems, setShowManageItems] = useState(false);
+  const [editingItem, setEditingItem] = useState<ProductionItemRecord | null>(null);
+  const [itemForm, setItemForm] = useState({ name: '', unit: '', shelfLifeHours: '' });
+  const [savingItem, setSavingItem] = useState(false);
+  const canManageItems = ['Super Admin', 'Admin', 'Manager'].includes(user?.role ?? '');
 
   const fetchData = useCallback(async () => {
     try {
@@ -66,6 +75,7 @@ const Production = () => {
   }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => { productionItemService.getAll().then(setProductionItems).catch(() => {}); }, []);
 
   const filtered = list.filter((p) => (p.itemName || "").toLowerCase().includes(search.toLowerCase()));
 
@@ -131,7 +141,89 @@ const Production = () => {
 
   return (
     <div className="space-y-6">
-      <PageHeader icon={<Factory className="h-5 w-5" />} title="Production" subtitle="Production batches" actions={<div className="flex gap-2"><Button variant="outline" onClick={() => { setShowDough(v => !v); setShowAdd(false); }}><Plus className="h-4 w-4 mr-2" />Produce Dough</Button><Button className="gradient-primary text-primary-foreground" onClick={() => { setShowAdd(v => !v); setShowDough(false); }}><Plus className="h-4 w-4 mr-2" />New Production</Button></div>} />
+      <PageHeader icon={<Factory className="h-5 w-5" />} title="Production" subtitle="Production batches" actions={<div className="flex gap-2">{canManageItems && (<Button variant="outline" onClick={() => setShowManageItems(v => !v)}>{showManageItems ? 'Hide Items' : 'Manage Items'}</Button>)}<Button variant="outline" onClick={() => { setShowDough(v => !v); setShowAdd(false); }}><Plus className="h-4 w-4 mr-2" />Produce Dough</Button><Button className="gradient-primary text-primary-foreground" onClick={() => { setShowAdd(v => !v); setShowDough(false); }}><Plus className="h-4 w-4 mr-2" />New Production</Button></div>} />
+      {showManageItems && canManageItems && (
+        <Card className="shadow-sm border-primary/30">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Production Items</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 items-end">
+              <div className="space-y-1.5">
+                <Label>Name</Label>
+                <Input placeholder="e.g. Pizza Dough" value={itemForm.name} onChange={e => setItemForm(p => ({ ...p, name: e.target.value }))} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Unit</Label>
+                <Input placeholder="e.g. kg" value={itemForm.unit} onChange={e => setItemForm(p => ({ ...p, unit: e.target.value }))} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Default Shelf Life (hours)</Label>
+                <Input type="number" placeholder="e.g. 8" value={itemForm.shelfLifeHours} onChange={e => setItemForm(p => ({ ...p, shelfLifeHours: e.target.value }))} />
+              </div>
+              <div className="flex gap-2">
+                {editingItem && (
+                  <Button variant="outline" size="sm" onClick={() => { setEditingItem(null); setItemForm({ name: '', unit: '', shelfLifeHours: '' }); }}>Cancel</Button>
+                )}
+                <Button size="sm" className="gradient-primary text-primary-foreground" disabled={savingItem || !itemForm.name || !itemForm.unit}
+                  onClick={async () => {
+                    setSavingItem(true);
+                    try {
+                      const data = { name: itemForm.name, unit: itemForm.unit, shelfLifeHours: itemForm.shelfLifeHours ? Number(itemForm.shelfLifeHours) : null };
+                      if (editingItem) {
+                        const updated = await productionItemService.update(editingItem.id, data);
+                        setProductionItems(prev => prev.map(i => i.id === updated.id ? updated : i));
+                      } else {
+                        const created = await productionItemService.create(data);
+                        setProductionItems(prev => [...prev, created]);
+                      }
+                      setItemForm({ name: '', unit: '', shelfLifeHours: '' });
+                      setEditingItem(null);
+                      toast.success(editingItem ? 'Item updated' : 'Item created');
+                    } catch (err: unknown) {
+                      toast.error((err as Error).message || 'Failed to save');
+                    } finally { setSavingItem(false); }
+                  }}
+                >{savingItem ? 'Saving...' : editingItem ? 'Update' : 'Add Item'}</Button>
+              </div>
+            </div>
+            {productionItems.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No production items yet.</p>
+            ) : (
+              <div className="rounded-lg border overflow-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-muted/50 hover:bg-muted/50">
+                      <TableHead>Name</TableHead><TableHead>Unit</TableHead><TableHead>Default Shelf Life</TableHead><TableHead></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {productionItems.map(item => (
+                      <TableRow key={item.id}>
+                        <TableCell className="font-medium">{item.name}</TableCell>
+                        <TableCell className="text-sm text-muted-foreground">{item.unit}</TableCell>
+                        <TableCell className="text-sm">{item.shelfLifeHours != null ? `${item.shelfLifeHours}h` : '—'}</TableCell>
+                        <TableCell>
+                          <div className="flex gap-1">
+                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setEditingItem(item); setItemForm({ name: item.name, unit: item.unit, shelfLifeHours: item.shelfLifeHours?.toString() ?? '' }); }}>
+                              <Pencil className="h-3 w-3" />
+                            </Button>
+                            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive"
+                              onClick={async () => { try { await productionItemService.delete(item.id); setProductionItems(prev => prev.filter(i => i.id !== item.id)); toast.success('Deleted'); } catch (err: unknown) { toast.error((err as Error).message || 'Failed'); } }}>
+                              <Trash2 className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       {showAdd && (
         <Card className="shadow-sm border-primary/30">
           <CardHeader className="pb-3"><CardTitle className="text-base">New Production</CardTitle></CardHeader>
