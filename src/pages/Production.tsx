@@ -14,11 +14,16 @@ import { PageHeader } from "@/components/ui/page-header";
 import { stockService, type ProductionRecord } from "@/services/stock.service";
 import { menuService, type MenuItemRecord } from "@/services/menu.service";
 import { inventoryService, type IngredientRecord } from "@/services/inventory.service";
+import { warehouseService } from "@/services/warehouse.service";
 
 const Production = () => {
   const [list, setList] = useState<ProductionRecord[]>([]);
   const [menuItems, setMenuItems] = useState<MenuItemRecord[]>([]);
   const [ingredients, setIngredients] = useState<IngredientRecord[]>([]);
+  // Per-kitchen stock for the current scope (branch admins see only their kitchen; the
+  // header outlet selector scopes this). Production consumes/adds in the kitchen, so the
+  // selectors show THIS number — not the chain-wide global Ingredient.currentStock.
+  const [kitchenStock, setKitchenStock] = useState<Record<string, { stock: number; unit: string }>>({});
   const [showAdd, setShowAdd] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [showDough, setShowDough] = useState(false);
@@ -42,14 +47,37 @@ const Production = () => {
       setLoading(false);
     }
     inventoryService.getIngredients({ status: 'active' }).then(setIngredients).catch(() => {});
+    // Build the per-kitchen stock map (summed across the kitchens visible in the current
+    // outlet scope) so the ingredient selectors show kitchen stock, matching Kitchen Stock.
+    warehouseService.getAll({ type: 'KITCHEN' }).then(async (kws) => {
+      const lists = await Promise.all(kws.map((w) => warehouseService.getStock(w.id).catch(() => [])));
+      const map: Record<string, { stock: number; unit: string }> = {};
+      for (const list of lists) {
+        for (const s of list) {
+          const id = s.ingredient.id;
+          map[id] = {
+            stock: (map[id]?.stock ?? 0) + Number(s.currentStock),
+            unit: s.ingredient.unit?.symbol || s.ingredient.unit?.name || "",
+          };
+        }
+      }
+      setKitchenStock(map);
+    }).catch(() => {});
   }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
   const filtered = list.filter((p) => (p.itemName || "").toLowerCase().includes(search.toLowerCase()));
 
-  // Show an ingredient's current stock inline in the selectors (same pattern as the purchase/demand pages).
-  const stockLabel = (i: IngredientRecord) => `${i.name} (Stock: ${Number(i.currentStock)} ${i.unit?.name ?? ""})`.trim();
+  // Show the ingredient's KITCHEN stock inline in the selectors (same idea as purchase/demand
+  // pages, but scoped to this kitchen — production happens here, so the global chain-wide number
+  // would mislead a branch user). Ingredients with no kitchen row show 0.
+  const stockLabel = (i: IngredientRecord) => {
+    const k = kitchenStock[i.id];
+    const qty = k ? k.stock : 0;
+    const unit = k?.unit || i.unit?.name || "";
+    return `${i.name} (Kitchen: ${qty}${unit ? " " + unit : ""})`;
+  };
 
   const handleProduce = () => {
     if (!form.itemName.trim() || form.quantity <= 0) { toast.error("Select a food item and enter quantity"); return; }
