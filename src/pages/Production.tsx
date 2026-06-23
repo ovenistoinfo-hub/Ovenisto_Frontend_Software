@@ -175,6 +175,7 @@ const Production = () => {
       setShowProduce(false);
       setProduceForm({ productionItemId: '', quantity: 0, shelfHours: 8, shelfMins: 0, consumed: [], notes: '' });
       fetchData();
+      refetchStock();
     } catch (err: unknown) {
       toast.error((err as Error).message || 'Failed to create production');
     } finally { setSaving(false); }
