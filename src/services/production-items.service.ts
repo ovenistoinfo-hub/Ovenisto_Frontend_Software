@@ -11,18 +11,18 @@ export interface ProductionItemRecord {
 
 const productionItemService = {
   getAll: async (): Promise<ProductionItemRecord[]> => {
-    const res = await api.get('/production-items');
-    return res.data.data;
+    const res = await api.get<{ success: boolean; data: ProductionItemRecord[] }>('/production-items');
+    return res.data;
   },
 
   create: async (data: { name: string; unit: string; shelfLifeHours?: number | null }): Promise<ProductionItemRecord> => {
-    const res = await api.post('/production-items', data);
-    return res.data.data;
+    const res = await api.post<{ success: boolean; data: ProductionItemRecord }>('/production-items', data);
+    return res.data;
   },
 
   update: async (id: string, data: { name?: string; unit?: string; shelfLifeHours?: number | null }): Promise<ProductionItemRecord> => {
-    const res = await api.put(`/production-items/${id}`, data);
-    return res.data.data;
+    const res = await api.put<{ success: boolean; data: ProductionItemRecord }>(`/production-items/${id}`, data);
+    return res.data;
   },
 
   delete: async (id: string): Promise<void> => {

@@ -226,8 +226,8 @@ export const stockService = {
 
   // ── Production Items Stock ──
   getProductionStock: async (): Promise<ProductionStockRecord[]> => {
-    const res = await api.get('/stock/production-stock');
-    return res.data.data;
+    const res = await api.get<{ success: boolean; data: ProductionStockRecord[] }>('/stock/production-stock');
+    return res.data;
   },
 
   createProductionItem: async (data: CreateProductionItemPayload): Promise<void> => {
