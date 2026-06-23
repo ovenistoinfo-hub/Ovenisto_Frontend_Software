@@ -219,26 +219,50 @@ const FoodMenuForm = () => {
 
             const rowMap: Record<string, RecipeRow> = {};
             item.recipes.forEach((r: RecipeIngredient) => {
-              if (!rowMap[r.ingredientId]) {
-                const baseUnitName = r.ingredient?.unit?.name || "";
-                const baseUnitId = r.ingredient?.unit?.id || "";
-                rowMap[r.ingredientId] = {
-                  ingredientId: r.ingredientId,
-                  name: r.ingredient?.name || "",
-                  unitId: baseUnitId,
-                  unit: baseUnitName,
-                  usageUnitId: r.usageUnitId || baseUnitId,
-                  usageUnitName: r.usageUnit?.name || baseUnitName,
-                  quantities: {},
-                  costs: {},
-                };
+              if (!r.ingredientId && !r.productionItemId) return;
+              const rowKey = r.ingredientId ? r.ingredientId : `prod_${r.productionItemId}`;
+              if (!rowMap[rowKey]) {
+                if (r.ingredientId) {
+                  // Ingredient row — existing behavior preserved exactly
+                  const baseUnitName = r.ingredient?.unit?.name || "";
+                  const baseUnitId = r.ingredient?.unit?.id || "";
+                  rowMap[rowKey] = {
+                    ingredientId: r.ingredientId,
+                    name: r.ingredient?.name || "",
+                    unitId: baseUnitId,
+                    unit: baseUnitName,
+                    usageUnitId: r.usageUnitId || baseUnitId,
+                    usageUnitName: r.usageUnit?.name || baseUnitName,
+                    quantities: {},
+                    costs: {},
+                  };
+                } else {
+                  // Production-item row
+                  const prodUnit = r.productionItem?.unit ?? (productionItems.find(p => p.id === r.productionItemId)?.unit ?? '');
+                  const prodName = r.productionItem?.name ?? (productionItems.find(p => p.id === r.productionItemId)?.name ?? '');
+                  rowMap[rowKey] = {
+                    productionItemId: r.productionItemId!,
+                    name: prodName,
+                    unitId: '',
+                    unit: prodUnit,
+                    usageUnitId: '',
+                    usageUnitName: prodUnit,
+                    quantities: {},
+                    costs: {},
+                  };
+                }
               }
               const key = r.variantId ? (variantIdToIndex[r.variantId] ?? "base") : "base";
-              rowMap[r.ingredientId].quantities[key] = Number(r.qtyPerUnit);
-              // calc cost
-              const baseQty = convertToBaseUnit(Number(r.qtyPerUnit), rowMap[r.ingredientId].usageUnitId, rowMap[r.ingredientId].unitId, cMap);
-              const ing = ings.find(ig => ig.id === r.ingredientId);
-              rowMap[r.ingredientId].costs[key] = baseQty * Number(ing?.purchasePrice || 0);
+              rowMap[rowKey].quantities[key] = Number(r.qtyPerUnit);
+              if (r.ingredientId) {
+                // calc cost for ingredient rows
+                const baseQty = convertToBaseUnit(Number(r.qtyPerUnit), rowMap[rowKey].usageUnitId, rowMap[rowKey].unitId, cMap);
+                const ing = ings.find(ig => ig.id === r.ingredientId);
+                rowMap[rowKey].costs[key] = baseQty * Number(ing?.purchasePrice || 0);
+              } else {
+                // no purchase price for production rows
+                rowMap[rowKey].costs[key] = 0;
+              }
             });
             setRecipeRows(Object.values(rowMap));
           }

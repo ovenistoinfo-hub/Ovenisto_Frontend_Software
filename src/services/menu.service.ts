@@ -65,7 +65,7 @@ export interface RecipeIngredient {
     name: string;
     purchasePrice: number | null;
     unit: { id: string; name: string } | null;
-  };
+  } | null;
   productionItemId: string | null;
   productionItem: { id: string; name: string; unit: string } | null;
 }
