@@ -144,6 +144,7 @@ export const stockService = {
     producedIngredientId?: string;
     consumedIngredients?: { ingredientId: string; qty: number }[];
     warehouseId?: string;
+    shelfLifeMinutes?: number;
   }): Promise<ProductionRecord> {
     const res = await api.post<{ success: boolean; data: ProductionRecord }>('/stock/productions', data);
     return res.data;

@@ -25,7 +25,7 @@ const Production = () => {
   const [showDough, setShowDough] = useState(false);
   const [search, setSearch] = useState("");
   const [form, setForm] = useState({ menuItemId: "", itemName: "", quantity: 0, unit: "", notes: "" });
-  const [doughForm, setDoughForm] = useState<{ producedIngredientId: string; quantity: number; unit: string; consumed: { ingredientId: string; qty: number }[] }>({ producedIngredientId: "", quantity: 0, unit: "", consumed: [] });
+  const [doughForm, setDoughForm] = useState<{ producedIngredientId: string; quantity: number; unit: string; consumed: { ingredientId: string; qty: number }[]; shelfHours: number; shelfMins: number }>({ producedIngredientId: "", quantity: 0, unit: "", consumed: [], shelfHours: 8, shelfMins: 0 });
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -80,6 +80,7 @@ const Production = () => {
 
   const submitDough = async () => {
     if (!doughForm.producedIngredientId || doughForm.quantity <= 0) { toast.error("Select the dough item and a quantity"); return; }
+    const totalMins = Math.round((Number(doughForm.shelfHours) || 0) * 60 + (Number(doughForm.shelfMins) || 0));
     try {
       await stockService.createProduction({
         itemName: ingredients.find(i => i.id === doughForm.producedIngredientId)?.name || "Dough",
@@ -87,10 +88,11 @@ const Production = () => {
         unit: doughForm.unit || undefined,
         producedIngredientId: doughForm.producedIngredientId,
         consumedIngredients: doughForm.consumed.filter(c => c.ingredientId && c.qty > 0),
+        shelfLifeMinutes: totalMins > 0 ? totalMins : undefined,
       });
-      toast.success("Dough produced — batch created with shelf-life clock started");
+      toast.success(totalMins > 0 ? `Dough produced — expires in ${Math.floor(totalMins / 60)}h ${totalMins % 60}m` : "Dough produced — batch created with shelf-life clock started");
       setShowDough(false);
-      setDoughForm({ producedIngredientId: "", quantity: 0, unit: "", consumed: [] });
+      setDoughForm({ producedIngredientId: "", quantity: 0, unit: "", consumed: [], shelfHours: 8, shelfMins: 0 });
       fetchData();
     } catch (e: any) { toast.error(e.message || "Failed to produce dough"); }
   };
@@ -107,7 +109,7 @@ const Production = () => {
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="space-y-1.5 sm:col-span-1">
                 <Label>Dough / Short-Life Item</Label>
-                <Select value={doughForm.producedIngredientId} onValueChange={(v) => setDoughForm(p => ({ ...p, producedIngredientId: v }))}>
+                <Select value={doughForm.producedIngredientId} onValueChange={(v) => { const ing = ingredients.find(i => i.id === v); setDoughForm(p => ({ ...p, producedIngredientId: v, shelfHours: ing?.shelfLifeHours ?? p.shelfHours, shelfMins: 0 })); }}>
                   <SelectTrigger><SelectValue placeholder="Select item" /></SelectTrigger>
                   <SelectContent>
                     {(ingredients.filter(i => i.shelfLifeHours != null).length > 0
@@ -125,6 +127,21 @@ const Production = () => {
                 <Label>Unit</Label>
                 <Input placeholder="e.g. kg" value={doughForm.unit} onChange={(e) => setDoughForm(p => ({ ...p, unit: e.target.value }))} />
               </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>Shelf life (expires after)</Label>
+              <div className="flex items-end gap-2">
+                <div className="space-y-1">
+                  <span className="text-xs text-muted-foreground">Hours</span>
+                  <Input type="number" min={0} className="w-24" placeholder="8" value={doughForm.shelfHours || ""} onChange={(e) => setDoughForm(p => ({ ...p, shelfHours: Math.max(0, Number(e.target.value)) }))} />
+                </div>
+                <div className="space-y-1">
+                  <span className="text-xs text-muted-foreground">Minutes</span>
+                  <Input type="number" min={0} max={59} className="w-24" placeholder="0" value={doughForm.shelfMins || ""} onChange={(e) => setDoughForm(p => ({ ...p, shelfMins: Math.max(0, Number(e.target.value)) }))} />
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">Countdown starts now. Leave at the item's default for normal shelf life — e.g. 8h 0m.</p>
             </div>
 
             <div className="space-y-2">
@@ -150,7 +167,7 @@ const Production = () => {
             </div>
 
             <div className="flex gap-2 justify-end pt-1">
-              <Button variant="outline" onClick={() => { setShowDough(false); setDoughForm({ producedIngredientId: "", quantity: 0, unit: "", consumed: [] }); }}>Cancel</Button>
+              <Button variant="outline" onClick={() => { setShowDough(false); setDoughForm({ producedIngredientId: "", quantity: 0, unit: "", consumed: [], shelfHours: 8, shelfMins: 0 }); }}>Cancel</Button>
               <Button className="gradient-primary text-primary-foreground" onClick={submitDough}>Produce</Button>
             </div>
           </CardContent>
