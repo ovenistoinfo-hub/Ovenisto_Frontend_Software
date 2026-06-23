@@ -163,19 +163,20 @@ const FoodMenuForm = () => {
   useEffect(() => {
     const loadData = async () => {
       try {
-        const [cats, ings, mods, unitsList] = await Promise.all([
+        const [cats, ings, mods, unitsList, prodItems] = await Promise.all([
           menuService.getCategories(),
           inventoryService.getIngredients(),
           menuService.getModifiers(),
           inventoryService.getUnits(),
+          productionItemService.getAll().catch(() => [] as ProductionItemRecord[]),
         ]);
         setCategories(cats);
         setIngredients(ings);
         setModifiersList(mods);
         setUnits(unitsList);
+        setProductionItems(prodItems);
         // Meal types loaded separately — backend route may not exist yet
         mealTypeService.getAll().then(setMealTypes).catch(() => {});
-        productionItemService.getAll().then(setProductionItems).catch(() => {});
 
         if (isEdit && id) {
           const item = await menuService.getMenuItem(id);
@@ -238,8 +239,8 @@ const FoodMenuForm = () => {
                   };
                 } else {
                   // Production-item row
-                  const prodUnit = r.productionItem?.unit ?? (productionItems.find(p => p.id === r.productionItemId)?.unit ?? '');
-                  const prodName = r.productionItem?.name ?? (productionItems.find(p => p.id === r.productionItemId)?.name ?? '');
+                  const prodUnit = r.productionItem?.unit ?? (prodItems.find(p => p.id === r.productionItemId)?.unit ?? '');
+                  const prodName = r.productionItem?.name ?? (prodItems.find(p => p.id === r.productionItemId)?.name ?? '');
                   rowMap[rowKey] = {
                     productionItemId: r.productionItemId!,
                     name: prodName,
@@ -609,6 +610,15 @@ const FoodMenuForm = () => {
   const recipeKeys = pricingType === "simple" ? ["base"] : variants.map((_, i) => i.toString());
   const recipeKeyLabels = pricingType === "simple" ? { base: "Qty" } : Object.fromEntries(variants.map((v, i) => [i.toString(), v.name || `V${i + 1}`]));
 
+  // Soft-deleted production items still referenced by the recipe — computed once here, used in the picker
+  const activeProdIds = new Set(productionItems.map(p => p.id));
+  const inactiveRefProd = recipeRows
+    .filter(r => r.productionItemId && !activeProdIds.has(r.productionItemId))
+    .reduce<{ id: string; name: string }[]>((acc, r) => {
+      if (!acc.some(x => x.id === r.productionItemId)) acc.push({ id: r.productionItemId!, name: r.name || 'Unknown item' });
+      return acc;
+    }, []);
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -761,6 +771,9 @@ const FoodMenuForm = () => {
                                     <SelectLabel>Production Items</SelectLabel>
                                     {productionItems.map(pi => (
                                       <SelectItem key={`prod_${pi.id}`} value={`prod_${pi.id}`}>{pi.name} (Production)</SelectItem>
+                                    ))}
+                                    {inactiveRefProd.map(pi => (
+                                      <SelectItem key={`prod_${pi.id}`} value={`prod_${pi.id}`}>{pi.name} (inactive)</SelectItem>
                                     ))}
                                   </SelectGroup>
                                 </SelectContent>
