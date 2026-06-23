@@ -407,10 +407,10 @@ const Demands = () => {
                 )}
               </div>
               <div className="space-y-1.5">
-                <Label>Supplying Warehouse (Branch) *</Label>
+                <Label>Supplying Warehouse ({selectedReqWH?.type === 'BRANCH' ? 'Main' : 'Branch'}) *</Label>
                 {supplyingOptions.length <= 1 ? (
                   <Input
-                    value={supplyingOptions[0]?.name ?? (requestingWHId ? "No branch warehouse for this outlet" : "Select requesting warehouse first")}
+                    value={supplyingOptions[0]?.name ?? (requestingWHId ? `No ${selectedReqWH?.type === 'BRANCH' ? 'main' : 'branch'} warehouse found` : "Select requesting warehouse first")}
                     disabled
                   />
                 ) : (
