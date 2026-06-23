@@ -897,7 +897,7 @@ const Warehouses = () => {
                               <Select value={item.ingredientId} onValueChange={v => apUpdateItemRow(originalIdx, "ingredientId", v)}>
                                 <SelectTrigger className="h-11 text-sm flex-1"><SelectValue placeholder="Select Ingredient" /></SelectTrigger>
                                 <SelectContent>
-                                  {apIngredients.map(ig => <SelectItem key={ig.id} value={ig.id}>{ig.name}</SelectItem>)}
+                                  {apIngredients.map(ig => <SelectItem key={ig.id} value={ig.id}>{ig.name} (Branch: {warehouseStockMap[ig.id] ?? 0} {ig.unit?.name ?? ""})</SelectItem>)}
                                 </SelectContent>
                               </Select>
                               <Button

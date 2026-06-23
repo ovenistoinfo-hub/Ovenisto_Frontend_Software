@@ -625,7 +625,7 @@ const Transfers = () => {
                               {ingredients
                                 .filter(ig => !items.some((it, ii) => ii !== idx && it.ingredientId === ig.id))
                                 .map(ig => (
-                                  <SelectItem key={ig.id} value={ig.id}>{ig.name}</SelectItem>
+                                  <SelectItem key={ig.id} value={ig.id}>{ig.name} (Warehouse: {sourceStockMap[ig.id]?.stock ?? 0} {sourceStockMap[ig.id]?.unit ?? ig.unit?.name ?? ""})</SelectItem>
                                 ))}
                             </SelectContent>
                           </Select>

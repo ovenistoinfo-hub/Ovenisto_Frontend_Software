@@ -132,6 +132,30 @@ const Purchases = () => {
   ]);
   const [selectedWarehouseId, setSelectedWarehouseId] = useState("");
 
+  // Stock of the chosen destination warehouse, so the ingredient picker shows THAT
+  // warehouse's quantity (not the chain-wide global). Falls back to global if none chosen.
+  const [warehouseStock, setWarehouseStock] = useState<Record<string, { qty: number; unit: string }>>({});
+  const stockLabel = useCallback((ig: IngredientRecord) => {
+    if (selectedWarehouseId) {
+      const ws = warehouseStock[ig.id];
+      const unit = ws?.unit || ig.unit?.name || "";
+      return ` (Warehouse: ${ws?.qty ?? 0}${unit ? " " + unit : ""})`;
+    }
+    const unit = ig.unit?.name ?? "";
+    return ` (Stock: ${Number(ig.currentStock)}${unit ? " " + unit : ""})`;
+  }, [selectedWarehouseId, warehouseStock]);
+  useEffect(() => {
+    if (!selectedWarehouseId) { setWarehouseStock({}); return; }
+    let cancelled = false;
+    warehouseService.getStock(selectedWarehouseId).then((rows) => {
+      if (cancelled) return;
+      const map: Record<string, { qty: number; unit: string }> = {};
+      rows.forEach((r) => { map[r.ingredient.id] = { qty: Number(r.currentStock), unit: r.ingredient.unit?.symbol || r.ingredient.unit?.name || "" }; });
+      setWarehouseStock(map);
+    }).catch(() => { if (!cancelled) setWarehouseStock({}); });
+    return () => { cancelled = true; };
+  }, [selectedWarehouseId]);
+
   // Billing / extra costs state
   const [taxAmount, setTaxAmount] = useState(0);
   const [shippingCost, setShippingCost] = useState(0);
@@ -709,7 +733,7 @@ const Purchases = () => {
                               <SelectContent>
                                 {ingredients.map((ig) => (
                                   <SelectItem key={ig.id} value={ig.id}>
-                                    {ig.name}
+                                    {ig.name}{stockLabel(ig)}
                                   </SelectItem>
                                 ))}
                               </SelectContent>
