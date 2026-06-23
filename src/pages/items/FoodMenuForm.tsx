@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
@@ -20,6 +20,7 @@ import { toast } from "sonner";
 import { menuService, type CategoryRecord, type ModifierRecord, type RecipeIngredient } from "@/services/menu.service";
 import { inventoryService, type IngredientRecord, type UnitRecord } from "@/services/inventory.service";
 import { mealTypeService, type MealTypeRecord } from "@/services/mealType.service";
+import productionItemService, { type ProductionItemRecord } from "@/services/production-items.service";
 import { getAccessToken } from "@/services/api";
 
 interface Variant {
@@ -39,7 +40,8 @@ const ORDER_TYPE_LABELS = [
 ];
 
 interface RecipeRow {
-  ingredientId: string;
+  ingredientId?: string;
+  productionItemId?: string;
   name: string;
   unitId: string;
   unit: string;
@@ -126,6 +128,7 @@ const FoodMenuForm = () => {
   const [modifiersList, setModifiersList] = useState<ModifierRecord[]>([]);
   const [units, setUnits] = useState<UnitRecord[]>([]);
   const [mealTypes, setMealTypes] = useState<MealTypeRecord[]>([]);
+  const [productionItems, setProductionItems] = useState<ProductionItemRecord[]>([]);
   const [savedVariantIds, setSavedVariantIds] = useState<Record<number, string>>({});
 
   // Auto-generate item code from name
@@ -172,6 +175,7 @@ const FoodMenuForm = () => {
         setUnits(unitsList);
         // Meal types loaded separately — backend route may not exist yet
         mealTypeService.getAll().then(setMealTypes).catch(() => {});
+        productionItemService.getAll().then(setProductionItems).catch(() => {});
 
         if (isEdit && id) {
           const item = await menuService.getMenuItem(id);
@@ -316,7 +320,7 @@ const FoodMenuForm = () => {
   // ── Recipe helpers ──
   const addRecipeRow = () => {
     setRecipeRows(p => [...p, {
-      ingredientId: "", name: "", unitId: "", unit: "",
+      name: "", unitId: "", unit: "",
       usageUnitId: "", usageUnitName: "",
       quantities: {}, costs: {},
     }]);
@@ -330,6 +334,7 @@ const FoodMenuForm = () => {
     setRecipeRows(p => p.map((r, i) => i === idx ? {
       ...r,
       ingredientId,
+      productionItemId: undefined,
       name: ing.name,
       unitId: ing.unit?.id || "",
       unit: ing.unit?.name || "",
@@ -338,6 +343,42 @@ const FoodMenuForm = () => {
       quantities: {},
       costs: {},
     } : r));
+  };
+
+  const updateRecipeItem = (idx: number, value: string) => {
+    if (value.startsWith('ing_')) {
+      const ingredientId = value.slice(4);
+      const ing = ingredients.find(ig => ig.id === ingredientId);
+      if (!ing) return;
+      setRecipeRows(p => p.map((r, i) => i === idx ? {
+        ...r,
+        ingredientId,
+        productionItemId: undefined,
+        name: ing.name,
+        unitId: ing.unit?.id || "",
+        unit: ing.unit?.name || "",
+        usageUnitId: ing.unit?.id || "",
+        usageUnitName: ing.unit?.name || "",
+        quantities: {},
+        costs: {},
+      } : r));
+    } else if (value.startsWith('prod_')) {
+      const productionItemId = value.slice(5);
+      const prod = productionItems.find(p => p.id === productionItemId);
+      if (!prod) return;
+      setRecipeRows(p => p.map((r, i) => i === idx ? {
+        ...r,
+        ingredientId: undefined,
+        productionItemId,
+        name: prod.name,
+        unitId: "",
+        unit: prod.unit,
+        usageUnitId: "",
+        usageUnitName: prod.unit,
+        quantities: {},
+        costs: {},
+      } : r));
+    }
   };
 
   const updateRecipeQty = (idx: number, key: string, qty: number) => {
@@ -491,11 +532,14 @@ const FoodMenuForm = () => {
       if (savedId) {
         const recipeData: any[] = [];
         recipeRows.forEach(row => {
-          if (!row.ingredientId) return;
+          if (!row.ingredientId && !row.productionItemId) return;
+          const itemFields = row.ingredientId
+            ? { ingredientId: row.ingredientId }
+            : { productionItemId: row.productionItemId };
           if (pricingType === "simple") {
             const qty = row.quantities["base"] || 0;
             if (qty > 0) recipeData.push({
-              ingredientId: row.ingredientId,
+              ...itemFields,
               qtyPerUnit: qty,
               variantId: null,
               usageUnitId: row.usageUnitId || null,
@@ -506,7 +550,7 @@ const FoodMenuForm = () => {
               if (qty > 0) {
                 const realVariantId = variantIdMap[v.name] || null;
                 recipeData.push({
-                  ingredientId: row.ingredientId,
+                  ...itemFields,
                   qtyPerUnit: qty,
                   variantId: realVariantId,
                   usageUnitId: row.usageUnitId || null,
@@ -673,9 +717,29 @@ const FoodMenuForm = () => {
                           <TableRow key={idx} className="hover:bg-muted/20">
                             <TableCell className="text-muted-foreground">{idx + 1}</TableCell>
                             <TableCell>
-                              <Select value={row.ingredientId} onValueChange={(v) => updateRecipeIngredient(idx, v)}>
-                                <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select ingredient" /></SelectTrigger>
-                                <SelectContent>{ingredients.map(ig => <SelectItem key={ig.id} value={ig.id}>{ig.name}</SelectItem>)}</SelectContent>
+                              <Select
+                                value={
+                                  row.ingredientId ? `ing_${row.ingredientId}`
+                                  : row.productionItemId ? `prod_${row.productionItemId}`
+                                  : ''
+                                }
+                                onValueChange={(v) => updateRecipeItem(idx, v)}
+                              >
+                                <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select ingredient or item" /></SelectTrigger>
+                                <SelectContent>
+                                  <SelectGroup>
+                                    <SelectLabel>Ingredients</SelectLabel>
+                                    {ingredients.map(ig => (
+                                      <SelectItem key={`ing_${ig.id}`} value={`ing_${ig.id}`}>{ig.name}</SelectItem>
+                                    ))}
+                                  </SelectGroup>
+                                  <SelectGroup>
+                                    <SelectLabel>Production Items</SelectLabel>
+                                    {productionItems.map(pi => (
+                                      <SelectItem key={`prod_${pi.id}`} value={`prod_${pi.id}`}>{pi.name} (Production)</SelectItem>
+                                    ))}
+                                  </SelectGroup>
+                                </SelectContent>
                               </Select>
                             </TableCell>
                             <TableCell>
