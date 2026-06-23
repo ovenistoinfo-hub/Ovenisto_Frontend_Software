@@ -1,11 +1,10 @@
 import { useState, useEffect } from "react";
 import { useData } from "@/contexts/DataContext";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { CreditCard } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
@@ -33,15 +32,16 @@ const CustomerDues = () => {
         <div className="rounded-lg border overflow-auto max-h-[calc(100vh-300px)]"><Table><TableHeader className="sticky top-0 z-10 bg-card"><TableRow className="bg-muted/50 hover:bg-muted/50"><TableHead>SN</TableHead><TableHead>Customer</TableHead><TableHead>Phone</TableHead><TableHead>Total Due</TableHead><TableHead>Last Order</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader>
           <TableBody>{dueCustomers.map((c, i) => (<TableRow key={c.id} className="hover:bg-muted/30 transition-colors"><TableCell>{i + 1}</TableCell><TableCell className="font-medium">{c.name}</TableCell><TableCell>{c.phone}</TableCell><TableCell className="text-destructive font-bold">{currency} {c.outstandingDue.toLocaleString()}</TableCell><TableCell>{c.lastOrder}</TableCell><TableCell><Button size="sm" className="gradient-primary text-primary-foreground" onClick={() => { setShowPay(c); setAmount(String(c.outstandingDue)); }}>Receive Payment</Button></TableCell></TableRow>))}</TableBody></Table></div>
       </CardContent></Card>
-      <Dialog open={!!showPay} onOpenChange={() => setShowPay(null)}>
-        <DialogContent><DialogHeader><DialogTitle>Receive Payment — {showPay?.name}</DialogTitle></DialogHeader>
-          <div className="space-y-3">
+      {showPay && (
+        <Card className="shadow-sm border-primary/30">
+          <CardHeader className="pb-3"><CardTitle className="text-base">Receive Payment — {showPay?.name}</CardTitle></CardHeader>
+          <CardContent className="space-y-3">
             <div className="space-y-1.5"><Label htmlFor="due-amount">Amount</Label><Input id="due-amount" type="number" value={amount} onChange={(e) => setAmount(e.target.value)} /></div>
             <div className="space-y-1.5"><Label htmlFor="due-method">Payment Method</Label><Input id="due-method" defaultValue="Cash" /></div>
-          </div>
-          <DialogFooter><Button variant="outline" onClick={() => setShowPay(null)}>Cancel</Button><Button className="gradient-primary text-primary-foreground" onClick={handlePay}>Confirm</Button></DialogFooter>
-        </DialogContent>
-      </Dialog>
+          <div className="flex justify-end gap-2 pt-1"><Button variant="outline" onClick={() => setShowPay(null)}>Cancel</Button><Button className="gradient-primary text-primary-foreground" onClick={handlePay}>Confirm</Button></div>
+        </CardContent>
+      </Card>
+      )}
     </div>
   );
 };

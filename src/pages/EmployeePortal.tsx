@@ -390,8 +390,10 @@ const EmployeePortal = () => {
       {/* ═══════════ DIALOGS ═══════════ */}
 
       {/* Request Leave Dialog */}
-      <Dialog open={showLeaveForm} onOpenChange={setShowLeaveForm}><DialogContent><DialogHeader><DialogTitle>Request Leave</DialogTitle></DialogHeader>
-        <div className="space-y-4">
+      {showLeaveForm && (
+        <Card className="shadow-sm border-primary/30">
+          <CardHeader className="pb-3"><CardTitle className="text-base">Request Leave</CardTitle></CardHeader>
+          <CardContent className="space-y-4">
           <div><Label>Leave Type</Label>
             <Select value={leaveForm.leaveType} onValueChange={(v: LeaveRequest["leaveType"]) => setLeaveForm(p => ({ ...p, leaveType: v }))}>
               <SelectTrigger><SelectValue /></SelectTrigger>
@@ -430,12 +432,13 @@ const EmployeePortal = () => {
               </div>
             );
           })()}
-        </div>
-        <DialogFooter>
+        <div className="flex justify-end gap-2 pt-1">
           <Button variant="outline" onClick={() => setShowLeaveForm(false)}>Cancel</Button>
           <Button className="gradient-primary text-primary-foreground" onClick={handleLeaveSubmit}>Submit Request</Button>
-        </DialogFooter>
-      </DialogContent></Dialog>
+        </div>
+        </CardContent>
+      </Card>
+      )}
 
       {/* View Leave Detail Dialog */}
       <Dialog open={!!viewLeave} onOpenChange={() => setViewLeave(null)}><DialogContent><DialogHeader><DialogTitle>Leave Request Details</DialogTitle></DialogHeader>
