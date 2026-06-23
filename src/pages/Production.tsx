@@ -4,7 +4,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Plus, Search, Factory, Trash2 } from "lucide-react";
@@ -48,6 +47,9 @@ const Production = () => {
   useEffect(() => { fetchData(); }, [fetchData]);
 
   const filtered = list.filter((p) => (p.itemName || "").toLowerCase().includes(search.toLowerCase()));
+
+  // Show an ingredient's current stock inline in the selectors (same pattern as the purchase/demand pages).
+  const stockLabel = (i: IngredientRecord) => `${i.name} (Stock: ${Number(i.currentStock)} ${i.unit?.name ?? ""})`.trim();
 
   const handleProduce = () => {
     if (!form.itemName.trim() || form.quantity <= 0) { toast.error("Select a food item and enter quantity"); return; }
@@ -101,7 +103,41 @@ const Production = () => {
 
   return (
     <div className="space-y-6">
-      <PageHeader icon={<Factory className="h-5 w-5" />} title="Production" subtitle="Production batches" actions={<div className="flex gap-2"><Button variant="outline" onClick={() => { setShowDough(v => !v); setShowAdd(false); }}><Plus className="h-4 w-4 mr-2" />Produce Dough</Button><Button className="gradient-primary text-primary-foreground" onClick={() => { setShowAdd(true); setShowDough(false); }}><Plus className="h-4 w-4 mr-2" />New Production</Button></div>} />
+      <PageHeader icon={<Factory className="h-5 w-5" />} title="Production" subtitle="Production batches" actions={<div className="flex gap-2"><Button variant="outline" onClick={() => { setShowDough(v => !v); setShowAdd(false); }}><Plus className="h-4 w-4 mr-2" />Produce Dough</Button><Button className="gradient-primary text-primary-foreground" onClick={() => { setShowAdd(v => !v); setShowDough(false); }}><Plus className="h-4 w-4 mr-2" />New Production</Button></div>} />
+      {showAdd && (
+        <Card className="shadow-sm border-primary/30">
+          <CardHeader className="pb-3"><CardTitle className="text-base">New Production</CardTitle></CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="space-y-1.5 sm:col-span-1">
+                <Label>Food Item</Label>
+                <Select value={form.menuItemId} onValueChange={(v) => {
+                  const item = menuItems.find(m => m.id === v);
+                  setForm(p => ({ ...p, menuItemId: v, itemName: item?.name || "" }));
+                }}>
+                  <SelectTrigger><SelectValue placeholder="Select food item" /></SelectTrigger>
+                  <SelectContent>{menuItems.map((f) => <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Quantity</Label>
+                <Input placeholder="Quantity to produce" type="number" value={form.quantity || ""} onChange={(e) => setForm((p) => ({ ...p, quantity: Number(e.target.value) }))} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Unit (Optional)</Label>
+                <Input placeholder="e.g. kg, pieces" value={form.unit} onChange={(e) => setForm((p) => ({ ...p, unit: e.target.value }))} />
+              </div>
+            </div>
+            {form.menuItemId && <p className="text-xs text-muted-foreground">Recipe ingredients will be deducted from kitchen stock automatically.</p>}
+            <div className="space-y-1.5"><Label>Notes</Label><Textarea placeholder="Notes" value={form.notes} onChange={(e) => setForm((p) => ({ ...p, notes: e.target.value }))} /></div>
+            <div className="flex gap-2 justify-end pt-1">
+              <Button variant="outline" onClick={() => { setShowAdd(false); setForm({ menuItemId: "", itemName: "", quantity: 0, unit: "", notes: "" }); }}>Cancel</Button>
+              <Button className="gradient-primary text-primary-foreground" onClick={handleProduce}>Produce</Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {showDough && (
         <Card className="shadow-sm border-primary/30">
           <CardHeader className="pb-3"><CardTitle className="text-base">Produce Dough / Short-Life Item</CardTitle></CardHeader>
@@ -115,7 +151,7 @@ const Production = () => {
                     {(ingredients.filter(i => i.shelfLifeHours != null).length > 0
                       ? ingredients.filter(i => i.shelfLifeHours != null)
                       : ingredients
-                    ).map(i => <SelectItem key={i.id} value={i.id}>{i.name}</SelectItem>)}
+                    ).map(i => <SelectItem key={i.id} value={i.id}>{stockLabel(i)}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
@@ -156,7 +192,7 @@ const Production = () => {
                 <div key={idx} className="flex gap-2 items-center">
                   <Select value={row.ingredientId} onValueChange={(v) => setDoughForm(p => ({ ...p, consumed: p.consumed.map((c, i) => i === idx ? { ...c, ingredientId: v } : c) }))}>
                     <SelectTrigger className="flex-1"><SelectValue placeholder="Ingredient" /></SelectTrigger>
-                    <SelectContent>{ingredients.map(i => <SelectItem key={i.id} value={i.id}>{i.name}</SelectItem>)}</SelectContent>
+                    <SelectContent>{ingredients.map(i => <SelectItem key={i.id} value={i.id}>{stockLabel(i)}</SelectItem>)}</SelectContent>
                   </Select>
                   <Input type="number" placeholder="Qty" className="w-24" value={row.qty || ""} onChange={(e) => setDoughForm(p => ({ ...p, consumed: p.consumed.map((c, i) => i === idx ? { ...c, qty: Number(e.target.value) } : c) }))} />
                   <Button type="button" variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => setDoughForm(p => ({ ...p, consumed: p.consumed.filter((_, i) => i !== idx) }))}>
@@ -179,22 +215,6 @@ const Production = () => {
           <div className="rounded-lg border overflow-auto max-h-[calc(100vh-300px)]"><Table><TableHeader className="sticky top-0 z-10 bg-card"><TableRow className="bg-muted/50 hover:bg-muted/50"><TableHead>SN</TableHead><TableHead>Date</TableHead><TableHead>Item</TableHead><TableHead>Qty</TableHead><TableHead>Unit</TableHead><TableHead>By</TableHead><TableHead>Notes</TableHead></TableRow></TableHeader>
             <TableBody>{filtered.map((p, i) => (<TableRow key={p.id} className="hover:bg-muted/30 transition-colors"><TableCell>{i+1}</TableCell><TableCell>{p.date.slice(0, 10)}</TableCell><TableCell className="font-medium">{p.itemName}</TableCell><TableCell>{p.quantity}</TableCell><TableCell>{p.unit || "—"}</TableCell><TableCell>{p.producedBy || "—"}</TableCell><TableCell className="text-muted-foreground">{p.notes || "—"}</TableCell></TableRow>))}</TableBody></Table></div>
         )}</CardContent></Card>
-
-      <Dialog open={showAdd} onOpenChange={setShowAdd}>
-        <DialogContent className="max-w-lg"><DialogHeader><DialogTitle>New Production</DialogTitle></DialogHeader>
-          <div className="space-y-3">
-            <div className="space-y-1.5"><Label>Food Item</Label><Select value={form.menuItemId} onValueChange={(v) => {
-              const item = menuItems.find(m => m.id === v);
-              setForm(p => ({ ...p, menuItemId: v, itemName: item?.name || "" }));
-            }}><SelectTrigger><SelectValue placeholder="Select food item" /></SelectTrigger><SelectContent>{menuItems.map((f) => <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>)}</SelectContent></Select></div>
-            <div className="space-y-1.5"><Label>Quantity</Label><Input placeholder="Quantity to produce" type="number" value={form.quantity || ""} onChange={(e) => setForm((p) => ({ ...p, quantity: Number(e.target.value) }))} /></div>
-            <div className="space-y-1.5"><Label>Unit (Optional)</Label><Input placeholder="e.g. kg, pieces" value={form.unit} onChange={(e) => setForm((p) => ({ ...p, unit: e.target.value }))} /></div>
-            {form.menuItemId && <p className="text-xs text-muted-foreground">Recipe ingredients will be deducted from stock automatically.</p>}
-            <div className="space-y-1.5"><Label>Notes</Label><Textarea placeholder="Notes" value={form.notes} onChange={(e) => setForm((p) => ({ ...p, notes: e.target.value }))} /></div>
-          </div>
-          <DialogFooter><Button variant="outline" onClick={() => setShowAdd(false)}>Cancel</Button><Button className="gradient-primary text-primary-foreground" onClick={handleProduce}>Produce</Button></DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       <AlertDialog open={showConfirm} onOpenChange={setShowConfirm}>
         <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Confirm Production</AlertDialogTitle><AlertDialogDescription>This will record the production{form.menuItemId ? " and deduct required ingredients from stock" : ""}. Continue?</AlertDialogDescription></AlertDialogHeader>
