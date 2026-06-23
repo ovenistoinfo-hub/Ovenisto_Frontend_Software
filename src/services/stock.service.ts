@@ -90,6 +90,34 @@ export interface WasteRecord {
   date: string;
 }
 
+export interface ProductionBatchRecord {
+  id: string;
+  batchQty: number;
+  remainingQty: number;
+  shelfLifeMinutes: number | null;
+  unitCost: number | null;
+  createdAt: string;
+  effectiveExpiry: string | null;
+}
+
+export interface ProductionStockRecord {
+  productionItemId: string;
+  item: { id: string; name: string; unit: string; shelfLifeHours: number | null };
+  warehouseId: string;
+  warehouse: { id: string; name: string };
+  currentStock: number;
+  batches: ProductionBatchRecord[];
+}
+
+export interface CreateProductionItemPayload {
+  productionItemId: string;
+  quantity: number;
+  unit: string;
+  consumedIngredients: { ingredientId: string; qty: number }[];
+  shelfLifeMinutes?: number;
+  notes?: string;
+}
+
 export const stockService = {
   // ── Stock Adjustments ──
   async getAdjustments(params?: { search?: string; warehouseId?: string; page?: number; limit?: number }): Promise<{ data: StockAdjustmentRecord[]; meta: any }> {
@@ -194,5 +222,19 @@ export const stockService = {
   async createWasteRecord(data: { itemName: string; quantity?: number; unit?: string; reason?: string; cost?: number; ingredientId?: string }): Promise<WasteRecord> {
     const res = await api.post<{ success: boolean; data: WasteRecord }>('/stock/waste', data);
     return res.data;
+  },
+
+  // ── Production Items Stock ──
+  getProductionStock: async (): Promise<ProductionStockRecord[]> => {
+    const res = await api.get('/stock/production-stock');
+    return res.data.data;
+  },
+
+  createProductionItem: async (data: CreateProductionItemPayload): Promise<void> => {
+    await api.post('/stock/productions', data);
+  },
+
+  wasteProductionBatch: async (batchId: string, qty: number): Promise<void> => {
+    await api.post(`/stock/production-batches/${batchId}/waste`, { qty });
   },
 };
