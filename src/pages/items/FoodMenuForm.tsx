@@ -19,7 +19,6 @@ import { PageHeader } from "@/components/ui/page-header";
 import { toast } from "sonner";
 import { menuService, type CategoryRecord, type ModifierRecord, type RecipeIngredient } from "@/services/menu.service";
 import { inventoryService, type IngredientRecord, type UnitRecord } from "@/services/inventory.service";
-import { warehouseService } from "@/services/warehouse.service";
 import { mealTypeService, type MealTypeRecord } from "@/services/mealType.service";
 import { getAccessToken } from "@/services/api";
 
@@ -124,15 +123,6 @@ const FoodMenuForm = () => {
   // Reference data
   const [categories, setCategories] = useState<CategoryRecord[]>([]);
   const [ingredients, setIngredients] = useState<IngredientRecord[]>([]);
-  // Per-kitchen stock (current outlet scope) so the recipe picker shows what's actually
-  // in the kitchen, not the chain-wide global Ingredient.currentStock.
-  const [kitchenStock, setKitchenStock] = useState<Record<string, { stock: number; unit: string }>>({});
-  const stockLabel = useCallback((ig: IngredientRecord) => {
-    const k = kitchenStock[ig.id];
-    const qty = k ? k.stock : 0;
-    const unit = k?.unit || ig.unit?.name || "";
-    return `${ig.name} (Kitchen: ${qty}${unit ? " " + unit : ""})`;
-  }, [kitchenStock]);
   const [modifiersList, setModifiersList] = useState<ModifierRecord[]>([]);
   const [units, setUnits] = useState<UnitRecord[]>([]);
   const [mealTypes, setMealTypes] = useState<MealTypeRecord[]>([]);
@@ -272,20 +262,6 @@ const FoodMenuForm = () => {
       }
     };
     loadData();
-    // Build the per-kitchen stock map (summed across kitchens visible in the current outlet scope).
-    warehouseService.getAll({ type: 'KITCHEN' }).then(async (kws) => {
-      const lists = await Promise.all(kws.map((w) => warehouseService.getStock(w.id).catch(() => [])));
-      const map: Record<string, { stock: number; unit: string }> = {};
-      for (const list of lists) {
-        for (const s of list) {
-          map[s.ingredient.id] = {
-            stock: (map[s.ingredient.id]?.stock ?? 0) + Number(s.currentStock),
-            unit: s.ingredient.unit?.symbol || s.ingredient.unit?.name || "",
-          };
-        }
-      }
-      setKitchenStock(map);
-    }).catch(() => {});
   }, [isEdit, id]);
 
   // ── Variant helpers ──
@@ -699,7 +675,7 @@ const FoodMenuForm = () => {
                             <TableCell>
                               <Select value={row.ingredientId} onValueChange={(v) => updateRecipeIngredient(idx, v)}>
                                 <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select ingredient" /></SelectTrigger>
-                                <SelectContent>{ingredients.map(ig => <SelectItem key={ig.id} value={ig.id}>{stockLabel(ig)}</SelectItem>)}</SelectContent>
+                                <SelectContent>{ingredients.map(ig => <SelectItem key={ig.id} value={ig.id}>{ig.name}</SelectItem>)}</SelectContent>
                               </Select>
                             </TableCell>
                             <TableCell>
