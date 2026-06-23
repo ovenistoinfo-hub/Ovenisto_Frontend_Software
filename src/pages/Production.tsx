@@ -27,7 +27,7 @@ function expiryColor(effectiveExpiry: string | null): string {
   if (diffMs < 0) return 'text-destructive font-semibold';
   if (diffH < 2) return 'text-orange-500 font-semibold';
   if (diffH < 6) return 'text-yellow-600';
-  return 'text-green-600';
+  return 'text-success';
 }
 
 function expiryLabel(effectiveExpiry: string | null): string {
