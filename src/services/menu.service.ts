@@ -56,7 +56,7 @@ export interface RecipeIngredient {
   id: string;
   menuItemId: string;
   variantId: string | null;
-  ingredientId: string;
+  ingredientId: string | null;
   qtyPerUnit: number;
   usageUnitId: string | null;
   usageUnit: { id: string; name: string } | null;
@@ -66,6 +66,8 @@ export interface RecipeIngredient {
     purchasePrice: number | null;
     unit: { id: string; name: string } | null;
   };
+  productionItemId: string | null;
+  productionItem: { id: string; name: string; unit: string } | null;
 }
 
 export interface ModifierRecord {
@@ -135,7 +137,7 @@ export const menuService = {
     return res.data;
   },
 
-  async updateRecipe(itemId: string, ingredients: { ingredientId: string; qtyPerUnit: number; variantId?: string | null; usageUnitId?: string | null }[]): Promise<RecipeIngredient[]> {
+  async updateRecipe(itemId: string, ingredients: { ingredientId?: string | null; productionItemId?: string | null; qtyPerUnit: number; variantId?: string | null; usageUnitId?: string | null }[]): Promise<RecipeIngredient[]> {
     const res = await api.put<{ success: boolean; data: RecipeIngredient[] }>(`/menu/items/${itemId}/recipe`, { ingredients });
     return res.data;
   },
