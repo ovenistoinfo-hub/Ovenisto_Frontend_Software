@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -6,17 +7,37 @@ import { Label } from "@/components/ui/label";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { Plus, Search, Factory, Trash2, Pencil } from "lucide-react";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Plus, Search, Factory, Trash2, Pencil, ChevronDown } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/ui/page-header";
-import { stockService, type ProductionRecord } from "@/services/stock.service";
+import { stockService, type ProductionRecord, type ProductionStockRecord } from "@/services/stock.service";
 import { menuService, type MenuItemRecord } from "@/services/menu.service";
 import { inventoryService, type IngredientRecord } from "@/services/inventory.service";
 import { warehouseService } from "@/services/warehouse.service";
 import { useAuth } from "@/contexts/AuthContext";
 import productionItemService, { type ProductionItemRecord } from "@/services/production-items.service";
+
+function expiryColor(effectiveExpiry: string | null): string {
+  if (!effectiveExpiry) return '';
+  const diffMs = new Date(effectiveExpiry).getTime() - Date.now();
+  const diffH = diffMs / (1000 * 60 * 60);
+  if (diffMs < 0) return 'text-destructive font-semibold';
+  if (diffH < 2) return 'text-orange-500 font-semibold';
+  if (diffH < 6) return 'text-yellow-600';
+  return 'text-green-600';
+}
+
+function expiryLabel(effectiveExpiry: string | null): string {
+  if (!effectiveExpiry) return 'No expiry';
+  const diffMs = new Date(effectiveExpiry).getTime() - Date.now();
+  if (diffMs < 0) return 'Expired';
+  const h = Math.floor(diffMs / 3600000);
+  const m = Math.floor((diffMs % 3600000) / 60000);
+  return `${h}h ${m}m left`;
+}
 
 const Production = () => {
   const { user } = useAuth();
@@ -48,6 +69,16 @@ const Production = () => {
   const [itemForm, setItemForm] = useState({ name: '', unit: '', shelfLifeHours: '' });
   const [savingItem, setSavingItem] = useState(false);
   const canManageItems = ['Super Admin', 'Admin', 'Manager'].includes(user?.role ?? '');
+
+  // Production Stock tab state
+  const { data: productionStock = [], refetch: refetchStock } = useQuery<ProductionStockRecord[]>({
+    queryKey: ['production-stock'],
+    queryFn: () => stockService.getProductionStock(),
+  });
+  const [wasteTarget, setWasteTarget] = useState<{ batchId: string; max: number } | null>(null);
+  const [wasteQty, setWasteQty] = useState('');
+  const [wastingSaving, setWastingSaving] = useState(false);
+  const [expandedItemKey, setExpandedItemKey] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
     try {
@@ -356,11 +387,115 @@ const Production = () => {
         </Card>
       )}
 
-      <Card className="shadow-sm"><CardHeader className="pb-3"><div className="relative max-w-sm"><Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search..." className="pl-9" /></div></CardHeader>
-        <CardContent>{filtered.length === 0 ? (<div className="text-center py-12"><Factory className="h-12 w-12 text-muted-foreground mx-auto mb-3 opacity-30" /><p className="text-muted-foreground">No production records found</p><p className="text-xs text-muted-foreground mt-1.5">Start your first production batch.</p></div>) : (
-          <div className="rounded-lg border overflow-auto max-h-[calc(100vh-300px)]"><Table><TableHeader className="sticky top-0 z-10 bg-card"><TableRow className="bg-muted/50 hover:bg-muted/50"><TableHead>SN</TableHead><TableHead>Date</TableHead><TableHead>Item</TableHead><TableHead>Qty</TableHead><TableHead>Unit</TableHead><TableHead>By</TableHead><TableHead>Notes</TableHead></TableRow></TableHeader>
-            <TableBody>{filtered.map((p, i) => (<TableRow key={p.id} className="hover:bg-muted/30 transition-colors"><TableCell>{i+1}</TableCell><TableCell>{p.date.slice(0, 10)}</TableCell><TableCell className="font-medium">{p.itemName}</TableCell><TableCell>{p.quantity}</TableCell><TableCell>{p.unit || "—"}</TableCell><TableCell>{p.producedBy || "—"}</TableCell><TableCell className="text-muted-foreground">{p.notes || "—"}</TableCell></TableRow>))}</TableBody></Table></div>
-        )}</CardContent></Card>
+      <Tabs defaultValue="history">
+        <TabsList>
+          <TabsTrigger value="history">Production History</TabsTrigger>
+          <TabsTrigger value="stock">Production Stock</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="history">
+          <Card className="shadow-sm"><CardHeader className="pb-3"><div className="relative max-w-sm"><Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search..." className="pl-9" /></div></CardHeader>
+            <CardContent>{filtered.length === 0 ? (<div className="text-center py-12"><Factory className="h-12 w-12 text-muted-foreground mx-auto mb-3 opacity-30" /><p className="text-muted-foreground">No production records found</p><p className="text-xs text-muted-foreground mt-1.5">Start your first production batch.</p></div>) : (
+              <div className="rounded-lg border overflow-auto max-h-[calc(100vh-300px)]"><Table><TableHeader className="sticky top-0 z-10 bg-card"><TableRow className="bg-muted/50 hover:bg-muted/50"><TableHead>SN</TableHead><TableHead>Date</TableHead><TableHead>Item</TableHead><TableHead>Qty</TableHead><TableHead>Unit</TableHead><TableHead>By</TableHead><TableHead>Notes</TableHead></TableRow></TableHeader>
+                <TableBody>{filtered.map((p, i) => (<TableRow key={p.id} className="hover:bg-muted/30 transition-colors"><TableCell>{i+1}</TableCell><TableCell>{p.date.slice(0, 10)}</TableCell><TableCell className="font-medium">{p.itemName}</TableCell><TableCell>{p.quantity}</TableCell><TableCell>{p.unit || "—"}</TableCell><TableCell>{p.producedBy || "—"}</TableCell><TableCell className="text-muted-foreground">{p.notes || "—"}</TableCell></TableRow>))}</TableBody></Table></div>
+            )}</CardContent></Card>
+        </TabsContent>
+
+        <TabsContent value="stock">
+          {productionStock.length === 0 ? (
+            <div className="text-center py-12 text-muted-foreground">No production stock yet. Produce an item first.</div>
+          ) : (
+            <div className="space-y-3">
+              {productionStock.map((s: ProductionStockRecord) => {
+                const key = `${s.productionItemId}-${s.warehouseId}`;
+                const isExpanded = expandedItemKey === key;
+                return (
+                  <Card key={key} className="shadow-sm">
+                    <CardHeader
+                      className="pb-2 cursor-pointer select-none"
+                      onClick={() => setExpandedItemKey(isExpanded ? null : key)}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <span className="font-medium">{s.item.name}</span>
+                          <span className="text-xs text-muted-foreground ml-2">{s.warehouse.name}</span>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span className="text-sm font-semibold">{s.currentStock.toFixed(2)} {s.item.unit}</span>
+                          <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                        </div>
+                      </div>
+                    </CardHeader>
+                    {isExpanded && (
+                      <CardContent>
+                        {s.batches.length === 0 ? (
+                          <p className="text-sm text-muted-foreground">No active batches.</p>
+                        ) : (
+                          <Table>
+                            <TableHeader>
+                              <TableRow className="bg-muted/50 hover:bg-muted/50">
+                                <TableHead>Produced At</TableHead>
+                                <TableHead className="text-right">Batch Qty</TableHead>
+                                <TableHead className="text-right">Remaining</TableHead>
+                                <TableHead>Expires</TableHead>
+                                <TableHead></TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {s.batches.map(b => (
+                                <TableRow key={b.id}>
+                                  <TableCell className="text-sm">{new Date(b.createdAt).toLocaleString()}</TableCell>
+                                  <TableCell className="text-right text-sm">{b.batchQty} {s.item.unit}</TableCell>
+                                  <TableCell className="text-right text-sm font-medium">{b.remainingQty} {s.item.unit}</TableCell>
+                                  <TableCell className={`text-sm ${expiryColor(b.effectiveExpiry)}`}>{expiryLabel(b.effectiveExpiry)}</TableCell>
+                                  <TableCell>
+                                    {wasteTarget?.batchId === b.id ? (
+                                      <div className="flex gap-1 items-center">
+                                        <Input
+                                          type="number" min={0.01} max={b.remainingQty} step={0.01}
+                                          className="w-20 h-7 text-xs"
+                                          value={wasteQty}
+                                          onChange={e => setWasteQty(e.target.value)}
+                                        />
+                                        <Button size="sm" variant="destructive" className="h-7 text-xs px-2"
+                                          disabled={wastingSaving || !wasteQty || Number(wasteQty) <= 0}
+                                          onClick={async () => {
+                                            setWastingSaving(true);
+                                            try {
+                                              await stockService.wasteProductionBatch(b.id, Number(wasteQty));
+                                              toast.success('Waste recorded');
+                                              setWasteTarget(null); setWasteQty('');
+                                              refetchStock();
+                                            } catch (err: unknown) {
+                                              toast.error((err as Error).message || 'Failed');
+                                            } finally { setWastingSaving(false); }
+                                          }}
+                                        >{wastingSaving ? '...' : 'Confirm'}</Button>
+                                        <Button size="sm" variant="ghost" className="h-7 text-xs px-2"
+                                          onClick={() => { setWasteTarget(null); setWasteQty(''); }}
+                                        >Cancel</Button>
+                                      </div>
+                                    ) : (
+                                      <Button size="sm" variant="ghost"
+                                        className="h-7 text-xs text-destructive hover:text-destructive"
+                                        onClick={() => { setWasteTarget({ batchId: b.id, max: b.remainingQty }); setWasteQty(''); }}
+                                      >Waste</Button>
+                                    )}
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        )}
+                      </CardContent>
+                    )}
+                  </Card>
+                );
+              })}
+            </div>
+          )}
+        </TabsContent>
+      </Tabs>
 
       <AlertDialog open={showConfirm} onOpenChange={setShowConfirm}>
         <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Confirm Production</AlertDialogTitle><AlertDialogDescription>This will record the production{form.menuItemId ? " and deduct required ingredients from stock" : ""}. Continue?</AlertDialogDescription></AlertDialogHeader>
