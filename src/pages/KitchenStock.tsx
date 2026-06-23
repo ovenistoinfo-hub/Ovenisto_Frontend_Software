@@ -696,6 +696,7 @@ const KitchenStock = () => {
                     <TableRow className="bg-muted/50 hover:bg-muted/50">
                       {hasActions && <TableHead className="w-10"><Checkbox checked={selectedStockIds.size === filteredStock.length && filteredStock.length > 0} onCheckedChange={(v) => setSelectedStockIds(v ? new Set(filteredStock.map(s => s.id)) : new Set())} /></TableHead>}
                       <TableHead className="w-12">SN</TableHead><TableHead>Ingredient</TableHead><TableHead>Brand</TableHead><TableHead>Category</TableHead><TableHead>Unit</TableHead>
+                      <TableHead className="text-right">Purchase Price</TableHead>
                       <TableHead className="text-right">Current Stock</TableHead><TableHead className="text-right">Low Stock Level</TableHead>
                       <TableHead>Status</TableHead>
                       {hasActions && <TableHead>Actions</TableHead>}
@@ -725,6 +726,7 @@ const KitchenStock = () => {
                           <TableCell className="text-sm text-muted-foreground">{s.ingredient.brand ?? "—"}</TableCell>
                           <TableCell className="text-sm text-muted-foreground">{s.ingredient.category?.name ?? "—"}</TableCell>
                           <TableCell className="text-sm">{s.ingredient.unit?.symbol || s.ingredient.unit?.name || "—"}</TableCell>
+                          <TableCell className="text-right text-sm">{s.ingredient.purchasePrice != null ? `Rs. ${Number(s.ingredient.purchasePrice).toFixed(2)}` : "—"}</TableCell>
                           <TableCell className={`text-right font-medium ${Number(s.currentStock) <= 0 ? "text-destructive" : status === "LOW" ? "text-yellow-600" : ""}`}>
                             {Number(s.currentStock).toFixed(3)}
                           </TableCell>
