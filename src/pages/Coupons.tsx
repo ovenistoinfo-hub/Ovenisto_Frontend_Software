@@ -1,13 +1,12 @@
 import { useState } from "react";
 import { Ticket, Plus, Pencil, Trash2, Search, Copy } from "lucide-react";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PageHeader } from "@/components/ui/page-header";
@@ -76,8 +75,10 @@ const Coupons = () => {
           ))}{filtered.length === 0 && <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">No coupons found</TableCell></TableRow>}</TableBody>
         </Table></div></CardContent>
       </Card>
-      <Dialog open={showDialog} onOpenChange={setShowDialog}><DialogContent className="max-h-[90vh] overflow-y-auto"><DialogHeader><DialogTitle>{editId ? "Edit" : "Create"} Coupon</DialogTitle></DialogHeader>
-        <div className="space-y-3">
+      {showDialog && (
+        <Card className="shadow-sm border-primary/30">
+          <CardHeader className="pb-3"><CardTitle className="text-base">{editId ? "Edit" : "Create"} Coupon</CardTitle></CardHeader>
+          <CardContent className="space-y-3">
           <div className="flex flex-col sm:flex-row gap-2"><div className="flex-1"><Label>Code</Label><Input value={form.code || ""} onChange={e => setForm(p => ({ ...p, code: e.target.value.toUpperCase() }))} /></div><Button variant="outline" className="sm:mt-6 shrink-0" onClick={() => setForm(p => ({ ...p, code: genCode() }))}>Generate</Button></div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3"><div><Label>Type</Label><Select value={form.type} onValueChange={v => setForm(p => ({ ...p, type: v as "percentage" | "fixed" }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="percentage">Percentage</SelectItem><SelectItem value="fixed">Fixed Amount</SelectItem></SelectContent></Select></div><div><Label>Value</Label><Input type="number" value={form.value || ""} onChange={e => setForm(p => ({ ...p, value: Number(e.target.value) }))} /></div></div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3"><div><Label>Min Order (Rs.)</Label><Input type="number" value={form.minOrderAmount || ""} onChange={e => setForm(p => ({ ...p, minOrderAmount: Number(e.target.value) }))} /></div>{form.type === "percentage" && <div><Label>Max Discount (Rs.)</Label><Input type="number" value={form.maxDiscount || ""} onChange={e => setForm(p => ({ ...p, maxDiscount: Number(e.target.value) }))} /></div>}</div>
@@ -85,9 +86,10 @@ const Coupons = () => {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3"><div><Label>Valid From</Label><Input type="date" value={form.validFrom || ""} onChange={e => setForm(p => ({ ...p, validFrom: e.target.value }))} /></div><div><Label>Valid To</Label><Input type="date" value={form.validTo === "never" ? "" : form.validTo || ""} onChange={e => setForm(p => ({ ...p, validTo: e.target.value || "never" }))} /></div></div>
           <div><Label>Applicable To</Label><Select value={form.applicableTo} onValueChange={v => setForm(p => ({ ...p, applicableTo: v as any }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All Orders</SelectItem><SelectItem value="dineIn">Dine In</SelectItem><SelectItem value="delivery">Delivery</SelectItem><SelectItem value="takeAway">Take Away</SelectItem><SelectItem value="online">Online</SelectItem></SelectContent></Select></div>
           <div className="flex items-center justify-between"><Label>Active</Label><Switch checked={form.isActive} onCheckedChange={c => setForm(p => ({ ...p, isActive: c }))} /></div>
-        </div>
-        <DialogFooter><Button variant="outline" onClick={() => setShowDialog(false)}>Cancel</Button><Button className="gradient-primary text-primary-foreground" onClick={handleSave}>Save</Button></DialogFooter>
-      </DialogContent></Dialog>
+        <div className="flex justify-end gap-2 pt-1"><Button variant="outline" onClick={() => setShowDialog(false)}>Cancel</Button><Button className="gradient-primary text-primary-foreground" onClick={handleSave}>Save</Button></div>
+        </CardContent>
+      </Card>
+      )}
       <AlertDialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Delete Coupon?</AlertDialogTitle><AlertDialogDescription>This cannot be undone.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={() => { if (deleteId) { removeItem("coupons", deleteId); setDeleteId(null); toast.success("Deleted"); } }} className="bg-destructive text-destructive-foreground">Delete</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
     </div>
   );

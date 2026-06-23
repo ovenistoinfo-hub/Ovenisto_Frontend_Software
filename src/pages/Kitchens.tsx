@@ -1,10 +1,9 @@
 import { useState, useEffect, useCallback } from "react";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -197,10 +196,10 @@ const Kitchens = () => {
         </CardContent>
       </Card>
 
-      <Dialog open={showDialog} onOpenChange={(v) => { if (!saving) setShowDialog(v); }}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>{editingId ? "Edit" : "Add"} Kitchen</DialogTitle></DialogHeader>
-          <div className="space-y-4">
+      {showDialog && (
+        <Card className="shadow-sm border-primary/30">
+          <CardHeader className="pb-3"><CardTitle className="text-base">{editingId ? "Edit" : "Add"} Kitchen</CardTitle></CardHeader>
+          <CardContent className="space-y-4">
             <div className="space-y-1.5">
               <Label>Kitchen Name</Label>
               <Input value={form.name} onChange={(e) => setForm(p => ({ ...p, name: e.target.value }))} placeholder="Enter kitchen name" />
@@ -219,15 +218,15 @@ const Kitchens = () => {
                 ))}
               </div>
             </div>
-          </div>
-          <DialogFooter>
+          <div className="flex justify-end gap-2 pt-1">
             <Button variant="outline" onClick={() => setShowDialog(false)} disabled={saving}>Cancel</Button>
             <Button className="gradient-primary text-primary-foreground" onClick={handleSave} disabled={saving}>
               {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}Save
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </div>
+        </CardContent>
+      </Card>
+      )}
     </div>
   );
 };

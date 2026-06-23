@@ -1,13 +1,12 @@
 import { useState, useMemo } from "react";
 import { CalendarCheck, Plus, Pencil } from "lucide-react";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { PageHeader } from "@/components/ui/page-header";
@@ -96,15 +95,18 @@ const Reservations = () => {
           </TableRow>
         ))}{filtered.length === 0 && <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">No reservations</TableCell></TableRow>}</TableBody>
       </Table></div></CardContent></Card>
-      <Dialog open={showDialog} onOpenChange={setShowDialog}><DialogContent><DialogHeader><DialogTitle>{editId ? "Edit" : "New"} Reservation</DialogTitle></DialogHeader>
-        <div className="space-y-3">
+      {showDialog && (
+        <Card className="shadow-sm border-primary/30">
+          <CardHeader className="pb-3"><CardTitle className="text-base">{editId ? "Edit" : "New"} Reservation</CardTitle></CardHeader>
+          <CardContent className="space-y-3">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3"><div><Label>Customer Name</Label><Input value={form.customerName || ""} onChange={e => setForm(p => ({ ...p, customerName: e.target.value }))} /></div><div><Label>Phone</Label><Input value={form.customerPhone || ""} onChange={e => setForm(p => ({ ...p, customerPhone: e.target.value }))} /></div></div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3"><div><Label>Date</Label><Input type="date" value={form.date || ""} onChange={e => setForm(p => ({ ...p, date: e.target.value }))} /></div><div><Label>Time</Label><Input type="time" value={form.time || ""} onChange={e => setForm(p => ({ ...p, time: e.target.value }))} /></div><div><Label>Guests</Label><Input type="number" value={form.guestCount || ""} onChange={e => setForm(p => ({ ...p, guestCount: Number(e.target.value) }))} /></div></div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3"><div><Label>Table</Label><Select value={form.tableNumber || ""} onValueChange={v => setForm(p => ({ ...p, tableNumber: v }))}><SelectTrigger><SelectValue placeholder="Select table" /></SelectTrigger><SelectContent>{tables.map(t => <SelectItem key={t.id} value={t.number}>{t.number} ({t.capacity} seats)</SelectItem>)}</SelectContent></Select></div><div><Label>Source</Label><Select value={form.source} onValueChange={v => setForm(p => ({ ...p, source: v as any }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="phone">Phone</SelectItem><SelectItem value="walkin">Walk-in</SelectItem><SelectItem value="online">Online</SelectItem></SelectContent></Select></div></div>
           <div><Label>Special Requests</Label><Textarea value={form.specialRequests || ""} onChange={e => setForm(p => ({ ...p, specialRequests: e.target.value }))} /></div>
-        </div>
-        <DialogFooter><Button variant="outline" onClick={() => setShowDialog(false)}>Cancel</Button><Button className="gradient-primary text-primary-foreground" onClick={handleSave}>Save</Button></DialogFooter>
-      </DialogContent></Dialog>
+        <div className="flex justify-end gap-2 pt-1"><Button variant="outline" onClick={() => setShowDialog(false)}>Cancel</Button><Button className="gradient-primary text-primary-foreground" onClick={handleSave}>Save</Button></div>
+        </CardContent>
+      </Card>
+      )}
       <AlertDialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Delete Reservation?</AlertDialogTitle><AlertDialogDescription>This cannot be undone.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={() => { if (deleteId) { removeItem("reservations", deleteId); setDeleteId(null); toast.success("Deleted"); } }} className="bg-destructive text-destructive-foreground">Delete</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
     </div>
   );

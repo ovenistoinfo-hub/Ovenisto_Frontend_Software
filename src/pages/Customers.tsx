@@ -1,11 +1,10 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useData } from "@/contexts/DataContext";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Search, Eye, Plus, Users, Trash2 } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
@@ -42,8 +41,23 @@ const Customers = () => {
         icon={<Users className="h-5 w-5" />}
         title="Customers"
         subtitle="Manage your customers"
-        actions={<Button className="gradient-primary text-primary-foreground" onClick={() => setShowAdd(true)}><Plus className="h-4 w-4 mr-2" />Add Customer</Button>}
+        actions={<Button className="gradient-primary text-primary-foreground" onClick={() => setShowAdd(v => !v)}><Plus className="h-4 w-4 mr-2" />Add Customer</Button>}
       />
+      {showAdd && (
+        <Card className="shadow-sm border-primary/30">
+          <CardHeader className="pb-3"><CardTitle className="text-base">Add Customer</CardTitle></CardHeader>
+          <CardContent className="space-y-3">
+            <Input placeholder="Name *" value={form.name} onChange={(e) => setForm(p => ({ ...p, name: e.target.value }))} />
+            <Input placeholder="Phone *" value={form.phone} onChange={(e) => setForm(p => ({ ...p, phone: e.target.value }))} />
+            <Input placeholder="Email" value={form.email} onChange={(e) => setForm(p => ({ ...p, email: e.target.value }))} />
+            <Input placeholder="Address" value={form.address} onChange={(e) => setForm(p => ({ ...p, address: e.target.value }))} />
+            <div className="flex justify-end gap-2 pt-1">
+              <Button variant="outline" onClick={() => setShowAdd(false)}>Cancel</Button>
+              <Button className="gradient-primary text-primary-foreground" onClick={handleAdd}>Save</Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
       <Card className="shadow-sm">
         <CardHeader className="pb-3"><div className="relative max-w-sm"><Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} placeholder="Search by name or phone..." className="pl-9" /></div></CardHeader>
         <CardContent>
@@ -88,17 +102,6 @@ const Customers = () => {
           )}
         </CardContent>
       </Card>
-      <Dialog open={showAdd} onOpenChange={setShowAdd}>
-        <DialogContent><DialogHeader><DialogTitle>Add Customer</DialogTitle></DialogHeader>
-          <div className="space-y-3">
-            <Input placeholder="Name *" value={form.name} onChange={(e) => setForm(p => ({ ...p, name: e.target.value }))} />
-            <Input placeholder="Phone *" value={form.phone} onChange={(e) => setForm(p => ({ ...p, phone: e.target.value }))} />
-            <Input placeholder="Email" value={form.email} onChange={(e) => setForm(p => ({ ...p, email: e.target.value }))} />
-            <Input placeholder="Address" value={form.address} onChange={(e) => setForm(p => ({ ...p, address: e.target.value }))} />
-          </div>
-          <DialogFooter><Button variant="outline" onClick={() => setShowAdd(false)}>Cancel</Button><Button className="gradient-primary text-primary-foreground" onClick={handleAdd}>Save</Button></DialogFooter>
-        </DialogContent>
-      </Dialog>
       <AlertDialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>
         <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Delete Customer?</AlertDialogTitle><AlertDialogDescription>Are you sure you want to delete this customer? This action cannot be undone.</AlertDialogDescription></AlertDialogHeader>
           <AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground">Delete</AlertDialogAction></AlertDialogFooter>

@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -99,6 +98,45 @@ const Outlets = () => {
         subtitle={`${list.length} branch${list.length !== 1 ? "es" : ""} configured`}
         actions={<Button className="gradient-primary text-primary-foreground" onClick={openAdd}><Plus className="h-4 w-4 mr-2" />Add Outlet</Button>}
       />
+      {showDialog && (
+        <Card className="shadow-sm border-primary/30">
+          <CardHeader className="pb-3"><CardTitle className="text-base">{editingId ? "Edit" : "Add"} Outlet</CardTitle></CardHeader>
+          <CardContent className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5 col-span-2">
+                <Label>Outlet Name</Label>
+                <Input placeholder="e.g. DHA Branch" value={form.name} onChange={(e) => setForm(p => ({ ...p, name: e.target.value }))} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Outlet Code</Label>
+                <Input placeholder="e.g. DHA-01" value={form.code} onChange={(e) => setForm(p => ({ ...p, code: e.target.value.toUpperCase() }))} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>City</Label>
+                <Input placeholder="Lahore" value={form.city} onChange={(e) => setForm(p => ({ ...p, city: e.target.value }))} />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Address</Label>
+              <Textarea placeholder="Full address" value={form.address} onChange={(e) => setForm(p => ({ ...p, address: e.target.value }))} />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>Phone</Label>
+                <Input placeholder="0300-0000000" value={form.phone} onChange={(e) => setForm(p => ({ ...p, phone: e.target.value }))} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Email</Label>
+                <Input placeholder="branch@ovenisto.com" value={form.email} onChange={(e) => setForm(p => ({ ...p, email: e.target.value }))} />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 pt-1">
+              <Button variant="outline" onClick={() => setShowDialog(false)}>Cancel</Button>
+              <Button className="gradient-primary text-primary-foreground" onClick={handleSave} disabled={saving}>{saving ? "Saving..." : "Save"}</Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {list.length === 0 ? (
           <div className="col-span-3 text-center py-16">
@@ -155,45 +193,6 @@ const Outlets = () => {
         ))}
       </div>
 
-      <Dialog open={showDialog} onOpenChange={setShowDialog}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>{editingId ? "Edit" : "Add"} Outlet</DialogTitle></DialogHeader>
-          <div className="space-y-3">
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5 col-span-2">
-                <Label>Outlet Name</Label>
-                <Input placeholder="e.g. DHA Branch" value={form.name} onChange={(e) => setForm(p => ({ ...p, name: e.target.value }))} />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Outlet Code</Label>
-                <Input placeholder="e.g. DHA-01" value={form.code} onChange={(e) => setForm(p => ({ ...p, code: e.target.value.toUpperCase() }))} />
-              </div>
-              <div className="space-y-1.5">
-                <Label>City</Label>
-                <Input placeholder="Lahore" value={form.city} onChange={(e) => setForm(p => ({ ...p, city: e.target.value }))} />
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              <Label>Address</Label>
-              <Textarea placeholder="Full address" value={form.address} onChange={(e) => setForm(p => ({ ...p, address: e.target.value }))} />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label>Phone</Label>
-                <Input placeholder="0300-0000000" value={form.phone} onChange={(e) => setForm(p => ({ ...p, phone: e.target.value }))} />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Email</Label>
-                <Input placeholder="branch@ovenisto.com" value={form.email} onChange={(e) => setForm(p => ({ ...p, email: e.target.value }))} />
-              </div>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowDialog(false)}>Cancel</Button>
-            <Button className="gradient-primary text-primary-foreground" onClick={handleSave} disabled={saving}>{saving ? "Saving..." : "Save"}</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 };

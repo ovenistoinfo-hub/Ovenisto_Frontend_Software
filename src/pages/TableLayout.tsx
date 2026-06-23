@@ -1,11 +1,10 @@
 import { useState, useMemo, useEffect } from "react";
 import { LayoutGrid, Plus, Loader2 } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PageHeader } from "@/components/ui/page-header";
@@ -150,10 +149,10 @@ const TableLayout = () => {
       </div>
 
       {/* Add/Edit Dialog */}
-      <Dialog open={showDialog} onOpenChange={setShowDialog}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>{editId ? "Edit" : "Add"} Table</DialogTitle></DialogHeader>
-          <div className="space-y-3">
+      {showDialog && (
+        <Card className="shadow-sm border-primary/30">
+          <CardHeader className="pb-3"><CardTitle className="text-base">{editId ? "Edit" : "Add"} Table</CardTitle></CardHeader>
+          <CardContent className="space-y-3">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div><Label>Table Number</Label><Input value={String(form.number ?? "")} onChange={(e) => setForm((p) => ({ ...p, number: e.target.value }))} /></div>
               <div><Label>Capacity</Label><Input type="number" value={form.capacity ?? ""} onChange={(e) => setForm((p) => ({ ...p, capacity: Number(e.target.value) }))} /></div>
@@ -184,8 +183,7 @@ const TableLayout = () => {
                 </SelectContent>
               </Select>
             </div>
-          </div>
-          <DialogFooter>
+          <div className="flex justify-end gap-2 pt-1">
             {editId && (
               <Button variant="destructive" onClick={() => { setShowDialog(false); setDeleteId(editId); }} className="mr-auto">Delete</Button>
             )}
@@ -193,9 +191,10 @@ const TableLayout = () => {
             <Button className="gradient-primary text-primary-foreground" onClick={handleSave} disabled={saving}>
               {saving && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}Save
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </div>
+        </CardContent>
+      </Card>
+      )}
 
       {/* Delete Confirm */}
       <AlertDialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>
