@@ -50,6 +50,7 @@ export interface ProductionRecord {
   producedBy: string | null;
   date: string;
   notes: string | null;
+  shelfLifeMinutes: number | null;
 }
 
 export interface DoughBatch {
