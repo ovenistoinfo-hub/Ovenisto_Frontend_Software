@@ -9,6 +9,7 @@ import { inventoryService, type IngredientRecord } from "@/services/inventory.se
 import { shiftService, type ShiftRecord } from "@/services/shift.service";
 import { deliveryService, type RiderRecord } from "@/services/delivery.service";
 import { tableService, type TableRecord } from "@/services/table.service";
+import { reservationService, type Reservation as ReservationRecord } from "@/services/reservation.service";
 import { useVisiblePolling } from "@/hooks/use-visible-polling";
 import { useOrderEvents } from "@/hooks/use-order-events";
 import { Search, Plus, Minus, X, ShoppingCart, FileText, Printer, ArrowLeft, Trash2, User, MapPin, Phone, Flame, Check, CreditCard, Banknote, Smartphone, RotateCcw, Download, ClipboardList, AlertTriangle, UtensilsCrossed, CalendarClock, Calendar, Timer, ChefHat, Tag, Zap, History, Monitor, BookOpen, StickyNote, Eye, Building2, Crown, CircleAlert, Bell, DollarSign, Package, Ban } from "lucide-react";
@@ -86,7 +87,7 @@ const finalizeMethods = [
 const quickDenominations = [10, 20, 50, 100, 500, 1000];
 
 const POS = () => {
-  const { orders: localOrdersData, customers: customersList, foodMenuItems: localFoodMenuItems, foodCategories: localFoodCategories, modifiers: localModifiers, kitchens: localKitchens, ingredients, addItem, updateItem: updateDataItem, shifts, settings, users, riders: deliveryRiders, deals, reservations } = useData();
+  const { orders: localOrdersData, customers: customersList, foodMenuItems: localFoodMenuItems, foodCategories: localFoodCategories, modifiers: localModifiers, kitchens: localKitchens, ingredients, addItem, updateItem: updateDataItem, shifts, settings, users, riders: deliveryRiders, deals } = useData();
   const { user } = useAuth();
   const location = useLocation();
 
@@ -100,6 +101,7 @@ const POS = () => {
   const [apiStaff, setApiStaff] = useState<any[]>([]);
   const [apiSettings, setApiSettings] = useState<SettingsRecord | null>(null);
   const [apiLowStockItems, setApiLowStockItems] = useState<IngredientRecord[]>([]);
+  const [apiReservations, setApiReservations] = useState<ReservationRecord[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Normalize an API OrderRecord to match the mock Order field names
@@ -183,6 +185,7 @@ const POS = () => {
     userService.getUsers({ limit: 100 }).then(res => setApiStaff(res.data.filter((u: any) => u.status === 'active' && STAFF_ROLES.includes(u.role)))).catch(() => {});
     settingsService.getSettings().then(s => setApiSettings({ ...s, taxRate: Number(s.taxRate) })).catch(() => {});
     inventoryService.getIngredients({ status: 'active', lowStock: true }).then(data => setApiLowStockItems(data)).catch(() => {});
+    reservationService.getAll({ upcoming: true }).then(data => setApiReservations(data)).catch(() => {});
   }, [loadApiOrders]);
 
   // Refresh orders on real-time push (instant), plus a 60s visibility-gated safety
@@ -507,12 +510,12 @@ const POS = () => {
     return users.filter(u => u.status === "active" && STAFF_ROLES.includes(u.role));
   }, [apiStaff, users]);
 
-  // Today's reservations for POS view
+  // Today's reservations for POS view (from API)
   const todayStr = new Date().toISOString().split("T")[0];
   const todayReservations = useMemo(() =>
-    (reservations || []).filter(r => r.date >= todayStr && r.status !== "cancelled" && r.status !== "noShow")
+    apiReservations
       .sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time)),
-    [reservations, todayStr]
+    [apiReservations]
   );
 
   // Kitchen Notifications — orders marked "ready" by kitchen
