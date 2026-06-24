@@ -210,13 +210,13 @@ const Reservations = () => {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <Label>Table</Label>
-                <Select value={form.tableId || ""} onValueChange={v => {
+                <Select value={form.tableId || "none"} onValueChange={v => {
                   const t = tables.find(t => t.id === v);
-                  setForm(p => ({ ...p, tableId: v || undefined, tableNumber: t?.number || "" }));
+                  setForm(p => ({ ...p, tableId: v === "none" ? undefined : v, tableNumber: t?.number || "" }));
                 }}>
                   <SelectTrigger><SelectValue placeholder="Select table" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">No table</SelectItem>
+                    <SelectItem value="none">No table</SelectItem>
                     {tables.map(t => <SelectItem key={t.id} value={t.id}>{t.number} ({t.capacity} seats)</SelectItem>)}
                   </SelectContent>
                 </Select>
