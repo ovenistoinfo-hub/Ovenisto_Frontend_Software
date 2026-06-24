@@ -160,6 +160,10 @@ const Production = () => {
     const { productionItemId, quantity, shelfHours, shelfMins, consumed, notes } = produceForm;
     if (!productionItemId) { toast.error('Select a production item'); return; }
     if (!quantity || quantity <= 0) { toast.error('Enter a valid quantity'); return; }
+    const validConsumed = consumed.filter(c => c.ingredientId && c.qty > 0);
+    if (validConsumed.length === 0) { toast.error('Add at least one ingredient with a quantity greater than 0'); return; }
+    const invalidRows = consumed.filter(c => c.ingredientId && c.qty <= 0);
+    if (invalidRows.length > 0) { toast.error('All added ingredients must have a quantity greater than 0'); return; }
     const totalMinutes = shelfHours * 60 + shelfMins;
     setSaving(true);
     try {
@@ -167,7 +171,7 @@ const Production = () => {
         productionItemId,
         quantity,
         unit: productionItems.find(i => i.id === productionItemId)?.unit ?? '',
-        consumedIngredients: consumed.filter(c => c.ingredientId && c.qty > 0),
+        consumedIngredients: validConsumed,
         shelfLifeMinutes: totalMinutes > 0 ? totalMinutes : undefined,
         notes: notes || undefined,
       });
