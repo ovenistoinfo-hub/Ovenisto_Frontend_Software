@@ -1,38 +1,63 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useData } from "@/contexts/DataContext";
+import { customerService } from "@/services/customer.service";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { Search, Eye, Plus, Users, Trash2 } from "lucide-react";
+import { Search, Eye, Plus, Users, Trash2, Loader2 } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { toast } from "sonner";
 import { TablePagination, paginate } from "@/components/TablePagination";
 
 const Customers = () => {
   const navigate = useNavigate();
-  const { customers, addItem, removeItem, settings } = useData();
+  const queryClient = useQueryClient();
+  const { settings } = useData();
   const [search, setSearch] = useState("");
   const [showAdd, setShowAdd] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [form, setForm] = useState({ name: "", phone: "", email: "", address: "" });
   const [page, setPage] = useState(1);
+  const [saving, setSaving] = useState(false);
   const currency = settings.currency || "Rs.";
 
-  const filtered = customers.filter((c) => c.name.toLowerCase().includes(search.toLowerCase()) || c.phone.includes(search));
-  const paged = paginate(filtered, page);
+  const { data: resp, isLoading } = useQuery({
+    queryKey: ["customers", { search }],
+    queryFn: () => customerService.getCustomers({ search: search || undefined, limit: 1000 }),
+  });
+  const customers = resp?.data ?? [];
+  const paged = paginate(customers, page);
 
-  const handleAdd = () => {
+  const handleAdd = async () => {
     if (!form.name.trim() || !form.phone.trim()) { toast.error("Name and phone are required"); return; }
-    addItem("customers", { id: crypto.randomUUID(), name: form.name.trim(), phone: form.phone.trim(), email: form.email.trim(), address: form.address.trim(), totalOrders: 0, totalSpent: 0, outstandingDue: 0, lastOrder: "-" });
-    setShowAdd(false); setForm({ name: "", phone: "", email: "", address: "" });
-    toast.success("Customer added");
+    setSaving(true);
+    try {
+      await customerService.createCustomer({ name: form.name.trim(), phone: form.phone.trim(), email: form.email.trim() || undefined, address: form.address.trim() || undefined });
+      queryClient.invalidateQueries({ queryKey: ["customers"] });
+      setShowAdd(false);
+      setForm({ name: "", phone: "", email: "", address: "" });
+      toast.success("Customer added");
+    } catch {
+      toast.error("Failed to add customer");
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const handleDelete = () => {
-    if (deleteId) { removeItem("customers", deleteId); setDeleteId(null); toast.success("Customer deleted"); }
+  const handleDelete = async () => {
+    if (!deleteId) return;
+    try {
+      await customerService.deleteCustomer(deleteId);
+      queryClient.invalidateQueries({ queryKey: ["customers"] });
+      setDeleteId(null);
+      toast.success("Customer deleted");
+    } catch {
+      toast.error("Failed to delete customer");
+    }
   };
 
   return (
@@ -53,58 +78,77 @@ const Customers = () => {
             <Input placeholder="Address" value={form.address} onChange={(e) => setForm(p => ({ ...p, address: e.target.value }))} />
             <div className="flex justify-end gap-2 pt-1">
               <Button variant="outline" onClick={() => setShowAdd(false)}>Cancel</Button>
-              <Button className="gradient-primary text-primary-foreground" onClick={handleAdd}>Save</Button>
+              <Button className="gradient-primary text-primary-foreground" onClick={handleAdd} disabled={saving}>
+                {saving && <Loader2 className="h-4 w-4 animate-spin mr-2" />}Save
+              </Button>
             </div>
           </CardContent>
         </Card>
       )}
       <Card className="shadow-sm">
-        <CardHeader className="pb-3"><div className="relative max-w-sm"><Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} placeholder="Search by name or phone..." className="pl-9" /></div></CardHeader>
+        <CardHeader className="pb-3">
+          <div className="relative max-w-sm">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} placeholder="Search by name or phone..." className="pl-9" />
+          </div>
+        </CardHeader>
         <CardContent>
-          {filtered.length === 0 ? (
+          {isLoading ? (
+            <div className="flex justify-center items-center h-40"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+          ) : customers.length === 0 ? (
             <div className="text-center py-12"><Users className="h-12 w-12 text-muted-foreground mx-auto mb-3 opacity-30" /><p className="text-muted-foreground">No customers found</p></div>
           ) : (
             <>
               <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
-              <Table>
-                <TableHeader>
-                  <TableRow className="bg-muted/50 hover:bg-muted/50">
-                    <TableHead className="sticky top-0 z-10 bg-card">SN</TableHead>
-                    <TableHead className="sticky top-0 z-10 bg-card">Name</TableHead>
-                    <TableHead className="sticky top-0 z-10 bg-card">Phone</TableHead>
-                    <TableHead className="sticky top-0 z-10 bg-card">Email</TableHead>
-                    <TableHead className="sticky top-0 z-10 bg-card">Orders</TableHead>
-                    <TableHead className="sticky top-0 z-10 bg-card">Total Spent</TableHead>
-                    <TableHead className="sticky top-0 z-10 bg-card">Due</TableHead>
-                    <TableHead className="sticky top-0 z-10 bg-card">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {paged.map((c, i) => (
-                    <TableRow key={c.id} className="hover:bg-muted/30 transition-colors">
-                      <TableCell>{(page - 1) * 10 + i + 1}</TableCell><TableCell className="font-medium">{c.name}</TableCell><TableCell>{c.phone}</TableCell>
-                      <TableCell className="text-muted-foreground">{c.email}</TableCell><TableCell>{c.totalOrders}</TableCell>
-                      <TableCell>{currency} {c.totalSpent.toLocaleString()}</TableCell>
-                      <TableCell className={c.outstandingDue > 0 ? "text-destructive font-medium" : "text-success"}>{currency} {c.outstandingDue.toLocaleString()}</TableCell>
-                      <TableCell>
-                        <div className="flex gap-1">
-                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => navigate(`/customers/${c.id}`)}><Eye className="h-3 w-3" /></Button>
-                          <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => setDeleteId(c.id)}><Trash2 className="h-3 w-3" /></Button>
-                        </div>
-                      </TableCell>
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-muted/50 hover:bg-muted/50">
+                      <TableHead className="sticky top-0 z-10 bg-card">SN</TableHead>
+                      <TableHead className="sticky top-0 z-10 bg-card">Name</TableHead>
+                      <TableHead className="sticky top-0 z-10 bg-card">Phone</TableHead>
+                      <TableHead className="sticky top-0 z-10 bg-card">Email</TableHead>
+                      <TableHead className="sticky top-0 z-10 bg-card">Orders</TableHead>
+                      <TableHead className="sticky top-0 z-10 bg-card">Total Spent</TableHead>
+                      <TableHead className="sticky top-0 z-10 bg-card">Due</TableHead>
+                      <TableHead className="sticky top-0 z-10 bg-card">Actions</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {paged.map((c, i) => (
+                      <TableRow key={c.id} className="hover:bg-muted/30 transition-colors">
+                        <TableCell>{(page - 1) * 10 + i + 1}</TableCell>
+                        <TableCell className="font-medium">{c.name}</TableCell>
+                        <TableCell>{c.phone}</TableCell>
+                        <TableCell className="text-muted-foreground">{c.email}</TableCell>
+                        <TableCell>{c.totalOrders}</TableCell>
+                        <TableCell>{currency} {c.totalSpent.toLocaleString()}</TableCell>
+                        <TableCell className={c.outstandingDue > 0 ? "text-destructive font-medium" : "text-success"}>{currency} {c.outstandingDue.toLocaleString()}</TableCell>
+                        <TableCell>
+                          <div className="flex gap-1">
+                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => navigate(`/customers/${c.id}`)}><Eye className="h-3 w-3" /></Button>
+                            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => setDeleteId(c.id)}><Trash2 className="h-3 w-3" /></Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
               </div>
-              <TablePagination currentPage={page} totalItems={filtered.length} onPageChange={setPage} />
+              <TablePagination currentPage={page} totalItems={customers.length} onPageChange={setPage} />
             </>
           )}
         </CardContent>
       </Card>
       <AlertDialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>
-        <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Delete Customer?</AlertDialogTitle><AlertDialogDescription>Are you sure you want to delete this customer? This action cannot be undone.</AlertDialogDescription></AlertDialogHeader>
-          <AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground">Delete</AlertDialogAction></AlertDialogFooter>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Customer?</AlertDialogTitle>
+            <AlertDialogDescription>Are you sure you want to delete this customer? This action cannot be undone.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground">Delete</AlertDialogAction>
+          </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
     </div>

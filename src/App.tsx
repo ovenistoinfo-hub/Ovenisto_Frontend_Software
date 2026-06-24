@@ -41,7 +41,6 @@ const StockAdjustments = lazy(() => import("./pages/stock/StockAdjustments"));
 const Sales = lazy(() => import("./pages/Sales"));
 const Customers = lazy(() => import("./pages/Customers"));
 const CustomerDetail = lazy(() => import("./pages/CustomerDetail"));
-const CustomerDues = lazy(() => import("./pages/CustomerDues"));
 const Purchases = lazy(() => import("./pages/Purchases"));
 const PurchaseRequests = lazy(() => import("./pages/PurchaseRequests"));
 const Suppliers = lazy(() => import("./pages/Suppliers"));
@@ -157,7 +156,6 @@ function AppRoutes() {
       <Route path="/sales" element={<ProtectedRoute module="sales"><AppLayout><Sales /></AppLayout></ProtectedRoute>} />
       <Route path="/customers" element={<ProtectedRoute module="customers"><AppLayout><Customers /></AppLayout></ProtectedRoute>} />
       <Route path="/customers/:id" element={<ProtectedRoute module="customers"><AppLayout><CustomerDetail /></AppLayout></ProtectedRoute>} />
-      <Route path="/customer-dues" element={<ProtectedRoute module="customer-dues"><AppLayout><CustomerDues /></AppLayout></ProtectedRoute>} />
       <Route path="/delivery" element={<ProtectedRoute module="sales"><AppLayout><Delivery /></AppLayout></ProtectedRoute>} />
       <Route path="/reservations" element={<ProtectedRoute module="customers"><AppLayout><Reservations /></AppLayout></ProtectedRoute>} />
       <Route path="/online-orders" element={<ProtectedRoute module="sales"><AppLayout><OnlineOrders /></AppLayout></ProtectedRoute>} />

@@ -28,16 +28,18 @@ const Sales = () => {
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("All");
   const [statusFilter, setStatusFilter] = useState("All");
+  const [dateFilter, setDateFilter] = useState("");
   const [page, setPage] = useState(1);
 
   const [selectedOrder, setSelectedOrder] = useState<OrderRecord | null>(null);
 
   const { data: resp, isLoading: loading } = useQuery({
-    queryKey: ["orders", { search, typeFilter, statusFilter, page }],
+    queryKey: ["orders", { search, typeFilter, statusFilter, dateFilter, page }],
     queryFn: () => orderService.getOrders({
       search: search || undefined,
       status: statusFilter !== "All" ? statusFilter : undefined,
       type: typeFilter !== "All" ? typeFilter : undefined,
+      date: dateFilter || undefined,
       page,
       limit: PAGE_SIZE,
     }),
@@ -50,6 +52,7 @@ const Sales = () => {
   const handleSearch = (v: string) => { setSearch(v); setPage(1); };
   const handleType = (v: string) => { setTypeFilter(v); setPage(1); };
   const handleStatus = (v: string) => { setStatusFilter(v); setPage(1); };
+  const handleDate = (v: string) => { setDateFilter(v); setPage(1); };
 
   const handleExport = () => {
     const headers = ["Order #", "Date", "Time", "Customer", "Type", "Items", "Total", "Status", "Payment Method"];
@@ -100,12 +103,23 @@ const Sales = () => {
                   className={typeFilter === t ? "gradient-primary text-primary-foreground" : ""}>{t}</Button>
               ))}
             </div>
-            <div className="flex gap-1.5 flex-wrap">
-              {["All", "completed", "preparing", "pending", "cancelled"].map((s) => (
-                <Button key={s} variant={statusFilter === s ? "default" : "outline"} size="sm"
-                  onClick={() => handleStatus(s)}
-                  className={`capitalize ${statusFilter === s ? "gradient-primary text-primary-foreground" : ""}`}>{s}</Button>
-              ))}
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex gap-1.5 flex-wrap">
+                {["All", "completed", "cancelled"].map((s) => (
+                  <Button key={s} variant={statusFilter === s ? "default" : "outline"} size="sm"
+                    onClick={() => handleStatus(s)}
+                    className={`capitalize ${statusFilter === s ? "gradient-primary text-primary-foreground" : ""}`}>{s}</Button>
+                ))}
+              </div>
+              <Input
+                type="date"
+                value={dateFilter}
+                onChange={(e) => handleDate(e.target.value)}
+                className="h-8 w-40 text-sm"
+              />
+              {dateFilter && (
+                <Button variant="ghost" size="sm" className="h-8 px-2 text-muted-foreground" onClick={() => handleDate("")}>Clear date</Button>
+              )}
             </div>
           </div>
         </CardHeader>

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useLocation, Link } from "react-router-dom";
 import {
   Home, BarChart3, ShoppingCart, ChefHat, UtensilsCrossed, Store, Settings, Globe, CalendarDays,
-  Pizza, Factory, Package, DollarSign, Receipt, ShoppingBag, CreditCard, ArrowLeftRight,
+  Pizza, Factory, Package, DollarSign, ShoppingBag, CreditCard, ArrowLeftRight,
   Trash2, Users, Clock, FileText, MessageSquare, ChevronDown, ChevronRight, Flame, LogOut, Link2,
   Bike, CalendarCheck, LayoutGrid, Timer, ClipboardList, CalendarOff, UserCircle
 } from "lucide-react";
@@ -62,7 +62,6 @@ const navSections = [
   { label: "Sale / Customer", items: [
     { title: "Sales", url: "/sales", icon: DollarSign, module: "sales" },
     { title: "Customers", url: "/customers", icon: Users, module: "customers" },
-    { title: "Customer Dues", url: "/customer-dues", icon: Receipt, module: "customer-dues" },
     { title: "Delivery", url: "/delivery", icon: Bike, module: "sales" },
     { title: "Reservations", url: "/reservations", icon: CalendarCheck, module: "customers" },
   ]},

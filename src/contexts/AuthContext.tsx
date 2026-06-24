@@ -9,7 +9,7 @@ const rolePermissions: Record<string, string[]> = {
   "Manager": [
     "dashboard", "analytics", "pos", "kitchens", "waiter", "order-status",
     "customer-display", "outlets", "items", "production", "stock", "warehouses",
-    "sales", "customers", "customer-dues", "purchases", "purchase-requests", "suppliers", "supplier-dues",
+    "sales", "customers", "purchases", "purchase-requests", "suppliers", "supplier-dues",
     "expenses", "transfers", "demands", "waste", "attendance", "reports", "sms",
     "settings", "my-portal",
   ],
@@ -17,7 +17,7 @@ const rolePermissions: Record<string, string[]> = {
     "dashboard", "waiter", "order-status", "customer-display", "customers",
     "reservations", "table-layout", "attendance", "my-portal",
   ],
-  "Cashier": ["dashboard", "pos", "sales", "customers", "customer-dues", "attendance", "my-portal"],
+  "Cashier": ["dashboard", "pos", "sales", "customers", "attendance", "my-portal"],
   "Waiter": ["waiter", "attendance", "my-portal"],
   "Kitchen Manager": ["kitchens", "order-status", "items", "production", "stock", "transfers", "demands", "attendance", "my-portal"],
   "Kitchen Staff": ["kitchens", "attendance", "my-portal"],
@@ -27,7 +27,7 @@ const rolePermissions: Record<string, string[]> = {
     "transfers", "demands", "waste", "attendance", "my-portal",
   ],
   "Accountant": [
-    "sales", "customer-dues", "purchases", "suppliers", "supplier-dues",
+    "sales", "purchases", "suppliers", "supplier-dues",
     "expenses", "reports", "attendance", "my-portal",
   ],
   "Rider": ["attendance", "my-portal"],
