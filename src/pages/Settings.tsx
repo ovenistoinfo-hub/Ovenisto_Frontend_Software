@@ -25,15 +25,11 @@ import { outletService } from "@/services/outlet.service";
 const tabSlugMap: Record<string, string> = {
   general: "",
   "self-order": "self-order",
-  website: "website-order",
-  reservation: "reservations",
   warehouses: "warehouses",
 };
 const slugTabMap: Record<string, string> = {
   "": "general",
   "self-order": "self-order",
-  "website-order": "website",
-  reservations: "reservation",
   warehouses: "warehouses",
 };
 
@@ -240,10 +236,6 @@ const QRCodeGenerator = ({ restaurantName }: { restaurantName: string }) => {
   );
 };
 
-const defaultSelfOrder = { enabled: false, showImages: true, showDescriptions: true, payAtCounter: true };
-const defaultWebsite = { enabled: false, deliveryRadius: "10", minOrder: "500", deliveryCharges: "100", prepTime: "30", autoAccept: false };
-const defaultReservation = { enabled: false, slotDuration: "60", maxAdvanceDays: "30", autoConfirm: false };
-
 const SettingsPage = () => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -258,13 +250,9 @@ const SettingsPage = () => {
   const [general, setGeneral] = useState({
     businessName: "", phone: "", email: "", currency: "Rs.",
     taxName: "GST", taxRate: "16", address: "", receiptHeader: "",
-    tableManagement: true, onlineOrders: true, reservations: false,
+    tableManagement: true, onlineOrders: true,
   });
-  const [selfOrder, setSelfOrder] = useState(defaultSelfOrder);
-  const [website, setWebsite] = useState(defaultWebsite);
-  const [reservation, setReservation] = useState(defaultReservation);
 
-  // Load settings from API on mount
   useEffect(() => {
     settingsService.getSettings()
       .then((data: SettingsRecord) => {
@@ -279,20 +267,12 @@ const SettingsPage = () => {
           receiptHeader: data.receiptHeader || "",
           tableManagement: data.tableManagement,
           onlineOrders: data.onlineOrders,
-          reservations: data.reservations,
         });
-        const sc = data.selfOrderConfig as any;
-        if (sc && typeof sc === "object") setSelfOrder({ ...defaultSelfOrder, ...sc });
-        const wc = data.websiteConfig as any;
-        if (wc && typeof wc === "object") setWebsite({ ...defaultWebsite, ...wc });
-        const rc = data.reservationConfig as any;
-        if (rc && typeof rc === "object") setReservation({ ...defaultReservation, ...rc });
       })
       .catch(() => toast.error("Failed to load settings"))
       .finally(() => setLoadingSettings(false));
   }, []);
 
-  // Sync tab from URL changes
   useEffect(() => {
     const slug = location.pathname.split("/settings/")[1] || "";
     const mapped = slugTabMap[slug] || "general";
@@ -305,35 +285,24 @@ const SettingsPage = () => {
     navigate(`/settings${slug ? "/" + slug : ""}`, { replace: true });
   };
 
-  const validateAndSave = async (section: string) => {
-    if (section === "general") {
-      const rate = Number(general.taxRate);
-      if (rate < 0 || rate > 100) { toast.error("Tax rate must be between 0-100"); return; }
-      if (general.email && !general.email.includes("@")) { toast.error("Invalid email format"); return; }
-    }
+  const validateAndSave = async () => {
+    const rate = Number(general.taxRate);
+    if (rate < 0 || rate > 100) { toast.error("Tax rate must be between 0-100"); return; }
+    if (general.email && !general.email.includes("@")) { toast.error("Invalid email format"); return; }
     setSaving(true);
     try {
-      if (section === "general") {
-        await settingsService.updateSettings({
-          restaurantName: general.businessName,
-          phone: general.phone || null,
-          email: general.email || null,
-          currency: general.currency,
-          taxName: general.taxName,
-          taxRate: Number(general.taxRate),
-          address: general.address || null,
-          receiptHeader: general.receiptHeader || null,
-          tableManagement: general.tableManagement,
-          onlineOrders: general.onlineOrders,
-          reservations: general.reservations,
-        });
-      } else if (section === "self-order") {
-        await settingsService.updateSettings({ selfOrderConfig: selfOrder as unknown as Record<string, unknown> });
-      } else if (section === "website") {
-        await settingsService.updateSettings({ websiteConfig: website as unknown as Record<string, unknown> });
-      } else if (section === "reservation") {
-        await settingsService.updateSettings({ reservationConfig: reservation as unknown as Record<string, unknown> });
-      }
+      await settingsService.updateSettings({
+        restaurantName: general.businessName,
+        phone: general.phone || null,
+        email: general.email || null,
+        currency: general.currency,
+        taxName: general.taxName,
+        taxRate: Number(general.taxRate),
+        address: general.address || null,
+        receiptHeader: general.receiptHeader || null,
+        tableManagement: general.tableManagement,
+        onlineOrders: general.onlineOrders,
+      });
       toast.success("Settings saved successfully");
     } catch (err: any) {
       toast.error(err.message || "Failed to save settings");
@@ -356,7 +325,7 @@ const SettingsPage = () => {
     <div className="space-y-6">
       <PageHeader icon={<SettingsIcon className="h-5 w-5" />} title="Settings" subtitle="System configuration" />
       <Tabs value={tab} onValueChange={handleTabChange}>
-        <div className="overflow-x-auto -mx-1 px-1"><TabsList className="inline-flex w-auto min-w-full sm:w-full"><TabsTrigger value="general">General</TabsTrigger><TabsTrigger value="self-order">Self Order</TabsTrigger><TabsTrigger value="website">Website Order</TabsTrigger><TabsTrigger value="reservation">Reservations</TabsTrigger><TabsTrigger value="warehouses">Warehouses</TabsTrigger></TabsList></div>
+        <div className="overflow-x-auto -mx-1 px-1"><TabsList className="inline-flex w-auto min-w-full sm:w-full"><TabsTrigger value="general">General</TabsTrigger><TabsTrigger value="self-order">Self Order</TabsTrigger><TabsTrigger value="warehouses">Warehouses</TabsTrigger></TabsList></div>
 
         {/* General Tab */}
         <TabsContent value="general"><Card className="shadow-sm"><CardHeader><CardTitle>General Settings</CardTitle></CardHeader><CardContent className="space-y-4">
@@ -373,49 +342,18 @@ const SettingsPage = () => {
           <div className="space-y-3">
             <div className="flex items-center justify-between"><span className="text-sm">Enable Table Management</span><Switch checked={general.tableManagement} onCheckedChange={c => setGeneral(p => ({...p, tableManagement: c}))} /></div>
             <div className="flex items-center justify-between"><span className="text-sm">Enable Online Orders</span><Switch checked={general.onlineOrders} onCheckedChange={c => setGeneral(p => ({...p, onlineOrders: c}))} /></div>
-            <div className="flex items-center justify-between"><span className="text-sm">Enable Reservations</span><Switch checked={general.reservations} onCheckedChange={c => setGeneral(p => ({...p, reservations: c}))} /></div>
           </div>
           <div className="flex flex-wrap gap-3">
-            <Button className="gradient-primary text-primary-foreground" onClick={() => validateAndSave("general")} disabled={saving}>{saving ? "Saving..." : "Save Changes"}</Button>
-            <Button variant="outline" onClick={() => { setGeneral({ businessName: "Ovenisto", phone: "03201119898", email: "admin@ovenisto.com", currency: "Rs.", taxName: "GST", taxRate: "16", address: "164-J LDA AVENUE-1 Lahore", receiptHeader: "Thank you for dining at Ovenisto!", tableManagement: true, onlineOrders: true, reservations: false }); toast.success("Reset to defaults"); }}>Reset to Defaults</Button>
+            <Button className="gradient-primary text-primary-foreground" onClick={validateAndSave} disabled={saving}>{saving ? "Saving..." : "Save Changes"}</Button>
+            <Button variant="outline" onClick={() => { setGeneral({ businessName: "Ovenisto", phone: "03201119898", email: "admin@ovenisto.com", currency: "Rs.", taxName: "GST", taxRate: "16", address: "164-J LDA AVENUE-1 Lahore", receiptHeader: "Thank you for dining at Ovenisto!", tableManagement: true, onlineOrders: true }); toast.success("Reset to defaults"); }}>Reset to Defaults</Button>
           </div>
         </CardContent></Card></TabsContent>
 
-        {/* Self Order Tab */}
-        <TabsContent value="self-order" className="space-y-6">
-          <Card className="shadow-sm"><CardHeader><CardTitle>Self Order Settings</CardTitle></CardHeader><CardContent className="space-y-4">
-            <div className="flex items-center justify-between"><span className="text-sm font-medium">Enable Self Ordering</span><Switch checked={selfOrder.enabled} onCheckedChange={c => setSelfOrder(p => ({...p, enabled: c}))} /></div>
-            <div className="flex items-center justify-between"><span className="text-sm">Show Images</span><Switch checked={selfOrder.showImages} onCheckedChange={c => setSelfOrder(p => ({...p, showImages: c}))} /></div>
-            <div className="flex items-center justify-between"><span className="text-sm">Show Descriptions</span><Switch checked={selfOrder.showDescriptions} onCheckedChange={c => setSelfOrder(p => ({...p, showDescriptions: c}))} /></div>
-            <div className="flex items-center justify-between"><span className="text-sm">Pay at Counter</span><Switch checked={selfOrder.payAtCounter} onCheckedChange={c => setSelfOrder(p => ({...p, payAtCounter: c}))} /></div>
-            <div className="flex gap-3"><Button className="gradient-primary text-primary-foreground" onClick={() => validateAndSave("self-order")} disabled={saving}>{saving ? "Saving..." : "Save Changes"}</Button></div>
-          </CardContent></Card>
+        {/* Self Order Tab — QR Code Generator only */}
+        <TabsContent value="self-order">
           <QRCodeGenerator restaurantName={general.businessName || "Ovenisto"} />
         </TabsContent>
 
-        {/* Website Order Tab */}
-        <TabsContent value="website"><Card className="shadow-sm"><CardHeader><CardTitle>Website Order Settings</CardTitle></CardHeader><CardContent className="space-y-4">
-          <div className="flex items-center justify-between"><span className="text-sm font-medium">Enable Website Orders</span><Switch checked={website.enabled} onCheckedChange={c => setWebsite(p => ({...p, enabled: c}))} /></div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div><label className="text-sm font-medium">Delivery Radius (km)</label><Input value={website.deliveryRadius} type="number" onChange={e => setWebsite(p => ({...p, deliveryRadius: e.target.value}))} /></div>
-            <div><label className="text-sm font-medium">Min Order Amount</label><Input value={website.minOrder} type="number" onChange={e => setWebsite(p => ({...p, minOrder: e.target.value}))} /></div>
-            <div><label className="text-sm font-medium">Delivery Charges (Rs.)</label><Input value={website.deliveryCharges} type="number" onChange={e => setWebsite(p => ({...p, deliveryCharges: e.target.value}))} /></div>
-            <div><label className="text-sm font-medium">Prep Time (min)</label><Input value={website.prepTime} type="number" onChange={e => setWebsite(p => ({...p, prepTime: e.target.value}))} /></div>
-          </div>
-          <div className="flex items-center justify-between"><span className="text-sm">Auto-accept Orders</span><Switch checked={website.autoAccept} onCheckedChange={c => setWebsite(p => ({...p, autoAccept: c}))} /></div>
-          <div className="flex gap-3"><Button className="gradient-primary text-primary-foreground" onClick={() => validateAndSave("website")} disabled={saving}>{saving ? "Saving..." : "Save Changes"}</Button></div>
-        </CardContent></Card></TabsContent>
-
-        {/* Reservations Tab */}
-        <TabsContent value="reservation"><Card className="shadow-sm"><CardHeader><CardTitle>Reservation Settings</CardTitle></CardHeader><CardContent className="space-y-4">
-          <div className="flex items-center justify-between"><span className="text-sm font-medium">Enable Reservations</span><Switch checked={reservation.enabled} onCheckedChange={c => setReservation(p => ({...p, enabled: c}))} /></div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div><label className="text-sm font-medium">Time Slot Duration (min)</label><Input value={reservation.slotDuration} type="number" onChange={e => setReservation(p => ({...p, slotDuration: e.target.value}))} /></div>
-            <div><label className="text-sm font-medium">Max Advance Days</label><Input value={reservation.maxAdvanceDays} type="number" onChange={e => setReservation(p => ({...p, maxAdvanceDays: e.target.value}))} /></div>
-          </div>
-          <div className="flex items-center justify-between"><span className="text-sm">Auto Confirmation</span><Switch checked={reservation.autoConfirm} onCheckedChange={c => setReservation(p => ({...p, autoConfirm: c}))} /></div>
-          <div className="flex gap-3"><Button className="gradient-primary text-primary-foreground" onClick={() => validateAndSave("reservation")} disabled={saving}>{saving ? "Saving..." : "Save Changes"}</Button></div>
-        </CardContent></Card></TabsContent>
         {/* Warehouses Tab */}
         <TabsContent value="warehouses"><WarehousesTab /></TabsContent>
       </Tabs>
