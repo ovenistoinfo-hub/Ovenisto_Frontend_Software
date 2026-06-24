@@ -11,7 +11,7 @@ import { deliveryService, type RiderRecord } from "@/services/delivery.service";
 import { tableService, type TableRecord } from "@/services/table.service";
 import { useVisiblePolling } from "@/hooks/use-visible-polling";
 import { useOrderEvents } from "@/hooks/use-order-events";
-import { Search, Plus, Minus, X, ShoppingCart, FileText, Printer, ArrowLeft, Trash2, User, MapPin, Phone, Flame, Check, CreditCard, Banknote, Smartphone, Star, RotateCcw, Download, ClipboardList, AlertTriangle, UtensilsCrossed, CalendarClock, Calendar, Timer, ChefHat, Tag, Zap, History, Monitor, BookOpen, StickyNote, Eye, Building2, Crown, CircleAlert, Bell, DollarSign, Package, Ban } from "lucide-react";
+import { Search, Plus, Minus, X, ShoppingCart, FileText, Printer, ArrowLeft, Trash2, User, MapPin, Phone, Flame, Check, CreditCard, Banknote, Smartphone, RotateCcw, Download, ClipboardList, AlertTriangle, UtensilsCrossed, CalendarClock, Calendar, Timer, ChefHat, Tag, Zap, History, Monitor, BookOpen, StickyNote, Eye, Building2, Crown, CircleAlert, Bell, DollarSign, Package, Ban } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -81,13 +81,12 @@ const finalizeMethods = [
   { id: "Credit Card", icon: CreditCard, label: "Credit Card" },
   { id: "JazzCash", icon: Smartphone, label: "JazzCash" },
   { id: "EasyPaisa", icon: Smartphone, label: "EasyPaisa" },
-  { id: "Loyalty Points", icon: Star, label: "Loyalty Points" },
 ];
 
 const quickDenominations = [10, 20, 50, 100, 500, 1000];
 
 const POS = () => {
-  const { orders: localOrdersData, customers: customersList, foodMenuItems: localFoodMenuItems, foodCategories: localFoodCategories, modifiers: localModifiers, kitchens: localKitchens, ingredients, addItem, updateItem: updateDataItem, shifts, settings, users, riders: deliveryRiders, deals, reservations, loyaltyMembers } = useData();
+  const { orders: localOrdersData, customers: customersList, foodMenuItems: localFoodMenuItems, foodCategories: localFoodCategories, modifiers: localModifiers, kitchens: localKitchens, ingredients, addItem, updateItem: updateDataItem, shifts, settings, users, riders: deliveryRiders, deals, reservations } = useData();
   const { user } = useAuth();
   const location = useLocation();
 
@@ -545,10 +544,8 @@ const POS = () => {
     const topItems: Record<string, number> = {};
     custOrders.forEach(o => o.items.forEach(i => { topItems[i.name] = (topItems[i.name] || 0) + i.qty; }));
     const topItemsSorted = Object.entries(topItems).sort((a, b) => b[1] - a[1]).slice(0, 5);
-    const loyaltyMember = (loyaltyMembers || []).find((m: any) => m.customerId === cust.id || m.name === cust.name);
-    const loyaltyPoints = loyaltyMember ? (loyaltyMember as any).points || 0 : 0;
-    return { ...cust, orderCount: custOrders.length, avgBill, lastVisit, topItems: topItemsSorted, recentOrders: custOrders.slice(0, 5), loyaltyPoints };
-  }, [selectedCustomer, customersList, allOrdersData, loyaltyMembers]);
+    return { ...cust, orderCount: custOrders.length, avgBill, lastVisit, topItems: topItemsSorted, recentOrders: custOrders.slice(0, 5) };
+  }, [selectedCustomer, customersList, allOrdersData]);
 
   // Timer for finalize sale
   useEffect(() => {
@@ -2383,10 +2380,6 @@ const POS = () => {
                 <Card className="p-2.5 text-center">
                   <p className="text-lg font-bold">{effectiveSettings.currency} {customerHistory.avgBill.toLocaleString()}</p>
                   <p className="text-[10px] text-muted-foreground">Avg Bill</p>
-                </Card>
-                <Card className="p-2.5 text-center">
-                  <p className="text-lg font-bold text-warning">{(customerHistory as any).loyaltyPoints || 0}</p>
-                  <p className="text-[10px] text-muted-foreground">Loyalty Pts</p>
                 </Card>
               </div>
               {customerHistory.outstandingDue > 0 && (

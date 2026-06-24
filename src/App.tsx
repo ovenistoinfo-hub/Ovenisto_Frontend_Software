@@ -60,11 +60,8 @@ const NotFound = lazy(() => import("./pages/NotFound"));
 
 // New pages
 const SelfOrder = lazy(() => import("./pages/SelfOrder"));
-const Deals = lazy(() => import("./pages/Deals"));
 const Delivery = lazy(() => import("./pages/Delivery"));
-const Loyalty = lazy(() => import("./pages/Loyalty"));
 const Shifts = lazy(() => import("./pages/Shifts"));
-const Coupons = lazy(() => import("./pages/Coupons"));
 const OnlineOrders = lazy(() => import("./pages/OnlineOrders"));
 const Reservations = lazy(() => import("./pages/Reservations"));
 const TableLayout = lazy(() => import("./pages/TableLayout"));
@@ -155,7 +152,6 @@ function AppRoutes() {
       <Route path="/items/food-menu/add" element={<ProtectedRoute module="items"><AppLayout><FoodMenuForm /></AppLayout></ProtectedRoute>} />
       <Route path="/items/food-menu/edit/:id" element={<ProtectedRoute module="items"><AppLayout><FoodMenuForm /></AppLayout></ProtectedRoute>} />
       <Route path="/items/pre-made-food" element={<ProtectedRoute module="items"><AppLayout><PreMadeFood /></AppLayout></ProtectedRoute>} />
-      <Route path="/deals" element={<ProtectedRoute module="items"><AppLayout><Deals /></AppLayout></ProtectedRoute>} />
       <Route path="/production" element={<ProtectedRoute module="production"><AppLayout><Production /></AppLayout></ProtectedRoute>} />
       <Route path="/stock/adjustments" element={<ProtectedRoute module="stock"><AppLayout><StockAdjustments /></AppLayout></ProtectedRoute>} />
       <Route path="/sales" element={<ProtectedRoute module="sales"><AppLayout><Sales /></AppLayout></ProtectedRoute>} />
@@ -163,8 +159,6 @@ function AppRoutes() {
       <Route path="/customers/:id" element={<ProtectedRoute module="customers"><AppLayout><CustomerDetail /></AppLayout></ProtectedRoute>} />
       <Route path="/customer-dues" element={<ProtectedRoute module="customer-dues"><AppLayout><CustomerDues /></AppLayout></ProtectedRoute>} />
       <Route path="/delivery" element={<ProtectedRoute module="sales"><AppLayout><Delivery /></AppLayout></ProtectedRoute>} />
-      <Route path="/loyalty" element={<ProtectedRoute module="customers"><AppLayout><Loyalty /></AppLayout></ProtectedRoute>} />
-      <Route path="/coupons" element={<ProtectedRoute module="sales"><AppLayout><Coupons /></AppLayout></ProtectedRoute>} />
       <Route path="/reservations" element={<ProtectedRoute module="customers"><AppLayout><Reservations /></AppLayout></ProtectedRoute>} />
       <Route path="/online-orders" element={<ProtectedRoute module="sales"><AppLayout><OnlineOrders /></AppLayout></ProtectedRoute>} />
       <Route path="/purchase-requests" element={<ProtectedRoute module="purchase-requests"><AppLayout><PurchaseRequests /></AppLayout></ProtectedRoute>} />

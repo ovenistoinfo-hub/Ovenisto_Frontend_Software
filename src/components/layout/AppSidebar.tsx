@@ -4,7 +4,7 @@ import {
   Home, BarChart3, ShoppingCart, ChefHat, UtensilsCrossed, Store, Settings, Globe, CalendarDays,
   Pizza, Factory, Package, DollarSign, Receipt, ShoppingBag, CreditCard, ArrowLeftRight,
   Trash2, Users, Clock, FileText, MessageSquare, ChevronDown, ChevronRight, Flame, LogOut, Link2,
-  Tag, Bike, Award, Ticket, CalendarCheck, LayoutGrid, Timer, ClipboardList, CalendarOff, UserCircle
+  Bike, CalendarCheck, LayoutGrid, Timer, ClipboardList, CalendarOff, UserCircle
 } from "lucide-react";
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupLabel, SidebarGroupContent,
@@ -52,7 +52,6 @@ const navSections = [
       { title: "Add Food Item", url: "/items/food-menu/add" },
       { title: "Pre-Made Food", url: "/items/pre-made-food" },
     ]},
-    { title: "Deals & Combos", url: "/deals", icon: Tag, module: "items" },
     { title: "Production", url: "/production", icon: Factory, module: "production" },
     { title: "Stock", icon: Package, module: "stock", children: [
       { title: "Branch Stock", url: "/warehouses", module: "warehouses" },
@@ -65,8 +64,6 @@ const navSections = [
     { title: "Customers", url: "/customers", icon: Users, module: "customers" },
     { title: "Customer Dues", url: "/customer-dues", icon: Receipt, module: "customer-dues" },
     { title: "Delivery", url: "/delivery", icon: Bike, module: "sales" },
-    { title: "Loyalty Program", url: "/loyalty", icon: Award, module: "customers" },
-    { title: "Coupons", url: "/coupons", icon: Ticket, module: "sales" },
     { title: "Reservations", url: "/reservations", icon: CalendarCheck, module: "customers" },
   ]},
   { label: "Purchase / Expense", items: [
