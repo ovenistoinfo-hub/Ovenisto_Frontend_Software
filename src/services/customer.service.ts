@@ -32,6 +32,11 @@ export const customerService = {
     return api.get<{ success: boolean; data: CustomerRecord[]; meta: { page: number; limit: number; total: number; totalPages: number } }>(`/customers${qs.toString() ? `?${qs}` : ''}`);
   },
 
+  async getCustomer(id: string): Promise<CustomerRecord> {
+    const res = await api.get<{ success: boolean; data: CustomerRecord }>(`/customers/${id}`);
+    return res.data;
+  },
+
   async createCustomer(data: CreateCustomerInput): Promise<CustomerRecord> {
     const res = await api.post<{ success: boolean; data: CustomerRecord }>('/customers', data);
     return res.data;
