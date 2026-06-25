@@ -41,8 +41,8 @@ const Customers = () => {
       setShowAdd(false);
       setForm({ name: "", phone: "", email: "", address: "" });
       toast.success("Customer added");
-    } catch {
-      toast.error("Failed to add customer");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to add customer");
     } finally {
       setSaving(false);
     }
