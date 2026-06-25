@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { Bike, MapPin, Phone, Clock, CheckCircle2, Truck, RotateCcw, RefreshCw, Package, TrendingUp, Banknote } from "lucide-react";
+import { Bike, MapPin, Phone, Clock, CheckCircle2, Truck, RotateCcw, RefreshCw, Package, TrendingUp, Banknote, LogOut } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -21,7 +21,7 @@ const STATUS_COLORS: Record<string, string> = {
 
 const RiderPortal = () => {
   const { settings }  = useData();
-  const { user }      = useAuth();
+  const { user, logout } = useAuth();
   const currency      = settings?.currency || "Rs.";
 
   const [rider, setRider]           = useState<RiderRecord | null>(null);
@@ -97,6 +97,9 @@ const RiderPortal = () => {
           )}
           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={loadData}>
             <RefreshCw className="h-3.5 w-3.5" />
+          </Button>
+          <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={logout} title="Logout">
+            <LogOut className="h-3.5 w-3.5" />
           </Button>
         </div>
       </div>
