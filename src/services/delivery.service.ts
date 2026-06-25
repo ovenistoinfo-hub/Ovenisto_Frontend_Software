@@ -15,6 +15,18 @@ export interface RiderRecord {
   collectedCash?: number;
 }
 
+export interface PendingDeliveryOrder {
+  id: string;
+  orderNumber: string;
+  customerName: string | null;
+  phone: string | null;
+  total: number;
+  deliveryAddress: string | null;
+  status: string;
+  riderId: string | null;
+  createdAt: string;
+}
+
 export interface AssignmentRecord {
   id: string;
   orderId: string;
@@ -87,5 +99,10 @@ export const deliveryService = {
   async getDashboard(): Promise<{ riderStats: RiderRecord[]; activeAssignments: AssignmentRecord[] }> {
     const res = await api.get<{ success: boolean; data: { riderStats: RiderRecord[]; activeAssignments: AssignmentRecord[] } }>('/delivery/dashboard');
     return res.data;
+  },
+
+  async getPendingDeliveryOrders(): Promise<PendingDeliveryOrder[]> {
+    const res = await api.get<{ success: boolean; data: PendingDeliveryOrder[] }>('/orders?type=DELIVERY&limit=50');
+    return (res.data || []).filter(o => !o.riderId);
   },
 };

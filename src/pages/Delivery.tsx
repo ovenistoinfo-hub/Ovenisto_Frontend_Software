@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { Bike, MapPin, Phone, Clock, Users, TrendingUp, Banknote, RefreshCw, Package } from "lucide-react";
+import { Bike, MapPin, Phone, Clock, Users, TrendingUp, Banknote, RefreshCw, Package, Plus } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PageHeader } from "@/components/ui/page-header";
-import { deliveryService, type RiderRecord, type AssignmentRecord } from "@/services/delivery.service";
+import { deliveryService, type RiderRecord, type AssignmentRecord, type PendingDeliveryOrder } from "@/services/delivery.service";
 import { useVisiblePolling } from "@/hooks/use-visible-polling";
 import { useData } from "@/contexts/DataContext";
 import { toast } from "sonner";
@@ -36,21 +36,27 @@ const Delivery = () => {
 
   const [riderStats, setRiderStats]         = useState<RiderRecord[]>([]);
   const [activeAssignments, setActive]      = useState<AssignmentRecord[]>([]);
+  const [pendingOrders, setPendingOrders]    = useState<PendingDeliveryOrder[]>([]);
   const [loading, setLoading]               = useState(true);
   const [tab, setTab]                       = useState("active");
 
   // Dialogs
   const [showAssign, setShowAssign]     = useState<string | null>(null); // orderId
-  const [showAddRider, setShowAddRider] = useState(false); // kept for TS; unused
+  const [showAddRider, setShowAddRider] = useState(false);
+  const [riderForm, setRiderForm]       = useState({ name: '', phone: '' });
   const [allRiders, setAllRiders]       = useState<RiderRecord[]>([]);
   const [selectedRider, setSelectedRider] = useState("");
   const [estTime, setEstTime]           = useState("30");
 
   const load = useCallback(async () => {
     try {
-      const dash = await deliveryService.getDashboard();
+      const [dash, pending] = await Promise.all([
+        deliveryService.getDashboard(),
+        deliveryService.getPendingDeliveryOrders(),
+      ]);
       setRiderStats(dash.riderStats);
       setActive(dash.activeAssignments);
+      setPendingOrders(pending);
     } catch { toast.error("Failed to load delivery data"); }
     finally { setLoading(false); }
   }, []);
@@ -77,6 +83,17 @@ const Delivery = () => {
     } catch (err: any) { toast.error(err?.message || "Assignment failed"); }
   };
 
+  const handleAddRider = async () => {
+    if (!riderForm.name.trim()) { toast.error("Rider name required"); return; }
+    try {
+      await deliveryService.createRider({ name: riderForm.name, phone: riderForm.phone || undefined });
+      toast.success("Rider added");
+      setShowAddRider(false);
+      setRiderForm({ name: '', phone: '' });
+      load();
+    } catch (err: any) { toast.error(err?.message || "Failed to add rider"); }
+  };
+
   const handleCollect = async (assignmentId: string) => {
     try {
       await deliveryService.collectAmount(assignmentId);
@@ -95,15 +112,42 @@ const Delivery = () => {
         icon={<Bike className="h-5 w-5" />}
         title="Delivery Management"
         subtitle="Track delivery orders, riders and cash collections"
-        actions={<Button variant="outline" size="sm" onClick={load}><RefreshCw className="h-3.5 w-3.5 mr-1" />Refresh</Button>}
+        actions={
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={() => setShowAddRider(s => !s)}><Plus className="h-3.5 w-3.5 mr-1" />Add Rider</Button>
+            <Button variant="outline" size="sm" onClick={load}><RefreshCw className="h-3.5 w-3.5 mr-1" />Refresh</Button>
+          </div>
+        }
       />
+
+      {showAddRider && (
+        <Card className="shadow-sm border-primary/30">
+          <CardHeader className="pb-3"><CardTitle className="text-base">Add Rider</CardTitle></CardHeader>
+          <CardContent className="space-y-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <Label>Name</Label>
+                <Input value={riderForm.name} onChange={e => setRiderForm(p => ({ ...p, name: e.target.value }))} placeholder="Rider name" className="mt-1" />
+              </div>
+              <div>
+                <Label>Phone</Label>
+                <Input value={riderForm.phone} onChange={e => setRiderForm(p => ({ ...p, phone: e.target.value }))} placeholder="03xxxxxxxxx" className="mt-1" />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 pt-1">
+              <Button variant="outline" onClick={() => setShowAddRider(false)}>Cancel</Button>
+              <Button className="gradient-primary text-primary-foreground" onClick={handleAddRider}>Save</Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Summary Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <Card className="shadow-sm">
           <CardContent className="p-4">
             <p className="text-xs text-muted-foreground">Active Deliveries</p>
-            <p className="text-2xl font-bold text-primary">{activeAssignments.length}</p>
+            <p className="text-2xl font-bold text-primary">{pendingOrders.length + activeAssignments.length}</p>
           </CardContent>
         </Card>
         <Card className="shadow-sm">
@@ -130,7 +174,7 @@ const Delivery = () => {
         <TabsList>
           <TabsTrigger value="active" className="gap-1.5">
             <Package className="h-3.5 w-3.5" />Active Orders
-            {activeAssignments.length > 0 && <Badge className="h-4 px-1 text-[10px] bg-primary text-primary-foreground">{activeAssignments.length}</Badge>}
+            {(pendingOrders.length + activeAssignments.length) > 0 && <Badge className="h-4 px-1 text-[10px] bg-primary text-primary-foreground">{pendingOrders.length + activeAssignments.length}</Badge>}
           </TabsTrigger>
           <TabsTrigger value="riders" className="gap-1.5">
             <Users className="h-3.5 w-3.5" />Riders Dashboard
@@ -138,34 +182,69 @@ const Delivery = () => {
         </TabsList>
 
         {/* Active Orders Tab */}
-        <TabsContent value="active" className="mt-4">
+        <TabsContent value="active" className="mt-4 space-y-6">
           {loading ? (
             <p className="text-center text-muted-foreground py-12">Loading...</p>
-          ) : activeAssignments.length === 0 ? (
+          ) : (pendingOrders.length === 0 && activeAssignments.length === 0) ? (
             <p className="text-center text-muted-foreground py-12">No active deliveries</p>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {activeAssignments.map(a => (
-                <Card key={a.id} className="shadow-sm">
-                  <CardContent className="p-4 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold text-sm">{a.order?.orderNumber}</span>
-                      <Badge variant="secondary" className={STATUS_COLORS[a.status]}>{a.status}</Badge>
-                    </div>
-                    <div className="text-sm space-y-1">
-                      <p className="font-medium">{a.order?.customer}</p>
-                      <p className="text-xs text-muted-foreground flex items-center gap-1"><MapPin className="h-3 w-3" />{a.customerAddress || "—"}</p>
-                      <p className="text-xs text-muted-foreground flex items-center gap-1"><Phone className="h-3 w-3" />{a.customerPhone || "—"}</p>
-                      <p className="font-bold text-primary">{currency} {a.order?.total?.toLocaleString()}</p>
-                    </div>
-                    <div className="text-xs space-y-1 border-t pt-2">
-                      <p><Bike className="h-3 w-3 inline mr-1" />Rider: <strong>{a.rider?.name}</strong></p>
-                      {a.estimatedTime && <p className="text-muted-foreground"><Clock className="h-3 w-3 inline mr-1" />Est. {a.estimatedTime} min</p>}
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
+            <>
+              {pendingOrders.length > 0 && (
+                <div>
+                  <h3 className="text-sm font-semibold text-warning mb-3 flex items-center gap-1.5">
+                    <Package className="h-4 w-4" />Awaiting Rider Assignment ({pendingOrders.length})
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {pendingOrders.map(o => (
+                      <Card key={o.id} className="shadow-sm border-warning/30">
+                        <CardContent className="p-4 space-y-3">
+                          <div className="flex items-center justify-between">
+                            <span className="font-bold text-sm">{o.orderNumber}</span>
+                            <Badge variant="secondary" className="bg-warning/10 text-warning">Unassigned</Badge>
+                          </div>
+                          <div className="text-sm space-y-1">
+                            <p className="font-medium">{o.customerName || "Walk-in"}</p>
+                            <p className="text-xs text-muted-foreground flex items-center gap-1"><MapPin className="h-3 w-3" />{o.deliveryAddress || "—"}</p>
+                            <p className="text-xs text-muted-foreground flex items-center gap-1"><Phone className="h-3 w-3" />{o.phone || "—"}</p>
+                            <p className="font-bold text-primary">{currency} {o.total?.toLocaleString()}</p>
+                          </div>
+                          <Button size="sm" className="w-full gradient-primary text-primary-foreground" onClick={() => openAssignDialog(o.id)}>
+                            <Bike className="h-3.5 w-3.5 mr-1.5" />Assign Rider
+                          </Button>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {activeAssignments.length > 0 && (
+                <div>
+                  <h3 className="text-sm font-semibold text-muted-foreground mb-3">In Progress ({activeAssignments.length})</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {activeAssignments.map(a => (
+                      <Card key={a.id} className="shadow-sm">
+                        <CardContent className="p-4 space-y-3">
+                          <div className="flex items-center justify-between">
+                            <span className="font-bold text-sm">{a.order?.orderNumber}</span>
+                            <Badge variant="secondary" className={STATUS_COLORS[a.status]}>{a.status}</Badge>
+                          </div>
+                          <div className="text-sm space-y-1">
+                            <p className="font-medium">{a.order?.customer}</p>
+                            <p className="text-xs text-muted-foreground flex items-center gap-1"><MapPin className="h-3 w-3" />{a.customerAddress || "—"}</p>
+                            <p className="text-xs text-muted-foreground flex items-center gap-1"><Phone className="h-3 w-3" />{a.customerPhone || "—"}</p>
+                            <p className="font-bold text-primary">{currency} {a.order?.total?.toLocaleString()}</p>
+                          </div>
+                          <div className="text-xs space-y-1 border-t pt-2">
+                            <p><Bike className="h-3 w-3 inline mr-1" />Rider: <strong>{a.rider?.name}</strong></p>
+                            {a.estimatedTime && <p className="text-muted-foreground"><Clock className="h-3 w-3 inline mr-1" />Est. {a.estimatedTime} min</p>}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </TabsContent>
 
