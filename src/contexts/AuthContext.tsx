@@ -30,7 +30,7 @@ const rolePermissions: Record<string, string[]> = {
     "sales", "purchases", "suppliers", "supplier-dues",
     "expenses", "reports", "attendance", "my-portal",
   ],
-  "Rider": ["attendance", "my-portal"],
+  "Rider": ["rider-portal", "attendance", "my-portal"],
   "Customer Screen": ["customer-display"],
 };
 

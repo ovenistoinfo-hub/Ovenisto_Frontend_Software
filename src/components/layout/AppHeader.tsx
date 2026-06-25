@@ -47,6 +47,7 @@ const breadcrumbConfig: Record<string, { label: string; parent?: { label: string
   "/stock/stock-take": { label: "Stock Take", parent: { label: "Stock", url: "/stock" } },
   "/sales": { label: "Sales" },
   "/customers": { label: "Customers" },
+  "/rider-portal": { label: "Rider Portal" },
   "/delivery": { label: "Delivery" },
   "/reservations": { label: "Reservations" },
   "/online-orders": { label: "Online Orders" },

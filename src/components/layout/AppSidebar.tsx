@@ -26,6 +26,7 @@ const navSections = [
     { title: "POS", url: "/pos", icon: ShoppingCart, module: "pos" },
     { title: "Self Order", url: "/self-order", icon: Pizza, module: "self-order" },
     { title: "Kitchens", url: "/kitchens", icon: ChefHat, module: "kitchens" },
+    { title: "Rider Portal", url: "/rider-portal", icon: Bike, module: "rider-portal" },
     { title: "Waiter Panel", url: "/waiter", icon: UtensilsCrossed, module: "waiter" },
     { title: "Table Layout", url: "/table-layout", icon: LayoutGrid, module: "settings" },
     { title: "Order Monitor", url: "/order-status", icon: BarChart3, module: "order-status" },

@@ -100,7 +100,7 @@ function getDefaultRouteForRole(role?: string): string {
     case 'Delivery Manager': return '/delivery';
     case 'Store Manager':    return '/warehouses';
     case 'Accountant':       return '/sales';
-    case 'Rider':            return '/my-portal';
+    case 'Rider':            return '/rider-portal';
     case 'Customer Screen':  return '/customer-display';
     default:                 return '/';
   }
@@ -169,7 +169,8 @@ function AppRoutes() {
       <Route path="/users" element={<ProtectedRoute module="users"><AppLayout><Users /></AppLayout></ProtectedRoute>} />
       <Route path="/attendance" element={<ProtectedRoute module="attendance"><AppLayout><Attendance /></AppLayout></ProtectedRoute>} />
       <Route path="/shifts" element={<ProtectedRoute module="attendance"><AppLayout><Shifts /></AppLayout></ProtectedRoute>} />
-      <Route path="/my-portal" element={<ProtectedRoute module="my-portal">{user?.role === 'Rider' ? <RiderPortal /> : <AppLayout><EmployeePortal /></AppLayout>}</ProtectedRoute>} />
+      <Route path="/rider-portal" element={<ProtectedRoute module="rider-portal"><AppLayout><RiderPortal /></AppLayout></ProtectedRoute>} />
+      <Route path="/my-portal" element={<ProtectedRoute module="my-portal"><AppLayout><EmployeePortal /></AppLayout></ProtectedRoute>} />
       <Route path="/reports" element={<ProtectedRoute module="reports"><AppLayout><Reports /></AppLayout></ProtectedRoute>} />
       <Route path="/sms" element={<ProtectedRoute module="sms"><AppLayout><SMS /></AppLayout></ProtectedRoute>} />
       <Route path="/profile" element={<ProtectedRoute><AppLayout><Profile /></AppLayout></ProtectedRoute>} />
