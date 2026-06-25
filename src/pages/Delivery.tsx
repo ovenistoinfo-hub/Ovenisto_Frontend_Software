@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { Bike, MapPin, Phone, Clock, Users, TrendingUp, Banknote, RefreshCw, Package, Plus, CheckCircle2 } from "lucide-react";
+import { Bike, MapPin, Phone, Clock, Users, TrendingUp, Banknote, RefreshCw, Package, CheckCircle2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -42,8 +42,6 @@ const Delivery = () => {
 
   // Dialogs
   const [showAssign, setShowAssign]     = useState<string | null>(null); // orderId
-  const [showAddRider, setShowAddRider] = useState(false);
-  const [riderForm, setRiderForm]       = useState({ name: '', phone: '' });
   const [allRiders, setAllRiders]       = useState<RiderRecord[]>([]);
   const [selectedRider, setSelectedRider] = useState("");
   const [estTime, setEstTime]           = useState("30");
@@ -83,17 +81,6 @@ const Delivery = () => {
     } catch (err: any) { toast.error(err?.message || "Assignment failed"); }
   };
 
-  const handleAddRider = async () => {
-    if (!riderForm.name.trim()) { toast.error("Rider name required"); return; }
-    try {
-      await deliveryService.createRider({ name: riderForm.name, phone: riderForm.phone || undefined });
-      toast.success("Rider added");
-      setShowAddRider(false);
-      setRiderForm({ name: '', phone: '' });
-      load();
-    } catch (err: any) { toast.error(err?.message || "Failed to add rider"); }
-  };
-
   const handleCollect = async (assignmentId: string) => {
     try {
       await deliveryService.collectAmount(assignmentId);
@@ -113,34 +100,9 @@ const Delivery = () => {
         title="Delivery Management"
         subtitle="Track delivery orders, riders and cash collections"
         actions={
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={() => setShowAddRider(s => !s)}><Plus className="h-3.5 w-3.5 mr-1" />Add Rider</Button>
-            <Button variant="outline" size="sm" onClick={load}><RefreshCw className="h-3.5 w-3.5 mr-1" />Refresh</Button>
-          </div>
+          <Button variant="outline" size="sm" onClick={load}><RefreshCw className="h-3.5 w-3.5 mr-1" />Refresh</Button>
         }
       />
-
-      {showAddRider && (
-        <Card className="shadow-sm border-primary/30">
-          <CardHeader className="pb-3"><CardTitle className="text-base">Add Rider</CardTitle></CardHeader>
-          <CardContent className="space-y-3">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <Label>Name</Label>
-                <Input value={riderForm.name} onChange={e => setRiderForm(p => ({ ...p, name: e.target.value }))} placeholder="Rider name" className="mt-1" />
-              </div>
-              <div>
-                <Label>Phone</Label>
-                <Input value={riderForm.phone} onChange={e => setRiderForm(p => ({ ...p, phone: e.target.value }))} placeholder="03xxxxxxxxx" className="mt-1" />
-              </div>
-            </div>
-            <div className="flex justify-end gap-2 pt-1">
-              <Button variant="outline" onClick={() => setShowAddRider(false)}>Cancel</Button>
-              <Button className="gradient-primary text-primary-foreground" onClick={handleAddRider}>Save</Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
 
       {/* Summary Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
