@@ -44,8 +44,9 @@ const Sales = () => {
       limit: PAGE_SIZE,
     }),
   });
-  const orders = resp?.data ?? [];
-  const total = resp?.meta?.total ?? orders.length;
+  const allOrders = resp?.data ?? [];
+  const orders = allOrders.filter(o => o.status !== "preparing" && o.status !== "pending");
+  const total = orders.length;
   const refetchOrders = () => queryClient.invalidateQueries({ queryKey: ["orders"] });
 
   // Reset to page 1 when filters change
