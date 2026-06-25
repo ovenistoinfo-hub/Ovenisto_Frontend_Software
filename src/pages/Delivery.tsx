@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { Bike, MapPin, Phone, Clock, Users, TrendingUp, Banknote, RefreshCw, Package, Plus } from "lucide-react";
+import { Bike, MapPin, Phone, Clock, Users, TrendingUp, Banknote, RefreshCw, Package, Plus, CheckCircle2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -286,11 +286,24 @@ const Delivery = () => {
                       </TableCell>
                       <TableCell className="text-right text-success">{currency} {(r.collectedCash || 0).toLocaleString()}</TableCell>
                       <TableCell>
-                        {(r.pendingCash || 0) > 0 && (
-                          <Button size="sm" variant="outline" className="text-xs h-7 gap-1" onClick={() => handleCollectAllFromRider(r.id)}>
-                            <Banknote className="h-3 w-3" />Collect
-                          </Button>
-                        )}
+                        <div className="flex gap-1 flex-wrap justify-end">
+                          {(r.pendingCash || 0) > 0 && (
+                            <Button size="sm" variant="outline" className="text-xs h-7 gap-1" onClick={() => handleCollectAllFromRider(r.id)}>
+                              <Banknote className="h-3 w-3" />Collect
+                            </Button>
+                          )}
+                          {r.status === "on_delivery" && (
+                            <Button size="sm" variant="outline" className="text-xs h-7 gap-1 text-success border-success/30 hover:bg-success/10"
+                              onClick={async () => {
+                                try {
+                                  await deliveryService.updateRider(r.id, { status: 'available', isAvailable: true });
+                                  load();
+                                } catch { toast.error("Failed to update rider status"); }
+                              }}>
+                              <CheckCircle2 className="h-3 w-3" />Mark Available
+                            </Button>
+                          )}
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
