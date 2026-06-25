@@ -191,7 +191,7 @@ const Delivery = () => {
                             <Badge variant="secondary" className={STATUS_COLORS[a.status]}>{a.status}</Badge>
                           </div>
                           <div className="text-sm space-y-1">
-                            <p className="font-medium">{a.order?.customer}</p>
+                            <p className="font-medium">{a.order?.customerName || "Walk-in"}</p>
                             <p className="text-xs text-muted-foreground flex items-center gap-1"><MapPin className="h-3 w-3" />{a.customerAddress || "—"}</p>
                             <p className="text-xs text-muted-foreground flex items-center gap-1"><Phone className="h-3 w-3" />{a.customerPhone || "—"}</p>
                             <p className="font-bold text-primary">{currency} {a.order?.total?.toLocaleString()}</p>

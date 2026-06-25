@@ -42,7 +42,7 @@ export interface AssignmentRecord {
   collectedAt: string | null;
   collectedBy: string | null;
   notes: string | null;
-  order?: { id: string; orderNumber: string; total: number; customer: string; deliveryAddress: string | null; phone?: string | null };
+  order?: { id: string; orderNumber: string; total: number; customerName: string | null; deliveryAddress: string | null; phone?: string | null };
   rider?: RiderRecord;
 }
 

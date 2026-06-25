@@ -155,7 +155,7 @@ const RiderPortal = () => {
                 </div>
 
                 <div className="space-y-1.5">
-                  <p className="font-medium text-sm">{a.order?.customer}</p>
+                  <p className="font-medium text-sm">{a.order?.customerName || "Walk-in"}</p>
                   <p className="text-xs text-muted-foreground flex items-center gap-1.5">
                     <MapPin className="h-3 w-3 shrink-0" />{a.customerAddress || "No address"}
                   </p>
