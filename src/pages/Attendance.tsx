@@ -1,5 +1,5 @@
 import { useState, Fragment } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import {
   Clock, FileText, Calendar, ChevronLeft, ChevronRight,
   Check, X, Edit2, Save, Lock
@@ -42,13 +42,12 @@ const ATT_STATUS_COLORS: Record<string, string> = {
 };
 
 function getWeekStart(offset = 0): string {
-  const now = new Date();
-  const day = now.getDay();
-  const diff = now.getDate() - day + (day === 0 ? -6 : 1) + offset * 7;
-  const d = new Date(now);
-  d.setDate(diff);
-  d.setHours(0, 0, 0, 0);
-  return d.toISOString().split("T")[0];
+  const pktNowMs = Date.now() + 5 * 60 * 60 * 1000; // PKT now in ms
+  const pkt = new Date(pktNowMs);
+  const day = pkt.getUTCDay(); // 0=Sun
+  const diff = day === 0 ? -6 : 1 - day; // days back to Monday
+  const monMs = pktNowMs + (diff + offset * 7) * 86_400_000;
+  return new Date(monMs).toISOString().split("T")[0];
 }
 
 function formatTime(dt: string | null | undefined): string {
@@ -63,7 +62,6 @@ function hoursWorked(clockIn: string | null, clockOut: string | null): string {
 }
 
 export default function AttendancePage() {
-  const qc = useQueryClient();
   const today = new Date().toISOString().split("T")[0];
 
   const [attDate, setAttDate] = useState(today);
@@ -80,9 +78,6 @@ export default function AttendancePage() {
   const [schedWeekOffset, setSchedWeekOffset] = useState(0);
   const schedWeekStart = getWeekStart(schedWeekOffset);
   const [draftShifts, setDraftShifts] = useState<Record<string, Record<number, string>>>({});
-
-  // suppress unused warning — qc available for future invalidation patterns
-  void qc;
 
   const { data: usersResult } = useQuery({
     queryKey: ["users-list"],
@@ -172,8 +167,8 @@ export default function AttendancePage() {
     correctMut.mutate({
       id: r.id,
       data: {
-        clockIn:  editData.clockIn  ? `${base}T${editData.clockIn}:00.000Z`  : null,
-        clockOut: editData.clockOut ? `${base}T${editData.clockOut}:00.000Z` : null,
+        clockIn:  editData.clockIn  ? new Date(`${base}T${editData.clockIn}:00`).toISOString()  : null,
+        clockOut: editData.clockOut ? new Date(`${base}T${editData.clockOut}:00`).toISOString() : null,
         status:   editData.status as "present" | "late" | "absent",
         notes:    editData.notes || null,
       },
