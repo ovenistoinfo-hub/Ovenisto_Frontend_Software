@@ -22,7 +22,7 @@ import { cn } from "@/lib/utils";
 import { attendanceService, type AttendanceRecord } from "@/services/attendance.service";
 import { leaveService, type LeaveRequest, type LeaveBalance } from "@/services/leave.service";
 import { scheduleService, type StaffSchedule, SHIFT_COLORS } from "@/services/schedule.service";
-import { shiftService } from "@/services/shift.service";
+import { shiftService, type ShiftRecord } from "@/services/shift.service";
 
 const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
@@ -161,7 +161,7 @@ export default function EmployeePortal() {
   });
 
   const historyRows: AttendanceRecord[] = historyData?.data ?? [];
-  const myShifts = (shiftsData?.data ?? []).filter((s: any) => s.cashierId === user?.id);
+  const myShifts = (shiftsData?.data ?? [] as ShiftRecord[]).filter(s => s.cashierId === user?.id);
 
   const monthStr = today.slice(0, 7);
   const monthRows = historyRows.filter(r => r.date.startsWith(monthStr));
@@ -413,7 +413,7 @@ export default function EmployeePortal() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {myShifts.map((s: any) => (
+                    {myShifts.map((s) => (
                       <TableRow key={s.id}>
                         <TableCell className="text-sm">{new Date(s.openedAt).toLocaleDateString("en-PK")}</TableCell>
                         <TableCell className="text-sm">{s.closedAt ? new Date(s.closedAt).toLocaleDateString("en-PK") : "—"}</TableCell>
