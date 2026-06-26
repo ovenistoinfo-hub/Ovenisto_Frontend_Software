@@ -47,4 +47,13 @@ export const shiftService = {
     const res = await api.put<{ success: boolean; data: ShiftRecord }>(`/shifts/${id}/close`, data);
     return res.data;
   },
+
+  async getShifts(params?: { status?: string; page?: number; limit?: number }): Promise<{ data: ShiftRecord[]; meta: { total: number; page: number; limit: number; totalPages: number } }> {
+    const q = new URLSearchParams();
+    if (params?.status) q.set('status', params.status);
+    q.set('page',  String(params?.page  ?? 1));
+    q.set('limit', String(params?.limit ?? 50));
+    const res = await api.get<{ success: boolean; data: ShiftRecord[]; meta: any }>(`/shifts?${q}`);
+    return { data: res.data, meta: (res as any).meta };
+  },
 };
