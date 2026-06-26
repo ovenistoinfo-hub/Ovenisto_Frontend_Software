@@ -44,13 +44,20 @@ const ATT_STATUS_COLORS: Record<string, string> = {
 };
 
 function getWeekStart(offset = 0): string {
-  const now = new Date();
-  const day = now.getDay();
-  const diff = now.getDate() - day + (day === 0 ? -6 : 1) + offset * 7;
-  const d = new Date(now);
-  d.setDate(diff);
-  d.setHours(0, 0, 0, 0);
-  return d.toISOString().split("T")[0];
+  const pktNowMs = Date.now() + 5 * 60 * 60 * 1000; // PKT now in ms
+  const pkt = new Date(pktNowMs);
+  const day = pkt.getUTCDay(); // 0=Sun
+  const diff = day === 0 ? -6 : 1 - day; // days back to Monday
+  const monMs = pktNowMs + (diff + offset * 7) * 86_400_000;
+  return new Date(monMs).toISOString().split("T")[0];
+}
+
+function formatWeekRange(weekStart: string): string {
+  const base = new Date(weekStart + "T00:00:00Z");
+  const end = new Date(base);
+  end.setUTCDate(base.getUTCDate() + 6);
+  const fmt = (d: Date) => d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+  return `${fmt(base)} – ${fmt(end)}, ${end.getUTCFullYear()}`;
 }
 
 function formatTime(dt: string | null | undefined): string {
@@ -193,11 +200,11 @@ export default function EmployeePortal() {
 
         {/* SCHEDULE TAB */}
         <TabsContent value="schedule" className="mt-4 space-y-4">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between flex-wrap gap-2">
             <div className="flex items-center gap-2">
-              <Button size="icon" variant="outline" onClick={() => setWeekOffset(o => o - 1)}><ChevronLeft className="h-4 w-4" /></Button>
-              <span className="text-sm font-medium w-40 text-center">Week of {weekStart}</span>
-              <Button size="icon" variant="outline" onClick={() => setWeekOffset(o => o + 1)}><ChevronRight className="h-4 w-4" /></Button>
+              <Button size="icon" variant="outline" className="h-8 w-8" onClick={() => setWeekOffset(o => o - 1)}><ChevronLeft className="h-4 w-4" /></Button>
+              <span className="text-sm font-semibold min-w-[200px] text-center">{formatWeekRange(weekStart)}</span>
+              <Button size="icon" variant="outline" className="h-8 w-8" onClick={() => setWeekOffset(o => o + 1)}><ChevronRight className="h-4 w-4" /></Button>
             </div>
             <Button size="sm" variant="outline" onClick={() => setWeekOffset(0)}>Today</Button>
           </div>
@@ -208,17 +215,21 @@ export default function EmployeePortal() {
             <div className="grid grid-cols-7 gap-2">
               {DAY_LABELS.map((label, i) => {
                 const shift = schedule.shifts.find(s => s.dayIndex === i);
-                const dateObj = new Date(weekStart);
-                dateObj.setDate(dateObj.getDate() + i);
+                const dateObj = new Date(weekStart + "T00:00:00Z");
+                dateObj.setUTCDate(dateObj.getUTCDate() + i);
                 const dateStr = dateObj.toISOString().split("T")[0];
                 const isToday = dateStr === today;
+                const shiftType = shift?.shiftType ?? "off";
+                const shiftLabel = shiftType === "off" ? "Off" : shiftType.charAt(0).toUpperCase() + shiftType.slice(1);
                 return (
                   <Card key={i} className={cn("shadow-sm text-center", isToday && "ring-2 ring-primary")}>
                     <CardContent className="p-3 space-y-1">
-                      <p className="text-xs text-muted-foreground">{label}</p>
-                      <p className="text-xs font-medium">{dateObj.getDate()}</p>
-                      <Badge variant="secondary" className={cn("text-[10px] px-1", SHIFT_COLORS[shift?.shiftType ?? "off"])}>
-                        {shift?.shiftType ?? "—"}
+                      <p className="text-xs font-semibold">{label}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {dateObj.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" })}
+                      </p>
+                      <Badge variant="secondary" className={cn("text-[10px] px-1.5", SHIFT_COLORS[shiftType])}>
+                        {shiftLabel}
                       </Badge>
                     </CardContent>
                   </Card>

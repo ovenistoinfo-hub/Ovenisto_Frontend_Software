@@ -55,6 +55,24 @@ function formatTime(dt: string | null | undefined): string {
   return new Date(dt).toLocaleTimeString("en-PK", { hour: "2-digit", minute: "2-digit", hour12: true });
 }
 
+function getWeekDates(weekStart: string): Date[] {
+  const base = new Date(weekStart + "T00:00:00Z");
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(base);
+    d.setUTCDate(base.getUTCDate() + i);
+    return d;
+  });
+}
+
+function formatWeekRange(weekStart: string): string {
+  const dates = getWeekDates(weekStart);
+  const start = dates[0];
+  const end = dates[6];
+  const fmt = (d: Date) => d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+  const year = end.getUTCFullYear();
+  return `${fmt(start)} – ${fmt(end)}, ${year}`;
+}
+
 function hoursWorked(clockIn: string | null, clockOut: string | null): string {
   if (!clockIn || !clockOut) return "—";
   const diff = (new Date(clockOut).getTime() - new Date(clockIn).getTime()) / 3600000;
@@ -429,22 +447,31 @@ export default function AttendancePage() {
 
         {/* SCHEDULES TAB */}
         <TabsContent value="schedules" className="mt-4 space-y-4">
-          <div className="flex items-center justify-between">
+          {/* Week Navigator */}
+          <div className="flex items-center justify-between flex-wrap gap-2">
             <div className="flex items-center gap-2">
-              <Button size="icon" variant="outline" onClick={() => setSchedWeekOffset(o => o - 1)}><ChevronLeft className="h-4 w-4" /></Button>
-              <span className="text-sm font-medium w-40 text-center">Week of {schedWeekStart}</span>
-              <Button size="icon" variant="outline" onClick={() => setSchedWeekOffset(o => o + 1)}><ChevronRight className="h-4 w-4" /></Button>
+              <Button size="icon" variant="outline" className="h-8 w-8" onClick={() => setSchedWeekOffset(o => o - 1)}><ChevronLeft className="h-4 w-4" /></Button>
+              <span className="text-sm font-semibold min-w-[200px] text-center">{formatWeekRange(schedWeekStart)}</span>
+              <Button size="icon" variant="outline" className="h-8 w-8" onClick={() => setSchedWeekOffset(o => o + 1)}><ChevronRight className="h-4 w-4" /></Button>
             </div>
             <Button size="sm" variant="outline" onClick={() => setSchedWeekOffset(0)}>Current Week</Button>
           </div>
 
+          {/* Schedule Grid */}
           <Card className="shadow-sm overflow-x-auto">
             <CardContent className="p-0">
               <Table>
                 <TableHeader>
                   <TableRow className="bg-muted/50 hover:bg-muted/50">
-                    <TableHead className="w-44">Employee</TableHead>
-                    {DAY_LABELS.map(d => <TableHead key={d} className="text-center text-xs w-24">{d}</TableHead>)}
+                    <TableHead className="w-44 sticky left-0 bg-muted/50 z-10">Employee</TableHead>
+                    {getWeekDates(schedWeekStart).map((date, i) => (
+                      <TableHead key={i} className="text-center min-w-[100px]">
+                        <div className="text-xs font-semibold">{DAY_LABELS[i]}</div>
+                        <div className="text-[10px] text-muted-foreground font-normal">
+                          {date.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" })}
+                        </div>
+                      </TableHead>
+                    ))}
                     <TableHead className="w-36"></TableHead>
                   </TableRow>
                 </TableHeader>
@@ -454,9 +481,9 @@ export default function AttendancePage() {
                     const isPublished = saved?.status === "published" && !draftShifts[u.id];
                     return (
                       <TableRow key={u.id} className="hover:bg-muted/20">
-                        <TableCell>
-                          <div className="flex items-center gap-1">
-                            {isPublished && <Lock className="h-3 w-3 text-muted-foreground" />}
+                        <TableCell className="sticky left-0 bg-card z-10">
+                          <div className="flex items-center gap-1.5">
+                            {isPublished && <Lock className="h-3 w-3 text-muted-foreground shrink-0" />}
                             <div>
                               <p className="text-sm font-medium">{u.name}</p>
                               <p className="text-xs text-muted-foreground">{u.role}</p>
@@ -465,18 +492,20 @@ export default function AttendancePage() {
                         </TableCell>
                         {DAY_LABELS.map((_, i) => {
                           const shiftType = getDraftOrSaved(u.id, i, saved);
+                          const label = shiftType === "off" ? "Off" : shiftType.charAt(0).toUpperCase() + shiftType.slice(1);
                           return (
                             <TableCell key={i} className="text-center p-1">
                               <button
                                 disabled={isPublished}
                                 className={cn(
-                                  "text-[10px] px-1.5 py-1 rounded font-medium transition-colors w-full",
+                                  "text-[10px] px-2 py-1.5 rounded-md font-medium transition-all w-full border",
                                   SHIFT_COLORS[shiftType],
-                                  !isPublished && "cursor-pointer hover:opacity-80"
+                                  !isPublished && "cursor-pointer hover:opacity-80 hover:ring-1 hover:ring-primary/40"
                                 )}
                                 onClick={() => cycleDayShift(u.id, i, shiftType)}
+                                title={isPublished ? "Click Edit to modify" : "Click to cycle shift type"}
                               >
-                                {shiftType}
+                                {label}
                               </button>
                             </TableCell>
                           );
@@ -513,6 +542,23 @@ export default function AttendancePage() {
               </Table>
             </CardContent>
           </Card>
+
+          {/* Shift Legend */}
+          <div className="flex flex-wrap gap-2 text-xs">
+            {[
+              { type: "morning", label: "Morning (09:00 – 17:00)" },
+              { type: "evening", label: "Evening (17:00 – 01:00)" },
+              { type: "night",   label: "Night (01:00 – 09:00)" },
+              { type: "off",     label: "Day Off" },
+            ].map(({ type, label }) => (
+              <span key={type} className={cn("flex items-center gap-1.5 rounded-md px-2.5 py-1 border font-medium", SHIFT_COLORS[type])}>
+                {label}
+              </span>
+            ))}
+            <span className="flex items-center gap-1.5 text-muted-foreground px-2.5 py-1 text-[10px]">
+              Click a cell to cycle • Save Draft • Publish to notify employee
+            </span>
+          </div>
         </TabsContent>
       </Tabs>
     </div>

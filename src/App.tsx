@@ -60,7 +60,6 @@ const NotFound = lazy(() => import("./pages/NotFound"));
 // New pages
 const SelfOrder = lazy(() => import("./pages/SelfOrder"));
 const Delivery = lazy(() => import("./pages/Delivery"));
-const Shifts = lazy(() => import("./pages/Shifts"));
 const OnlineOrders = lazy(() => import("./pages/OnlineOrders"));
 const Reservations = lazy(() => import("./pages/Reservations"));
 const TableLayout = lazy(() => import("./pages/TableLayout"));
@@ -168,7 +167,6 @@ function AppRoutes() {
       <Route path="/waste" element={<ProtectedRoute module="waste"><AppLayout><Waste /></AppLayout></ProtectedRoute>} />
       <Route path="/users" element={<ProtectedRoute module="users"><AppLayout><Users /></AppLayout></ProtectedRoute>} />
       <Route path="/attendance" element={<ProtectedRoute module="attendance"><AppLayout><Attendance /></AppLayout></ProtectedRoute>} />
-      <Route path="/shifts" element={<ProtectedRoute module="attendance"><AppLayout><Shifts /></AppLayout></ProtectedRoute>} />
       <Route path="/rider-portal" element={<ProtectedRoute module="rider-portal"><AppLayout><RiderPortal /></AppLayout></ProtectedRoute>} />
       <Route path="/my-portal" element={<ProtectedRoute module="my-portal"><AppLayout><EmployeePortal /></AppLayout></ProtectedRoute>} />
       <Route path="/reports" element={<ProtectedRoute module="reports"><AppLayout><Reports /></AppLayout></ProtectedRoute>} />
