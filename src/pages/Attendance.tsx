@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, Fragment } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Clock, FileText, Calendar, ChevronLeft, ChevronRight,
@@ -260,8 +260,8 @@ export default function AttendancePage() {
                 </TableHeader>
                 <TableBody>
                   {attRows.map(r => (
-                    <>
-                      <TableRow key={r.id} className="hover:bg-muted/30">
+                    <Fragment key={r.id}>
+                      <TableRow className="hover:bg-muted/30">
                         <TableCell>
                           <p className="text-sm font-medium">{r.user?.name ?? "—"}</p>
                           <p className="text-xs text-muted-foreground">{r.user?.role ?? ""}</p>
@@ -307,7 +307,7 @@ export default function AttendancePage() {
                           </TableCell>
                         </TableRow>
                       )}
-                    </>
+                    </Fragment>
                   ))}
                   {attRows.length === 0 && (
                     <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">No records for {attDate}</TableCell></TableRow>
