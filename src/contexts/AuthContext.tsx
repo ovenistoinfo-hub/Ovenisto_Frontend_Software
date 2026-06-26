@@ -15,22 +15,22 @@ const rolePermissions: Record<string, string[]> = {
   ],
   "Floor Manager": [
     "dashboard", "waiter", "order-status", "customer-display", "customers",
-    "reservations", "table-layout", "attendance", "my-portal",
+    "reservations", "table-layout", "my-portal",
   ],
-  "Cashier": ["dashboard", "pos", "sales", "customers", "attendance", "my-portal"],
-  "Waiter": ["waiter", "attendance", "my-portal"],
-  "Kitchen Manager": ["kitchens", "order-status", "items", "production", "stock", "transfers", "demands", "attendance", "my-portal"],
-  "Kitchen Staff": ["kitchens", "attendance", "my-portal"],
-  "Delivery Manager": ["delivery", "online-orders", "order-status", "sales", "attendance", "my-portal"],
+  "Cashier": ["dashboard", "pos", "sales", "customers", "my-portal"],
+  "Waiter": ["waiter", "my-portal"],
+  "Kitchen Manager": ["kitchens", "order-status", "items", "production", "stock", "transfers", "demands", "my-portal"],
+  "Kitchen Staff": ["kitchens", "my-portal"],
+  "Delivery Manager": ["delivery", "online-orders", "order-status", "sales", "my-portal"],
   "Store Manager": [
     "items", "stock", "warehouses", "production", "purchases", "suppliers",
-    "transfers", "demands", "waste", "attendance", "my-portal",
+    "transfers", "demands", "waste", "my-portal",
   ],
   "Accountant": [
     "sales", "purchases", "suppliers", "supplier-dues",
-    "expenses", "reports", "attendance", "my-portal",
+    "expenses", "reports", "my-portal",
   ],
-  "Rider": ["rider-portal", "attendance", "my-portal"],
+  "Rider": ["rider-portal", "my-portal"],
   "Customer Screen": ["customer-display"],
 };
 
