@@ -1,8 +1,7 @@
 import { useState, useEffect } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueries, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
-  Calendar, Clock, FileText, ChevronLeft, ChevronRight,
-  LogIn, LogOut, Plus, X, Timer
+  Calendar, Clock, FileText, LogIn, LogOut, Plus, X, Timer, DollarSign, AlertTriangle
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -21,10 +20,10 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { attendanceService, type AttendanceRecord } from "@/services/attendance.service";
 import { leaveService, type LeaveRequest, type LeaveBalance } from "@/services/leave.service";
-import { scheduleService, type StaffSchedule, SHIFT_COLORS } from "@/services/schedule.service";
+import { scheduleService, SHIFT_COLORS } from "@/services/schedule.service";
 import { shiftService, type ShiftRecord } from "@/services/shift.service";
-
-const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+import { userService } from "@/services/user.service";
+import { settingsService } from "@/services/settings.service";
 
 const LEAVE_TYPE_COLORS: Record<string, string> = {
   sick:      "bg-destructive/10 text-destructive",
@@ -43,21 +42,64 @@ const ATT_STATUS_COLORS: Record<string, string> = {
   absent:  "bg-destructive/10 text-destructive",
 };
 
-function getWeekStart(offset = 0): string {
-  const pktNowMs = Date.now() + 5 * 60 * 60 * 1000; // PKT now in ms
-  const pkt = new Date(pktNowMs);
-  const day = pkt.getUTCDay(); // 0=Sun
-  const diff = day === 0 ? -6 : 1 - day; // days back to Monday
-  const monMs = pktNowMs + (diff + offset * 7) * 86_400_000;
-  return new Date(monMs).toISOString().split("T")[0];
+type ShiftName = "morning" | "evening" | "night";
+interface ShiftTime { start: string; end: string }
+interface ShiftConfig { morning: ShiftTime; evening: ShiftTime; night: ShiftTime }
+const DEFAULT_SHIFT_CONFIG: ShiftConfig = {
+  morning: { start: "09:00", end: "17:00" },
+  evening: { start: "17:00", end: "01:00" },
+  night:   { start: "01:00", end: "09:00" },
+};
+function parseShiftConfig(raw: Record<string, unknown>): ShiftConfig {
+  const cfg = raw as any;
+  return {
+    morning: { start: cfg?.morning?.start ?? "09:00", end: cfg?.morning?.end ?? "17:00" },
+    evening: { start: cfg?.evening?.start ?? "17:00", end: cfg?.evening?.end ?? "01:00" },
+    night:   { start: cfg?.night?.start   ?? "01:00", end: cfg?.night?.end   ?? "09:00" },
+  };
 }
 
-function formatWeekRange(weekStart: string): string {
-  const base = new Date(weekStart + "T00:00:00Z");
-  const end = new Date(base);
-  end.setUTCDate(base.getUTCDate() + 6);
-  const fmt = (d: Date) => d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
-  return `${fmt(base)} – ${fmt(end)}, ${end.getUTCFullYear()}`;
+function todayPKT(): string {
+  return new Date(Date.now() + 5 * 60 * 60 * 1000).toISOString().split("T")[0];
+}
+
+function currentWeekMonday(): string {
+  const pktNowMs = Date.now() + 5 * 60 * 60 * 1000;
+  const pkt = new Date(pktNowMs);
+  const day = pkt.getUTCDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  return new Date(pktNowMs + diff * 86_400_000).toISOString().split("T")[0];
+}
+
+function weekSunday(monday: string): string {
+  const base = new Date(monday + "T00:00:00Z");
+  base.setUTCDate(base.getUTCDate() + 6);
+  return base.toISOString().split("T")[0];
+}
+
+function weekStartsInRange(from: string, to: string): string[] {
+  const toMs = new Date(to + "T00:00:00Z").getTime();
+  const starts: string[] = [];
+  const fromDate = new Date(from + "T00:00:00Z");
+  const day = fromDate.getUTCDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  let cursor = new Date(fromDate.getTime() + diff * 86_400_000);
+  while (cursor.getTime() <= toMs) {
+    starts.push(cursor.toISOString().split("T")[0]);
+    cursor = new Date(cursor.getTime() + 7 * 86_400_000);
+  }
+  return starts;
+}
+
+function datesInRange(from: string, to: string): string[] {
+  const dates: string[] = [];
+  const toMs = new Date(to + "T00:00:00Z").getTime();
+  let cur = new Date(from + "T00:00:00Z");
+  while (cur.getTime() <= toMs) {
+    dates.push(cur.toISOString().split("T")[0]);
+    cur = new Date(cur.getTime() + 86_400_000);
+  }
+  return dates;
 }
 
 function formatTime(dt: string | null | undefined): string {
@@ -65,10 +107,9 @@ function formatTime(dt: string | null | undefined): string {
   return new Date(dt).toLocaleTimeString("en-PK", { hour: "2-digit", minute: "2-digit", hour12: true });
 }
 
-function hoursWorked(clockIn: string | null, clockOut: string | null): string {
-  if (!clockIn || !clockOut) return "—";
-  const diff = (new Date(clockOut).getTime() - new Date(clockIn).getTime()) / 3600000;
-  return `${diff.toFixed(1)}h`;
+function hoursWorkedNum(clockIn: string | null, clockOut: string | null): number {
+  if (!clockIn || !clockOut) return 0;
+  return (new Date(clockOut).getTime() - new Date(clockIn).getTime()) / 3600000;
 }
 
 function ElapsedTimer({ clockIn }: { clockIn: string }) {
@@ -90,28 +131,79 @@ function ElapsedTimer({ clockIn }: { clockIn: string }) {
 export default function EmployeePortal() {
   const { user } = useAuth();
   const qc = useQueryClient();
-  const [weekOffset, setWeekOffset] = useState(0);
+
+  const today = todayPKT();
+  const thirtyDaysAgo = new Date(Date.now() + 5 * 60 * 60 * 1000 - 30 * 86_400_000)
+    .toISOString().split("T")[0];
+
+  // Schedule tab
+  const [schedFrom, setSchedFrom] = useState(currentWeekMonday());
+  const [schedTo, setSchedTo]     = useState(weekSunday(currentWeekMonday()));
+
+  // Attendance history filter
+  const [attFrom, setAttFrom] = useState(thirtyDaysAgo);
+  const [attTo, setAttTo]     = useState(today);
+
+  // Leave date filter
+  const leaveYearStart = `${new Date().getFullYear()}-01-01`;
+  const [leaveFrom, setLeaveFrom] = useState(leaveYearStart);
+  const [leaveTo, setLeaveTo]     = useState(today);
+
+  // Leave form
   const [showLeaveForm, setShowLeaveForm] = useState(false);
   const [leaveForm, setLeaveForm] = useState({ leaveType: "casual", startDate: "", endDate: "", reason: "" });
   const [viewLeave, setViewLeave] = useState<LeaveRequest | null>(null);
 
-  const weekStart = getWeekStart(weekOffset);
-  const today = new Date().toISOString().split("T")[0];
+  // Settings for shift config
+  const { data: settings } = useQuery({
+    queryKey: ["settings"],
+    queryFn: () => settingsService.getSettings(),
+  });
+  const shiftConfig: ShiftConfig = settings?.shiftConfig && Object.keys(settings.shiftConfig).length > 0
+    ? parseShiftConfig(settings.shiftConfig)
+    : DEFAULT_SHIFT_CONFIG;
 
-  const { data: schedule } = useQuery({
-    queryKey: ["my-schedule", weekStart],
-    queryFn: () => scheduleService.getMySchedule(weekStart),
+  // Full profile for hourlyRate / absencePenalty — use /auth/me (accessible to any role)
+  const { data: myProfile } = useQuery({
+    queryKey: ["my-profile"],
+    queryFn: () => userService.getMe(),
+    enabled: !!user?.id,
   });
 
+  // Schedule: all weeks in range fetched in parallel
+  const weekStarts = weekStartsInRange(schedFrom, schedTo);
+  const scheduleQueries = useQueries({
+    queries: weekStarts.map(ws => ({
+      queryKey: ["my-schedule", ws],
+      queryFn: () => scheduleService.getMySchedule(ws),
+    })),
+  });
+
+  const shiftByDate: Record<string, string> = {};
+  scheduleQueries.forEach((q, i) => {
+    const sched = q.data;
+    if (!sched || sched.status === "draft") return;
+    const ws = weekStarts[i];
+    sched.shifts.forEach(s => {
+      const d = new Date(ws + "T00:00:00Z");
+      d.setUTCDate(d.getUTCDate() + s.dayIndex);
+      shiftByDate[d.toISOString().split("T")[0]] = s.shiftType;
+    });
+  });
+
+  const scheduleDates = datesInRange(schedFrom, schedTo);
+
+  // Today status
   const { data: todayStatus, refetch: refetchStatus } = useQuery({
     queryKey: ["my-attendance-status"],
     queryFn: () => attendanceService.getMyStatus(),
     refetchInterval: 60000,
   });
 
+  // History with date range
   const { data: historyData } = useQuery({
-    queryKey: ["my-attendance-history"],
-    queryFn: () => attendanceService.getMyHistory(),
+    queryKey: ["my-attendance-history", attFrom, attTo],
+    queryFn: () => attendanceService.getMyHistory({ startDate: attFrom, endDate: attTo }),
   });
 
   const { data: leaveBalance } = useQuery({
@@ -120,8 +212,9 @@ export default function EmployeePortal() {
   });
 
   const { data: myRequests } = useQuery({
-    queryKey: ["my-leave-requests"],
-    queryFn: () => leaveService.getMyRequests(),
+    queryKey: ["my-leave-requests", user?.id],
+    queryFn: () => leaveService.getMyRequests(user?.id),
+    enabled: !!user?.id,
   });
 
   const { data: shiftsData } = useQuery({
@@ -167,18 +260,21 @@ export default function EmployeePortal() {
     onError: (e: any) => toast.error(e?.message || "Cancel failed"),
   });
 
+  // Derived
   const historyRows: AttendanceRecord[] = historyData?.data ?? [];
   const myShifts = (shiftsData?.data ?? [] as ShiftRecord[]).filter(s => s.cashierId === user?.id);
 
-  const monthStr = today.slice(0, 7);
-  const monthRows = historyRows.filter(r => r.date.startsWith(monthStr));
-  const presentCount = monthRows.filter(r => r.status === "present").length;
-  const lateCount    = monthRows.filter(r => r.status === "late").length;
-  const absentCount  = monthRows.filter(r => r.status === "absent").length;
-  const totalHours   = monthRows.reduce((acc, r) => {
-    if (!r.clockIn || !r.clockOut) return acc;
-    return acc + (new Date(r.clockOut).getTime() - new Date(r.clockIn).getTime()) / 3600000;
-  }, 0);
+  const presentCount = historyRows.filter(r => r.status === "present").length;
+  const lateCount    = historyRows.filter(r => r.status === "late").length;
+  const absentCount  = historyRows.filter(r => r.status === "absent").length;
+  const totalHours   = historyRows.reduce((acc, r) => acc + hoursWorkedNum(r.clockIn, r.clockOut), 0);
+
+  const hourlyRate     = myProfile?.hourlyRate     ?? 0;
+  const absencePenalty = myProfile?.absencePenalty ?? 0;
+  const totalPay       = totalHours * hourlyRate;
+  const totalPenalty   = absentCount * absencePenalty;
+
+  const fmt = (n: number) => `Rs. ${Math.round(n).toLocaleString("en-PK")}`;
 
   return (
     <div className="space-y-6">
@@ -190,57 +286,85 @@ export default function EmployeePortal() {
 
       <Tabs defaultValue="schedule">
         <TabsList className="flex-wrap h-auto gap-1">
-          <TabsTrigger value="schedule" className="gap-1.5"><Calendar className="h-3.5 w-3.5" />Schedule</TabsTrigger>
-          <TabsTrigger value="attendance" className="gap-1.5"><Clock className="h-3.5 w-3.5" />Attendance</TabsTrigger>
-          <TabsTrigger value="leaves" className="gap-1.5"><FileText className="h-3.5 w-3.5" />Leaves</TabsTrigger>
+          <TabsTrigger value="schedule"    className="gap-1.5"><Calendar className="h-3.5 w-3.5" />Schedule</TabsTrigger>
+          <TabsTrigger value="attendance"  className="gap-1.5"><Clock    className="h-3.5 w-3.5" />Attendance</TabsTrigger>
+          <TabsTrigger value="leaves"      className="gap-1.5"><FileText className="h-3.5 w-3.5" />Leaves</TabsTrigger>
           {user?.role === "Cashier" && (
             <TabsTrigger value="cash-shifts" className="gap-1.5"><Timer className="h-3.5 w-3.5" />Cash Shifts</TabsTrigger>
           )}
         </TabsList>
 
-        {/* SCHEDULE TAB */}
+        {/* ── SCHEDULE ── */}
         <TabsContent value="schedule" className="mt-4 space-y-4">
-          <div className="flex items-center justify-between flex-wrap gap-2">
-            <div className="flex items-center gap-2">
-              <Button size="icon" variant="outline" className="h-8 w-8" onClick={() => setWeekOffset(o => o - 1)}><ChevronLeft className="h-4 w-4" /></Button>
-              <span className="text-sm font-semibold min-w-[200px] text-center">{formatWeekRange(weekStart)}</span>
-              <Button size="icon" variant="outline" className="h-8 w-8" onClick={() => setWeekOffset(o => o + 1)}><ChevronRight className="h-4 w-4" /></Button>
-            </div>
-            <Button size="sm" variant="outline" onClick={() => setWeekOffset(0)}>Today</Button>
-          </div>
+          <Card className="shadow-sm">
+            <CardContent className="p-4">
+              <div className="flex flex-wrap gap-4 items-end">
+                <div>
+                  <Label className="text-xs">From</Label>
+                  <Input type="date" value={schedFrom} onChange={e => setSchedFrom(e.target.value)} className="mt-1 w-40" />
+                </div>
+                <div>
+                  <Label className="text-xs">To</Label>
+                  <Input type="date" value={schedTo} onChange={e => setSchedTo(e.target.value)} className="mt-1 w-40" />
+                </div>
+                <Button size="sm" variant="outline" onClick={() => {
+                  const mon = currentWeekMonday();
+                  setSchedFrom(mon);
+                  setSchedTo(weekSunday(mon));
+                }}>
+                  This Week
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
 
-          {!schedule || schedule.status === "draft" ? (
-            <p className="text-center text-muted-foreground py-12">No published schedule for this week.</p>
-          ) : (
-            <div className="grid grid-cols-7 gap-2">
-              {DAY_LABELS.map((label, i) => {
-                const shift = schedule.shifts.find(s => s.dayIndex === i);
-                const dateObj = new Date(weekStart + "T00:00:00Z");
-                dateObj.setUTCDate(dateObj.getUTCDate() + i);
-                const dateStr = dateObj.toISOString().split("T")[0];
-                const isToday = dateStr === today;
-                const shiftType = shift?.shiftType ?? "off";
-                const shiftLabel = shiftType === "off" ? "Off" : shiftType.charAt(0).toUpperCase() + shiftType.slice(1);
-                return (
-                  <Card key={i} className={cn("shadow-sm text-center", isToday && "ring-2 ring-primary")}>
-                    <CardContent className="p-3 space-y-1">
-                      <p className="text-xs font-semibold">{label}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {dateObj.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" })}
-                      </p>
-                      <Badge variant="secondary" className={cn("text-[10px] px-1.5", SHIFT_COLORS[shiftType])}>
-                        {shiftLabel}
-                      </Badge>
-                    </CardContent>
-                  </Card>
-                );
-              })}
-            </div>
-          )}
+          <Card className="shadow-sm">
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-muted/50 hover:bg-muted/50">
+                    <TableHead>Date</TableHead>
+                    <TableHead>Day</TableHead>
+                    <TableHead>Shift</TableHead>
+                    <TableHead>Time</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {scheduleDates.map(ds => {
+                    const obj     = new Date(ds + "T00:00:00Z");
+                    const dayName = obj.toLocaleDateString("en-US", { weekday: "short", timeZone: "UTC" });
+                    const shiftType = shiftByDate[ds] ?? "off";
+                    const label     = shiftType === "off" ? "Day Off" : shiftType.charAt(0).toUpperCase() + shiftType.slice(1);
+                    const isToday   = ds === today;
+                    const times     = shiftType !== "off" ? shiftConfig[shiftType as ShiftName] : null;
+                    return (
+                      <TableRow key={ds} className={cn("hover:bg-muted/20", isToday && "bg-primary/5")}>
+                        <TableCell className="text-sm font-medium">
+                          {obj.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" })}
+                          {isToday && <span className="ml-1.5 text-[10px] text-primary font-semibold">Today</span>}
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground">{dayName}</TableCell>
+                        <TableCell>
+                          <Badge variant="secondary" className={cn("text-xs", SHIFT_COLORS[shiftType])}>{label}</Badge>
+                        </TableCell>
+                        <TableCell className="text-sm font-mono text-muted-foreground">
+                          {times ? `${times.start} – ${times.end}` : "—"}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                  {scheduleDates.length === 0 && (
+                    <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground py-8">Select a date range</TableCell></TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
         </TabsContent>
 
-        {/* ATTENDANCE TAB */}
+        {/* ── ATTENDANCE ── */}
         <TabsContent value="attendance" className="mt-4 space-y-4">
+          {/* Today's clock card */}
           <Card className="shadow-sm border-primary/20">
             <CardHeader className="pb-2"><CardTitle className="text-base">Today — {today}</CardTitle></CardHeader>
             <CardContent>
@@ -265,50 +389,96 @@ export default function EmployeePortal() {
               ) : (
                 <div className="text-center py-4 space-y-1">
                   <p className="text-sm">In: {formatTime(todayStatus.clockIn)} · Out: {formatTime(todayStatus.clockOut)}</p>
-                  <p className="text-sm font-medium">Total: {hoursWorked(todayStatus.clockIn, todayStatus.clockOut)}</p>
+                  <p className="text-sm font-medium">Total: {hoursWorkedNum(todayStatus.clockIn, todayStatus.clockOut).toFixed(1)}h</p>
                   <Badge className={cn("mt-1", ATT_STATUS_COLORS[todayStatus.status])}>{todayStatus.status}</Badge>
                 </div>
               )}
             </CardContent>
           </Card>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {/* Date range filter */}
+          <Card className="shadow-sm">
+            <CardContent className="p-4">
+              <div className="flex flex-wrap gap-4 items-end">
+                <div>
+                  <Label className="text-xs">From</Label>
+                  <Input type="date" value={attFrom} onChange={e => setAttFrom(e.target.value)} className="mt-1 w-40" />
+                </div>
+                <div>
+                  <Label className="text-xs">To</Label>
+                  <Input type="date" value={attTo} onChange={e => setAttTo(e.target.value)} className="mt-1 w-40" />
+                </div>
+                <Button size="sm" variant="outline" onClick={() => { setAttFrom(thirtyDaysAgo); setAttTo(today); }}>
+                  Last 30 Days
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Stats — including pay & penalty */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
             {[
-              { label: "Present", value: presentCount, color: "text-success" },
-              { label: "Late",    value: lateCount,    color: "text-warning" },
-              { label: "Absent",  value: absentCount,  color: "text-destructive" },
-              { label: "Hours",   value: `${totalHours.toFixed(1)}h`, color: "text-primary" },
+              { label: "Present",  value: String(presentCount),               color: "text-success",     extra: null },
+              { label: "Late",     value: String(lateCount),                  color: "text-warning",     extra: null },
+              { label: "Absent",   value: String(absentCount),                color: "text-destructive", extra: null },
+              { label: "Hours",    value: `${totalHours.toFixed(1)}h`,        color: "text-primary",     extra: null },
+              { label: "Est. Pay", value: hourlyRate > 0 ? fmt(totalPay)    : "—", color: "text-success",     extra: <DollarSign className="h-3 w-3" /> },
+              { label: "Penalty",  value: absencePenalty > 0 ? fmt(totalPenalty) : "—", color: "text-destructive", extra: <AlertTriangle className="h-3 w-3" /> },
             ].map(s => (
               <Card key={s.label} className="shadow-sm">
                 <CardContent className="p-3 text-center">
-                  <p className="text-xs text-muted-foreground">{s.label}</p>
-                  <p className={cn("text-xl font-bold", s.color)}>{s.value}</p>
+                  <div className="flex items-center justify-center gap-1 text-xs text-muted-foreground mb-0.5">
+                    {s.extra}{s.label}
+                  </div>
+                  <p className={cn("text-lg font-bold", s.color)}>{s.value}</p>
                 </CardContent>
               </Card>
             ))}
           </div>
 
+          {/* History table */}
           <Card className="shadow-sm">
-            <CardHeader><CardTitle className="text-sm">History</CardTitle></CardHeader>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm">History — {attFrom} → {attTo}</CardTitle>
+            </CardHeader>
             <CardContent className="p-0">
               <Table>
                 <TableHeader>
                   <TableRow className="bg-muted/50 hover:bg-muted/50">
-                    <TableHead>Date</TableHead><TableHead>Clock In</TableHead><TableHead>Clock Out</TableHead><TableHead>Hours</TableHead><TableHead>Status</TableHead>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Clock In</TableHead>
+                    <TableHead>Clock Out</TableHead>
+                    <TableHead>Hours</TableHead>
+                    {hourlyRate > 0 && <TableHead>Pay</TableHead>}
+                    <TableHead>Status</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {historyRows.slice(0, 30).map(r => (
-                    <TableRow key={r.id}>
-                      <TableCell className="text-sm">{r.date}</TableCell>
-                      <TableCell className="text-sm">{formatTime(r.clockIn)}</TableCell>
-                      <TableCell className="text-sm">{formatTime(r.clockOut)}</TableCell>
-                      <TableCell className="text-sm">{hoursWorked(r.clockIn, r.clockOut)}</TableCell>
-                      <TableCell><Badge variant="secondary" className={ATT_STATUS_COLORS[r.status]}>{r.status}</Badge></TableCell>
-                    </TableRow>
-                  ))}
+                  {historyRows.map(r => {
+                    const hrs = hoursWorkedNum(r.clockIn, r.clockOut);
+                    return (
+                      <TableRow key={r.id}>
+                        <TableCell className="text-sm">{r.date}</TableCell>
+                        <TableCell className="text-sm">{formatTime(r.clockIn)}</TableCell>
+                        <TableCell className="text-sm">{formatTime(r.clockOut)}</TableCell>
+                        <TableCell className="text-sm">{hrs > 0 ? `${hrs.toFixed(1)}h` : "—"}</TableCell>
+                        {hourlyRate > 0 && (
+                          <TableCell className="text-sm text-success">
+                            {hrs > 0 ? `Rs. ${Math.round(hrs * hourlyRate).toLocaleString("en-PK")}` : "—"}
+                          </TableCell>
+                        )}
+                        <TableCell>
+                          <Badge variant="secondary" className={ATT_STATUS_COLORS[r.status]}>{r.status}</Badge>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                   {historyRows.length === 0 && (
-                    <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-6">No attendance history</TableCell></TableRow>
+                    <TableRow>
+                      <TableCell colSpan={hourlyRate > 0 ? 6 : 5} className="text-center text-muted-foreground py-6">
+                        No records for selected period
+                      </TableCell>
+                    </TableRow>
                   )}
                 </TableBody>
               </Table>
@@ -316,19 +486,19 @@ export default function EmployeePortal() {
           </Card>
         </TabsContent>
 
-        {/* LEAVES TAB */}
+        {/* ── LEAVES ── */}
         <TabsContent value="leaves" className="mt-4 space-y-4">
           {leaveBalance && (
             <div className="grid grid-cols-3 gap-3">
               {(["annual", "sick", "casual"] as const).map(type => {
-                const used = leaveBalance[`${type}Used` as keyof LeaveBalance] as number;
+                const used  = leaveBalance[`${type}Used` as keyof LeaveBalance] as number;
                 const total = leaveBalance[type] as number;
                 return (
                   <Card key={type} className="shadow-sm">
                     <CardContent className="p-3 space-y-1">
                       <p className="text-xs font-medium capitalize">{type}</p>
                       <p className="text-lg font-bold">{total - used}<span className="text-xs text-muted-foreground font-normal"> / {total}</span></p>
-                      <Progress value={(used / total) * 100} className="h-1.5" />
+                      <Progress value={total > 0 ? (used / total) * 100 : 0} className="h-1.5" />
                     </CardContent>
                   </Card>
                 );
@@ -382,34 +552,79 @@ export default function EmployeePortal() {
             </Card>
           )}
 
-          <div className="space-y-2">
-            {(myRequests ?? []).map(r => (
-              <Card key={r.id} className="shadow-sm cursor-pointer hover:bg-muted/30" onClick={() => setViewLeave(r)}>
-                <CardContent className="p-3 flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <div className="flex items-center gap-2">
-                      <Badge variant="secondary" className={cn("text-xs", LEAVE_TYPE_COLORS[r.leaveType])}>{r.leaveType}</Badge>
-                      <Badge variant="secondary" className={cn("text-xs", LEAVE_STATUS_COLORS[r.status])}>{r.status}</Badge>
-                    </div>
-                    <p className="text-sm">{r.startDate} → {r.endDate} <span className="text-muted-foreground">({r.totalDays}d)</span></p>
-                    <p className="text-xs text-muted-foreground">{r.reason}</p>
-                  </div>
-                  {r.status === "pending" && (
-                    <Button size="sm" variant="ghost" className="text-destructive h-7"
-                      onClick={e => { e.stopPropagation(); cancelLeaveMut.mutate(r.id); }}>
-                      Cancel
-                    </Button>
+          {/* Leave date filter */}
+          <Card className="shadow-sm">
+            <CardContent className="p-3">
+              <div className="flex flex-wrap gap-3 items-end">
+                <div>
+                  <Label className="text-xs">From</Label>
+                  <Input type="date" value={leaveFrom} onChange={e => setLeaveFrom(e.target.value)} className="mt-1 w-40" />
+                </div>
+                <div>
+                  <Label className="text-xs">To</Label>
+                  <Input type="date" value={leaveTo} onChange={e => setLeaveTo(e.target.value)} className="mt-1 w-40" />
+                </div>
+                <Button size="sm" variant="outline" onClick={() => { setLeaveFrom(leaveYearStart); setLeaveTo(today); }}>This Year</Button>
+                <Button size="sm" variant="outline" onClick={() => {
+                  const m = today.slice(0, 7);
+                  setLeaveFrom(`${m}-01`);
+                  setLeaveTo(today);
+                }}>This Month</Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Clean table view */}
+          <Card className="shadow-sm">
+            <CardHeader><CardTitle className="text-sm">Leave History</CardTitle></CardHeader>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-muted/50 hover:bg-muted/50">
+                    <TableHead>Type</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>From</TableHead>
+                    <TableHead>To</TableHead>
+                    <TableHead className="text-center">Days</TableHead>
+                    <TableHead>Reason</TableHead>
+                    <TableHead></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {(myRequests ?? []).filter(r => r.startDate >= leaveFrom && r.startDate <= leaveTo).map(r => (
+                    <TableRow key={r.id} className="cursor-pointer hover:bg-muted/20" onClick={() => setViewLeave(r)}>
+                      <TableCell>
+                        <Badge variant="secondary" className={cn("text-xs", LEAVE_TYPE_COLORS[r.leaveType])}>{r.leaveType}</Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="secondary" className={cn("text-xs", LEAVE_STATUS_COLORS[r.status])}>{r.status}</Badge>
+                      </TableCell>
+                      <TableCell className="text-sm">{r.startDate}</TableCell>
+                      <TableCell className="text-sm">{r.endDate}</TableCell>
+                      <TableCell className="text-sm text-center">{r.totalDays}</TableCell>
+                      <TableCell className="text-sm max-w-[160px] truncate text-muted-foreground">{r.reason}</TableCell>
+                      <TableCell onClick={e => e.stopPropagation()}>
+                        {r.status === "pending" && (
+                          <Button size="sm" variant="ghost" className="text-destructive h-7 text-xs"
+                            onClick={() => cancelLeaveMut.mutate(r.id)} disabled={cancelLeaveMut.isPending}>
+                            Cancel
+                          </Button>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {(myRequests ?? []).filter(r => r.startDate >= leaveFrom && r.startDate <= leaveTo).length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={7} className="text-center text-muted-foreground py-8">No leave requests for selected period</TableCell>
+                    </TableRow>
                   )}
-                </CardContent>
-              </Card>
-            ))}
-            {(myRequests ?? []).length === 0 && (
-              <p className="text-center text-muted-foreground py-8">No leave requests</p>
-            )}
-          </div>
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
         </TabsContent>
 
-        {/* CASH SHIFTS TAB */}
+        {/* ── CASH SHIFTS ── */}
         {user?.role === "Cashier" && (
           <TabsContent value="cash-shifts" className="mt-4">
             <Card className="shadow-sm">

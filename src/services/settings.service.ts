@@ -21,6 +21,7 @@ export interface SettingsRecord {
   selfOrderConfig: Record<string, unknown>;
   websiteConfig: Record<string, unknown>;
   reservationConfig: Record<string, unknown>;
+  shiftConfig: Record<string, unknown>;
   updatedAt: string;
 }
 
@@ -39,6 +40,7 @@ export interface UpdateSettingsInput {
   selfOrderConfig?: Record<string, unknown>;
   websiteConfig?: Record<string, unknown>;
   reservationConfig?: Record<string, unknown>;
+  shiftConfig?: Record<string, unknown>;
 }
 
 export const settingsService = {

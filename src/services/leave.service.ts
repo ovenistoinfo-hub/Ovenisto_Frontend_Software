@@ -51,8 +51,9 @@ export const leaveService = {
     return res.data;
   },
 
-  async getMyRequests(): Promise<LeaveRequest[]> {
-    const res = await api.get<{ success: boolean; data: LeaveRequest[] }>('/leave-requests');
+  async getMyRequests(myUserId?: string): Promise<LeaveRequest[]> {
+    const q = myUserId ? `?userId=${myUserId}` : '';
+    const res = await api.get<{ success: boolean; data: LeaveRequest[] }>(`/leave-requests${q}`);
     return res.data;
   },
 

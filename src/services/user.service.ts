@@ -16,6 +16,8 @@ export interface UserRecord {
   status: string;
   lastLogin: string | null;
   createdAt: string;
+  hourlyRate: number | null;
+  absencePenalty: number | null;
   outlet: { id: string; name: string; code: string } | null;
 }
 
@@ -58,6 +60,8 @@ export interface UpdateUserInput {
   outletId?: string | null;
   avatar?: string | null;
   status?: string;
+  hourlyRate?: number | null;
+  absencePenalty?: number | null;
 }
 
 export interface UserQueryParams {
@@ -88,7 +92,15 @@ export const userService = {
   },
 
   /**
-   * Get a single user by ID
+   * Get the currently authenticated user's own profile (any role)
+   */
+  async getMe(): Promise<UserRecord> {
+    const res = await api.get<UserResponse>('/auth/me');
+    return res.data;
+  },
+
+  /**
+   * Get a single user by ID (Admin+ only)
    */
   async getUser(id: string): Promise<UserRecord> {
     const res = await api.get<UserResponse>(`/users/${id}`);

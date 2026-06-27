@@ -35,20 +35,27 @@ export const attendanceService = {
     return res.data;
   },
 
-  async getMyHistory(page = 1): Promise<AttendancePage> {
+  async getMyHistory(params?: { page?: number; startDate?: string; endDate?: string }): Promise<AttendancePage> {
+    const q = new URLSearchParams();
+    q.set('page', String(params?.page ?? 1));
+    q.set('limit', '100');
+    if (params?.startDate) q.set('startDate', params.startDate);
+    if (params?.endDate)   q.set('endDate',   params.endDate);
     const res = await api.get<{ success: boolean; data: AttendanceRecord[]; meta: AttendancePage['meta'] }>(
-      `/attendance/my-history?page=${page}&limit=30`
+      `/attendance/my-history?${q}`
     );
     return { data: res.data, meta: (res as any).meta };
   },
 
-  async getAll(params?: { date?: string; userId?: string; status?: string; page?: number }): Promise<AttendancePage> {
+  async getAll(params?: { date?: string; startDate?: string; endDate?: string; userId?: string; status?: string; page?: number }): Promise<AttendancePage> {
     const q = new URLSearchParams();
-    if (params?.date)   q.set('date',   params.date);
-    if (params?.userId) q.set('userId', params.userId);
-    if (params?.status) q.set('status', params.status);
-    if (params?.page)   q.set('page',   String(params.page));
-    q.set('limit', '50');
+    if (params?.date)      q.set('date',      params.date);
+    if (params?.startDate) q.set('startDate', params.startDate);
+    if (params?.endDate)   q.set('endDate',   params.endDate);
+    if (params?.userId)    q.set('userId',    params.userId);
+    if (params?.status)    q.set('status',    params.status);
+    if (params?.page)      q.set('page',      String(params.page));
+    q.set('limit', '100');
     const res = await api.get<{ success: boolean; data: AttendanceRecord[]; meta: AttendancePage['meta'] }>(
       `/attendance?${q}`
     );
@@ -60,6 +67,11 @@ export const attendanceService = {
     data: { clockIn?: string | null; clockOut?: string | null; status?: string; notes?: string }
   ): Promise<AttendanceRecord> {
     const res = await api.patch<{ success: boolean; data: AttendanceRecord }>(`/attendance/${id}`, data);
+    return res.data;
+  },
+
+  async markAbsent(date: string): Promise<{ count: number }> {
+    const res = await api.post<{ success: boolean; data: { count: number } }>('/attendance/mark-absent', { date });
     return res.data;
   },
 };
