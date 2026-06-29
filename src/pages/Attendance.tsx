@@ -536,6 +536,7 @@ export default function AttendancePage() {
                     <TableHead>Clock In</TableHead>
                     <TableHead>Clock Out</TableHead>
                     <TableHead>Hours</TableHead>
+                    <TableHead>Overtime</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Notes</TableHead>
                     <TableHead></TableHead>
@@ -560,6 +561,11 @@ export default function AttendancePage() {
                           : formatTime(r.clockOut)}
                       </TableCell>
                       <TableCell className="text-sm">{hoursWorked(r.clockIn, r.clockOut)}</TableCell>
+                      <TableCell className="text-sm">
+                        {(r.overtimeMinutes ?? 0) > 0
+                          ? <span className="text-warning font-medium">{((r.overtimeMinutes ?? 0) / 60).toFixed(1)}h</span>
+                          : "—"}
+                      </TableCell>
                       <TableCell>
                         {editRow === r.id
                           ? <Select value={editData.status} onValueChange={v => setEditData(d => ({ ...d, status: v }))}>
@@ -598,7 +604,7 @@ export default function AttendancePage() {
                     </TableRow>
                   ))}
                   {filteredAttRows.length === 0 && (
-                    <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground py-8">No records for selected period</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={9} className="text-center text-muted-foreground py-8">No records for selected period</TableCell></TableRow>
                   )}
                 </TableBody>
               </Table>

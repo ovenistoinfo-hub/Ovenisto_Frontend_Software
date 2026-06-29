@@ -65,12 +65,13 @@ function todayPKT(): string {
   return new Date(Date.now() + 5 * 60 * 60 * 1000).toISOString().split("T")[0];
 }
 
-function currentWeekMonday(): string {
+function getWeekStart(offset = 0): string {
   const pktNowMs = Date.now() + 5 * 60 * 60 * 1000;
   const pkt = new Date(pktNowMs);
   const day = pkt.getUTCDay();
   const diff = day === 0 ? -6 : 1 - day;
-  return new Date(pktNowMs + diff * 86_400_000).toISOString().split("T")[0];
+  const monMs = pktNowMs + (diff + offset * 7) * 86_400_000;
+  return new Date(monMs).toISOString().split("T")[0];
 }
 
 function weekSunday(monday: string): string {
@@ -79,18 +80,11 @@ function weekSunday(monday: string): string {
   return base.toISOString().split("T")[0];
 }
 
-function weekStartsInRange(from: string, to: string): string[] {
-  const toMs = new Date(to + "T00:00:00Z").getTime();
-  const starts: string[] = [];
-  const fromDate = new Date(from + "T00:00:00Z");
-  const day = fromDate.getUTCDay();
-  const diff = day === 0 ? -6 : 1 - day;
-  let cursor = new Date(fromDate.getTime() + diff * 86_400_000);
-  while (cursor.getTime() <= toMs) {
-    starts.push(cursor.toISOString().split("T")[0]);
-    cursor = new Date(cursor.getTime() + 7 * 86_400_000);
-  }
-  return starts;
+function formatWeekRange(weekStart: string): string {
+  const start = new Date(weekStart + "T00:00:00Z");
+  const end   = new Date(weekSunday(weekStart) + "T00:00:00Z");
+  const fmt = (d: Date) => d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+  return `${fmt(start)} – ${fmt(end)}, ${end.getUTCFullYear()}`;
 }
 
 function datesInRange(from: string, to: string): string[] {
@@ -139,8 +133,10 @@ export default function EmployeePortal() {
     .toISOString().split("T")[0];
 
   // Schedule tab
-  const [schedFrom, setSchedFrom] = useState(currentWeekMonday());
-  const [schedTo, setSchedTo]     = useState(weekSunday(currentWeekMonday()));
+  const [schedWeekView, setSchedWeekView] = useState<"prev" | "current" | "next">("current");
+  const prevWeekStart    = getWeekStart(-1);
+  const currentWeekStart = getWeekStart(0);
+  const nextWeekStart    = getWeekStart(1);
 
   // Attendance history filter
   const [attFrom, setAttFrom] = useState(thirtyDaysAgo);
@@ -172,8 +168,16 @@ export default function EmployeePortal() {
     enabled: !!user?.id,
   });
 
-  // Schedule: all weeks in range fetched in parallel
-  const weekStarts = weekStartsInRange(schedFrom, schedTo);
+  // Schedule: last/current/next week always fetched in parallel; buttons switch which is shown
+  const weekSections = [
+    { key: "prev" as const,    label: "Last Week",    weekStart: prevWeekStart,
+      dot: "bg-orange-500", tabActive: "bg-orange-50 border-orange-300 dark:bg-orange-950/30 dark:border-orange-800", tabText: "text-orange-900 dark:text-orange-200" },
+    { key: "current" as const, label: "Current Week", weekStart: currentWeekStart,
+      dot: "bg-green-500",  tabActive: "bg-green-50 border-green-300 dark:bg-green-950/30 dark:border-green-800",   tabText: "text-green-900 dark:text-green-200" },
+    { key: "next" as const,    label: "Next Week",    weekStart: nextWeekStart,
+      dot: "bg-blue-500",   tabActive: "bg-blue-50 border-blue-300 dark:bg-blue-950/30 dark:border-blue-800",      tabText: "text-blue-900 dark:text-blue-200" },
+  ];
+  const weekStarts = weekSections.map(s => s.weekStart);
   const scheduleQueries = useQueries({
     queries: weekStarts.map(ws => ({
       queryKey: ["my-schedule", ws],
@@ -193,7 +197,8 @@ export default function EmployeePortal() {
     });
   });
 
-  const scheduleDates = datesInRange(schedFrom, schedTo);
+  const activeWeekStart = weekSections.find(s => s.key === schedWeekView)?.weekStart ?? currentWeekStart;
+  const scheduleDates = datesInRange(activeWeekStart, weekSunday(activeWeekStart));
 
   // Today status
   const { data: todayStatus, refetch: refetchStatus } = useQuery({
@@ -302,6 +307,7 @@ export default function EmployeePortal() {
   const absentCount  = historyRows.filter(r => r.status === "absent").length;
   const notRecordedCount = unrecordedRows.length;
   const totalHours   = historyRows.reduce((acc, r) => acc + hoursWorkedNum(r.clockIn, r.clockOut), 0);
+  const totalOvertimeHours = historyRows.reduce((acc, r) => acc + (r.overtimeMinutes ?? 0), 0) / 60;
 
   const hourlyRate     = myProfile?.hourlyRate     ?? 0;
   const absencePenalty = myProfile?.absencePenalty ?? 0;
@@ -342,27 +348,31 @@ export default function EmployeePortal() {
 
         {/* ── SCHEDULE ── */}
         <TabsContent value="schedule" className="mt-4 space-y-4">
-          <Card className="shadow-sm">
-            <CardContent className="p-4">
-              <div className="flex flex-wrap gap-4 items-end">
-                <div>
-                  <Label className="text-xs">From</Label>
-                  <Input type="date" value={schedFrom} onChange={e => setSchedFrom(e.target.value)} className="mt-1 w-40" />
-                </div>
-                <div>
-                  <Label className="text-xs">To</Label>
-                  <Input type="date" value={schedTo} onChange={e => setSchedTo(e.target.value)} className="mt-1 w-40" />
-                </div>
-                <Button size="sm" variant="outline" onClick={() => {
-                  const mon = currentWeekMonday();
-                  setSchedFrom(mon);
-                  setSchedTo(weekSunday(mon));
-                }}>
-                  This Week
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+            {weekSections.map(section => {
+              const active = schedWeekView === section.key;
+              return (
+                <button
+                  key={section.key}
+                  onClick={() => setSchedWeekView(section.key)}
+                  className={cn(
+                    "rounded-xl border px-4 py-3 text-left transition-all",
+                    active ? cn(section.tabActive, "shadow-sm") : "bg-card border-border hover:bg-muted/40"
+                  )}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className={cn("h-2 w-2 rounded-full shrink-0", section.dot)} />
+                    <span className={cn("text-sm font-semibold", active ? section.tabText : "text-foreground")}>
+                      {section.label}
+                    </span>
+                  </div>
+                  <p className={cn("text-[11px] mt-0.5 pl-3.5", active ? cn(section.tabText, "opacity-80") : "text-muted-foreground")}>
+                    {formatWeekRange(section.weekStart)}
+                  </p>
+                </button>
+              );
+            })}
+          </div>
 
           <Card className="shadow-sm">
             <CardContent className="p-0">
@@ -371,7 +381,7 @@ export default function EmployeePortal() {
                   <TableRow className="bg-muted/50 hover:bg-muted/50">
                     <TableHead>Date</TableHead>
                     <TableHead>Day</TableHead>
-                    <TableHead>Shift</TableHead>
+                    <TableHead>On/Off Shift</TableHead>
                     <TableHead>Time</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -471,7 +481,7 @@ export default function EmployeePortal() {
           </Card>
 
           {/* Stats — including pay & penalty */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-9 gap-3">
             {[
               { label: "Present",      value: String(presentCount),               color: "text-success",     extra: null, statusKey: "present" },
               { label: "Late",         value: String(lateCount),                  color: "text-warning",     extra: null, statusKey: "late" },
@@ -479,6 +489,7 @@ export default function EmployeePortal() {
               { label: "Absent",       value: String(absentCount),                color: "text-destructive", extra: null, statusKey: "absent" },
               { label: "Not Recorded", value: String(notRecordedCount),           color: "text-muted-foreground", extra: null, statusKey: "not-recorded" },
               { label: "Hours",        value: `${totalHours.toFixed(1)}h`,        color: "text-primary",     extra: null, statusKey: null },
+              { label: "Overtime",     value: `${totalOvertimeHours.toFixed(1)}h`, color: "text-warning",    extra: <Timer className="h-3 w-3" />, statusKey: null },
               { label: "Est. Pay",     value: hourlyRate > 0 ? fmt(totalPay)    : "—", color: "text-success",     extra: <DollarSign className="h-3 w-3" />, statusKey: null },
               { label: "Penalty",      value: absencePenalty > 0 ? fmt(totalPenalty) : "—", color: "text-destructive", extra: <AlertTriangle className="h-3 w-3" />, statusKey: null },
             ].map(s => (
@@ -514,6 +525,7 @@ export default function EmployeePortal() {
                     <TableHead>Clock In</TableHead>
                     <TableHead>Clock Out</TableHead>
                     <TableHead>Hours</TableHead>
+                    <TableHead>Overtime</TableHead>
                     {hourlyRate > 0 && <TableHead>Pay</TableHead>}
                     <TableHead>Status</TableHead>
                   </TableRow>
@@ -527,6 +539,11 @@ export default function EmployeePortal() {
                         <TableCell className="text-sm">{formatTime(r.clockIn)}</TableCell>
                         <TableCell className="text-sm">{formatTime(r.clockOut)}</TableCell>
                         <TableCell className="text-sm">{hrs > 0 ? `${hrs.toFixed(1)}h` : "—"}</TableCell>
+                        <TableCell className="text-sm">
+                          {r.overtimeMinutes > 0
+                            ? <span className="text-warning font-medium">{(r.overtimeMinutes / 60).toFixed(1)}h</span>
+                            : "—"}
+                        </TableCell>
                         {hourlyRate > 0 && (
                           <TableCell className="text-sm text-success">
                             {hrs > 0 ? `Rs. ${Math.round(hrs * hourlyRate).toLocaleString("en-PK")}` : "—"}
@@ -542,7 +559,7 @@ export default function EmployeePortal() {
                   })}
                   {filteredHistoryRows.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={hourlyRate > 0 ? 6 : 5} className="text-center text-muted-foreground py-6">
+                      <TableCell colSpan={hourlyRate > 0 ? 7 : 6} className="text-center text-muted-foreground py-6">
                         No records for selected period
                       </TableCell>
                     </TableRow>

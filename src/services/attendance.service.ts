@@ -8,6 +8,7 @@ export interface AttendanceRecord {
   clockIn: string | null;
   clockOut: string | null;
   status: 'present' | 'late' | 'absent';
+  overtimeMinutes: number;
   notes: string | null;
   createdAt: string;
   updatedAt: string;
