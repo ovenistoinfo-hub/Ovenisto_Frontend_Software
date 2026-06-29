@@ -875,10 +875,10 @@ export default function AttendancePage() {
 
           <Card className="shadow-sm">
             <CardContent className="p-0 overflow-x-auto">
-              <table className="w-full min-w-[1900px] border-collapse text-sm">
+              <table className="w-full min-w-[1600px] border-collapse text-sm">
                 <thead>
                   <tr>
-                    <th rowSpan={2} className="sticky left-0 z-20 bg-muted/50 border align-bottom text-left px-3 py-2 w-48 min-w-[180px]">
+                    <th rowSpan={2} className="sticky left-0 z-20 bg-muted/50 border align-bottom text-left px-3 py-2 w-40 min-w-[140px]">
                       Employee
                     </th>
                     {weekSections.map(section => (
@@ -892,14 +892,14 @@ export default function AttendancePage() {
                     {weekSections.map(section => (
                       <Fragment key={section.key}>
                         {getWeekDates(section.weekStart).map((date, i) => (
-                          <th key={i} className={cn("border px-1.5 py-1 text-center font-medium text-[11px] min-w-[68px]", section.headerBg)}>
+                          <th key={i} className={cn("border px-1.5 py-1 text-center font-medium text-[11px] min-w-[56px]", section.headerBg)}>
                             <div>{DAY_LABELS[i]}</div>
                             <div className="text-[9px] opacity-70 font-normal">
                               {date.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" })}
                             </div>
                           </th>
                         ))}
-                        <th className={cn("border px-2 py-1 text-center font-medium text-[11px] min-w-[112px]", section.headerBg)}>
+                        <th className={cn("border px-2 py-1 text-center font-medium text-[11px] min-w-[90px]", section.headerBg)}>
                           Action
                         </th>
                       </Fragment>
