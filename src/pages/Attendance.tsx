@@ -158,6 +158,7 @@ export default function AttendancePage() {
 
   // Schedule
   const [schedWeekOffset, setSchedWeekOffset] = useState(0);
+  const [schedWeekView, setSchedWeekView] = useState<"prev" | "current" | "next">("current");
   const prevWeekStart    = getWeekStart(schedWeekOffset - 1);
   const currentWeekStart = getWeekStart(schedWeekOffset);
   const nextWeekStart    = getWeekStart(schedWeekOffset + 1);
@@ -435,21 +436,31 @@ export default function AttendancePage() {
 
   const weekSections = [
     {
-      key: "prev", label: "Last Week", weekStart: prevWeekStart, schedules: prevSchedules,
-      headerBg: "bg-orange-100 dark:bg-orange-900/30 text-orange-900 dark:text-orange-200",
-      cellBg:   "bg-orange-50/40 dark:bg-orange-950/10",
+      key: "prev" as const, label: "Last Week", weekStart: prevWeekStart, schedules: prevSchedules,
+      headerBg:   "bg-orange-100 dark:bg-orange-900/30 text-orange-900 dark:text-orange-200",
+      cellBg:     "bg-orange-50/40 dark:bg-orange-950/10",
+      dot:        "bg-orange-500",
+      tabActive:  "bg-orange-50 border-orange-300 dark:bg-orange-950/30 dark:border-orange-800",
+      tabText:    "text-orange-900 dark:text-orange-200",
     },
     {
-      key: "current", label: "Current Week", weekStart: currentWeekStart, schedules: currSchedules,
-      headerBg: "bg-green-100 dark:bg-green-900/30 text-green-900 dark:text-green-200",
-      cellBg:   "bg-green-50/40 dark:bg-green-950/10",
+      key: "current" as const, label: "Current Week", weekStart: currentWeekStart, schedules: currSchedules,
+      headerBg:   "bg-green-100 dark:bg-green-900/30 text-green-900 dark:text-green-200",
+      cellBg:     "bg-green-50/40 dark:bg-green-950/10",
+      dot:        "bg-green-500",
+      tabActive:  "bg-green-50 border-green-300 dark:bg-green-950/30 dark:border-green-800",
+      tabText:    "text-green-900 dark:text-green-200",
     },
     {
-      key: "next", label: "Next Week", weekStart: nextWeekStart, schedules: nextSchedules,
-      headerBg: "bg-blue-100 dark:bg-blue-900/30 text-blue-900 dark:text-blue-200",
-      cellBg:   "bg-blue-50/40 dark:bg-blue-950/10",
+      key: "next" as const, label: "Next Week", weekStart: nextWeekStart, schedules: nextSchedules,
+      headerBg:   "bg-blue-100 dark:bg-blue-900/30 text-blue-900 dark:text-blue-200",
+      cellBg:     "bg-blue-50/40 dark:bg-blue-950/10",
+      dot:        "bg-blue-500",
+      tabActive:  "bg-blue-50 border-blue-300 dark:bg-blue-950/30 dark:border-blue-800",
+      tabText:    "text-blue-900 dark:text-blue-200",
     },
   ];
+  const activeSection = weekSections.find(s => s.key === schedWeekView) ?? weekSections[1];
 
   return (
     <div className="space-y-6">
@@ -829,10 +840,37 @@ export default function AttendancePage() {
             </CardContent>
           </Card>
 
+          {/* Week selector — pick ONE week to view at a time */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+            {weekSections.map(section => {
+              const active = schedWeekView === section.key;
+              return (
+                <button
+                  key={section.key}
+                  onClick={() => setSchedWeekView(section.key)}
+                  className={cn(
+                    "rounded-xl border px-4 py-3 text-left transition-all",
+                    active ? cn(section.tabActive, "shadow-sm") : "bg-card border-border hover:bg-muted/40"
+                  )}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className={cn("h-2 w-2 rounded-full shrink-0", section.dot)} />
+                    <span className={cn("text-sm font-semibold", active ? section.tabText : "text-foreground")}>
+                      {section.label}
+                    </span>
+                  </div>
+                  <p className={cn("text-[11px] mt-0.5 pl-3.5", active ? cn(section.tabText, "opacity-80") : "text-muted-foreground")}>
+                    {formatWeekRange(section.weekStart)}
+                  </p>
+                </button>
+              );
+            })}
+          </div>
+
           <div className="flex items-center justify-between flex-wrap gap-3">
             <div className="flex items-center gap-2">
               <Button size="icon" variant="outline" className="h-8 w-8" onClick={() => setSchedWeekOffset(o => o - 1)}><ChevronLeft className="h-4 w-4" /></Button>
-              <span className="text-sm font-semibold min-w-[200px] text-center">{formatWeekRange(currentWeekStart)}</span>
+              <span className="text-sm font-semibold min-w-[200px] text-center">{formatWeekRange(activeSection.weekStart)}</span>
               <Button size="icon" variant="outline" className="h-8 w-8" onClick={() => setSchedWeekOffset(o => o + 1)}><ChevronRight className="h-4 w-4" /></Button>
             </div>
             <div className="flex items-end gap-3 flex-wrap">
@@ -867,137 +905,122 @@ export default function AttendancePage() {
                   const curMon = new Date(pktNowMs + curDiff * 86_400_000).toISOString().split("T")[0];
                   const weeks = Math.round((new Date(pickedMon + "T00:00:00Z").getTime() - new Date(curMon + "T00:00:00Z").getTime()) / (7 * 86_400_000));
                   setSchedWeekOffset(weeks);
+                  setSchedWeekView("current");
                 }} />
               </div>
-              <Button size="sm" variant="outline" onClick={() => setSchedWeekOffset(0)}>Current Week</Button>
+              <Button size="sm" variant="outline" onClick={() => { setSchedWeekOffset(0); setSchedWeekView("current"); }}>Jump to Today</Button>
             </div>
           </div>
 
           <Card className="shadow-sm">
             <CardContent className="p-0 overflow-x-auto">
-              <table className="w-full min-w-[1600px] border-collapse text-sm">
+              <table className="w-full border-collapse text-sm">
                 <thead>
                   <tr>
-                    <th rowSpan={2} className="sticky left-0 z-20 bg-muted/50 border align-bottom text-left px-3 py-2 w-40 min-w-[140px]">
+                    <th className="sticky left-0 z-10 bg-muted/50 border text-left px-3 py-2 w-40 min-w-[140px]">
                       Employee
                     </th>
-                    {weekSections.map(section => (
-                      <th key={section.key} colSpan={8} className={cn("border px-2 py-1.5 text-center font-semibold", section.headerBg)}>
-                        <div>{section.label}</div>
-                        <div className="text-[10px] font-normal opacity-80">{formatWeekRange(section.weekStart)}</div>
+                    {getWeekDates(activeSection.weekStart).map((date, i) => (
+                      <th key={i} className={cn("border px-1.5 py-1.5 text-center font-medium text-[11px] min-w-[88px]", activeSection.headerBg)}>
+                        <div>{DAY_LABELS[i]}</div>
+                        <div className="text-[9px] opacity-70 font-normal">
+                          {date.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" })}
+                        </div>
                       </th>
                     ))}
-                  </tr>
-                  <tr>
-                    {weekSections.map(section => (
-                      <Fragment key={section.key}>
-                        {getWeekDates(section.weekStart).map((date, i) => (
-                          <th key={i} className={cn("border px-1.5 py-1 text-center font-medium text-[11px] min-w-[56px]", section.headerBg)}>
-                            <div>{DAY_LABELS[i]}</div>
-                            <div className="text-[9px] opacity-70 font-normal">
-                              {date.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" })}
-                            </div>
-                          </th>
-                        ))}
-                        <th className={cn("border px-2 py-1 text-center font-medium text-[11px] min-w-[90px]", section.headerBg)}>
-                          Action
-                        </th>
-                      </Fragment>
-                    ))}
+                    <th className={cn("border px-2 py-1.5 text-center font-medium text-[11px] min-w-[110px]", activeSection.headerBg)}>
+                      Action
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredStaff.map(u => (
-                    <tr key={u.id} className="hover:bg-muted/20">
-                      <td className="sticky left-0 z-10 bg-card border px-3 py-2">
-                        <p className="text-sm font-medium">{u.name}</p>
-                        <p className="text-xs text-muted-foreground">{u.role}</p>
-                      </td>
-                      {weekSections.map(section => {
-                        const saved       = section.schedules.find(s => s.userId === u.id);
-                        const key         = draftKey(u.id, section.weekStart);
-                        const inEditMode  = key in draftShifts;
-                        const hasPending  = inEditMode && Object.keys(draftShifts[key]).length > 0;
-                        const isPublished = saved?.status === "published" && !inEditMode;
-                        return (
-                          <Fragment key={section.key}>
-                            {getWeekDates(section.weekStart).map((date, i) => {
-                              const dateStr = date.toISOString().split("T")[0];
-                              const onLeave = leaveBlockedDates[u.id]?.has(dateStr);
-                              if (onLeave) {
-                                return (
-                                  <td key={i} className={cn("border p-1 text-center", section.cellBg)}>
-                                    <div title="Approved leave" className="text-[10px] px-2 py-1.5 rounded-md font-medium w-full border bg-purple-100 text-purple-700 border-purple-200 cursor-not-allowed">
-                                      Leave
-                                    </div>
-                                  </td>
-                                );
-                              }
-                              const shiftType = getDraftOrSaved(u.id, section.weekStart, i, saved);
-                              const label     = shiftType === "off" ? "Off" : shiftType.charAt(0).toUpperCase() + shiftType.slice(1);
-                              const times     = shiftType !== "off" ? shiftConfig[shiftType as ShiftName] : null;
-                              return (
-                                <td key={i} className={cn("border p-1 text-center", section.cellBg)}>
-                                  <button
-                                    disabled={isPublished}
-                                    title={times ? `${times.start} – ${times.end}` : "Day Off"}
-                                    className={cn(
-                                      "text-[10px] px-2 py-1.5 rounded-md font-medium transition-all w-full border",
-                                      SHIFT_COLORS[shiftType],
-                                      !isPublished && "cursor-pointer hover:opacity-80 hover:ring-1 hover:ring-primary/40"
-                                    )}
-                                    onClick={() => cycleDayShift(u.id, section.weekStart, i, shiftType)}
-                                  >
-                                    {label}
-                                    {times && <div className="text-[8px] opacity-70 font-mono">{times.start}</div>}
-                                  </button>
-                                </td>
-                              );
-                            })}
-                            <td className={cn("border p-1 text-center", section.cellBg)}>
-                              <div className="flex gap-1 justify-center flex-wrap">
-                                {inEditMode ? (
-                                  <>
-                                    {hasPending ? (
-                                      <Button size="sm" variant="outline" className="h-6 text-[10px] px-1.5" disabled={saveSched.isPending}
-                                        onClick={() => saveSched.mutate({ userId: u.id, weekStart: section.weekStart, shifts: buildShiftsPayload(u.id, section.weekStart, saved) })}>
-                                        Save Draft
-                                      </Button>
-                                    ) : (
-                                      <span className="text-[9px] text-muted-foreground">Click shift to change</span>
-                                    )}
-                                    <Button size="sm" variant="ghost" className="h-6 text-[10px] px-1.5" onClick={() => cancelEdit(u.id, section.weekStart)}>
-                                      Cancel
-                                    </Button>
-                                  </>
-                                ) : isPublished ? (
-                                  isAdminOrHigher ? (
-                                    <Button size="sm" variant="ghost" className="h-6 text-[10px] px-1.5"
-                                      onClick={() => setDraftShifts(prev => ({ ...prev, [key]: {} }))}>
-                                      Edit
-                                    </Button>
-                                  ) : (
-                                    <span className="text-[10px] text-muted-foreground flex items-center gap-1">
-                                      <Lock className="h-2.5 w-2.5" />Published
-                                    </span>
-                                  )
-                                ) : saved?.status === "draft" ? (
-                                  <Button size="sm" className="h-6 text-[10px] px-1.5 gradient-primary text-primary-foreground"
-                                    disabled={publishSched.isPending} onClick={() => publishSched.mutate(saved.id)}>
-                                    Publish
+                  {filteredStaff.map(u => {
+                    const saved       = activeSection.schedules.find(s => s.userId === u.id);
+                    const key         = draftKey(u.id, activeSection.weekStart);
+                    const inEditMode  = key in draftShifts;
+                    const hasPending  = inEditMode && Object.keys(draftShifts[key]).length > 0;
+                    const isPublished = saved?.status === "published" && !inEditMode;
+                    return (
+                      <tr key={u.id} className="hover:bg-muted/20">
+                        <td className="sticky left-0 z-10 bg-card border px-3 py-2">
+                          <p className="text-sm font-medium">{u.name}</p>
+                          <p className="text-xs text-muted-foreground">{u.role}</p>
+                        </td>
+                        {getWeekDates(activeSection.weekStart).map((date, i) => {
+                          const dateStr = date.toISOString().split("T")[0];
+                          const onLeave = leaveBlockedDates[u.id]?.has(dateStr);
+                          if (onLeave) {
+                            return (
+                              <td key={i} className={cn("border p-1.5 text-center", activeSection.cellBg)}>
+                                <div title="Approved leave" className="text-[10px] px-2 py-1.5 rounded-md font-medium w-full border bg-purple-100 text-purple-700 border-purple-200 cursor-not-allowed">
+                                  Leave
+                                </div>
+                              </td>
+                            );
+                          }
+                          const shiftType = getDraftOrSaved(u.id, activeSection.weekStart, i, saved);
+                          const label     = shiftType === "off" ? "Off" : shiftType.charAt(0).toUpperCase() + shiftType.slice(1);
+                          const times     = shiftType !== "off" ? shiftConfig[shiftType as ShiftName] : null;
+                          return (
+                            <td key={i} className={cn("border p-1.5 text-center", activeSection.cellBg)}>
+                              <button
+                                disabled={isPublished}
+                                title={times ? `${times.start} – ${times.end}` : "Day Off"}
+                                className={cn(
+                                  "text-[10px] px-2 py-1.5 rounded-md font-medium transition-all w-full border",
+                                  SHIFT_COLORS[shiftType],
+                                  !isPublished && "cursor-pointer hover:opacity-80 hover:ring-1 hover:ring-primary/40"
+                                )}
+                                onClick={() => cycleDayShift(u.id, activeSection.weekStart, i, shiftType)}
+                              >
+                                {label}
+                                {times && <div className="text-[8px] opacity-70 font-mono">{times.start}</div>}
+                              </button>
+                            </td>
+                          );
+                        })}
+                        <td className={cn("border p-1.5 text-center", activeSection.cellBg)}>
+                          <div className="flex gap-1 justify-center flex-wrap">
+                            {inEditMode ? (
+                              <>
+                                {hasPending ? (
+                                  <Button size="sm" variant="outline" className="h-6 text-[10px] px-1.5" disabled={saveSched.isPending}
+                                    onClick={() => saveSched.mutate({ userId: u.id, weekStart: activeSection.weekStart, shifts: buildShiftsPayload(u.id, activeSection.weekStart, saved) })}>
+                                    Save Draft
                                   </Button>
                                 ) : (
-                                  <span className="text-[10px] text-muted-foreground">—</span>
+                                  <span className="text-[9px] text-muted-foreground">Click shift to change</span>
                                 )}
-                              </div>
-                            </td>
-                          </Fragment>
-                        );
-                      })}
-                    </tr>
-                  ))}
+                                <Button size="sm" variant="ghost" className="h-6 text-[10px] px-1.5" onClick={() => cancelEdit(u.id, activeSection.weekStart)}>
+                                  Cancel
+                                </Button>
+                              </>
+                            ) : isPublished ? (
+                              isAdminOrHigher ? (
+                                <Button size="sm" variant="ghost" className="h-6 text-[10px] px-1.5"
+                                  onClick={() => setDraftShifts(prev => ({ ...prev, [key]: {} }))}>
+                                  Edit
+                                </Button>
+                              ) : (
+                                <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+                                  <Lock className="h-2.5 w-2.5" />Published
+                                </span>
+                              )
+                            ) : saved?.status === "draft" ? (
+                              <Button size="sm" className="h-6 text-[10px] px-1.5 gradient-primary text-primary-foreground"
+                                disabled={publishSched.isPending} onClick={() => publishSched.mutate(saved.id)}>
+                                Publish
+                              </Button>
+                            ) : (
+                              <span className="text-[10px] text-muted-foreground">—</span>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                   {filteredStaff.length === 0 && (
-                    <tr><td colSpan={25} className="text-center text-muted-foreground py-8">No staff found</td></tr>
+                    <tr><td colSpan={9} className="text-center text-muted-foreground py-8">No staff found</td></tr>
                   )}
                 </tbody>
               </table>
