@@ -22,6 +22,7 @@ export interface SettingsRecord {
   websiteConfig: Record<string, unknown>;
   reservationConfig: Record<string, unknown>;
   shiftConfig: Record<string, unknown>;
+  graceMinutes?: number;
   updatedAt: string;
 }
 
@@ -41,6 +42,7 @@ export interface UpdateSettingsInput {
   websiteConfig?: Record<string, unknown>;
   reservationConfig?: Record<string, unknown>;
   shiftConfig?: Record<string, unknown>;
+  graceMinutes?: number;
 }
 
 export const settingsService = {

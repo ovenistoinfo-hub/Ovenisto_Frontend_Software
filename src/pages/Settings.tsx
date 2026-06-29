@@ -250,7 +250,7 @@ const SettingsPage = () => {
   const [general, setGeneral] = useState({
     businessName: "", phone: "", email: "", currency: "Rs.",
     taxName: "GST", taxRate: "16", address: "", receiptHeader: "",
-    tableManagement: true, onlineOrders: true,
+    tableManagement: true, onlineOrders: true, graceMinutes: 15,
   });
 
   useEffect(() => {
@@ -267,6 +267,7 @@ const SettingsPage = () => {
           receiptHeader: data.receiptHeader || "",
           tableManagement: data.tableManagement,
           onlineOrders: data.onlineOrders,
+          graceMinutes: data.graceMinutes ?? 15,
         });
       })
       .catch(() => toast.error("Failed to load settings"))
@@ -289,6 +290,8 @@ const SettingsPage = () => {
     const rate = Number(general.taxRate);
     if (rate < 0 || rate > 100) { toast.error("Tax rate must be between 0-100"); return; }
     if (general.email && !general.email.includes("@")) { toast.error("Invalid email format"); return; }
+    const grace = Number(general.graceMinutes);
+    if (isNaN(grace) || grace < 10 || grace > 30) { toast.error("Grace period must be between 10 to 30 minutes"); return; }
     setSaving(true);
     try {
       await settingsService.updateSettings({
@@ -302,6 +305,7 @@ const SettingsPage = () => {
         receiptHeader: general.receiptHeader || null,
         tableManagement: general.tableManagement,
         onlineOrders: general.onlineOrders,
+        graceMinutes: grace,
       });
       toast.success("Settings saved successfully");
     } catch (err: any) {
@@ -336,6 +340,19 @@ const SettingsPage = () => {
             <div><label className="text-sm font-medium">Currency</label><Input value={general.currency} onChange={e => setGeneral(p => ({...p, currency: e.target.value}))} /></div>
             <div><label className="text-sm font-medium">Tax Name</label><Input value={general.taxName} onChange={e => setGeneral(p => ({...p, taxName: e.target.value}))} /></div>
             <div><label className="text-sm font-medium">Tax Rate (%)</label><Input value={general.taxRate} type="number" onChange={e => setGeneral(p => ({...p, taxRate: e.target.value}))} /></div>
+            <div>
+              <label className="text-sm font-medium">Grace Minutes (Attendance)</label>
+              <Select value={String(general.graceMinutes)} onValueChange={v => setGeneral(p => ({ ...p, graceMinutes: Number(v) }))}>
+                <SelectTrigger className="mt-1">
+                  <SelectValue placeholder="Select grace minutes" />
+                </SelectTrigger>
+                <SelectContent>
+                  {[10, 15, 20, 25, 30].map(m => (
+                    <SelectItem key={m} value={String(m)}>{m} minutes</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
           <div><label className="text-sm font-medium">Address</label><Textarea value={general.address} onChange={e => setGeneral(p => ({...p, address: e.target.value}))} /></div>
           <div><label className="text-sm font-medium">Receipt Header</label><Textarea value={general.receiptHeader} onChange={e => setGeneral(p => ({...p, receiptHeader: e.target.value}))} /></div>
@@ -345,7 +362,7 @@ const SettingsPage = () => {
           </div>
           <div className="flex flex-wrap gap-3">
             <Button className="gradient-primary text-primary-foreground" onClick={validateAndSave} disabled={saving}>{saving ? "Saving..." : "Save Changes"}</Button>
-            <Button variant="outline" onClick={() => { setGeneral({ businessName: "Ovenisto", phone: "03201119898", email: "admin@ovenisto.com", currency: "Rs.", taxName: "GST", taxRate: "16", address: "164-J LDA AVENUE-1 Lahore", receiptHeader: "Thank you for dining at Ovenisto!", tableManagement: true, onlineOrders: true }); toast.success("Reset to defaults"); }}>Reset to Defaults</Button>
+            <Button variant="outline" onClick={() => { setGeneral({ businessName: "Ovenisto", phone: "03201119898", email: "admin@ovenisto.com", currency: "Rs.", taxName: "GST", taxRate: "16", address: "164-J LDA AVENUE-1 Lahore", receiptHeader: "Thank you for dining at Ovenisto!", tableManagement: true, onlineOrders: true, graceMinutes: 15 }); toast.success("Reset to defaults"); }}>Reset to Defaults</Button>
           </div>
         </CardContent></Card></TabsContent>
 

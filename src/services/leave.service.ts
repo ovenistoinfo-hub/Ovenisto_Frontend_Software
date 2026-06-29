@@ -29,6 +29,8 @@ export interface LeaveBalance {
   sickUsed: number;
   casual: number;
   casualUsed: number;
+  halfday: number;
+  halfdayUsed: number;
   user?: { id: string; name: string; role: string };
 }
 
@@ -45,7 +47,7 @@ export const leaveService = {
 
   async updateBalance(
     userId: string,
-    data: { annual?: number; sick?: number; casual?: number }
+    data: { annual?: number; sick?: number; casual?: number; halfday?: number }
   ): Promise<LeaveBalance> {
     const res = await api.put<{ success: boolean; data: LeaveBalance }>(`/leave-requests/balances/${userId}`, data);
     return res.data;

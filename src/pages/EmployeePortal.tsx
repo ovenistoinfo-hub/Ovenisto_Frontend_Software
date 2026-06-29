@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useQuery, useQueries, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Calendar, Clock, FileText, LogIn, LogOut, Plus, X, Timer, DollarSign, AlertTriangle
@@ -39,7 +39,9 @@ const LEAVE_STATUS_COLORS: Record<string, string> = {
 const ATT_STATUS_COLORS: Record<string, string> = {
   present: "bg-success/10 text-success",
   late:    "bg-warning/10 text-warning",
+  halfday: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-200",
   absent:  "bg-destructive/10 text-destructive",
+  off:     "bg-muted text-muted-foreground",
 };
 
 type ShiftName = "morning" | "evening" | "night";
@@ -260,13 +262,45 @@ export default function EmployeePortal() {
     onError: (e: any) => toast.error(e?.message || "Cancel failed"),
   });
 
+  const [statusFilter, setStatusFilter] = useState("all");
+
   // Derived
   const historyRows: AttendanceRecord[] = historyData?.data ?? [];
   const myShifts = (shiftsData?.data ?? [] as ShiftRecord[]).filter(s => s.cashierId === user?.id);
 
+  const unrecordedRows = useMemo(() => {
+    const dates = datesInRange(attFrom, attTo);
+    const rows: any[] = [];
+    const recordSet = new Set(historyRows.map(r => r.date));
+
+    for (const dStr of dates) {
+      if (!recordSet.has(dStr)) {
+        const shift = shiftByDate[dStr] ?? "off";
+        rows.push({
+          id: `unrecorded-${dStr}`,
+          date: dStr,
+          userId: user?.id,
+          clockIn: null,
+          clockOut: null,
+          status: shift === "off" ? "off" : "absent",
+          notes: shift === "off" ? "Scheduled Off" : "No record",
+        });
+      }
+    }
+    return rows;
+  }, [historyRows, attFrom, attTo, shiftByDate, user?.id]);
+
+  const filteredHistoryRows = useMemo(() => {
+    if (statusFilter === "all") return historyRows;
+    if (statusFilter === "not-recorded") return unrecordedRows;
+    return historyRows.filter(r => r.status === statusFilter);
+  }, [historyRows, statusFilter, unrecordedRows]);
+
   const presentCount = historyRows.filter(r => r.status === "present").length;
   const lateCount    = historyRows.filter(r => r.status === "late").length;
+  const halfdayCount = historyRows.filter(r => r.status === "halfday").length;
   const absentCount  = historyRows.filter(r => r.status === "absent").length;
+  const notRecordedCount = unrecordedRows.length;
   const totalHours   = historyRows.reduce((acc, r) => acc + hoursWorkedNum(r.clockIn, r.clockOut), 0);
 
   const hourlyRate     = myProfile?.hourlyRate     ?? 0;
@@ -275,6 +309,18 @@ export default function EmployeePortal() {
   const totalPenalty   = absentCount * absencePenalty;
 
   const fmt = (n: number) => `Rs. ${Math.round(n).toLocaleString("en-PK")}`;
+
+  if (user?.role === "Admin" || user?.role === "Super Admin") {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] text-center p-6 space-y-3">
+        <AlertTriangle className="h-10 w-10 text-destructive animate-bounce" />
+        <h3 className="text-lg font-bold">Access Denied</h3>
+        <p className="text-sm text-muted-foreground max-w-sm">
+          Admin and Super Admin accounts do not have employee portals.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -369,13 +415,22 @@ export default function EmployeePortal() {
             <CardHeader className="pb-2"><CardTitle className="text-base">Today — {today}</CardTitle></CardHeader>
             <CardContent>
               {!todayStatus?.clockIn ? (
-                <div className="text-center py-4">
-                  <p className="text-sm text-muted-foreground mb-3">You have not clocked in today.</p>
-                  <Button size="lg" className="gradient-primary text-primary-foreground gap-2 w-full max-w-xs"
-                    onClick={() => clockInMut.mutate()} disabled={clockInMut.isPending}>
-                    <LogIn className="h-5 w-5" />Check In
-                  </Button>
-                </div>
+                shiftByDate[today] === "off" ? (
+                  <div className="text-center py-4">
+                    <p className="text-sm text-warning font-semibold mb-3">Today is your scheduled day off.</p>
+                    <Button size="lg" className="gap-2 w-full max-w-xs border border-dashed border-muted text-muted-foreground bg-muted/20" disabled>
+                      <LogIn className="h-5 w-5" />Check In Disabled
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="text-center py-4">
+                    <p className="text-sm text-muted-foreground mb-3">You have not clocked in today.</p>
+                    <Button size="lg" className="gradient-primary text-primary-foreground gap-2 w-full max-w-xs"
+                      onClick={() => clockInMut.mutate()} disabled={clockInMut.isPending}>
+                      <LogIn className="h-5 w-5" />Check In
+                    </Button>
+                  </div>
+                )
               ) : !todayStatus.clockOut ? (
                 <div className="text-center py-4 space-y-2">
                   <p className="text-sm text-muted-foreground">
@@ -416,16 +471,26 @@ export default function EmployeePortal() {
           </Card>
 
           {/* Stats — including pay & penalty */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
             {[
-              { label: "Present",  value: String(presentCount),               color: "text-success",     extra: null },
-              { label: "Late",     value: String(lateCount),                  color: "text-warning",     extra: null },
-              { label: "Absent",   value: String(absentCount),                color: "text-destructive", extra: null },
-              { label: "Hours",    value: `${totalHours.toFixed(1)}h`,        color: "text-primary",     extra: null },
-              { label: "Est. Pay", value: hourlyRate > 0 ? fmt(totalPay)    : "—", color: "text-success",     extra: <DollarSign className="h-3 w-3" /> },
-              { label: "Penalty",  value: absencePenalty > 0 ? fmt(totalPenalty) : "—", color: "text-destructive", extra: <AlertTriangle className="h-3 w-3" /> },
+              { label: "Present",      value: String(presentCount),               color: "text-success",     extra: null, statusKey: "present" },
+              { label: "Late",         value: String(lateCount),                  color: "text-warning",     extra: null, statusKey: "late" },
+              { label: "Half Day",     value: String(halfdayCount),               color: "text-orange-500",  extra: null, statusKey: "halfday" },
+              { label: "Absent",       value: String(absentCount),                color: "text-destructive", extra: null, statusKey: "absent" },
+              { label: "Not Recorded", value: String(notRecordedCount),           color: "text-muted-foreground", extra: null, statusKey: "not-recorded" },
+              { label: "Hours",        value: `${totalHours.toFixed(1)}h`,        color: "text-primary",     extra: null, statusKey: null },
+              { label: "Est. Pay",     value: hourlyRate > 0 ? fmt(totalPay)    : "—", color: "text-success",     extra: <DollarSign className="h-3 w-3" />, statusKey: null },
+              { label: "Penalty",      value: absencePenalty > 0 ? fmt(totalPenalty) : "—", color: "text-destructive", extra: <AlertTriangle className="h-3 w-3" />, statusKey: null },
             ].map(s => (
-              <Card key={s.label} className="shadow-sm">
+              <Card 
+                key={s.label} 
+                className={cn(
+                  "shadow-sm",
+                  s.statusKey && "cursor-pointer transition-all hover:ring-2 hover:ring-primary/20",
+                  s.statusKey && statusFilter === s.statusKey && "ring-2 ring-primary bg-primary/5"
+                )}
+                onClick={() => s.statusKey && setStatusFilter(prev => prev === s.statusKey ? "all" : s.statusKey!)}
+              >
                 <CardContent className="p-3 text-center">
                   <div className="flex items-center justify-center gap-1 text-xs text-muted-foreground mb-0.5">
                     {s.extra}{s.label}
@@ -454,7 +519,7 @@ export default function EmployeePortal() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {historyRows.map(r => {
+                  {filteredHistoryRows.map(r => {
                     const hrs = hoursWorkedNum(r.clockIn, r.clockOut);
                     return (
                       <TableRow key={r.id}>
@@ -468,12 +533,14 @@ export default function EmployeePortal() {
                           </TableCell>
                         )}
                         <TableCell>
-                          <Badge variant="secondary" className={ATT_STATUS_COLORS[r.status]}>{r.status}</Badge>
+                          <Badge variant="secondary" className={cn("capitalize", ATT_STATUS_COLORS[r.status])}>
+                            {r.status === "halfday" ? "half day" : r.status}
+                          </Badge>
                         </TableCell>
                       </TableRow>
                     );
                   })}
-                  {historyRows.length === 0 && (
+                  {filteredHistoryRows.length === 0 && (
                     <TableRow>
                       <TableCell colSpan={hourlyRate > 0 ? 6 : 5} className="text-center text-muted-foreground py-6">
                         No records for selected period
@@ -489,14 +556,15 @@ export default function EmployeePortal() {
         {/* ── LEAVES ── */}
         <TabsContent value="leaves" className="mt-4 space-y-4">
           {leaveBalance && (
-            <div className="grid grid-cols-3 gap-3">
-              {(["annual", "sick", "casual"] as const).map(type => {
+            <div className="grid grid-cols-4 gap-3">
+              {(["annual", "sick", "casual", "halfday"] as const).map(type => {
                 const used  = leaveBalance[`${type}Used` as keyof LeaveBalance] as number;
                 const total = leaveBalance[type] as number;
+                const label = type === "halfday" ? "half day" : type;
                 return (
                   <Card key={type} className="shadow-sm">
                     <CardContent className="p-3 space-y-1">
-                      <p className="text-xs font-medium capitalize">{type}</p>
+                      <p className="text-xs font-medium capitalize">{label}</p>
                       <p className="text-lg font-bold">{total - used}<span className="text-xs text-muted-foreground font-normal"> / {total}</span></p>
                       <Progress value={total > 0 ? (used / total) * 100 : 0} className="h-1.5" />
                     </CardContent>

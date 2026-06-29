@@ -92,7 +92,7 @@ export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
   const location = useLocation();
-  const { logout, hasPermission } = useAuth();
+  const { logout, hasPermission, user } = useAuth();
 
   const isActive = (url?: string) => {
     if (!url) return false;
@@ -111,7 +111,12 @@ export function AppSidebar() {
 
       <SidebarContent className="overflow-y-auto">
         {navSections.map((section) => {
-          const visibleItems = section.items.filter((item: any) => !item.module || hasPermission(item.module));
+          const visibleItems = section.items.filter((item: any) => {
+            if (item.url === "/my-portal" && ["Admin", "Super Admin"].includes(user?.role ?? "")) {
+              return false;
+            }
+            return !item.module || hasPermission(item.module);
+          });
           if (visibleItems.length === 0) return null;
           return (
             <SidebarGroup key={section.label}>
