@@ -16,8 +16,6 @@ export interface UserRecord {
   status: string;
   lastLogin: string | null;
   createdAt: string;
-  hourlyRate: number | null;
-  absencePenalty: number | null;
   outlet: { id: string; name: string; code: string } | null;
 }
 
@@ -60,8 +58,6 @@ export interface UpdateUserInput {
   outletId?: string | null;
   avatar?: string | null;
   status?: string;
-  hourlyRate?: number | null;
-  absencePenalty?: number | null;
 }
 
 export interface UserQueryParams {

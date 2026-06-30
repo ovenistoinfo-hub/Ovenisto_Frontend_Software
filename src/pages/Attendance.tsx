@@ -168,10 +168,6 @@ export default function AttendancePage() {
   const [schedSearch, setSchedSearch]         = useState("");
   const [schedRoleFilter, setSchedRoleFilter] = useState("all");
 
-  // Pay settings
-  const [editPayUser, setEditPayUser] = useState<string | null>(null);
-  const [payEdit, setPayEdit]         = useState({ hourlyRate: 0, absencePenalty: 0 });
-
   // ── Queries ──
   const { data: usersResult } = useQuery({
     queryKey: ["users-list", selectedOutletId],
@@ -293,17 +289,6 @@ export default function AttendancePage() {
       toast.success("Shift timings saved");
       setEditingShiftConfig(false);
       qc.setQueryData(["settings"], updated);
-    },
-    onError: (e: unknown) => toast.error((e as Error)?.message || "Save failed"),
-  });
-
-  const updatePayMut = useMutation({
-    mutationFn: ({ userId, data }: { userId: string; data: { hourlyRate: number | null; absencePenalty: number | null } }) =>
-      userService.updateUser(userId, data),
-    onSuccess: () => {
-      toast.success("Pay settings saved");
-      setEditPayUser(null);
-      qc.invalidateQueries({ queryKey: ["users-list", selectedOutletId] });
     },
     onError: (e: unknown) => toast.error((e as Error)?.message || "Save failed"),
   });
