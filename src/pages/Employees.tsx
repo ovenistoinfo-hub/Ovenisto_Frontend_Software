@@ -185,6 +185,9 @@ const Employees = () => {
               <TabsList className="flex-wrap h-auto gap-1">
                 <TabsTrigger value="basic">Basic Information</TabsTrigger>
                 <TabsTrigger value="positional">Positional Info</TabsTrigger>
+                <TabsTrigger value="supervisor">Supervisor</TabsTrigger>
+                <TabsTrigger value="biographical">Biographical Info</TabsTrigger>
+                <TabsTrigger value="emergency">Emergency Contact</TabsTrigger>
               </TabsList>
 
               <TabsContent value="basic" className="mt-4 space-y-3">
@@ -247,6 +250,49 @@ const Employees = () => {
                     </Select>
                   </div>
                   <div className="space-y-1.5"><Label>Penalty Fee (PKR, per absence)</Label><Input type="number" min="0" value={form.penaltyFee ?? ""} onChange={(e) => setForm(p => ({ ...p, penaltyFee: e.target.value ? Number(e.target.value) : null }))} /></div>
+                </div>
+              </TabsContent>
+
+              <TabsContent value="supervisor" className="mt-4 space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-md">
+                  <div className="space-y-1.5">
+                    <Label>Reports To</Label>
+                    <Select value={form.supervisorId ?? ""} onValueChange={(v) => setForm(p => ({ ...p, supervisorId: v }))}>
+                      <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
+                      <SelectContent>
+                        {supervisors.map(s => <SelectItem key={s.id} value={s.id}>{s.firstName} {s.lastName ?? ""}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </TabsContent>
+
+              <TabsContent value="biographical" className="mt-4 space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  <div className="space-y-1.5"><Label>Date of Birth</Label><Input type="date" value={form.dateOfBirth ?? ""} onChange={(e) => setForm(p => ({ ...p, dateOfBirth: e.target.value }))} /></div>
+                  <div className="space-y-1.5">
+                    <Label>Gender</Label>
+                    <Select value={form.gender ?? ""} onValueChange={(v) => setForm(p => ({ ...p, gender: v }))}>
+                      <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                      <SelectContent>{GENDERS.map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Marital Status</Label>
+                    <Select value={form.maritalStatus ?? ""} onValueChange={(v) => setForm(p => ({ ...p, maritalStatus: v }))}>
+                      <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                      <SelectContent>{MARITAL_STATUSES.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5"><Label>CNIC</Label><Input placeholder="42101-1234567-1" value={form.cnic ?? ""} onChange={(e) => setForm(p => ({ ...p, cnic: e.target.value }))} /></div>
+                </div>
+              </TabsContent>
+
+              <TabsContent value="emergency" className="mt-4 space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  <div className="space-y-1.5"><Label>Contact Name</Label><Input value={form.emergencyContactName ?? ""} onChange={(e) => setForm(p => ({ ...p, emergencyContactName: e.target.value }))} /></div>
+                  <div className="space-y-1.5"><Label>Relationship</Label><Input value={form.emergencyContactRelation ?? ""} onChange={(e) => setForm(p => ({ ...p, emergencyContactRelation: e.target.value }))} /></div>
+                  <div className="space-y-1.5"><Label>Phone</Label><Input value={form.emergencyContactPhone ?? ""} onChange={(e) => setForm(p => ({ ...p, emergencyContactPhone: e.target.value }))} /></div>
                 </div>
               </TabsContent>
             </Tabs>
