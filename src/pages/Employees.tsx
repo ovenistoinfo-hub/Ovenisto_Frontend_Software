@@ -1,18 +1,38 @@
-import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { employeeService, type EmployeeRecord } from "@/services/employee.service";
+import { useState, useRef } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { employeeService, type EmployeeRecord, type EmployeeInput } from "@/services/employee.service";
+import { userService, type UserRecord } from "@/services/user.service";
+import { getAccessToken } from "@/services/api";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
-import { Plus, Search, Pencil, IdCard } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Plus, Search, Pencil, IdCard, ChevronUp, Upload, Loader2 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PageHeader } from "@/components/ui/page-header";
 import { TablePagination, paginate } from "@/components/TablePagination";
 import { useAuth } from "@/contexts/AuthContext";
+import { toast } from "sonner";
+
+const RATE_TYPES = ["Hourly", "Daily", "Monthly", "PerShift"];
+const PAY_FREQUENCIES = ["Weekly", "BiWeekly", "Monthly"];
+const DUTY_TYPES = ["Full Time", "Part Time"];
+const GENDERS = ["Male", "Female", "Other"];
+const MARITAL_STATUSES = ["Single", "Married", "Divorced", "Widowed"];
+
+const emptyForm: EmployeeInput = {
+  firstName: "", lastName: "", email: "", phone: "", photoUrl: "",
+  userId: "", supervisorId: "",
+  division: "", designation: "", dutyType: "", hireDate: "",
+  rateType: "Hourly", rate: 0, payFrequency: "", penaltyFee: null,
+  dateOfBirth: "", gender: "", maritalStatus: "", cnic: "",
+  emergencyContactName: "", emergencyContactRelation: "", emergencyContactPhone: "",
+};
 
 const Employees = () => {
   const { user } = useAuth();
@@ -20,6 +40,113 @@ const Employees = () => {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("active");
   const [page, setPage] = useState(1);
+
+  const queryClient = useQueryClient();
+  const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [form, setForm] = useState<EmployeeInput>(emptyForm);
+  const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const { data: users = [] } = useQuery({
+    queryKey: ["users-for-employee-link"],
+    queryFn: () => userService.getUsers({ limit: 200 }).then(r => r.data),
+    enabled: showForm,
+  });
+
+  const { data: supervisors = [] } = useQuery({
+    queryKey: ["supervisor-options", editingId],
+    queryFn: () => employeeService.getSupervisorOptions(editingId ?? undefined),
+    enabled: showForm,
+  });
+
+  const resetForm = () => { setShowForm(false); setEditingId(null); setForm(emptyForm); };
+
+  const openAdd = () => { setEditingId(null); setForm(emptyForm); setShowForm(true); };
+
+  const openEdit = (e: EmployeeRecord) => {
+    setEditingId(e.id);
+    setForm({
+      firstName: e.firstName, lastName: e.lastName ?? "", email: e.email ?? "", phone: e.phone,
+      photoUrl: e.photoUrl ?? "", userId: e.userId ?? "", supervisorId: e.supervisorId ?? "",
+      division: e.division ?? "", designation: e.designation, dutyType: e.dutyType ?? "",
+      hireDate: e.hireDate.slice(0, 10), rateType: e.rateType, rate: e.rate,
+      payFrequency: e.payFrequency ?? "", penaltyFee: e.penaltyFee,
+      dateOfBirth: e.dateOfBirth ? e.dateOfBirth.slice(0, 10) : "", gender: e.gender ?? "",
+      maritalStatus: e.maritalStatus ?? "", cnic: e.cnic ?? "",
+      emergencyContactName: e.emergencyContactName ?? "", emergencyContactRelation: e.emergencyContactRelation ?? "",
+      emergencyContactPhone: e.emergencyContactPhone ?? "",
+    });
+    setShowForm(true);
+  };
+
+  const handleImageUpload = async (ev: React.ChangeEvent<HTMLInputElement>) => {
+    const file = ev.target.files?.[0];
+    if (!file) return;
+    ev.target.value = "";
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("image", file);
+      const token = getAccessToken();
+      const res = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3001/api"}/upload/image`, {
+        method: "POST",
+        headers: { ...(token && { Authorization: `Bearer ${token}` }) },
+        body: formData,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Upload failed");
+      setForm(p => ({ ...p, photoUrl: data.data.url }));
+      toast.success("Photo uploaded");
+    } catch (err: any) {
+      toast.error(err.message || "Photo upload failed");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleSave = async () => {
+    if (!form.firstName.trim() || !form.phone.trim() || !form.designation.trim() || !form.hireDate || !form.rate) {
+      toast.error("First name, phone, designation, hire date, and rate are required");
+      return;
+    }
+    setSaving(true);
+    try {
+      const payload: EmployeeInput = {
+        ...form,
+        lastName: form.lastName || null,
+        email: form.email || null,
+        photoUrl: form.photoUrl || null,
+        userId: form.userId || null,
+        supervisorId: form.supervisorId || null,
+        division: form.division || null,
+        dutyType: form.dutyType || null,
+        payFrequency: form.payFrequency || null,
+        penaltyFee: form.penaltyFee || null,
+        dateOfBirth: form.dateOfBirth || null,
+        gender: form.gender || null,
+        maritalStatus: form.maritalStatus || null,
+        cnic: form.cnic || null,
+        emergencyContactName: form.emergencyContactName || null,
+        emergencyContactRelation: form.emergencyContactRelation || null,
+        emergencyContactPhone: form.emergencyContactPhone || null,
+      };
+      if (editingId) {
+        await employeeService.update(editingId, payload);
+        toast.success("Employee updated");
+      } else {
+        await employeeService.create(payload);
+        toast.success("Employee added");
+      }
+      resetForm();
+      queryClient.invalidateQueries({ queryKey: ["employees"] });
+    } catch (err: any) {
+      toast.error(err.message || "Failed to save employee");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const { data: list = [], isLoading: loading } = useQuery({
     queryKey: ["employees", statusFilter],
@@ -44,8 +171,93 @@ const Employees = () => {
         icon={<IdCard className="h-5 w-5" />}
         title="Employees"
         subtitle={`${list.length} employee records`}
-        actions={canManage ? <Button className="gradient-primary text-primary-foreground"><Plus className="h-4 w-4 mr-2" />Add Employee</Button> : undefined}
+        actions={canManage ? <Button className="gradient-primary text-primary-foreground" onClick={openAdd}><Plus className="h-4 w-4 mr-2" />Add Employee</Button> : undefined}
       />
+
+      {showForm && canManage && (
+        <Card className="shadow-sm border-primary/30 bg-primary/[0.02]">
+          <CardHeader className="pb-2 flex flex-row items-center justify-between">
+            <Label className="text-xs text-muted-foreground uppercase tracking-wider">{editingId ? "Edit" : "Add"} Employee</Label>
+            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={resetForm}><ChevronUp className="h-4 w-4" /></Button>
+          </CardHeader>
+          <CardContent>
+            <Tabs defaultValue="basic">
+              <TabsList className="flex-wrap h-auto gap-1">
+                <TabsTrigger value="basic">Basic Information</TabsTrigger>
+                <TabsTrigger value="positional">Positional Info</TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="basic" className="mt-4 space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  <div className="space-y-1.5"><Label>First Name <span className="text-destructive">*</span></Label><Input value={form.firstName} onChange={(e) => setForm(p => ({ ...p, firstName: e.target.value }))} /></div>
+                  <div className="space-y-1.5"><Label>Last Name</Label><Input value={form.lastName ?? ""} onChange={(e) => setForm(p => ({ ...p, lastName: e.target.value }))} /></div>
+                  <div className="space-y-1.5"><Label>Phone <span className="text-destructive">*</span></Label><Input value={form.phone} onChange={(e) => setForm(p => ({ ...p, phone: e.target.value }))} /></div>
+                  <div className="space-y-1.5"><Label>Email</Label><Input type="email" value={form.email ?? ""} onChange={(e) => setForm(p => ({ ...p, email: e.target.value }))} /></div>
+                  <div className="space-y-1.5">
+                    <Label>Linked User Account</Label>
+                    <Select value={form.userId ?? ""} onValueChange={(v) => setForm(p => ({ ...p, userId: v }))}>
+                      <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
+                      <SelectContent>
+                        {users.map((u: UserRecord) => <SelectItem key={u.id} value={u.id}>{u.name} ({u.email})</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Photograph</Label>
+                    <input type="file" accept="image/*" ref={fileInputRef} className="hidden" onChange={handleImageUpload} />
+                    {uploading ? (
+                      <div className="border rounded-lg p-2 flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />Uploading...</div>
+                    ) : form.photoUrl ? (
+                      <div className="flex items-center gap-2">
+                        <Avatar className="h-10 w-10"><AvatarImage src={form.photoUrl} /></Avatar>
+                        <Button type="button" variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}>Change</Button>
+                      </div>
+                    ) : (
+                      <Button type="button" variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}><Upload className="h-3 w-3 mr-1.5" />Upload</Button>
+                    )}
+                  </div>
+                </div>
+              </TabsContent>
+
+              <TabsContent value="positional" className="mt-4 space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  <div className="space-y-1.5"><Label>Division</Label><Input value={form.division ?? ""} onChange={(e) => setForm(p => ({ ...p, division: e.target.value }))} /></div>
+                  <div className="space-y-1.5"><Label>Designation <span className="text-destructive">*</span></Label><Input value={form.designation} onChange={(e) => setForm(p => ({ ...p, designation: e.target.value }))} /></div>
+                  <div className="space-y-1.5">
+                    <Label>Duty Type</Label>
+                    <Select value={form.dutyType ?? ""} onValueChange={(v) => setForm(p => ({ ...p, dutyType: v }))}>
+                      <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                      <SelectContent>{DUTY_TYPES.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5"><Label>Hire Date <span className="text-destructive">*</span></Label><Input type="date" value={form.hireDate} onChange={(e) => setForm(p => ({ ...p, hireDate: e.target.value }))} /></div>
+                  <div className="space-y-1.5">
+                    <Label>Rate Type <span className="text-destructive">*</span></Label>
+                    <Select value={form.rateType} onValueChange={(v) => setForm(p => ({ ...p, rateType: v as EmployeeInput["rateType"] }))}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>{RATE_TYPES.map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5"><Label>Rate (PKR) <span className="text-destructive">*</span></Label><Input type="number" min="0" value={form.rate} onChange={(e) => setForm(p => ({ ...p, rate: Number(e.target.value) }))} /></div>
+                  <div className="space-y-1.5">
+                    <Label>Pay Frequency</Label>
+                    <Select value={form.payFrequency ?? ""} onValueChange={(v) => setForm(p => ({ ...p, payFrequency: v }))}>
+                      <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                      <SelectContent>{PAY_FREQUENCIES.map(f => <SelectItem key={f} value={f}>{f}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5"><Label>Penalty Fee (PKR, per absence)</Label><Input type="number" min="0" value={form.penaltyFee ?? ""} onChange={(e) => setForm(p => ({ ...p, penaltyFee: e.target.value ? Number(e.target.value) : null }))} /></div>
+                </div>
+              </TabsContent>
+            </Tabs>
+
+            <div className="flex justify-end gap-2 pt-4">
+              <Button variant="outline" onClick={resetForm}>Cancel</Button>
+              <Button className="gradient-primary text-primary-foreground" onClick={handleSave} disabled={saving}>{saving ? "Saving..." : "Save"}</Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <Card className="shadow-sm">
         <CardHeader className="pb-3">
@@ -69,7 +281,7 @@ const Employees = () => {
             <div className="text-center py-12">
               <IdCard className="h-12 w-12 text-muted-foreground mx-auto mb-3 opacity-30" />
               <p className="text-muted-foreground">No employees found</p>
-              {canManage && <Button size="sm" className="gradient-primary text-primary-foreground mt-3"><Plus className="h-4 w-4 mr-1" />Add Employee</Button>}
+              {canManage && <Button size="sm" className="gradient-primary text-primary-foreground mt-3" onClick={openAdd}><Plus className="h-4 w-4 mr-1" />Add Employee</Button>}
             </div>
           ) : (
             <>
@@ -105,7 +317,7 @@ const Employees = () => {
                       <TableCell><Badge variant="secondary" className={e.status === "active" ? "bg-success/10 text-success" : "bg-destructive/10 text-destructive"}>{e.status}</Badge></TableCell>
                       {canManage && (
                         <TableCell>
-                          <Button variant="ghost" size="icon" className="h-7 w-7"><Pencil className="h-3 w-3" /></Button>
+                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(e)}><Pencil className="h-3 w-3" /></Button>
                         </TableCell>
                       )}
                     </TableRow>
