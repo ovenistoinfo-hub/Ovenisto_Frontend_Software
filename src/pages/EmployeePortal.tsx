@@ -22,7 +22,7 @@ import { attendanceService, type AttendanceRecord } from "@/services/attendance.
 import { leaveService, type LeaveRequest, type LeaveBalance } from "@/services/leave.service";
 import { scheduleService, SHIFT_COLORS } from "@/services/schedule.service";
 import { shiftService, type ShiftRecord } from "@/services/shift.service";
-import { userService } from "@/services/user.service";
+import { employeeService } from "@/services/employee.service";
 import { settingsService } from "@/services/settings.service";
 
 const LEAVE_TYPE_COLORS: Record<string, string> = {
@@ -161,10 +161,10 @@ export default function EmployeePortal() {
     ? parseShiftConfig(settings.shiftConfig)
     : DEFAULT_SHIFT_CONFIG;
 
-  // Full profile for hourlyRate / absencePenalty — use /auth/me (accessible to any role)
-  const { data: myProfile } = useQuery({
-    queryKey: ["my-profile"],
-    queryFn: () => userService.getMe(),
+  // Linked Employee profile for pay/penalty — accessible to any role
+  const { data: myEmployee } = useQuery({
+    queryKey: ["my-employee"],
+    queryFn: () => employeeService.getMe(),
     enabled: !!user?.id,
   });
 
@@ -309,10 +309,18 @@ export default function EmployeePortal() {
   const totalHours   = historyRows.reduce((acc, r) => acc + hoursWorkedNum(r.clockIn, r.clockOut), 0);
   const totalOvertimeHours = historyRows.reduce((acc, r) => acc + (r.overtimeMinutes ?? 0), 0) / 60;
 
-  const hourlyRate     = myProfile?.hourlyRate     ?? 0;
-  const absencePenalty = myProfile?.absencePenalty ?? 0;
-  const totalPay       = totalHours * hourlyRate;
-  const totalPenalty   = absentCount * absencePenalty;
+  const presentDays  = presentCount + lateCount;
+  const rateType     = myEmployee?.rateType ?? null;
+  const rate         = myEmployee?.rate ?? 0;
+  const penaltyFee   = myEmployee?.penaltyFee ?? 0;
+  const hasPay       = !!myEmployee && rate > 0;
+  const totalPay =
+    rateType === "Hourly"   ? totalHours * rate :
+    rateType === "Daily"    ? presentDays * rate :
+    rateType === "Monthly"  ? rate :
+    rateType === "PerShift" ? presentDays * rate :
+    0;
+  const totalPenalty = absentCount * penaltyFee;
 
   const fmt = (n: number) => `Rs. ${Math.round(n).toLocaleString("en-PK")}`;
 
@@ -490,8 +498,8 @@ export default function EmployeePortal() {
               { label: "Not Recorded", value: String(notRecordedCount),           color: "text-muted-foreground", extra: null, statusKey: "not-recorded" },
               { label: "Hours",        value: `${totalHours.toFixed(1)}h`,        color: "text-primary",     extra: null, statusKey: null },
               { label: "Overtime",     value: `${totalOvertimeHours.toFixed(1)}h`, color: "text-warning",    extra: <Timer className="h-3 w-3" />, statusKey: null },
-              { label: "Est. Pay",     value: hourlyRate > 0 ? fmt(totalPay)    : "—", color: "text-success",     extra: <DollarSign className="h-3 w-3" />, statusKey: null },
-              { label: "Penalty",      value: absencePenalty > 0 ? fmt(totalPenalty) : "—", color: "text-destructive", extra: <AlertTriangle className="h-3 w-3" />, statusKey: null },
+              { label: "Est. Pay",     value: hasPay ? fmt(totalPay)    : "—", color: "text-success",     extra: <DollarSign className="h-3 w-3" />, statusKey: null },
+              { label: "Penalty",      value: penaltyFee > 0 ? fmt(totalPenalty) : "—", color: "text-destructive", extra: <AlertTriangle className="h-3 w-3" />, statusKey: null },
             ].map(s => (
               <Card 
                 key={s.label} 
@@ -526,7 +534,7 @@ export default function EmployeePortal() {
                     <TableHead>Clock Out</TableHead>
                     <TableHead>Hours</TableHead>
                     <TableHead>Overtime</TableHead>
-                    {hourlyRate > 0 && <TableHead>Pay</TableHead>}
+                    {rateType === "Hourly" && hasPay && <TableHead>Pay</TableHead>}
                     <TableHead>Status</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -544,9 +552,9 @@ export default function EmployeePortal() {
                             ? <span className="text-warning font-medium">{(r.overtimeMinutes / 60).toFixed(1)}h</span>
                             : "—"}
                         </TableCell>
-                        {hourlyRate > 0 && (
+                        {rateType === "Hourly" && hasPay && (
                           <TableCell className="text-sm text-success">
-                            {hrs > 0 ? `Rs. ${Math.round(hrs * hourlyRate).toLocaleString("en-PK")}` : "—"}
+                            {hrs > 0 ? `Rs. ${Math.round(hrs * rate).toLocaleString("en-PK")}` : "—"}
                           </TableCell>
                         )}
                         <TableCell>
@@ -559,7 +567,7 @@ export default function EmployeePortal() {
                   })}
                   {filteredHistoryRows.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={hourlyRate > 0 ? 7 : 6} className="text-center text-muted-foreground py-6">
+                      <TableCell colSpan={rateType === "Hourly" && hasPay ? 7 : 6} className="text-center text-muted-foreground py-6">
                         No records for selected period
                       </TableCell>
                     </TableRow>
