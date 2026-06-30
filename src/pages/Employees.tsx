@@ -37,6 +37,7 @@ const emptyForm: EmployeeInput = {
 const Employees = () => {
   const { user } = useAuth();
   const canManage = ["Super Admin", "Admin", "Manager", "Store Manager"].includes(user?.role ?? "");
+  const canEditOrDelete = ["Super Admin", "Admin"].includes(user?.role ?? "");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("active");
   const [page, setPage] = useState(1);
@@ -375,9 +376,15 @@ const Employees = () => {
                       {canManage && (
                         <TableCell>
                           <div className="flex gap-1">
-                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(e)}><Pencil className="h-3 w-3" /></Button>
-                            {e.status === "active" && (
-                              <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => handleDeactivate(e.id, `${e.firstName} ${e.lastName ?? ""}`)}><Trash2 className="h-3 w-3" /></Button>
+                            {canEditOrDelete ? (
+                              <>
+                                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(e)}><Pencil className="h-3 w-3" /></Button>
+                                {e.status === "active" && (
+                                  <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => handleDeactivate(e.id, `${e.firstName} ${e.lastName ?? ""}`)}><Trash2 className="h-3 w-3" /></Button>
+                                )}
+                              </>
+                            ) : (
+                              <span className="text-xs text-muted-foreground italic px-1">View only</span>
                             )}
                           </div>
                         </TableCell>

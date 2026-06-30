@@ -12,8 +12,9 @@ import { Plus, Search, Pencil, Trash2, Shield } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PageHeader } from "@/components/ui/page-header";
 import { toast } from "sonner";
-import { userService, type UserRecord } from "@/services/user.service";
+import { userService, type UserRecord, type UnlinkedEmployee } from "@/services/user.service";
 import { outletService, type OutletRecord } from "@/services/outlet.service";
+import { useAuth } from "@/contexts/AuthContext";
 
 const roleColors: Record<string, string> = {
   "Super Admin": "bg-purple-100 text-purple-700",
@@ -85,6 +86,18 @@ const branchScopedRoles = ["Admin", "Manager", "Floor Manager", "Kitchen Manager
 
 const Users = () => {
   const queryClient = useQueryClient();
+  const { user: authUser } = useAuth();
+  const isAdminOrHigher = ["Super Admin", "Admin"].includes(authUser?.role ?? "");
+  const isManager = authUser?.role === "Manager";
+
+  // Roles manager is NOT allowed to create or see
+  const ownerRoles = ["Admin", "Super Admin"];
+
+  // Roles available in the dropdown depending on actor
+  const availableRoles = isManager
+    ? roles.filter(r => !ownerRoles.includes(r))
+    : roles;
+
   const [showDialog, setShowDialog] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -93,6 +106,8 @@ const Users = () => {
   const [perms, setPerms] = useState<Record<string, string[]>>(rolePresets["Cashier"]);
   const [saving, setSaving] = useState(false);
   const [outlets, setOutlets] = useState<OutletRecord[]>([]);
+  const [unlinkedEmployees, setUnlinkedEmployees] = useState<UnlinkedEmployee[]>([]);
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>("none");
 
   const { data: list = [], isLoading: loading } = useQuery({
     queryKey: ["users"],
@@ -105,6 +120,8 @@ const Users = () => {
   }, []);
 
   const filtered = list.filter((u) => {
+    // Manager cannot see Admin or Super Admin accounts
+    if (isManager && ownerRoles.includes(u.role)) return false;
     const matchesSearch = u.name.toLowerCase().includes(search.toLowerCase()) || u.email.toLowerCase().includes(search.toLowerCase());
     const matchesRole = filterRole === "all" || u.role === filterRole;
     return matchesSearch && matchesRole;
@@ -112,16 +129,49 @@ const Users = () => {
 
   const openAdd = () => {
     setEditingId(null);
-    setForm({ name: "", email: "", phone: "", role: "Cashier", password: "", branch: "", outletId: "" });
-    setPerms(rolePresets["Cashier"]);
+    const defaultRole = isManager ? "Cashier" : "Cashier";
+    setForm({ name: "", email: "", phone: "", role: defaultRole, password: "", branch: "", outletId: "" });
+    setPerms(rolePresets[defaultRole]);
+    setSelectedEmployeeId("none");
+    setUnlinkedEmployees([]);
+    userService.getUnlinkedEmployees()
+      .then(setUnlinkedEmployees)
+      .catch((err) => console.error("Failed to fetch unlinked employees", err));
     setShowDialog(true);
   };
   const openEdit = (u: UserRecord) => {
+    // Manager cannot edit any user
+    if (isManager) return;
     setEditingId(u.id);
     setForm({ name: u.name, email: u.email, phone: u.phone || "", role: u.role, password: "", branch: u.branch || u.outlet?.name || "", outletId: u.outletId || "" });
     setPerms(rolePresets[u.role] || rolePresets["Cashier"]);
     setShowDialog(true);
   };
+  const handleEmployeeSelect = (empId: string) => {
+    setSelectedEmployeeId(empId);
+    if (empId === "none") {
+      setForm(p => ({ ...p, name: "", email: "", phone: "", outletId: "" }));
+      return;
+    }
+    const emp = unlinkedEmployees.find(e => e.id === empId);
+    if (emp) {
+      const fullName = [emp.firstName, emp.lastName].filter(Boolean).join(" ");
+      const matchingRole = roles.find(r => r.toLowerCase() === emp.designation.toLowerCase());
+      
+      setForm(p => ({
+        ...p,
+        name: fullName,
+        email: emp.email || "",
+        phone: emp.phone || "",
+        outletId: emp.outletId || "",
+        role: matchingRole || p.role
+      }));
+      if (matchingRole) {
+        setPerms(rolePresets[matchingRole] || {});
+      }
+    }
+  };
+
   const handleRoleChange = (role: string) => {
     setForm(p => ({ ...p, role }));
     setPerms(rolePresets[role] || {});
@@ -152,6 +202,7 @@ const Users = () => {
           phone: form.phone || null,
           role: form.role,
           outletId: form.outletId || null,
+          employeeId: selectedEmployeeId === "none" ? null : selectedEmployeeId,
         });
         toast.success("User added");
       }
@@ -166,6 +217,8 @@ const Users = () => {
   };
 
   const handleDelete = async (id: string, name: string) => {
+    // Manager cannot delete any user
+    if (isManager) return;
     if (!confirm(`Deactivate user "${name}"?`)) return;
     try {
       await userService.deleteUser(id);
@@ -183,8 +236,14 @@ const Users = () => {
       <PageHeader
         icon={<Shield className="h-5 w-5" />}
         title="Users & Permissions"
-        subtitle={`${list.length} staff accounts • ${roles.length} roles`}
-        actions={<Button className="gradient-primary text-primary-foreground" onClick={openAdd}><Plus className="h-4 w-4 mr-2" />Add User</Button>}
+        subtitle={`${filtered.length} staff accounts • ${roles.length} roles`}
+        actions={
+          (isAdminOrHigher || isManager) ? (
+            <Button className="gradient-primary text-primary-foreground" onClick={openAdd}>
+              <Plus className="h-4 w-4 mr-2" />Add User
+            </Button>
+          ) : undefined
+        }
       />
       <Card className="shadow-sm">
         <CardHeader className="pb-3">
@@ -225,23 +284,30 @@ const Users = () => {
                 <TableHead className="sticky top-0 z-10 bg-card">Actions</TableHead>
               </TableRow>
             </TableHeader>
-            <TableBody>{filtered.map((u, i) => (
-              <TableRow key={u.id} className="hover:bg-muted/30 transition-colors">
-                <TableCell>{i+1}</TableCell>
-                <TableCell className="font-medium">{u.name}</TableCell>
-                <TableCell>{u.email}</TableCell>
-                <TableCell>{u.phone || "—"}</TableCell>
-                <TableCell><Badge variant="secondary" className={roleColors[u.role] || ""}>{u.role}</Badge></TableCell>
-                <TableCell>{u.outlet?.name || u.branch || "—"}</TableCell>
-                <TableCell><Badge variant="secondary" className={u.status === "active" ? "bg-success/10 text-success" : "bg-destructive/10 text-destructive"}>{u.status}</Badge></TableCell>
-                <TableCell>
-                  <div className="flex gap-1">
-                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(u)}><Pencil className="h-3 w-3" /></Button>
-                    <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => handleDelete(u.id, u.name)}><Trash2 className="h-3 w-3" /></Button>
-                  </div>
-                </TableCell>
-              </TableRow>
-            ))}</TableBody>
+              <TableBody>{filtered.map((u, i) => (
+                <TableRow key={u.id} className="hover:bg-muted/30 transition-colors">
+                  <TableCell>{i+1}</TableCell>
+                  <TableCell className="font-medium">{u.name}</TableCell>
+                  <TableCell>{u.email}</TableCell>
+                  <TableCell>{u.phone || "—"}</TableCell>
+                  <TableCell><Badge variant="secondary" className={roleColors[u.role] || ""}>{u.role}</Badge></TableCell>
+                  <TableCell>{u.outlet?.name || u.branch || "—"}</TableCell>
+                  <TableCell><Badge variant="secondary" className={u.status === "active" ? "bg-success/10 text-success" : "bg-destructive/10 text-destructive"}>{u.status}</Badge></TableCell>
+                  <TableCell>
+                    <div className="flex gap-1">
+                      {isAdminOrHigher && (
+                        <>
+                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(u)}><Pencil className="h-3 w-3" /></Button>
+                          <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => handleDelete(u.id, u.name)}><Trash2 className="h-3 w-3" /></Button>
+                        </>
+                      )}
+                      {isManager && (
+                        <span className="text-xs text-muted-foreground italic px-1">View only</span>
+                      )}
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}</TableBody>
           </Table>
           </div>
         )}</CardContent>
@@ -252,6 +318,31 @@ const Users = () => {
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>{editingId ? "Edit" : "Add"} User</DialogTitle></DialogHeader>
           <div className="space-y-4">
+            {/* Link to onboarded employee dropdown (only on Add User) */}
+            {!editingId && (
+              <div className="bg-primary/5 border border-primary/10 rounded-lg p-3">
+                <label className="text-sm font-semibold mb-1 block text-primary">
+                  Link to Onboarded Employee (Optional)
+                </label>
+                <p className="text-xs text-muted-foreground mb-2">
+                  Select an onboarded employee who does not have a user account yet to pre-fill their details.
+                </p>
+                <Select value={selectedEmployeeId} onValueChange={handleEmployeeSelect}>
+                  <SelectTrigger className="bg-background">
+                    <SelectValue placeholder="Select onboarded employee (optional)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">None (Create Independent User)</SelectItem>
+                    {unlinkedEmployees.map(emp => (
+                      <SelectItem key={emp.id} value={emp.id}>
+                        {emp.firstName} {emp.lastName || ""} — {emp.designation} {emp.outlet ? `(${emp.outlet.name})` : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
             {/* Basic Info */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
@@ -274,7 +365,7 @@ const Users = () => {
                 <label className="text-sm font-medium mb-1 block">Role</label>
                 <Select value={form.role} onValueChange={handleRoleChange}>
                   <SelectTrigger><SelectValue placeholder="Role" /></SelectTrigger>
-                  <SelectContent>{roles.map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}</SelectContent>
+                  <SelectContent>{availableRoles.map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
               {branchScopedRoles.includes(form.role) && (

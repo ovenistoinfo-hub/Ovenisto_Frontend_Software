@@ -46,6 +46,7 @@ export interface CreateUserInput {
   outletId?: string | null;
   avatar?: string | null;
   status?: string;
+  employeeId?: string | null;
 }
 
 export interface UpdateUserInput {
@@ -69,6 +70,17 @@ export interface UserQueryParams {
   outletId?: string;
 }
 
+export interface UnlinkedEmployee {
+  id: string;
+  firstName: string;
+  lastName: string | null;
+  email: string | null;
+  phone: string;
+  designation: string;
+  outletId: string | null;
+  outlet: { id: string; name: string } | null;
+}
+
 export const userService = {
   /**
    * List all users with optional filters
@@ -85,6 +97,14 @@ export const userService = {
     const qs = query.toString();
     const res = await api.get<UsersListResponse>(`/users${qs ? `?${qs}` : ''}`);
     return { data: res.data, meta: res.meta };
+  },
+
+  /**
+   * Fetch employees with no linked user account
+   */
+  async getUnlinkedEmployees(): Promise<UnlinkedEmployee[]> {
+    const res = await api.get<{ success: boolean; data: UnlinkedEmployee[] }>('/users/unlinked-employees');
+    return res.data;
   },
 
   /**
