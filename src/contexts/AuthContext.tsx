@@ -10,7 +10,7 @@ const rolePermissions: Record<string, string[]> = {
     "dashboard", "analytics", "pos", "kitchens", "waiter", "order-status",
     "customer-display", "outlets", "items", "production", "stock", "warehouses",
     "sales", "customers", "purchases", "purchase-requests", "suppliers", "supplier-dues",
-    "expenses", "transfers", "demands", "waste", "attendance", "reports", "sms",
+    "expenses", "transfers", "demands", "waste", "attendance", "employees", "reports", "sms",
     "settings", "my-portal",
   ],
   "Floor Manager": [
@@ -24,7 +24,7 @@ const rolePermissions: Record<string, string[]> = {
   "Delivery Manager": ["delivery", "online-orders", "order-status", "sales", "my-portal"],
   "Store Manager": [
     "items", "stock", "warehouses", "production", "purchases", "suppliers",
-    "transfers", "demands", "waste", "my-portal",
+    "transfers", "demands", "waste", "employees", "my-portal",
   ],
   "Accountant": [
     "sales", "purchases", "suppliers", "supplier-dues",
