@@ -12,7 +12,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Search, Pencil, IdCard, ChevronUp, Upload, Loader2 } from "lucide-react";
+import { Plus, Search, Pencil, IdCard, ChevronUp, Upload, Loader2, Trash2 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PageHeader } from "@/components/ui/page-header";
 import { TablePagination, paginate } from "@/components/TablePagination";
@@ -145,6 +145,17 @@ const Employees = () => {
       toast.error(err.message || "Failed to save employee");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleDeactivate = async (id: string, name: string) => {
+    if (!confirm(`Deactivate employee "${name}"?`)) return;
+    try {
+      await employeeService.deactivate(id);
+      toast.success("Employee deactivated");
+      queryClient.invalidateQueries({ queryKey: ["employees"] });
+    } catch (err: any) {
+      toast.error(err.message || "Failed to deactivate employee");
     }
   };
 
@@ -363,7 +374,12 @@ const Employees = () => {
                       <TableCell><Badge variant="secondary" className={e.status === "active" ? "bg-success/10 text-success" : "bg-destructive/10 text-destructive"}>{e.status}</Badge></TableCell>
                       {canManage && (
                         <TableCell>
-                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(e)}><Pencil className="h-3 w-3" /></Button>
+                          <div className="flex gap-1">
+                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(e)}><Pencil className="h-3 w-3" /></Button>
+                            {e.status === "active" && (
+                              <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => handleDeactivate(e.id, `${e.firstName} ${e.lastName ?? ""}`)}><Trash2 className="h-3 w-3" /></Button>
+                            )}
+                          </div>
                         </TableCell>
                       )}
                     </TableRow>

@@ -452,7 +452,7 @@ export default function AttendancePage() {
       <PageHeader
         icon={<Clock className="h-5 w-5" />}
         title="HR Management"
-        subtitle="Attendance, leave requests, schedules, and pay settings"
+        subtitle="Attendance, leave requests, and schedules"
       />
 
       <Tabs defaultValue="attendance">
