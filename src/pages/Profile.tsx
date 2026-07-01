@@ -28,6 +28,9 @@ const Profile = () => {
   const [newPw, setNewPw] = useState("");
   const [confirmPw, setConfirmPw] = useState("");
   const [savingPw, setSavingPw] = useState(false);
+  const [newPin, setNewPin] = useState("");
+  const [confirmPin, setConfirmPin] = useState("");
+  const [savingPin, setSavingPin] = useState(false);
   const [emailAlerts, setEmailAlerts] = useState(true);
   const [smsAlerts, setSmsAlerts] = useState(false);
   const [pushAlerts, setPushAlerts] = useState(true);
@@ -62,6 +65,24 @@ const Profile = () => {
     }
   };
 
+  const CANCEL_AUTHORIZER_ROLES = ["Super Admin", "Admin", "Manager", "Floor Manager"];
+  const canSetCancellationPin = CANCEL_AUTHORIZER_ROLES.includes(user?.role || "");
+
+  const handleSetPin = async () => {
+    if (!/^\d{4}$/.test(newPin)) { toast.error("PIN must be exactly 4 digits"); return; }
+    if (newPin !== confirmPin) { toast.error("PINs don't match"); return; }
+    setSavingPin(true);
+    try {
+      await authService.setPin(newPin);
+      toast.success("Cancellation PIN set successfully");
+      setNewPin(""); setConfirmPin("");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to set PIN");
+    } finally {
+      setSavingPin(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <PageHeader icon={<User className="h-5 w-5" />} title="My Profile" subtitle="Account settings" />
@@ -80,6 +101,14 @@ const Profile = () => {
             <div><label className="text-sm font-medium">Confirm Password</label><Input type="password" value={confirmPw} onChange={(e) => setConfirmPw(e.target.value)} /></div>
             <Button variant="outline" onClick={handleUpdatePassword} disabled={savingPw}>{savingPw ? "Updating..." : "Update Password"}</Button>
           </CardContent></Card>
+          {canSetCancellationPin && (
+            <Card className="shadow-sm"><CardHeader><CardTitle className="text-base">Cancellation PIN</CardTitle></CardHeader><CardContent className="space-y-4">
+              <p className="text-xs text-muted-foreground">This 4-digit PIN is required to authorize order cancellations at the POS.</p>
+              <div><label className="text-sm font-medium">New PIN</label><Input type="password" inputMode="numeric" maxLength={4} value={newPin} onChange={(e) => setNewPin(e.target.value.replace(/\D/g, ""))} /></div>
+              <div><label className="text-sm font-medium">Confirm PIN</label><Input type="password" inputMode="numeric" maxLength={4} value={confirmPin} onChange={(e) => setConfirmPin(e.target.value.replace(/\D/g, ""))} /></div>
+              <Button variant="outline" onClick={handleSetPin} disabled={savingPin}>{savingPin ? "Saving..." : "Set PIN"}</Button>
+            </CardContent></Card>
+          )}
           <Card className="shadow-sm"><CardHeader><CardTitle className="text-base">Notifications</CardTitle></CardHeader><CardContent className="space-y-3">
             <div className="flex items-center justify-between"><span className="text-sm">Email Alerts</span><Switch checked={emailAlerts} onCheckedChange={setEmailAlerts} /></div>
             <div className="flex items-center justify-between"><span className="text-sm">SMS Alerts</span><Switch checked={smsAlerts} onCheckedChange={setSmsAlerts} /></div>
