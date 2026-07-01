@@ -85,4 +85,11 @@ export const authService = {
   async changePassword(currentPassword: string, newPassword: string): Promise<void> {
     await api.put('/auth/change-password', { currentPassword, newPassword });
   },
+
+  /**
+   * Set own cancellation-authorization PIN
+   */
+  async setPin(pin: string): Promise<void> {
+    await api.put('/auth/pin', { pin });
+  },
 };
