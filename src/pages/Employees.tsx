@@ -12,7 +12,8 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Search, Pencil, IdCard, ChevronUp, Upload, Loader2, Trash2 } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Plus, Search, Pencil, IdCard, ChevronUp, Upload, Loader2, Trash2, Eye } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PageHeader } from "@/components/ui/page-header";
 import { TablePagination, paginate } from "@/components/TablePagination";
@@ -49,6 +50,20 @@ const Employees = () => {
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Termination fields
+  const [terminationEmployee, setTerminationEmployee] = useState<EmployeeRecord | null>(null);
+  const [terminationReason, setTerminationReason] = useState("");
+  const [terminating, setTerminating] = useState(false);
+
+  // Re-hire fields
+  const [rehireEmployee, setRehireEmployee] = useState<EmployeeRecord | null>(null);
+  const [rehireDate, setRehireDate] = useState("");
+  const [rehireRate, setRehireRate] = useState(0);
+  const [rehiring, setRehiring] = useState(false);
+
+  // View details modal field
+  const [viewEmployee, setViewEmployee] = useState<EmployeeRecord | null>(null);
 
   const { data: users = [] } = useQuery({
     queryKey: ["users-for-employee-link"],
@@ -149,14 +164,51 @@ const Employees = () => {
     }
   };
 
-  const handleDeactivate = async (id: string, name: string) => {
-    if (!confirm(`Deactivate employee "${name}"?`)) return;
+  const handleTerminateClick = (emp: EmployeeRecord) => {
+    setTerminationEmployee(emp);
+    setTerminationReason("");
+  };
+
+  const handleTerminateSubmit = async () => {
+    if (!terminationEmployee) return;
+    if (!terminationReason.trim()) {
+      toast.error("Please enter a termination reason");
+      return;
+    }
+    setTerminating(true);
     try {
-      await employeeService.deactivate(id);
-      toast.success("Employee deactivated");
+      await employeeService.terminate(terminationEmployee.id, terminationReason);
+      toast.success("Employee terminated successfully");
+      setTerminationEmployee(null);
       queryClient.invalidateQueries({ queryKey: ["employees"] });
     } catch (err: any) {
-      toast.error(err.message || "Failed to deactivate employee");
+      toast.error(err.message || "Failed to terminate employee");
+    } finally {
+      setTerminating(false);
+    }
+  };
+
+  const handleRehireClick = (emp: EmployeeRecord) => {
+    setRehireEmployee(emp);
+    setRehireDate(new Date().toISOString().slice(0, 10));
+    setRehireRate(emp.rate);
+  };
+
+  const handleRehireSubmit = async () => {
+    if (!rehireEmployee) return;
+    setRehiring(true);
+    try {
+      await employeeService.rehire(rehireEmployee.id, {
+        rehireDate: rehireDate,
+        rate: rehireRate,
+      });
+      toast.success("Employee rehired successfully");
+      setRehireEmployee(null);
+      queryClient.invalidateQueries({ queryKey: ["employees"] });
+    } catch (err: any) {
+      toast.error(err.message || "Failed to re-hire employee");
+    } finally {
+      setRehiring(false);
     }
   };
 
@@ -372,15 +424,35 @@ const Employees = () => {
                       <TableCell>{e.phone}</TableCell>
                       <TableCell>{new Date(e.hireDate).toLocaleDateString("en-PK")}</TableCell>
                       <TableCell>{e.supervisor ? `${e.supervisor.firstName} ${e.supervisor.lastName ?? ""}` : "—"}</TableCell>
-                      <TableCell><Badge variant="secondary" className={e.status === "active" ? "bg-success/10 text-success" : "bg-destructive/10 text-destructive"}>{e.status}</Badge></TableCell>
+                      <TableCell>
+                        <div className="flex flex-col">
+                          <Badge variant="secondary" className={e.status === "active" ? "bg-success/10 text-success w-fit" : "bg-destructive/10 text-destructive w-fit"}>
+                            {e.status === "active" ? "active" : "terminated"}
+                          </Badge>
+                          {e.status === "inactive" && e.terminationReason && (
+                            <span className="text-[10px] text-muted-foreground mt-0.5 max-w-[120px] truncate" title={`Reason: ${e.terminationReason}\nDate: ${e.terminationDate ? new Date(e.terminationDate).toLocaleDateString() : 'N/A'}`}>
+                              Reason: {e.terminationReason}
+                            </span>
+                          )}
+                        </div>
+                      </TableCell>
                       {canManage && (
                         <TableCell>
-                          <div className="flex gap-1">
+                          <div className="flex gap-1 items-center">
+                            <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground" onClick={() => setViewEmployee(e)} title="View Employee Details">
+                              <Eye className="h-3.5 w-3.5" />
+                            </Button>
                             {canEditOrDelete ? (
                               <>
-                                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(e)}><Pencil className="h-3 w-3" /></Button>
-                                {e.status === "active" && (
-                                  <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => handleDeactivate(e.id, `${e.firstName} ${e.lastName ?? ""}`)}><Trash2 className="h-3 w-3" /></Button>
+                                {e.status === "active" ? (
+                                  <>
+                                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(e)} title="Edit Employee"><Pencil className="h-3 w-3" /></Button>
+                                    <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => handleTerminateClick(e)} title="Terminate Employee"><Trash2 className="h-3 w-3" /></Button>
+                                  </>
+                                ) : (
+                                  <Button variant="outline" size="sm" className="h-7 px-2 text-xs flex items-center gap-1 border-success text-success hover:bg-success/10" onClick={() => handleRehireClick(e)}>
+                                    Re-hire
+                                  </Button>
                                 )}
                               </>
                             ) : (
@@ -398,6 +470,188 @@ const Employees = () => {
           )}
         </CardContent>
       </Card>
+
+      {/* Termination Reason Dialog */}
+      <Dialog open={!!terminationEmployee} onOpenChange={(open) => !open && setTerminationEmployee(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Terminate Employee</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <p className="text-sm text-muted-foreground">
+              Are you sure you want to terminate <strong>{terminationEmployee?.firstName} {terminationEmployee?.lastName || ""}</strong>?
+              Please provide the termination reason below.
+            </p>
+            <div className="space-y-1.5">
+              <Label htmlFor="termination-reason">Termination Reason <span className="text-destructive">*</span></Label>
+              <Input
+                id="termination-reason"
+                placeholder="e.g. Resigned, Performance issues, Relocation..."
+                value={terminationReason}
+                onChange={(e) => setTerminationReason(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setTerminationEmployee(null)}>Cancel</Button>
+            <Button className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={handleTerminateSubmit} disabled={terminating}>
+              {terminating ? "Terminating..." : "Terminate"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Re-hire Form Dialog */}
+      <Dialog open={!!rehireEmployee} onOpenChange={(open) => !open && setRehireEmployee(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Re-hire Employee</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <p className="text-sm text-muted-foreground">
+              Re-hiring <strong>{rehireEmployee?.firstName} {rehireEmployee?.lastName || ""}</strong> will activate their portal profile. Please specify the new details below.
+            </p>
+            <div className="grid grid-cols-1 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="rehire-date">New Hire Date <span className="text-destructive">*</span></Label>
+                <Input
+                  id="rehire-date"
+                  type="date"
+                  value={rehireDate}
+                  onChange={(e) => setRehireDate(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="rehire-rate">New Pay Rate (Rs.) <span className="text-destructive">*</span></Label>
+                <Input
+                  id="rehire-rate"
+                  type="number"
+                  value={rehireRate}
+                  onChange={(e) => setRehireRate(Number(e.target.value))}
+                />
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRehireEmployee(null)}>Cancel</Button>
+            <Button className="gradient-primary text-primary-foreground" onClick={handleRehireSubmit} disabled={rehiring}>
+              {rehiring ? "Re-hiring..." : "Re-hire"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* View Details Dialog */}
+      <Dialog open={!!viewEmployee} onOpenChange={(open) => !open && setViewEmployee(null)}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-3">
+              <Avatar className="h-10 w-10">
+                <AvatarImage src={viewEmployee?.photoUrl ?? undefined} />
+                <AvatarFallback className="text-sm bg-primary/10 text-primary">{viewEmployee ? initials(viewEmployee) : ""}</AvatarFallback>
+              </Avatar>
+              <div className="flex flex-col">
+                <span className="text-base font-semibold">{viewEmployee?.firstName} {viewEmployee?.lastName ?? ""}</span>
+                <span className="text-xs text-muted-foreground font-normal">{viewEmployee?.designation}</span>
+              </div>
+            </DialogTitle>
+          </DialogHeader>
+
+          {viewEmployee && (
+            <div className="space-y-6 py-2">
+              {/* Current Status Block */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 bg-muted/35 rounded-lg p-4 text-sm">
+                <div>
+                  <Label className="text-xs text-muted-foreground">Employment Status</Label>
+                  <div className="flex items-center gap-2 mt-1">
+                    <Badge variant="secondary" className={viewEmployee.status === "active" ? "bg-success/10 text-success" : "bg-destructive/10 text-destructive"}>
+                      {viewEmployee.status === "active" ? "Active" : "Terminated"}
+                    </Badge>
+                  </div>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground">Outlet / Branch</Label>
+                  <p className="font-medium mt-1">{viewEmployee.outletId ? "Linked Outlet" : "Main Branch"}</p>
+                </div>
+              </div>
+
+              {/* Employment Status Info — context-aware */}
+              {viewEmployee.status === "inactive" && viewEmployee.terminationDate && (
+                <div className="rounded-lg border border-destructive/20 bg-destructive/[0.04] p-4 space-y-3">
+                  <h4 className="text-xs font-semibold text-destructive uppercase tracking-wider flex items-center gap-1.5">
+                    <span className="inline-block h-1.5 w-1.5 rounded-full bg-destructive" />
+                    Termination Details
+                  </h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+                    <div className="space-y-0.5">
+                      <p className="text-xs text-muted-foreground">Terminated On</p>
+                      <p className="font-semibold text-destructive">{new Date(viewEmployee.terminationDate).toLocaleDateString("en-PK")}</p>
+                    </div>
+                    <div className="space-y-0.5">
+                      <p className="text-xs text-muted-foreground">Reason</p>
+                      <p className="font-medium text-foreground italic">"{viewEmployee.terminationReason || "No reason specified"}"</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {viewEmployee.status === "active" && viewEmployee.rehireDate && (
+                <div className="rounded-lg border border-success/20 bg-success/[0.04] p-4 space-y-3">
+                  <h4 className="text-xs font-semibold text-success uppercase tracking-wider flex items-center gap-1.5">
+                    <span className="inline-block h-1.5 w-1.5 rounded-full bg-success" />
+                    Re-hire Details
+                  </h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+                    <div className="space-y-0.5">
+                      <p className="text-xs text-muted-foreground">Re-hired On</p>
+                      <p className="font-semibold text-success">{new Date(viewEmployee.rehireDate).toLocaleDateString("en-PK")}</p>
+                    </div>
+                    {viewEmployee.terminationDate && (
+                      <div className="space-y-0.5">
+                        <p className="text-xs text-muted-foreground">Previously Terminated</p>
+                        <p className="font-medium text-muted-foreground">{new Date(viewEmployee.terminationDate).toLocaleDateString("en-PK")} — <span className="italic">"{viewEmployee.terminationReason || "N/A"}"</span></p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Two Column Grid of other information */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* General Info */}
+                <div className="space-y-3">
+                  <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Work Details</h4>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between border-b pb-1.5"><span className="text-muted-foreground">Original Hire Date:</span> <span className="font-medium">{new Date(viewEmployee.hireDate).toLocaleDateString("en-PK")}</span></div>
+                    <div className="flex justify-between border-b pb-1.5"><span className="text-muted-foreground">Division:</span> <span className="font-medium">{viewEmployee.division || "—"}</span></div>
+                    <div className="flex justify-between border-b pb-1.5"><span className="text-muted-foreground">Duty Type:</span> <span className="font-medium">{viewEmployee.dutyType || "—"}</span></div>
+                    <div className="flex justify-between border-b pb-1.5"><span className="text-muted-foreground">Supervisor:</span> <span className="font-medium">{viewEmployee.supervisor ? `${viewEmployee.supervisor.firstName} ${viewEmployee.supervisor.lastName ?? ""}` : "—"}</span></div>
+                    <div className="flex justify-between border-b pb-1.5"><span className="text-muted-foreground">Rate:</span> <span className="font-medium">Rs. {viewEmployee.rate} ({viewEmployee.rateType})</span></div>
+                    <div className="flex justify-between border-b pb-1.5"><span className="text-muted-foreground">Pay Frequency:</span> <span className="font-medium">{viewEmployee.payFrequency || "—"}</span></div>
+                  </div>
+                </div>
+
+                {/* Personal & Emergency Info */}
+                <div className="space-y-3">
+                  <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Personal & Biographical</h4>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between border-b pb-1.5"><span className="text-muted-foreground">Phone:</span> <span className="font-medium">{viewEmployee.phone}</span></div>
+                    <div className="flex justify-between border-b pb-1.5"><span className="text-muted-foreground">Email:</span> <span className="font-medium">{viewEmployee.email || "—"}</span></div>
+                    <div className="flex justify-between border-b pb-1.5"><span className="text-muted-foreground">Date of Birth:</span> <span className="font-medium">{viewEmployee.dateOfBirth ? new Date(viewEmployee.dateOfBirth).toLocaleDateString("en-PK") : "—"}</span></div>
+                    <div className="flex justify-between border-b pb-1.5"><span className="text-muted-foreground">CNIC / ID:</span> <span className="font-medium">{viewEmployee.cnic || "—"}</span></div>
+                    <div className="flex justify-between border-b pb-1.5"><span className="text-muted-foreground">Gender:</span> <span className="font-medium">{viewEmployee.gender || "—"}</span></div>
+                    <div className="flex justify-between border-b pb-1.5"><span className="text-muted-foreground">Emergency Contact:</span> <span className="font-medium">{viewEmployee.emergencyContactName ? `${viewEmployee.emergencyContactName} (${viewEmployee.emergencyContactRelation || ""}) - ${viewEmployee.emergencyContactPhone || ""}` : "—"}</span></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setViewEmployee(null)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

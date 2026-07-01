@@ -29,6 +29,9 @@ export interface EmployeeRecord {
   emergencyContactRelation: string | null;
   emergencyContactPhone: string | null;
   status: string;
+  terminationDate: string | null;
+  terminationReason: string | null;
+  rehireDate: string | null;
   createdAt: string;
   supervisor: { id: string; firstName: string; lastName: string | null } | null;
   user: { id: string; name: string; email: string } | null;
@@ -64,6 +67,9 @@ export interface EmployeeInput {
   emergencyContactRelation?: string | null;
   emergencyContactPhone?: string | null;
   status?: string;
+  terminationDate?: string | null;
+  terminationReason?: string | null;
+  rehireDate?: string | null;
 }
 
 interface ListResponse {
@@ -107,6 +113,16 @@ export const employeeService = {
 
   async update(id: string, data: Partial<EmployeeInput>): Promise<EmployeeRecord> {
     const res = await api.put<{ success: boolean; data: EmployeeRecord }>(`/employees/${id}`, data);
+    return res.data;
+  },
+
+  async terminate(id: string, reason: string): Promise<EmployeeRecord> {
+    const res = await api.put<{ success: boolean; data: EmployeeRecord }>(`/employees/${id}/terminate`, { reason });
+    return res.data;
+  },
+
+  async rehire(id: string, data?: { rehireDate: string; rate?: number }): Promise<EmployeeRecord> {
+    const res = await api.put<{ success: boolean; data: EmployeeRecord }>(`/employees/${id}/rehire`, data);
     return res.data;
   },
 
