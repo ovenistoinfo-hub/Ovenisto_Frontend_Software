@@ -571,7 +571,7 @@ const Employees = () => {
                 </div>
                 <div>
                   <Label className="text-xs text-muted-foreground">Outlet / Branch</Label>
-                  <p className="font-medium mt-1">{viewEmployee.outletId ? "Linked Outlet" : "Main Branch"}</p>
+                  <p className="font-medium mt-1">{viewEmployee.outlet ? `${viewEmployee.outlet.name} (${viewEmployee.outlet.code})` : "Main Branch"}</p>
                 </div>
               </div>
 

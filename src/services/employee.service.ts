@@ -35,6 +35,7 @@ export interface EmployeeRecord {
   createdAt: string;
   supervisor: { id: string; firstName: string; lastName: string | null } | null;
   user: { id: string; name: string; email: string } | null;
+  outlet: { id: string; name: string; code: string } | null;
 }
 
 export interface SupervisorOption {
