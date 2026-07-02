@@ -390,6 +390,7 @@ const POS = () => {
   const [cancelManagerPin, setCancelManagerPin] = useState("");
   const [cancelRefundMethod, setCancelRefundMethod] = useState("cash");
   const [cancelSubmitting, setCancelSubmitting] = useState(false);
+  const [showCancelSlip, setShowCancelSlip] = useState<{ order: any; cancelledItems: any[]; reason: string; refundAmount: number; refundMethod: string } | null>(null);
 
   const activeDeals = useMemo(() =>
     deals.filter(d => d.isActive && d.type === "optionCombo" && d.optionGroups && d.optionGroups.length > 0 && (d.validTo === "always" || d.validTo >= new Date().toISOString().split("T")[0])),
@@ -628,6 +629,13 @@ const POS = () => {
         refundAmount,
         refundMethod: cancelRefundMethod,
         newSubtotal, newTax, newTotal,
+      });
+      setShowCancelSlip({
+        order,
+        cancelledItems: isFullCancel ? activeItems : activeItems.filter((i: any) => cancelSelectedItemIds.includes(i.id)),
+        reason: finalReason,
+        refundAmount,
+        refundMethod: cancelRefundMethod,
       });
       toast.success(isFullCancel ? "Order cancelled" : "Item(s) cancelled");
       setShowModifyOrder(null);
@@ -2844,6 +2852,39 @@ const POS = () => {
                 <FileText className="h-4 w-4 mr-1" />Modify Order
               </Button>
             )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Cancel Slip Print Dialog */}
+      <Dialog open={!!showCancelSlip} onOpenChange={(open) => { if (!open) setShowCancelSlip(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle>Cancellation Slip</DialogTitle></DialogHeader>
+          {showCancelSlip && (
+            <div className="text-sm space-y-2 border rounded-md p-3">
+              <p className="font-semibold text-center">{effectiveSettings.restaurantName || "Ovenisto"}</p>
+              <p className="text-center text-xs text-muted-foreground">Order Cancellation Slip</p>
+              <hr />
+              <p>Order: <strong>{showCancelSlip.order.orderNumber}</strong></p>
+              <p>Date: {new Date().toLocaleString()}</p>
+              <p>Reason: {showCancelSlip.reason}</p>
+              <hr />
+              {showCancelSlip.cancelledItems.map((item: any) => (
+                <div key={item.id} className="flex justify-between text-xs">
+                  <span>{item.name} × {item.qty}</span>
+                  <span>{effectiveSettings.currency} {(item.price * item.qty - item.discount).toLocaleString()}</span>
+                </div>
+              ))}
+              <hr />
+              <div className="flex justify-between font-semibold">
+                <span>Refund ({showCancelSlip.refundMethod})</span>
+                <span>{effectiveSettings.currency} {showCancelSlip.refundAmount.toLocaleString()}</span>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowCancelSlip(null)}>Close</Button>
+            <Button className="gradient-primary text-primary-foreground" onClick={() => window.print()}><Printer className="h-4 w-4 mr-1" />Print Cancel Slip</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
