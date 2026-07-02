@@ -99,6 +99,7 @@ const POS = () => {
   const [apiKitchens, setApiKitchens] = useState<any[]>([]);
   const [apiCustomers, setApiCustomers] = useState<CustomerRecord[]>([]);
   const [apiStaff, setApiStaff] = useState<any[]>([]);
+  const [apiManagers, setApiManagers] = useState<any[]>([]);
   const [apiSettings, setApiSettings] = useState<SettingsRecord | null>(null);
   const [apiLowStockItems, setApiLowStockItems] = useState<IngredientRecord[]>([]);
   const [apiReservations, setApiReservations] = useState<ReservationRecord[]>([]);
@@ -183,6 +184,8 @@ const POS = () => {
     customerService.getCustomers({ limit: 500 }).then(res => setApiCustomers(res.data)).catch(() => {});
     const STAFF_ROLES = ['Waiter', 'Floor Manager', 'Cashier', 'Manager', 'Admin'];
     userService.getUsers({ limit: 100 }).then(res => setApiStaff(res.data.filter((u: any) => u.status === 'active' && STAFF_ROLES.includes(u.role)))).catch(() => {});
+    const CANCEL_AUTHORIZER_ROLES = ['Super Admin', 'Admin', 'Manager', 'Floor Manager'];
+    userService.getUsers({ limit: 100 }).then(res => setApiManagers(res.data.filter((u: any) => u.status === 'active' && CANCEL_AUTHORIZER_ROLES.includes(u.role)))).catch(() => {});
     settingsService.getSettings().then(s => setApiSettings({ ...s, taxRate: Number(s.taxRate) })).catch(() => {});
     inventoryService.getIngredients({ status: 'active', lowStock: true }).then(data => setApiLowStockItems(data)).catch(() => {});
     reservationService.getAll({ upcoming: true }).then(data => setApiReservations(data)).catch(() => {});
@@ -382,6 +385,11 @@ const POS = () => {
   const [modifyCancelReason, setModifyCancelReason] = useState("");
   const [modifyCancelAction, setModifyCancelAction] = useState<"modify" | "cancel">("modify");
   const [modifyCancelCustomReason, setModifyCancelCustomReason] = useState("");
+  const [cancelSelectedItemIds, setCancelSelectedItemIds] = useState<string[]>([]);
+  const [cancelAuthorizedById, setCancelAuthorizedById] = useState("");
+  const [cancelManagerPin, setCancelManagerPin] = useState("");
+  const [cancelRefundMethod, setCancelRefundMethod] = useState("cash");
+  const [cancelSubmitting, setCancelSubmitting] = useState(false);
 
   const activeDeals = useMemo(() =>
     deals.filter(d => d.isActive && d.type === "optionCombo" && d.optionGroups && d.optionGroups.length > 0 && (d.validTo === "always" || d.validTo >= new Date().toISOString().split("T")[0])),
@@ -584,6 +592,54 @@ const POS = () => {
   // Prefer API settings; fall back to localStorage settings
   const effectiveSettings = apiSettings ?? settings;
   const taxRate = ((effectiveSettings?.taxRate ?? 16) as number) / 100;
+
+  const handleCancelOrder = useCallback(async (order: any) => {
+    const finalReason = modifyCancelReason === "Other" ? modifyCancelCustomReason.trim() : modifyCancelReason;
+    if (!finalReason) { toast.error("Reason is required"); return; }
+    if (!cancelAuthorizedById) { toast.error("Select the authorizing manager"); return; }
+    if (!/^\d{4}$/.test(cancelManagerPin)) { toast.error("Enter the manager's 4-digit PIN"); return; }
+
+    const activeItems = order.items.filter((i: any) => i.status !== "cancelled");
+    const isFullCancel = cancelSelectedItemIds.length === 0 || cancelSelectedItemIds.length === activeItems.length;
+
+    const refundAmount = isFullCancel
+      ? order.total
+      : activeItems.filter((i: any) => cancelSelectedItemIds.includes(i.id))
+          .reduce((s: number, i: any) => s + (i.price * i.qty - i.discount), 0);
+
+    let newSubtotal: number | undefined;
+    let newTax: number | undefined;
+    let newTotal: number | undefined;
+    if (!isFullCancel) {
+      const remainingItems = activeItems.filter((i: any) => !cancelSelectedItemIds.includes(i.id));
+      const remainingItemsSubtotal = remainingItems.reduce((s: number, i: any) => s + (i.price * i.qty - i.discount), 0);
+      newSubtotal = remainingItemsSubtotal - order.discount;
+      newTax = Math.round(newSubtotal * taxRate);
+      newTotal = newSubtotal + newTax;
+    }
+
+    setCancelSubmitting(true);
+    try {
+      await orderService.cancelOrder(order.id, {
+        itemIds: isFullCancel ? undefined : cancelSelectedItemIds,
+        reason: finalReason,
+        authorizedById: cancelAuthorizedById,
+        managerPin: cancelManagerPin,
+        refundAmount,
+        refundMethod: cancelRefundMethod,
+        newSubtotal, newTax, newTotal,
+      });
+      toast.success(isFullCancel ? "Order cancelled" : "Item(s) cancelled");
+      setShowModifyOrder(null);
+      setModifyCancelReason(""); setModifyCancelCustomReason("");
+      setCancelSelectedItemIds([]); setCancelAuthorizedById(""); setCancelManagerPin("");
+      loadApiOrders();
+    } catch (err: any) {
+      toast.error(err.message || "Failed to cancel");
+    } finally {
+      setCancelSubmitting(false);
+    }
+  }, [modifyCancelReason, modifyCancelCustomReason, cancelAuthorizedById, cancelManagerPin, cancelRefundMethod, cancelSelectedItemIds, taxRate, loadApiOrders]);
 
   // FIX 3A: Filter by tags
   const filteredMenu = useMemo(() => {
@@ -2626,6 +2682,98 @@ const POS = () => {
           {(() => {
             const order = allOrdersData.find(o => o.id === showModifyOrder);
             if (!order) return <p className="text-sm text-muted-foreground">Order not found</p>;
+            if (modifyCancelAction === "cancel") {
+              return (
+                <div className="space-y-3">
+                  <div className="text-sm space-y-1">
+                    <p>Order: <strong>{order.orderNumber}</strong></p>
+                    <p>Customer: <strong>{order.customer}</strong></p>
+                    <p>Status: <Badge variant="secondary" className="text-[10px]">{order.status}</Badge></p>
+                    <p>Total: <strong>{effectiveSettings.currency} {order.total.toLocaleString()}</strong></p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium">Items</Label>
+                    {order.items.filter((i: any) => i.status !== "cancelled").map((item: any) => (
+                      <div key={item.id} className="flex items-center justify-between text-xs border rounded-md px-2 py-1.5">
+                        <span>{item.name} × {item.qty}</span>
+                        <Button size="sm" variant={cancelSelectedItemIds.includes(item.id) ? "destructive" : "outline"} className="h-6 text-[10px] px-2"
+                          onClick={() => setCancelSelectedItemIds(prev => prev.includes(item.id) ? prev.filter(id => id !== item.id) : [...prev, item.id])}>
+                          {cancelSelectedItemIds.includes(item.id) ? "Selected" : "Cancel Item"}
+                        </Button>
+                      </div>
+                    ))}
+                    <Button size="sm" variant="destructive" className="w-full h-7 text-xs" onClick={() => setCancelSelectedItemIds([])}>
+                      Cancel Full Order
+                    </Button>
+                  </div>
+                  <div>
+                    <Label className="text-xs font-medium">Reason for Cancellation *</Label>
+                    <Select value={modifyCancelReason} onValueChange={setModifyCancelReason}>
+                      <SelectTrigger className="mt-1 h-9 text-sm"><SelectValue placeholder="Select reason..." /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Customer changed mind">Customer changed mind</SelectItem>
+                        <SelectItem value="Wrong order entered">Wrong order entered</SelectItem>
+                        <SelectItem value="Item not available">Item not available</SelectItem>
+                        <SelectItem value="Kitchen mistake">Kitchen mistake</SelectItem>
+                        <SelectItem value="Payment failed">Payment failed</SelectItem>
+                        <SelectItem value="Duplicate order">Duplicate order</SelectItem>
+                        <SelectItem value="Customer complaint">Customer complaint</SelectItem>
+                        <SelectItem value="Other">Other (specify below)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    {modifyCancelReason === "Other" && (
+                      <Input className="mt-2" value={modifyCancelCustomReason} onChange={e => setModifyCancelCustomReason(e.target.value)}
+                        placeholder="Enter custom reason..." />
+                    )}
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <Label className="text-xs font-medium">Authorized By *</Label>
+                      <Select value={cancelAuthorizedById} onValueChange={setCancelAuthorizedById}>
+                        <SelectTrigger className="mt-1 h-9 text-sm"><SelectValue placeholder="Select manager..." /></SelectTrigger>
+                        <SelectContent>
+                          {apiManagers.map((m: any) => <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label className="text-xs font-medium">Manager PIN *</Label>
+                      <Input className="mt-1 h-9 text-sm" type="password" inputMode="numeric" maxLength={4}
+                        value={cancelManagerPin} onChange={e => setCancelManagerPin(e.target.value.replace(/\D/g, ""))} />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 items-end">
+                    <div className="bg-muted/50 rounded-lg p-2.5 text-xs">
+                      <p className="font-semibold text-muted-foreground uppercase tracking-wider text-[10px]">Refund Amount</p>
+                      <p className="text-sm font-bold">
+                        {effectiveSettings.currency} {(cancelSelectedItemIds.length === 0
+                          ? order.total
+                          : order.items.filter((i: any) => cancelSelectedItemIds.includes(i.id)).reduce((s: number, i: any) => s + (i.price * i.qty - i.discount), 0)
+                        ).toLocaleString()}
+                      </p>
+                    </div>
+                    <div>
+                      <Label className="text-xs font-medium">Refund Method</Label>
+                      <Select value={cancelRefundMethod} onValueChange={setCancelRefundMethod}>
+                        <SelectTrigger className="mt-1 h-9 text-sm"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="cash">Cash</SelectItem>
+                          <SelectItem value="card">Card</SelectItem>
+                          <SelectItem value="online">Online</SelectItem>
+                          <SelectItem value="none">None</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <div className="bg-muted/50 rounded-lg p-2.5 text-xs space-y-1">
+                    <p className="font-semibold text-muted-foreground uppercase tracking-wider text-[10px]">Audit Trail</p>
+                    <p>Order placed: {order.date} at {order.time}</p>
+                    <p>Current status: {order.status}</p>
+                    {order.staff && <p>Staff: {order.staff}</p>}
+                  </div>
+                </div>
+              );
+            }
             const isSentToKitchen = order.status === "preparing" || order.status === "ready";
             return (
               <div className="space-y-3">
@@ -2639,36 +2787,20 @@ const POS = () => {
                   <div className="bg-warning/10 border border-warning/30 rounded-lg p-2.5 text-xs text-warning font-medium">
                     <AlertTriangle className="h-3.5 w-3.5 inline mr-1" />
                     Order has been sent to kitchen and preparation has started.
-                    {modifyCancelAction === "cancel" && " Tax amount will not be refunded. The payment will not be returned."}
                   </div>
                 )}
                 <div>
-                  <Label className="text-xs font-medium">Reason for {modifyCancelAction === "cancel" ? "Cancellation" : "Modification"} *</Label>
+                  <Label className="text-xs font-medium">Reason for Modification *</Label>
                   <Select value={modifyCancelReason} onValueChange={setModifyCancelReason}>
                     <SelectTrigger className="mt-1 h-9 text-sm"><SelectValue placeholder="Select reason..." /></SelectTrigger>
                     <SelectContent>
-                      {modifyCancelAction === "cancel" ? (
-                        <>
-                          <SelectItem value="Customer changed mind">Customer changed mind</SelectItem>
-                          <SelectItem value="Wrong order entered">Wrong order entered</SelectItem>
-                          <SelectItem value="Item not available">Item not available</SelectItem>
-                          <SelectItem value="Kitchen mistake">Kitchen mistake</SelectItem>
-                          <SelectItem value="Payment failed">Payment failed</SelectItem>
-                          <SelectItem value="Duplicate order">Duplicate order</SelectItem>
-                          <SelectItem value="Customer complaint">Customer complaint</SelectItem>
-                          <SelectItem value="Other">Other (specify below)</SelectItem>
-                        </>
-                      ) : (
-                        <>
-                          <SelectItem value="Customer requested change">Customer requested change</SelectItem>
-                          <SelectItem value="Wrong item added">Wrong item added</SelectItem>
-                          <SelectItem value="Quantity change">Quantity change</SelectItem>
-                          <SelectItem value="Add extra items">Add extra items</SelectItem>
-                          <SelectItem value="Remove item">Remove item</SelectItem>
-                          <SelectItem value="Change instructions">Change instructions</SelectItem>
-                          <SelectItem value="Other">Other (specify below)</SelectItem>
-                        </>
-                      )}
+                      <SelectItem value="Customer requested change">Customer requested change</SelectItem>
+                      <SelectItem value="Wrong item added">Wrong item added</SelectItem>
+                      <SelectItem value="Quantity change">Quantity change</SelectItem>
+                      <SelectItem value="Add extra items">Add extra items</SelectItem>
+                      <SelectItem value="Remove item">Remove item</SelectItem>
+                      <SelectItem value="Change instructions">Change instructions</SelectItem>
+                      <SelectItem value="Other">Other (specify below)</SelectItem>
                     </SelectContent>
                   </Select>
                   {modifyCancelReason === "Other" && (
@@ -2689,19 +2821,11 @@ const POS = () => {
             );
           })()}
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => { setShowModifyOrder(null); setModifyCancelReason(""); setModifyCancelCustomReason(""); }}>Cancel</Button>
+            <Button variant="outline" onClick={() => { setShowModifyOrder(null); setModifyCancelReason(""); setModifyCancelCustomReason(""); setCancelSelectedItemIds([]); setCancelAuthorizedById(""); setCancelManagerPin(""); }}>Cancel</Button>
             {modifyCancelAction === "cancel" ? (
-              <Button variant="destructive" disabled={!modifyCancelReason || (modifyCancelReason === "Other" && !modifyCancelCustomReason.trim())} onClick={() => {
-                if (!showModifyOrder) return;
-                const finalReason = modifyCancelReason === "Other" ? modifyCancelCustomReason.trim() : modifyCancelReason;
-                if (!finalReason) return;
-                handleOrderStatusUpdate(showModifyOrder, "cancelled");
-                toast.success("Order cancelled with audit record");
-                setShowModifyOrder(null);
-                setModifyCancelReason("");
-                setModifyCancelCustomReason("");
-              }}>
-                <Ban className="h-4 w-4 mr-1" />Confirm Cancellation
+              <Button variant="destructive" disabled={cancelSubmitting || !modifyCancelReason || (modifyCancelReason === "Other" && !modifyCancelCustomReason.trim())}
+                onClick={() => { const order = allOrdersData.find(o => o.id === showModifyOrder); if (order) handleCancelOrder(order); }}>
+                <Ban className="h-4 w-4 mr-1" />{cancelSubmitting ? "Cancelling..." : "Save Cancellation"}
               </Button>
             ) : (
               <Button className="gradient-primary text-primary-foreground" disabled={!modifyCancelReason || (modifyCancelReason === "Other" && !modifyCancelCustomReason.trim())} onClick={() => {
