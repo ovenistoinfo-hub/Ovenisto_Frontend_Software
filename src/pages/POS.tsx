@@ -122,6 +122,7 @@ const POS = () => {
       modifiers: i.modifiers || [],
       cookingTime: i.cookingTime || 0,
       notes: i.notes || '',
+      status: i.status ?? 'active',
     })),
     subtotal: Number(o.subtotal),
     discount: Number(o.discount),
@@ -640,7 +641,7 @@ const POS = () => {
       toast.success(isFullCancel ? "Order cancelled" : "Item(s) cancelled");
       setShowModifyOrder(null);
       setModifyCancelReason(""); setModifyCancelCustomReason("");
-      setCancelSelectedItemIds([]); setCancelAuthorizedById(""); setCancelManagerPin("");
+      setCancelSelectedItemIds([]); setCancelAuthorizedById(""); setCancelManagerPin(""); setCancelRefundMethod("cash");
       loadApiOrders();
     } catch (err: any) {
       toast.error(err.message || "Failed to cancel");
@@ -2754,10 +2755,14 @@ const POS = () => {
                     <div className="bg-muted/50 rounded-lg p-2.5 text-xs">
                       <p className="font-semibold text-muted-foreground uppercase tracking-wider text-[10px]">Refund Amount</p>
                       <p className="text-sm font-bold">
-                        {effectiveSettings.currency} {(cancelSelectedItemIds.length === 0
-                          ? order.total
-                          : order.items.filter((i: any) => cancelSelectedItemIds.includes(i.id)).reduce((s: number, i: any) => s + (i.price * i.qty - i.discount), 0)
-                        ).toLocaleString()}
+                        {effectiveSettings.currency} {(() => {
+                          const activeItems = order.items.filter((i: any) => i.status !== "cancelled");
+                          const isFullCancel = cancelSelectedItemIds.length === 0 || cancelSelectedItemIds.length === activeItems.length;
+                          return (isFullCancel
+                            ? order.total
+                            : activeItems.filter((i: any) => cancelSelectedItemIds.includes(i.id)).reduce((s: number, i: any) => s + (i.price * i.qty - i.discount), 0)
+                          ).toLocaleString();
+                        })()}
                       </p>
                     </div>
                     <div>
@@ -2829,7 +2834,7 @@ const POS = () => {
             );
           })()}
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => { setShowModifyOrder(null); setModifyCancelReason(""); setModifyCancelCustomReason(""); setCancelSelectedItemIds([]); setCancelAuthorizedById(""); setCancelManagerPin(""); }}>Cancel</Button>
+            <Button variant="outline" onClick={() => { setShowModifyOrder(null); setModifyCancelReason(""); setModifyCancelCustomReason(""); setCancelSelectedItemIds([]); setCancelAuthorizedById(""); setCancelManagerPin(""); setCancelRefundMethod("cash"); }}>Cancel</Button>
             {modifyCancelAction === "cancel" ? (
               <Button variant="destructive" disabled={cancelSubmitting || !modifyCancelReason || (modifyCancelReason === "Other" && !modifyCancelCustomReason.trim())}
                 onClick={() => { const order = allOrdersData.find(o => o.id === showModifyOrder); if (order) handleCancelOrder(order); }}>
