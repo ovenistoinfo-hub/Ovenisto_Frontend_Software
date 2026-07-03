@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, Fragment } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { employeeService, type EmployeeRecord } from "@/services/employee.service";
 import { attendanceService, type AttendanceRecord } from "@/services/attendance.service";
@@ -14,7 +14,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import { Coins, Search, Printer, CheckCircle, Clock, History, AlertTriangle, Eye, Calendar, Download, Flame } from "lucide-react";
+import { Coins, Search, Printer, CheckCircle, Clock, History, AlertTriangle, Eye, Calendar, Download, Flame, Users, ChevronDown, ChevronRight } from "lucide-react";
 import { generatePayslipPDF } from "@/lib/generate-payslip-pdf";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PageHeader } from "@/components/ui/page-header";
@@ -77,6 +77,14 @@ interface EmployeePayrollRow {
   latestPaidThrough: string | null; // last date already covered by a payment this month, if any
 }
 
+interface EmployeeLedgerRow {
+  employee: EmployeeRecord;
+  logs: PaymentLogRecord[];      // sorted newest-first
+  totalPaid: number;
+  paymentCount: number;
+  firstPaidAt: string | null;    // earliest log's paidAt, or null if never paid
+}
+
 const Payroll = () => {
   const { user: currentUser } = useAuth();
   const queryClient = useQueryClient();
@@ -103,6 +111,14 @@ const Payroll = () => {
   const [processingBatch, setProcessingBatch] = useState(false);
   const [activeTab, setActiveTab] = useState("calculate");
   const [showBatchConfirm, setShowBatchConfirm] = useState(false);
+
+  const [ledgerSearch, setLedgerSearch] = useState("");
+  const [expandedEmployeeId, setExpandedEmployeeId] = useState<string | null>(null);
+
+  const { data: allPaymentLogs = [], isLoading: loadingAllLogs } = useQuery({
+    queryKey: ["payroll-all-logs"],
+    queryFn: () => payrollService.getPaymentLogs(),
+  });
 
   // Selected slip for printing/viewing
   const [selectedSlip, setSelectedSlip] = useState<EmployeePayrollRow | null>(null);
@@ -230,6 +246,35 @@ const Payroll = () => {
         latestPaidThrough: latestPaidEndDate,
       };
     });
+
+  // Employee Ledger: one row per active employee, grouping ALL payment logs
+  // ever made (not scoped to the selected month) by employeeId.
+  const ledgerRows: EmployeeLedgerRow[] = useMemo(() => {
+    const logsByEmployee: Record<string, PaymentLogRecord[]> = {};
+    for (const log of allPaymentLogs) {
+      if (!logsByEmployee[log.employeeId]) logsByEmployee[log.employeeId] = [];
+      logsByEmployee[log.employeeId].push(log);
+    }
+    return employees
+      .filter(emp => emp.status === "active")
+      .map(emp => {
+        const logs = (logsByEmployee[emp.id] || [])
+          .slice()
+          .sort((a, b) => new Date(b.paidAt).getTime() - new Date(a.paidAt).getTime());
+        const totalPaid = logs.reduce((sum, l) => sum + l.finalPay, 0);
+        const firstPaidAt = logs.length > 0
+          ? logs.reduce((earliest, l) => (l.paidAt < earliest ? l.paidAt : earliest), logs[0].paidAt)
+          : null;
+        return { employee: emp, logs, totalPaid, paymentCount: logs.length, firstPaidAt };
+      });
+  }, [employees, allPaymentLogs]);
+
+  const filteredLedgerRows = ledgerRows.filter(row => {
+    const name = `${row.employee.firstName} ${row.employee.lastName || ""}`.toLowerCase();
+    const designation = row.employee.designation.toLowerCase();
+    const query = ledgerSearch.toLowerCase();
+    return name.includes(query) || designation.includes(query);
+  });
 
   // Filter rows based on search query
   const filteredRows = payrollRows.filter(row => {
@@ -421,9 +466,10 @@ const Payroll = () => {
       />
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-2 max-w-[400px]">
+        <TabsList className="grid w-full grid-cols-3 max-w-[560px]">
           <TabsTrigger value="calculate" className="flex items-center gap-1.5"><Calendar className="h-4 w-4" /> Calculate Pay</TabsTrigger>
           <TabsTrigger value="logs" className="flex items-center gap-1.5"><History className="h-4 w-4" /> Payment History</TabsTrigger>
+          <TabsTrigger value="ledger" className="flex items-center gap-1.5"><Users className="h-4 w-4" /> Employee Ledger</TabsTrigger>
         </TabsList>
 
         {/* CALCULATE PAYROLL TAB */}
@@ -705,6 +751,112 @@ const Payroll = () => {
                             </Button>
                           </TableCell>
                         </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="ledger" className="space-y-6 mt-4">
+          <Card className="shadow-sm">
+            <CardHeader className="pb-3 border-b">
+              <div className="flex flex-col sm:flex-row gap-4 items-center justify-between">
+                <div>
+                  <CardTitle className="text-lg">Employee Ledger</CardTitle>
+                  <CardDescription>Lifetime payment history per employee</CardDescription>
+                </div>
+                <div className="relative w-full sm:w-[240px]">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                  <Input placeholder="Search employee..." value={ledgerSearch} onChange={(e) => setLedgerSearch(e.target.value)} className="pl-8 h-9 text-xs" />
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="p-0">
+              {loadingAllLogs ? (
+                <div className="space-y-3 p-6">
+                  {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}
+                </div>
+              ) : filteredLedgerRows.length === 0 ? (
+                <div className="text-center py-12">
+                  <Users className="h-12 w-12 text-muted-foreground mx-auto mb-3 opacity-30" />
+                  <p className="text-muted-foreground">No employees match your search.</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader className="bg-muted/50">
+                      <TableRow>
+                        <TableHead>Employee</TableHead>
+                        <TableHead>Current Rate</TableHead>
+                        <TableHead>First Paid</TableHead>
+                        <TableHead>Payments</TableHead>
+                        <TableHead className="font-semibold text-primary">Total Paid</TableHead>
+                        <TableHead className="text-right">Details</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredLedgerRows.map(row => (
+                        <Fragment key={row.employee.id}>
+                          <TableRow className="hover:bg-muted/30 transition-colors">
+                            <TableCell className="font-medium">
+                              <div className="flex items-center gap-2.5">
+                                <Avatar className="h-8 w-8">
+                                  <AvatarImage src={row.employee.photoUrl ?? undefined} />
+                                  <AvatarFallback className="text-xs">{initials(row.employee)}</AvatarFallback>
+                                </Avatar>
+                                <div>
+                                  <p className="text-xs font-semibold">{row.employee.firstName} {row.employee.lastName || ""}</p>
+                                  <p className="text-[10px] text-muted-foreground">{row.employee.designation}</p>
+                                </div>
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-xs">
+                              <span className="font-medium">Rs. {row.employee.rate}</span>
+                              <Badge variant="outline" className="ml-1.5 text-[9px] px-1 py-0 h-4">{row.employee.rateType}</Badge>
+                            </TableCell>
+                            <TableCell className="text-xs">
+                              {row.firstPaidAt
+                                ? new Date(row.firstPaidAt).toLocaleDateString("en-PK")
+                                : <span className="text-muted-foreground italic">Not paid yet</span>}
+                            </TableCell>
+                            <TableCell className="text-xs">{row.paymentCount}</TableCell>
+                            <TableCell className="text-xs font-semibold text-primary">Rs. {row.totalPaid.toLocaleString()}</TableCell>
+                            <TableCell className="text-right">
+                              {row.logs.length > 0 && (
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-7 w-7"
+                                  onClick={() => setExpandedEmployeeId(expandedEmployeeId === row.employee.id ? null : row.employee.id)}
+                                  title="View payment records"
+                                >
+                                  {expandedEmployeeId === row.employee.id ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                                </Button>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                          {expandedEmployeeId === row.employee.id && (
+                            <TableRow className="bg-muted/20 hover:bg-muted/20">
+                              <TableCell colSpan={6} className="p-0">
+                                <div className="p-3 pl-14 space-y-1.5">
+                                  {row.logs.map(log => (
+                                    <div key={log.id} className="flex items-center justify-between text-xs border rounded-md px-3 py-1.5 bg-background gap-3">
+                                      <span className="text-muted-foreground">{log.startDate} to {log.endDate}</span>
+                                      <span className="font-semibold text-primary">Rs. {log.finalPay.toLocaleString()}</span>
+                                      <span className="text-muted-foreground">{new Date(log.paidAt).toLocaleDateString("en-PK")}</span>
+                                      <Button variant="ghost" size="icon" className="h-6 w-6 text-primary" onClick={() => setSelectedLogSlip(log)} title="View Receipt">
+                                        <Eye className="h-3 w-3" />
+                                      </Button>
+                                    </div>
+                                  ))}
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          )}
+                        </Fragment>
                       ))}
                     </TableBody>
                   </Table>
