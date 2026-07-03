@@ -657,7 +657,7 @@ const POS = () => {
       items = items.filter((i) => (i as any).tags?.includes(activeTag.toLowerCase()));
     }
     if (activeCategory !== "All") items = items.filter((i) => i.category === activeCategory);
-    if (search) items = items.filter((i) => i.name.toLowerCase().includes(search.toLowerCase()) || i.code.toLowerCase().includes(search.toLowerCase()));
+    if (search) items = items.filter((i) => i.name.toLowerCase().includes(search.toLowerCase()) || (i.code ?? "").toLowerCase().includes(search.toLowerCase()));
     return items;
   }, [activeCategory, search, activeTag, foodMenuItems]);
 
