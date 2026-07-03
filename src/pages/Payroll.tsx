@@ -356,6 +356,7 @@ const Payroll = () => {
       });
 
       queryClient.invalidateQueries({ queryKey: ["payroll-logs"] });
+      queryClient.invalidateQueries({ queryKey: ["payroll-all-logs"] });
     } catch (err: any) {
       toast.error(err.message || "Failed to disburse payment");
     } finally {
@@ -393,6 +394,7 @@ const Payroll = () => {
       setRewardsState({});
       setPenaltiesState({});
       queryClient.invalidateQueries({ queryKey: ["payroll-logs"] });
+      queryClient.invalidateQueries({ queryKey: ["payroll-all-logs"] });
     } catch (err: any) {
       toast.error(err.message || "Failed to disburse batch payments");
     } finally {
