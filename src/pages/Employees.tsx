@@ -576,7 +576,7 @@ const Employees = () => {
               </div>
 
               {/* Employment Status Info — context-aware */}
-              {viewEmployee.status === "inactive" && viewEmployee.terminationDate && (
+              {viewEmployee.status === "inactive" && (
                 <div className="rounded-lg border border-destructive/20 bg-destructive/[0.04] p-4 space-y-3">
                   <h4 className="text-xs font-semibold text-destructive uppercase tracking-wider flex items-center gap-1.5">
                     <span className="inline-block h-1.5 w-1.5 rounded-full bg-destructive" />
@@ -585,7 +585,9 @@ const Employees = () => {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
                     <div className="space-y-0.5">
                       <p className="text-xs text-muted-foreground">Terminated On</p>
-                      <p className="font-semibold text-destructive">{new Date(viewEmployee.terminationDate).toLocaleDateString("en-PK")}</p>
+                      <p className="font-semibold text-destructive">
+                        {viewEmployee.terminationDate ? new Date(viewEmployee.terminationDate).toLocaleDateString("en-PK") : "N/A"}
+                      </p>
                     </div>
                     <div className="space-y-0.5">
                       <p className="text-xs text-muted-foreground">Reason</p>

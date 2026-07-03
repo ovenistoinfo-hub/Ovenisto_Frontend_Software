@@ -4,7 +4,7 @@ import {
   Home, BarChart3, ShoppingCart, ChefHat, UtensilsCrossed, Store, Settings, Globe, CalendarDays,
   Pizza, Factory, Package, DollarSign, ShoppingBag, CreditCard, ArrowLeftRight,
   Trash2, Users, Clock, FileText, MessageSquare, ChevronDown, ChevronRight, Flame, LogOut, Link2,
-  Bike, CalendarCheck, LayoutGrid, ClipboardList, CalendarOff, UserCircle, IdCard
+  Bike, CalendarCheck, LayoutGrid, ClipboardList, CalendarOff, UserCircle, IdCard, Coins
 } from "lucide-react";
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupLabel, SidebarGroupContent,
@@ -80,6 +80,7 @@ const navSections = [
   { label: "Account / HR", items: [
     { title: "My Portal", url: "/my-portal", icon: UserCircle, module: "my-portal" },
     { title: "Employees", url: "/employees", icon: IdCard, module: "employees" },
+    { title: "Payroll", url: "/payroll", icon: Coins, module: "payroll" },
     { title: "Users", url: "/users", icon: Users, module: "users" },
     { title: "HR Management", url: "/attendance", icon: Clock, module: "attendance" },
   ]},
