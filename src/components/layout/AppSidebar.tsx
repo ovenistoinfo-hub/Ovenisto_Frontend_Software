@@ -4,7 +4,7 @@ import {
   Home, BarChart3, ShoppingCart, ChefHat, UtensilsCrossed, Store, Settings, Globe, CalendarDays,
   Pizza, Factory, Package, DollarSign, ShoppingBag, CreditCard, ArrowLeftRight,
   Trash2, Users, Clock, FileText, MessageSquare, ChevronDown, ChevronRight, Flame, LogOut, Link2,
-  Bike, CalendarCheck, LayoutGrid, ClipboardList, CalendarOff, UserCircle, IdCard, Coins
+  Bike, CalendarCheck, LayoutGrid, ClipboardList, CalendarOff, UserCircle, IdCard, Coins, Ban
 } from "lucide-react";
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupLabel, SidebarGroupContent,
@@ -13,9 +13,12 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
+import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { useVisiblePolling } from "@/hooks/use-visible-polling";
+import { cancellationRequestService } from "@/services/cancellationRequest.service";
 
 const navSections = [
   { label: "Common", items: [
@@ -32,6 +35,7 @@ const navSections = [
     { title: "Order Monitor", url: "/order-status", icon: BarChart3, module: "order-status" },
     { title: "Customer Display", url: "/customer-display", icon: Globe, module: "customer-display" },
     { title: "Online Orders", url: "/online-orders", icon: Globe, module: "sales" },
+    { title: "Cancellation Requests", url: "/cancellation-requests", icon: Ban, module: "cancellation-requests" },
   ]},
   { label: "Outlets", items: [{ title: "Outlets", url: "/outlets", icon: Store, module: "outlets" }]},
   { label: "Settings", items: [
@@ -96,6 +100,14 @@ export function AppSidebar() {
   const location = useLocation();
   const { logout, hasPermission, user } = useAuth();
 
+  const canReviewCancellations = hasPermission("cancellation-requests");
+  const [pendingCancelCount, setPendingCancelCount] = useState(0);
+  useVisiblePolling(() => {
+    cancellationRequestService.list({ status: "pending" })
+      .then(r => setPendingCancelCount(r.length))
+      .catch(() => {});
+  }, 30000, canReviewCancellations);
+
   const isActive = (url?: string) => {
     if (!url) return false;
     if (url === "/") return location.pathname === "/";
@@ -134,9 +146,14 @@ export function AppSidebar() {
                           "transition-all rounded-md",
                           isActive(item.url) && "bg-sidebar-accent text-sidebar-accent-foreground font-medium border-l-[3px] border-primary"
                         )}>
-                          <Link to={item.url!}>
+                          <Link to={item.url!} className="flex items-center gap-2">
                             <item.icon className="h-4 w-4 shrink-0" />
-                            {!collapsed && <span>{item.title}</span>}
+                            {!collapsed && <span className="flex-1">{item.title}</span>}
+                            {item.url === "/cancellation-requests" && pendingCancelCount > 0 && !collapsed && (
+                              <Badge variant="destructive" className="h-4 min-w-4 px-1 text-[10px] leading-none">
+                                {pendingCancelCount}
+                              </Badge>
+                            )}
                           </Link>
                         </SidebarMenuButton>
                       </SidebarMenuItem>

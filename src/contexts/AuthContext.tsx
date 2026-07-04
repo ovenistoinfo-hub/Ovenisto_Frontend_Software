@@ -11,7 +11,7 @@ const rolePermissions: Record<string, string[]> = {
     "customer-display", "outlets", "items", "production", "stock", "warehouses",
     "sales", "customers", "purchases", "purchase-requests", "suppliers", "supplier-dues",
     "expenses", "transfers", "demands", "waste", "attendance", "employees", "reports", "sms",
-    "settings", "my-portal",
+    "settings", "my-portal", "cancellation-requests",
   ],
   "Floor Manager": [
     "dashboard", "waiter", "order-status", "customer-display", "customers",

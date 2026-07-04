@@ -81,7 +81,27 @@ export interface UnlinkedEmployee {
   outlet: { id: string; name: string } | null;
 }
 
+export interface StaffPickerRecord {
+  id: string;
+  name: string;
+  role: string;
+}
+
 export const userService = {
+  /**
+   * Minimal user list (id/name/role) accessible to any POS-facing role — used to
+   * populate the cancellation-request approver/responsible-person dropdowns, unlike
+   * getUsers() below which is Manager+ only.
+   */
+  async getStaffPicker(roles?: string[], outletId?: string | null): Promise<StaffPickerRecord[]> {
+    const q = new URLSearchParams();
+    if (roles?.length) q.set('roles', roles.join(','));
+    if (outletId) q.set('outletId', outletId);
+    const qs = q.toString();
+    const res = await api.get<{ success: boolean; data: StaffPickerRecord[] }>(`/users/staff-picker${qs ? `?${qs}` : ''}`);
+    return res.data;
+  },
+
   /**
    * List all users with optional filters
    */

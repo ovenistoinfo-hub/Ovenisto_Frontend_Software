@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import type { OrderItem, Order, OrderType, CustomerType, OrderModificationLog } from "@/data/mock-data";
 import { orderService, type OrderRecord } from "@/services/order.service";
+import { cancellationRequestService, type CancellationRequestRecord } from "@/services/cancellationRequest.service";
 import { menuService } from "@/services/menu.service";
 import { customerService, type CustomerRecord } from "@/services/customer.service";
 import { userService } from "@/services/user.service";
@@ -12,6 +13,7 @@ import { tableService, type TableRecord } from "@/services/table.service";
 import { reservationService, type Reservation as ReservationRecord } from "@/services/reservation.service";
 import { useVisiblePolling } from "@/hooks/use-visible-polling";
 import { useOrderEvents } from "@/hooks/use-order-events";
+import { getSocket } from "@/lib/socket";
 import { Search, Plus, Minus, X, ShoppingCart, FileText, Printer, ArrowLeft, Trash2, User, MapPin, Phone, Flame, Check, CreditCard, Banknote, Smartphone, RotateCcw, Download, ClipboardList, AlertTriangle, UtensilsCrossed, CalendarClock, Calendar, Timer, ChefHat, Tag, Zap, History, Monitor, BookOpen, StickyNote, Eye, Building2, Crown, CircleAlert, Bell, DollarSign, Package, Ban } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -86,6 +88,18 @@ const finalizeMethods = [
 
 const quickDenominations = [10, 20, 50, 100, 500, 1000];
 
+// Roles that can populate the "Waiter" (serving staff) selector — deliberately broad,
+// unrelated to the cancellation-request pickers below.
+const WAITER_ASSIGNMENT_ROLES = [
+  'Super Admin', 'Admin', 'Manager', 'Cashier',
+  'Kitchen Staff', 'Kitchen Manager', 'Waiter', 'Floor Manager',
+];
+// Cancellation-request "Send Approval Request To" — only managers/admins can approve.
+const CANCEL_APPROVER_ROLES = ['Super Admin', 'Admin', 'Manager'];
+// Cancellation-request "Responsible Person" — rank-and-file staff only, never a
+// manager/admin (those are the approver pool above, kept mutually exclusive).
+const CANCEL_RESPONSIBLE_ROLES = ['Cashier', 'Kitchen Staff', 'Kitchen Manager', 'Waiter'];
+
 const POS = () => {
   const { orders: localOrdersData, customers: customersList, foodMenuItems: localFoodMenuItems, foodCategories: localFoodCategories, modifiers: localModifiers, kitchens: localKitchens, ingredients, addItem, updateItem: updateDataItem, shifts, settings, users, riders: deliveryRiders, deals } = useData();
   const { user } = useAuth();
@@ -99,7 +113,8 @@ const POS = () => {
   const [apiKitchens, setApiKitchens] = useState<any[]>([]);
   const [apiCustomers, setApiCustomers] = useState<CustomerRecord[]>([]);
   const [apiStaff, setApiStaff] = useState<any[]>([]);
-  const [apiManagers, setApiManagers] = useState<any[]>([]);
+  const [apiApprovers, setApiApprovers] = useState<any[]>([]);
+  const [apiResponsibleStaff, setApiResponsibleStaff] = useState<any[]>([]);
   const [apiSettings, setApiSettings] = useState<SettingsRecord | null>(null);
   const [apiLowStockItems, setApiLowStockItems] = useState<IngredientRecord[]>([]);
   const [apiReservations, setApiReservations] = useState<ReservationRecord[]>([]);
@@ -183,10 +198,12 @@ const POS = () => {
     menuService.getModifiers().then(data => setApiModifiers(data)).catch(() => {});
     orderService.getKitchens().then(data => setApiKitchens(data)).catch(() => {});
     customerService.getCustomers({ limit: 500 }).then(res => setApiCustomers(res.data)).catch(() => {});
-    const STAFF_ROLES = ['Waiter', 'Floor Manager', 'Cashier', 'Manager', 'Admin'];
-    userService.getUsers({ limit: 100 }).then(res => setApiStaff(res.data.filter((u: any) => u.status === 'active' && STAFF_ROLES.includes(u.role)))).catch(() => {});
-    const CANCEL_AUTHORIZER_ROLES = ['Super Admin', 'Admin', 'Manager', 'Floor Manager'];
-    userService.getUsers({ limit: 100 }).then(res => setApiManagers(res.data.filter((u: any) => u.status === 'active' && CANCEL_AUTHORIZER_ROLES.includes(u.role)))).catch(() => {});
+    // getStaffPicker (not getUsers) — accessible to every POS-facing role, not just
+    // Manager+, so Cashier/Waiter/Floor Manager can populate this dropdown too. This one
+    // powers the "Waiter" (serving staff) selector only — the cancellation-request
+    // approver/responsible-person pickers are fetched per-order (see the Cancel button
+    // below), scoped to that specific order's outlet.
+    userService.getStaffPicker(WAITER_ASSIGNMENT_ROLES).then(setApiStaff).catch(() => {});
     settingsService.getSettings().then(s => setApiSettings({ ...s, taxRate: Number(s.taxRate) })).catch(() => {});
     inventoryService.getIngredients({ status: 'active', lowStock: true }).then(data => setApiLowStockItems(data)).catch(() => {});
     reservationService.getAll({ upcoming: true }).then(data => setApiReservations(data)).catch(() => {});
@@ -196,6 +213,23 @@ const POS = () => {
   // poll so a backgrounded tab stops querying and lets the DB idle (saves CU-hrs).
   useOrderEvents(loadApiOrders);
   useVisiblePolling(loadApiOrders, 60000);
+
+  // Let the staff member who requested a cancellation know the outcome as soon as
+  // the approver reviews it — otherwise the request dialog just closes on submit
+  // with no later feedback on accept/reject.
+  useEffect(() => {
+    const socket = getSocket();
+    const handler = (payload: CancellationRequestRecord) => {
+      if (payload.requestedById !== user?.id || payload.status === "pending") return;
+      if (payload.status === "approved") {
+        toast.success(`Order ${payload.order?.orderNumber ?? ""} cancellation approved by ${payload.reviewedBy?.name ?? "approver"}`);
+      } else {
+        toast.error(`Order ${payload.order?.orderNumber ?? ""} cancellation rejected${payload.reviewNote ? `: ${payload.reviewNote}` : ""}`);
+      }
+    };
+    socket.on("cancellationRequest:updated", handler);
+    return () => { socket.off("cancellationRequest:updated", handler); };
+  }, [user?.id]);
 
   // ── Load order from Order Status Board (payment collection) ──
   useEffect(() => {
@@ -387,11 +421,11 @@ const POS = () => {
   const [modifyCancelAction, setModifyCancelAction] = useState<"modify" | "cancel">("modify");
   const [modifyCancelCustomReason, setModifyCancelCustomReason] = useState("");
   const [cancelSelectedItemIds, setCancelSelectedItemIds] = useState<string[]>([]);
-  const [cancelAuthorizedById, setCancelAuthorizedById] = useState("");
-  const [cancelManagerPin, setCancelManagerPin] = useState("");
+  const [cancelApproverId, setCancelApproverId] = useState("");
+  const [cancelResponsibleUserId, setCancelResponsibleUserId] = useState("");
+  const [cancelPenaltyAmount, setCancelPenaltyAmount] = useState(0);
   const [cancelRefundMethod, setCancelRefundMethod] = useState("cash");
   const [cancelSubmitting, setCancelSubmitting] = useState(false);
-  const [showCancelSlip, setShowCancelSlip] = useState<{ order: any; cancelledItems: any[]; reason: string; refundAmount: number; refundMethod: string } | null>(null);
 
   const activeDeals = useMemo(() =>
     deals.filter(d => d.isActive && d.type === "optionCombo" && d.optionGroups && d.optionGroups.length > 0 && (d.validTo === "always" || d.validTo >= new Date().toISOString().split("T")[0])),
@@ -515,8 +549,8 @@ const POS = () => {
   );
 
   const activeStaff = useMemo(() => {
-    const STAFF_ROLES = ['Waiter', 'Floor Manager', 'Cashier', 'Manager', 'Admin'];
     if (apiStaff.length > 0) return apiStaff;
+    const STAFF_ROLES = ['Waiter', 'Floor Manager', 'Cashier', 'Manager', 'Admin'];
     return users.filter(u => u.status === "active" && STAFF_ROLES.includes(u.role));
   }, [apiStaff, users]);
 
@@ -598,8 +632,7 @@ const POS = () => {
   const handleCancelOrder = useCallback(async (order: any) => {
     const finalReason = modifyCancelReason === "Other" ? modifyCancelCustomReason.trim() : modifyCancelReason;
     if (!finalReason) { toast.error("Reason is required"); return; }
-    if (!cancelAuthorizedById) { toast.error("Select the authorizing manager"); return; }
-    if (!/^\d{4}$/.test(cancelManagerPin)) { toast.error("Enter the manager's 4-digit PIN"); return; }
+    if (!cancelApproverId) { toast.error("Select an approver"); return; }
 
     const activeItems = order.items.filter((i: any) => i.status !== "cancelled");
     const isFullCancel = cancelSelectedItemIds.length === 0 || cancelSelectedItemIds.length === activeItems.length;
@@ -622,33 +655,27 @@ const POS = () => {
 
     setCancelSubmitting(true);
     try {
-      await orderService.cancelOrder(order.id, {
+      await cancellationRequestService.create(order.id, {
         itemIds: isFullCancel ? undefined : cancelSelectedItemIds,
         reason: finalReason,
-        authorizedById: cancelAuthorizedById,
-        managerPin: cancelManagerPin,
+        approverId: cancelApproverId,
+        responsibleUserId: cancelResponsibleUserId || undefined,
+        penaltyAmount: cancelPenaltyAmount || undefined,
         refundAmount,
         refundMethod: cancelRefundMethod,
         newSubtotal, newTax, newTotal,
       });
-      setShowCancelSlip({
-        order,
-        cancelledItems: isFullCancel ? activeItems : activeItems.filter((i: any) => cancelSelectedItemIds.includes(i.id)),
-        reason: finalReason,
-        refundAmount,
-        refundMethod: cancelRefundMethod,
-      });
-      toast.success(isFullCancel ? "Order cancelled" : "Item(s) cancelled");
+      toast.success("Cancellation request sent for approval");
       setShowModifyOrder(null);
       setModifyCancelReason(""); setModifyCancelCustomReason("");
-      setCancelSelectedItemIds([]); setCancelAuthorizedById(""); setCancelManagerPin(""); setCancelRefundMethod("cash");
+      setCancelSelectedItemIds([]); setCancelApproverId(""); setCancelResponsibleUserId(""); setCancelPenaltyAmount(0); setCancelRefundMethod("cash");
       loadApiOrders();
     } catch (err: any) {
-      toast.error(err.message || "Failed to cancel");
+      toast.error(err.message || "Failed to send cancellation request");
     } finally {
       setCancelSubmitting(false);
     }
-  }, [modifyCancelReason, modifyCancelCustomReason, cancelAuthorizedById, cancelManagerPin, cancelRefundMethod, cancelSelectedItemIds, taxRate, loadApiOrders]);
+  }, [modifyCancelReason, modifyCancelCustomReason, cancelApproverId, cancelResponsibleUserId, cancelPenaltyAmount, cancelRefundMethod, cancelSelectedItemIds, taxRate, loadApiOrders]);
 
   // FIX 3A: Filter by tags
   const filteredMenu = useMemo(() => {
@@ -2057,7 +2084,17 @@ const POS = () => {
                           <Button size="sm" variant="outline" className="h-7 text-xs border-warning/30 text-warning hover:bg-warning/5" onClick={() => { setModifyCancelAction("modify"); setModifyCancelReason(""); setShowModifyOrder(order.id); }}>
                             Modify
                           </Button>
-                          <Button size="sm" variant="outline" className="h-7 text-xs border-destructive/30 text-destructive hover:bg-destructive/5" onClick={() => { setModifyCancelAction("cancel"); setModifyCancelReason(""); setShowModifyOrder(order.id); }}>
+                          <Button size="sm" variant="outline" className="h-7 text-xs border-destructive/30 text-destructive hover:bg-destructive/5" onClick={() => {
+                            setModifyCancelAction("cancel"); setModifyCancelReason(""); setShowModifyOrder(order.id);
+                            // Scope both pickers to THIS order's branch — not the globally
+                            // selected outlet — so a Super Admin on "All Outlets" (or anyone)
+                            // can only route the request to / blame staff from that one branch.
+                            const orderOutletId = (order as any).outletId as string | null | undefined;
+                            setApiApprovers([]);
+                            setApiResponsibleStaff([]);
+                            userService.getStaffPicker(CANCEL_APPROVER_ROLES, orderOutletId).then(setApiApprovers).catch(() => {});
+                            userService.getStaffPicker(CANCEL_RESPONSIBLE_ROLES, orderOutletId).then(setApiResponsibleStaff).catch(() => {});
+                          }}>
                             Cancel
                           </Button>
                         </div>
@@ -2678,7 +2715,7 @@ const POS = () => {
 
       {/* Order Modification/Cancellation Dialog */}
       <Dialog open={!!showModifyOrder} onOpenChange={(open) => { if (!open) setShowModifyOrder(null); }}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               {modifyCancelAction === "cancel" ? (
@@ -2724,6 +2761,9 @@ const POS = () => {
                         <SelectItem value="Wrong order entered">Wrong order entered</SelectItem>
                         <SelectItem value="Item not available">Item not available</SelectItem>
                         <SelectItem value="Kitchen mistake">Kitchen mistake</SelectItem>
+                        <SelectItem value="Missing Item">Missing Item</SelectItem>
+                        <SelectItem value="Wrong Item">Wrong Item</SelectItem>
+                        <SelectItem value="Packing Error">Packing Error</SelectItem>
                         <SelectItem value="Payment failed">Payment failed</SelectItem>
                         <SelectItem value="Duplicate order">Duplicate order</SelectItem>
                         <SelectItem value="Customer complaint">Customer complaint</SelectItem>
@@ -2735,20 +2775,33 @@ const POS = () => {
                         placeholder="Enter custom reason..." />
                     )}
                   </div>
+                  <div>
+                    <Label className="text-xs font-medium">Send Approval Request To *</Label>
+                    <Select value={cancelApproverId} onValueChange={setCancelApproverId}>
+                      <SelectTrigger className="mt-1 h-9 text-sm"><SelectValue placeholder="Select manager/admin..." /></SelectTrigger>
+                      <SelectContent>
+                        {apiApprovers.map((m: any) => <SelectItem key={m.id} value={m.id}>{m.name} ({m.role})</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-[10px] text-muted-foreground mt-1">
+                      Order will only be cancelled once this person approves the request.
+                    </p>
+                  </div>
                   <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <Label className="text-xs font-medium">Authorized By *</Label>
-                      <Select value={cancelAuthorizedById} onValueChange={setCancelAuthorizedById}>
-                        <SelectTrigger className="mt-1 h-9 text-sm"><SelectValue placeholder="Select manager..." /></SelectTrigger>
+                      <Label className="text-xs font-medium">Responsible Person</Label>
+                      <Select value={cancelResponsibleUserId} onValueChange={setCancelResponsibleUserId}>
+                        <SelectTrigger className="mt-1 h-9 text-sm"><SelectValue placeholder="Select staff (optional)..." /></SelectTrigger>
                         <SelectContent>
-                          {apiManagers.map((m: any) => <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>)}
+                          {apiResponsibleStaff.map((m: any) => <SelectItem key={m.id} value={m.id}>{m.name} ({m.role})</SelectItem>)}
                         </SelectContent>
                       </Select>
                     </div>
                     <div>
-                      <Label className="text-xs font-medium">Manager PIN *</Label>
-                      <Input className="mt-1 h-9 text-sm" type="password" inputMode="numeric" maxLength={4}
-                        value={cancelManagerPin} onChange={e => setCancelManagerPin(e.target.value.replace(/\D/g, ""))} />
+                      <Label className="text-xs font-medium">Penalty ({effectiveSettings.currency})</Label>
+                      <Input className="mt-1 h-9 text-sm" type="number" min={0} inputMode="numeric"
+                        value={cancelPenaltyAmount || ""} onChange={e => setCancelPenaltyAmount(Math.max(0, parseFloat(e.target.value) || 0))}
+                        placeholder="0" />
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-2 items-end">
@@ -2834,11 +2887,11 @@ const POS = () => {
             );
           })()}
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => { setShowModifyOrder(null); setModifyCancelReason(""); setModifyCancelCustomReason(""); setCancelSelectedItemIds([]); setCancelAuthorizedById(""); setCancelManagerPin(""); setCancelRefundMethod("cash"); }}>Cancel</Button>
+            <Button variant="outline" onClick={() => { setShowModifyOrder(null); setModifyCancelReason(""); setModifyCancelCustomReason(""); setCancelSelectedItemIds([]); setCancelApproverId(""); setCancelResponsibleUserId(""); setCancelPenaltyAmount(0); setCancelRefundMethod("cash"); }}>Cancel</Button>
             {modifyCancelAction === "cancel" ? (
-              <Button variant="destructive" disabled={cancelSubmitting || !modifyCancelReason || (modifyCancelReason === "Other" && !modifyCancelCustomReason.trim())}
+              <Button variant="destructive" disabled={cancelSubmitting || !modifyCancelReason || !cancelApproverId || (modifyCancelReason === "Other" && !modifyCancelCustomReason.trim())}
                 onClick={() => { const order = allOrdersData.find(o => o.id === showModifyOrder); if (order) handleCancelOrder(order); }}>
-                <Ban className="h-4 w-4 mr-1" />{cancelSubmitting ? "Cancelling..." : "Save Cancellation"}
+                <Ban className="h-4 w-4 mr-1" />{cancelSubmitting ? "Sending..." : "Send for Approval"}
               </Button>
             ) : (
               <Button className="gradient-primary text-primary-foreground" disabled={!modifyCancelReason || (modifyCancelReason === "Other" && !modifyCancelCustomReason.trim())} onClick={() => {
@@ -2857,39 +2910,6 @@ const POS = () => {
                 <FileText className="h-4 w-4 mr-1" />Modify Order
               </Button>
             )}
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Cancel Slip Print Dialog */}
-      <Dialog open={!!showCancelSlip} onOpenChange={(open) => { if (!open) setShowCancelSlip(null); }}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader><DialogTitle>Cancellation Slip</DialogTitle></DialogHeader>
-          {showCancelSlip && (
-            <div className="text-sm space-y-2 border rounded-md p-3">
-              <p className="font-semibold text-center">{effectiveSettings.restaurantName || "Ovenisto"}</p>
-              <p className="text-center text-xs text-muted-foreground">Order Cancellation Slip</p>
-              <hr />
-              <p>Order: <strong>{showCancelSlip.order.orderNumber}</strong></p>
-              <p>Date: {new Date().toLocaleString()}</p>
-              <p>Reason: {showCancelSlip.reason}</p>
-              <hr />
-              {showCancelSlip.cancelledItems.map((item: any) => (
-                <div key={item.id} className="flex justify-between text-xs">
-                  <span>{item.name} × {item.qty}</span>
-                  <span>{effectiveSettings.currency} {(item.price * item.qty - item.discount).toLocaleString()}</span>
-                </div>
-              ))}
-              <hr />
-              <div className="flex justify-between font-semibold">
-                <span>Refund ({showCancelSlip.refundMethod})</span>
-                <span>{effectiveSettings.currency} {showCancelSlip.refundAmount.toLocaleString()}</span>
-              </div>
-            </div>
-          )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowCancelSlip(null)}>Close</Button>
-            <Button className="gradient-primary text-primary-foreground" onClick={() => window.print()}><Printer className="h-4 w-4 mr-1" />Print Cancel Slip</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

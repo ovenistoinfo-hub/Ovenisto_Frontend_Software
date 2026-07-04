@@ -24,6 +24,7 @@ import { scheduleService, SHIFT_COLORS } from "@/services/schedule.service";
 import { shiftService, type ShiftRecord } from "@/services/shift.service";
 import { employeeService } from "@/services/employee.service";
 import { settingsService } from "@/services/settings.service";
+import { penaltyService } from "@/services/penalty.service";
 
 const LEAVE_TYPE_COLORS: Record<string, string> = {
   sick:      "bg-destructive/10 text-destructive",
@@ -165,6 +166,14 @@ export default function EmployeePortal() {
   const { data: myEmployee } = useQuery({
     queryKey: ["my-employee"],
     queryFn: () => employeeService.getMe(),
+    enabled: !!user?.id,
+  });
+
+  // Per-incident penalties (e.g. order-cancellation responsibility) — same treatment
+  // as the absence penalty below, additive on top of it.
+  const { data: myPenalties = [] } = useQuery({
+    queryKey: ["my-penalties"],
+    queryFn: () => penaltyService.getMine(),
     enabled: !!user?.id,
   });
 
@@ -320,7 +329,12 @@ export default function EmployeePortal() {
     rateType === "Monthly"  ? rate :
     rateType === "PerShift" ? presentDays * rate :
     0;
-  const totalPenalty = absentCount * penaltyFee;
+  const filteredPenalties = useMemo(
+    () => myPenalties.filter(p => p.date >= attFrom && p.date <= attTo),
+    [myPenalties, attFrom, attTo]
+  );
+  const incidentPenaltyTotal = filteredPenalties.reduce((acc, p) => acc + p.amount, 0);
+  const totalPenalty = absentCount * penaltyFee + incidentPenaltyTotal;
 
   const fmt = (n: number) => `Rs. ${Math.round(n).toLocaleString("en-PK")}`;
 
@@ -499,7 +513,7 @@ export default function EmployeePortal() {
               { label: "Hours",        value: `${totalHours.toFixed(1)}h`,        color: "text-primary",     extra: null, statusKey: null },
               { label: "Overtime",     value: `${totalOvertimeHours.toFixed(1)}h`, color: "text-warning",    extra: <Timer className="h-3 w-3" />, statusKey: null },
               { label: "Est. Pay",     value: hasPay ? fmt(totalPay)    : "—", color: "text-success",     extra: <DollarSign className="h-3 w-3" />, statusKey: null },
-              { label: "Penalty",      value: penaltyFee > 0 ? fmt(totalPenalty) : "—", color: "text-destructive", extra: <AlertTriangle className="h-3 w-3" />, statusKey: null },
+              { label: "Penalty",      value: (penaltyFee > 0 || incidentPenaltyTotal > 0) ? fmt(totalPenalty) : "—", color: "text-destructive", extra: <AlertTriangle className="h-3 w-3" />, statusKey: null },
             ].map(s => (
               <Card 
                 key={s.label} 
@@ -519,6 +533,41 @@ export default function EmployeePortal() {
               </Card>
             ))}
           </div>
+
+          {/* Per-incident penalties (e.g. order-cancellation responsibility) */}
+          {filteredPenalties.length > 0 && (
+            <Card className="shadow-sm border-destructive/20">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm">Penalties — {attFrom} → {attTo}</CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-muted/50 hover:bg-muted/50">
+                      <TableHead>Date</TableHead>
+                      <TableHead>Reason</TableHead>
+                      <TableHead className="text-right">Amount</TableHead>
+                      <TableHead className="text-right">Status</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredPenalties.map(p => (
+                      <TableRow key={p.id} className="hover:bg-muted/20">
+                        <TableCell className="text-sm">{p.date}</TableCell>
+                        <TableCell className="text-sm text-muted-foreground">{p.reason}</TableCell>
+                        <TableCell className="text-sm text-right text-destructive font-medium">{fmt(p.amount)}</TableCell>
+                        <TableCell className="text-right">
+                          <Badge className={p.paymentLogId ? "bg-muted text-muted-foreground" : "bg-warning/10 text-warning"}>
+                            {p.paymentLogId ? "Deducted" : "Pending"}
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          )}
 
           {/* History table */}
           <Card className="shadow-sm">

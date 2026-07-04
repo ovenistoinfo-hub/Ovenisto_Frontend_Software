@@ -39,6 +39,7 @@ export interface PayoutInput {
   rate?: number;
   unitsWorked?: number;
   absentDays?: number;
+  penaltyIds?: string[];
 }
 
 export const payrollService = {

@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { employeeService, type EmployeeRecord } from "@/services/employee.service";
 import { attendanceService, type AttendanceRecord } from "@/services/attendance.service";
 import { payrollService, type PayoutInput, type PaymentLogRecord } from "@/services/payroll.service";
+import { penaltyService } from "@/services/penalty.service";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -75,6 +76,7 @@ interface EmployeePayrollRow {
   periodStart: string;
   periodEnd: string;
   latestPaidThrough: string | null; // last date already covered by a payment this month, if any
+  penaltyIds: string[]; // unpaid StaffPenalty ids (order-cancellation etc.) folded into `penalties`
 }
 
 interface EmployeeLedgerRow {
@@ -147,7 +149,21 @@ const Payroll = () => {
     // tab needs it to know which employees are already paid for this exact period.
   });
 
+  // Unpaid per-incident penalties (order-cancellation responsibility, etc.) for this
+  // month — folded into the "absents × penaltyFee" default below, same as that.
+  const { data: staffPenalties = [] } = useQuery({
+    queryKey: ["payroll-penalties", startDate, effectiveMonthEnd],
+    queryFn: () => penaltyService.list({ startDate, endDate: effectiveMonthEnd, unpaidOnly: true }),
+  });
+
   const attendanceRecords = attendancePage?.data || [];
+
+  // Group unpaid penalties by userId
+  const penaltiesByUser = staffPenalties.reduce<Record<string, typeof staffPenalties>>((acc, p) => {
+    if (!acc[p.userId]) acc[p.userId] = [];
+    acc[p.userId].push(p);
+    return acc;
+  }, {});
 
   // Payment logs for this month, grouped per employee — used to find where each
   // employee's calculation should resume from (see periodStart below). A mid-month
@@ -217,9 +233,14 @@ const Payroll = () => {
 
       basePay = parseFloat(basePay.toFixed(2));
 
-      // Automated penalties calculation (absent count * penalty fee)
+      // Automated penalties calculation (absent count * penalty fee) + any unpaid
+      // per-incident penalties (order-cancellation responsibility, etc.) for this period
       const defaultPenaltyFee = emp.penaltyFee || 0;
-      const calculatedPenalty = isPaid ? 0 : absentCount * defaultPenaltyFee;
+      const userPenaltyRecords = emp.userId
+        ? (penaltiesByUser[emp.userId] || []).filter(p => p.date >= periodStart && p.date <= periodEnd)
+        : [];
+      const incidentPenalty = userPenaltyRecords.reduce((s, p) => s + p.amount, 0);
+      const calculatedPenalty = isPaid ? 0 : absentCount * defaultPenaltyFee + incidentPenalty;
 
       // Local states override
       const penaltyOverride = isPaid ? 0 : (penaltiesState[emp.id] !== undefined ? penaltiesState[emp.id] : calculatedPenalty);
@@ -244,6 +265,7 @@ const Payroll = () => {
         periodStart,
         periodEnd,
         latestPaidThrough: latestPaidEndDate,
+        penaltyIds: isPaid ? [] : userPenaltyRecords.map(p => p.id),
       };
     });
 
@@ -338,11 +360,12 @@ const Payroll = () => {
           : row.employee.rateType === "Monthly" ? undefined
           : row.checkInCount,
         absentDays: row.absentCount,
+        penaltyIds: row.penaltyIds,
       };
 
       await payrollService.payIndividual(payout);
       toast.success(`Disbursed pay of Rs. ${row.finalPay} to ${row.employee.firstName}`);
-      
+
       // Clear inputs for this employee
       setRewardsState(prev => {
         const copy = { ...prev };
@@ -357,6 +380,7 @@ const Payroll = () => {
 
       queryClient.invalidateQueries({ queryKey: ["payroll-logs"] });
       queryClient.invalidateQueries({ queryKey: ["payroll-all-logs"] });
+      queryClient.invalidateQueries({ queryKey: ["payroll-penalties"] });
     } catch (err: any) {
       toast.error(err.message || "Failed to disburse payment");
     } finally {
@@ -385,16 +409,18 @@ const Payroll = () => {
           : row.employee.rateType === "Monthly" ? undefined
           : row.checkInCount,
         absentDays: row.absentCount,
+        penaltyIds: row.penaltyIds,
       }));
 
       await payrollService.payBatch(payouts);
       toast.success(`Successfully disbursed batch payroll of Rs. ${totalFinalPay} to ${payouts.length} employees!`);
-      
+
       // Reset input fields
       setRewardsState({});
       setPenaltiesState({});
       queryClient.invalidateQueries({ queryKey: ["payroll-logs"] });
       queryClient.invalidateQueries({ queryKey: ["payroll-all-logs"] });
+      queryClient.invalidateQueries({ queryKey: ["payroll-penalties"] });
     } catch (err: any) {
       toast.error(err.message || "Failed to disburse batch payments");
     } finally {
@@ -521,7 +547,7 @@ const Payroll = () => {
                         <TableHead>Rate / Pay Info</TableHead>
                         <TableHead>Hours / Days</TableHead>
                         <TableHead>Base Pay</TableHead>
-                        <TableHead>Penalties (Absents)</TableHead>
+                        <TableHead>Penalties</TableHead>
                         <TableHead>Rewards</TableHead>
                         <TableHead>Reward Reason / Notes</TableHead>
                         <TableHead className="font-semibold text-primary">Final Pay</TableHead>

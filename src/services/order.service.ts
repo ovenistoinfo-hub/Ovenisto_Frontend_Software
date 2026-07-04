@@ -22,6 +22,7 @@ export interface OrderItemRecord {
 export interface OrderRecord {
   id: string;
   orderNumber: string;
+  outletId: string | null;
   customerId: string | null;
   customerName: string | null;
   phone: string | null;
@@ -92,18 +93,6 @@ export interface CreateOrderInput {
   orderSource?: string;
 }
 
-export interface CancelOrderInput {
-  itemIds?: string[];
-  reason: string;
-  authorizedById: string;
-  managerPin: string;
-  refundAmount: number;
-  refundMethod: string;
-  newSubtotal?: number;
-  newTax?: number;
-  newTotal?: number;
-}
-
 export const orderService = {
   // ── Orders ──
 
@@ -143,11 +132,6 @@ export const orderService = {
 
   async updateOrderStatus(id: string, status: string): Promise<OrderRecord> {
     const res = await api.put<{ success: boolean; data: OrderRecord }>(`/orders/${id}/status`, { status });
-    return res.data;
-  },
-
-  async cancelOrder(id: string, data: CancelOrderInput): Promise<OrderRecord> {
-    const res = await api.post<{ success: boolean; data: OrderRecord }>(`/orders/${id}/cancel`, data);
     return res.data;
   },
 

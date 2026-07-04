@@ -50,6 +50,7 @@ const Demands = lazy(() => import("./pages/Demands"));
 const Waste = lazy(() => import("./pages/Waste"));
 const Users = lazy(() => import("./pages/Users"));
 const Attendance = lazy(() => import("./pages/Attendance"));
+const CancellationRequests = lazy(() => import("./pages/CancellationRequests"));
 const Employees = lazy(() => import("./pages/Employees"));
 const Payroll = lazy(() => import("./pages/Payroll"));
 const Reports = lazy(() => import("./pages/Reports"));
@@ -169,6 +170,7 @@ function AppRoutes() {
       <Route path="/waste" element={<ProtectedRoute module="waste"><AppLayout><Waste /></AppLayout></ProtectedRoute>} />
       <Route path="/users" element={<ProtectedRoute module="users"><AppLayout><Users /></AppLayout></ProtectedRoute>} />
       <Route path="/attendance" element={<ProtectedRoute module="attendance"><AppLayout><Attendance /></AppLayout></ProtectedRoute>} />
+      <Route path="/cancellation-requests" element={<ProtectedRoute module="cancellation-requests"><AppLayout><CancellationRequests /></AppLayout></ProtectedRoute>} />
       <Route path="/employees" element={<ProtectedRoute module="employees"><AppLayout><Employees /></AppLayout></ProtectedRoute>} />
       <Route path="/payroll" element={<ProtectedRoute module="payroll"><AppLayout><Payroll /></AppLayout></ProtectedRoute>} />
       <Route path="/rider-portal" element={<ProtectedRoute module="rider-portal"><AppLayout><RiderPortal /></AppLayout></ProtectedRoute>} />
