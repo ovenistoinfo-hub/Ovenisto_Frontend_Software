@@ -119,6 +119,10 @@ const POS = () => {
   const [apiLowStockItems, setApiLowStockItems] = useState<IngredientRecord[]>([]);
   const [apiReservations, setApiReservations] = useState<ReservationRecord[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // Order ids with a cancellation request I've filed that's still pending — the
+  // per-order gate that keeps a filed order's "Cancel" button locked without
+  // touching every other order's (each order's request state is independent).
+  const [myPendingCancelOrderIds, setMyPendingCancelOrderIds] = useState<Set<string>>(new Set());
 
   // Normalize an API OrderRecord to match the mock Order field names
   const normalizeApiOrder = useCallback((o: OrderRecord): any => ({
@@ -190,9 +194,21 @@ const POS = () => {
     }
   }, [normalizeApiOrder]);
 
+  // Which of MY orders already have a pending cancellation request — so the "Cancel"
+  // button only locks for that specific order, not every order in the list.
+  const loadMyPendingCancellations = useCallback(async () => {
+    try {
+      const requests = await cancellationRequestService.listMine();
+      setMyPendingCancelOrderIds(new Set(requests.filter(r => r.status === "pending").map(r => r.orderId)));
+    } catch {
+      // non-critical — worst case the button stays enabled and a duplicate request 400s
+    }
+  }, []);
+
   useEffect(() => {
     // Load all data from API on mount
     loadApiOrders();
+    loadMyPendingCancellations();
     menuService.getMenuItems({ limit: 500 }).then(data => setApiMenuItems(data)).catch(() => {});
     menuService.getCategories('active').then(data => setApiCategories(data)).catch(() => {});
     menuService.getModifiers().then(data => setApiModifiers(data)).catch(() => {});
@@ -207,7 +223,7 @@ const POS = () => {
     settingsService.getSettings().then(s => setApiSettings({ ...s, taxRate: Number(s.taxRate) })).catch(() => {});
     inventoryService.getIngredients({ status: 'active', lowStock: true }).then(data => setApiLowStockItems(data)).catch(() => {});
     reservationService.getAll({ upcoming: true }).then(data => setApiReservations(data)).catch(() => {});
-  }, [loadApiOrders]);
+  }, [loadApiOrders, loadMyPendingCancellations]);
 
   // Refresh orders on real-time push (instant), plus a 60s visibility-gated safety
   // poll so a backgrounded tab stops querying and lets the DB idle (saves CU-hrs).
@@ -216,19 +232,36 @@ const POS = () => {
 
   // Let the staff member who requested a cancellation know the outcome as soon as
   // the approver reviews it — otherwise the request dialog just closes on submit
-  // with no later feedback on accept/reject.
+  // with no later feedback on accept/reject. Also keeps myPendingCancelOrderIds (the
+  // per-order "Cancel" lock) in sync: add the order when MY request is created, drop
+  // it the moment it's approved/rejected — so only that one order is ever locked,
+  // and it unlocks again if rejected (letting a fresh cancellation be filed).
   useEffect(() => {
     const socket = getSocket();
-    const handler = (payload: CancellationRequestRecord) => {
+    const createdHandler = (payload: CancellationRequestRecord) => {
+      if (payload.requestedById !== user?.id || payload.status !== "pending") return;
+      setMyPendingCancelOrderIds(prev => new Set(prev).add(payload.orderId));
+    };
+    const updatedHandler = (payload: CancellationRequestRecord) => {
       if (payload.requestedById !== user?.id || payload.status === "pending") return;
+      setMyPendingCancelOrderIds(prev => {
+        if (!prev.has(payload.orderId)) return prev;
+        const next = new Set(prev);
+        next.delete(payload.orderId);
+        return next;
+      });
       if (payload.status === "approved") {
         toast.success(`Order ${payload.order?.orderNumber ?? ""} cancellation approved by ${payload.reviewedBy?.name ?? "approver"}`);
       } else {
         toast.error(`Order ${payload.order?.orderNumber ?? ""} cancellation rejected${payload.reviewNote ? `: ${payload.reviewNote}` : ""}`);
       }
     };
-    socket.on("cancellationRequest:updated", handler);
-    return () => { socket.off("cancellationRequest:updated", handler); };
+    socket.on("cancellationRequest:created", createdHandler);
+    socket.on("cancellationRequest:updated", updatedHandler);
+    return () => {
+      socket.off("cancellationRequest:created", createdHandler);
+      socket.off("cancellationRequest:updated", updatedHandler);
+    };
   }, [user?.id]);
 
   // ── Load order from Order Status Board (payment collection) ──
@@ -666,6 +699,7 @@ const POS = () => {
         newSubtotal, newTax, newTotal,
       });
       toast.success("Cancellation request sent for approval");
+      setMyPendingCancelOrderIds(prev => new Set(prev).add(order.id));
       setShowModifyOrder(null);
       setModifyCancelReason(""); setModifyCancelCustomReason("");
       setCancelSelectedItemIds([]); setCancelApproverId(""); setCancelResponsibleUserId(""); setCancelPenaltyAmount(0); setCancelRefundMethod("cash");
@@ -2084,18 +2118,20 @@ const POS = () => {
                           <Button size="sm" variant="outline" className="h-7 text-xs border-warning/30 text-warning hover:bg-warning/5" onClick={() => { setModifyCancelAction("modify"); setModifyCancelReason(""); setShowModifyOrder(order.id); }}>
                             Modify
                           </Button>
-                          <Button size="sm" variant="outline" className="h-7 text-xs border-destructive/30 text-destructive hover:bg-destructive/5" onClick={() => {
-                            setModifyCancelAction("cancel"); setModifyCancelReason(""); setShowModifyOrder(order.id);
-                            // Scope both pickers to THIS order's branch — not the globally
-                            // selected outlet — so a Super Admin on "All Outlets" (or anyone)
-                            // can only route the request to / blame staff from that one branch.
-                            const orderOutletId = (order as any).outletId as string | null | undefined;
-                            setApiApprovers([]);
-                            setApiResponsibleStaff([]);
-                            userService.getStaffPicker(CANCEL_APPROVER_ROLES, orderOutletId).then(setApiApprovers).catch(() => {});
-                            userService.getStaffPicker(CANCEL_RESPONSIBLE_ROLES, orderOutletId).then(setApiResponsibleStaff).catch(() => {});
-                          }}>
-                            Cancel
+                          <Button size="sm" variant="outline" className="h-7 text-xs border-destructive/30 text-destructive hover:bg-destructive/5 disabled:opacity-60"
+                            disabled={myPendingCancelOrderIds.has(order.id)}
+                            onClick={() => {
+                              setModifyCancelAction("cancel"); setModifyCancelReason(""); setShowModifyOrder(order.id);
+                              // Scope both pickers to THIS order's branch — not the globally
+                              // selected outlet — so a Super Admin on "All Outlets" (or anyone)
+                              // can only route the request to / blame staff from that one branch.
+                              const orderOutletId = (order as any).outletId as string | null | undefined;
+                              setApiApprovers([]);
+                              setApiResponsibleStaff([]);
+                              userService.getStaffPicker(CANCEL_APPROVER_ROLES, orderOutletId).then(setApiApprovers).catch(() => {});
+                              userService.getStaffPicker(CANCEL_RESPONSIBLE_ROLES, orderOutletId).then(setApiResponsibleStaff).catch(() => {});
+                            }}>
+                            {myPendingCancelOrderIds.has(order.id) ? "Pending Approval" : "Cancel"}
                           </Button>
                         </div>
                       </Card>
