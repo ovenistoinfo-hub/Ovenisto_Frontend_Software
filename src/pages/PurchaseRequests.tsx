@@ -27,6 +27,7 @@ import {
 } from "@/services/purchase-request.service";
 import { warehouseService, type WarehouseRecord } from "@/services/warehouse.service";
 import { inventoryService, type IngredientRecord } from "@/services/inventory.service";
+import { supplierService, type SupplierRecord } from "@/services/supplier.service";
 
 const STATUS_STYLE: Record<string, { label: string; cls: string }> = {
   PENDING: { label: "Pending", cls: "bg-warning/10 text-warning" },
@@ -64,6 +65,8 @@ const PurchaseRequests = () => {
   const [showCreate, setShowCreate] = useState(false);
   const [warehouses, setWarehouses] = useState<WarehouseRecord[]>([]);
   const [ingredients, setIngredients] = useState<IngredientRecord[]>([]);
+  const [suppliers, setSuppliers] = useState<SupplierRecord[]>([]);
+  const [selectedSuppliers, setSelectedSuppliers] = useState<string[]>([]);
   const [selectedWarehouse, setSelectedWarehouse] = useState("");
   const [createItems, setCreateItems] = useState<RequestItem[]>([]);
   const [createNotes, setCreateNotes] = useState("");
@@ -113,14 +116,17 @@ const PurchaseRequests = () => {
     setCreateItems([]);
     setCreateNotes("");
     setAddIngredientId("");
+    setSelectedSuppliers([]);
     try {
-      const [whs, ings] = await Promise.all([
+      const [whs, ings, sups] = await Promise.all([
         warehouseService.getAll(),
         inventoryService.getIngredients(),
+        supplierService.getAll().then(r => r.data),
       ]);
       const branchWarehouses = whs.filter(w => w.type === "BRANCH");
       setWarehouses(branchWarehouses);
       setIngredients(ings);
+      setSuppliers(sups);
       // Pre-select warehouse from URL param if available
       const paramWarehouseId = searchParams.get("warehouseId");
       if (paramWarehouseId && branchWarehouses.find(w => w.id === paramWarehouseId)) {
@@ -149,6 +155,40 @@ const PurchaseRequests = () => {
   const getWarehouseStock = useCallback((ingredientId: string) => {
     return warehouseStockMap[ingredientId] ?? 0;
   }, [warehouseStockMap]);
+
+  // Fetch ingredients for selected supplier and auto-populate request items
+  const handleAddSupplier = useCallback((supplierId: string) => {
+    if (!supplierId || supplierId === "none" || selectedSuppliers.includes(supplierId)) return;
+    setSelectedSuppliers(prev => [...prev, supplierId]);
+    supplierService.getIngredients(supplierId).then(res => {
+      const newItems = res.data.map(ing => {
+        const currentStock = getWarehouseStock(ing.id);
+        const lowLevel = Number(ing.lowStockLevel) || 0;
+        return {
+          ingredientId: ing.id,
+          name: ing.name,
+          unit: ing.unit?.symbol || ing.unit?.name || "",
+          currentStock,
+          requestedQty: Math.max(1, Math.round(lowLevel - currentStock)),
+        };
+      });
+      setCreateItems(prev => {
+        const filteredPrev = prev.filter(p => p.ingredientId !== "");
+        const toAppend = newItems.filter(n => !filteredPrev.some(p => p.ingredientId === n.ingredientId));
+        return [...filteredPrev, ...toAppend];
+      });
+    }).catch(err => {
+      toast.error(err.message || "Failed to load supplier ingredients");
+    });
+  }, [selectedSuppliers, getWarehouseStock]);
+
+  const handleRemoveSupplier = useCallback((supplierId: string) => {
+    setSelectedSuppliers(prev => prev.filter(id => id !== supplierId));
+    setCreateItems(prev => prev.filter(item => {
+      const ing = ingredients.find(ig => ig.id === item.ingredientId);
+      return ing?.supplierId !== supplierId;
+    }));
+  }, [ingredients]);
 
   // Pre-fill ingredient from URL param after ingredients are loaded
   useEffect(() => {
@@ -225,11 +265,20 @@ const PurchaseRequests = () => {
     if (createItems.length === 0) { toast.error("Add at least one item"); return; }
     if (createItems.some(i => i.requestedQty <= 0)) { toast.error("All quantities must be > 0"); return; }
     setSaving(true);
+    const itemSupplierIds = createItems
+      .map(item => ingredients.find(ig => ig.id === item.ingredientId)?.supplierId)
+      .filter(Boolean);
+    const uniqueSuppliers = Array.from(new Set(itemSupplierIds));
+    const finalSupplierId = selectedSuppliers.length === 1
+      ? selectedSuppliers[0]
+      : (uniqueSuppliers.length === 1 ? uniqueSuppliers[0] : undefined);
+
     try {
       const newPR = await purchaseRequestService.create({
         warehouseId: selectedWarehouse,
         items: createItems.map(i => ({ ingredientId: i.ingredientId, requestedQty: i.requestedQty })),
         notes: createNotes || undefined,
+        supplierId: finalSupplierId,
       });
       toast.success("Purchase request created");
       setShowCreate(false);
@@ -364,6 +413,44 @@ const PurchaseRequests = () => {
               )}
             </div>
 
+            {/* Vendor Select */}
+            <div className="space-y-1.5">
+              <Label>Select Suppliers / Vendors</Label>
+              <Select value="" onValueChange={handleAddSupplier}>
+                <SelectTrigger><SelectValue placeholder="Add supplier to load ingredients..." /></SelectTrigger>
+                <SelectContent>
+                  {suppliers
+                    .filter(s => !selectedSuppliers.includes(s.id))
+                    .map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Selected Suppliers Badges */}
+            {selectedSuppliers.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 p-2.5 bg-muted/40 rounded-lg border">
+                <span className="text-xs text-muted-foreground self-center mr-1">Active Vendors:</span>
+                {selectedSuppliers.map(id => {
+                  const s = suppliers.find(sup => sup.id === id);
+                  if (!s) return null;
+                  return (
+                    <Badge key={id} variant="secondary" className="flex items-center gap-1.5 py-1 pr-1.5 pl-2.5">
+                      <span className="text-xs font-semibold">{s.name}</span>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-4.5 w-4.5 rounded-full p-0 text-muted-foreground hover:text-foreground"
+                        onClick={() => handleRemoveSupplier(id)}
+                      >
+                        <X className="h-3 w-3" />
+                      </Button>
+                    </Badge>
+                  );
+                })}
+              </div>
+            )}
+
             {/* Add ingredient row */}
             <div className="flex gap-2 items-end">
               <div className="flex-1">
@@ -448,6 +535,7 @@ const PurchaseRequests = () => {
                       <TableHead>Date</TableHead>
                       <TableHead>Requester</TableHead>
                       <TableHead>Warehouse</TableHead>
+                      <TableHead>Vendor</TableHead>
                       <TableHead className="text-center">Items</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Actions</TableHead>
@@ -466,6 +554,7 @@ const PurchaseRequests = () => {
                             <div className="text-xs text-muted-foreground">{pr.requestedBy.role}</div>
                           </TableCell>
                           <TableCell className="text-sm">{pr.warehouse.name}</TableCell>
+                          <TableCell className="text-sm">{pr.supplier?.name || "—"}</TableCell>
                           <TableCell className="text-center">{pr.items.length}</TableCell>
                           <TableCell><Badge variant="secondary" className={st.cls}>{st.label}</Badge></TableCell>
                           <TableCell>
@@ -534,6 +623,7 @@ const PurchaseRequests = () => {
                 {/* Warehouse + Notes */}
                 <div className="flex gap-4 text-sm flex-wrap">
                   <div><span className="text-muted-foreground">Warehouse:</span> <span className="font-medium">{viewRequest.warehouse.name}</span>{viewRequest.warehouse.outlet && <span className="text-muted-foreground"> — {viewRequest.warehouse.outlet.name}</span>}</div>
+                  {viewRequest.supplier && <div><span className="text-muted-foreground">Vendor:</span> <span className="font-medium">{viewRequest.supplier.name}</span></div>}
                   {viewRequest.notes && <div><span className="text-muted-foreground">Notes:</span> {viewRequest.notes}</div>}
                 </div>
 

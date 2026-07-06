@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supplierService, type SupplierRecord } from "@/services/supplier.service";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -29,6 +29,26 @@ const Suppliers = () => {
   const [saving, setSaving] = useState(false);
   const [page, setPage] = useState(1);
   const [showDetail, setShowDetail] = useState<SupplierRecord | null>(null);
+  const [associatedIngredients, setAssociatedIngredients] = useState<any[]>([]);
+  const [loadingIngredients, setLoadingIngredients] = useState(false);
+
+  useEffect(() => {
+    if (showDetail) {
+      setLoadingIngredients(true);
+      supplierService.getIngredients(showDetail.id)
+        .then(res => {
+          setAssociatedIngredients(res.data || []);
+        })
+        .catch(err => {
+          toast.error(err.message || "Failed to load supplier ingredients");
+        })
+        .finally(() => {
+          setLoadingIngredients(false);
+        });
+    } else {
+      setAssociatedIngredients([]);
+    }
+  }, [showDetail]);
 
   const { data: suppliers = [], isLoading: loading } = useQuery({
     queryKey: ["suppliers"],
@@ -150,6 +170,38 @@ const Suppliers = () => {
               <div className="flex justify-between items-center px-1">
                 <span className="text-sm text-muted-foreground">Total Purchases</span>
                 <span className="text-lg font-bold">{currency} {(showDetail.totalPurchases ?? 0).toLocaleString()}</span>
+              </div>
+              <div className="space-y-2 pt-2 border-t">
+                <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Associated Ingredients</Label>
+                {loadingIngredients ? (
+                  <div className="space-y-2">
+                    <Skeleton className="h-8 w-full rounded" />
+                    <Skeleton className="h-8 w-full rounded" />
+                  </div>
+                ) : associatedIngredients.length === 0 ? (
+                  <p className="text-xs text-muted-foreground italic">No ingredients associated with this supplier yet.</p>
+                ) : (
+                  <div className="rounded-lg border max-h-48 overflow-y-auto">
+                    <Table>
+                      <TableHeader className="bg-muted/50">
+                        <TableRow>
+                          <TableHead className="py-2 text-xs">Name</TableHead>
+                          <TableHead className="py-2 text-xs">Category</TableHead>
+                          <TableHead className="py-2 text-xs">Price</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {associatedIngredients.map((ing) => (
+                          <TableRow key={ing.id} className="hover:bg-muted/20">
+                            <TableCell className="py-2 text-xs font-medium">{ing.name}</TableCell>
+                            <TableCell className="py-2 text-xs text-muted-foreground">{ing.category?.name || "—"}</TableCell>
+                            <TableCell className="py-2 text-xs">{currency} {Number(ing.purchasePrice) || 0}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
               </div>
             </div>
           )}

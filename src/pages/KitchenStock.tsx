@@ -6,6 +6,7 @@ import {
   type ExpirySummary,
 } from "@/services/warehouse.service";
 import { inventoryService, type IngredientCategoryRecord } from "@/services/inventory.service";
+import { supplierService, type SupplierRecord } from "@/services/supplier.service";
 import { demandService } from "@/services/demand.service";
 import { challanService } from "@/services/challan.service";
 import { useAuth } from "@/contexts/AuthContext";
@@ -70,6 +71,8 @@ const KitchenStock = () => {
   const [categoryFilter, setCategoryFilter] = useState("");
   const [unitFilter, setUnitFilter] = useState("");
   const [brandFilter, setBrandFilter] = useState("");
+  const [vendorFilter, setVendorFilter] = useState("");
+  const [suppliers, setSuppliers] = useState<SupplierRecord[]>([]);
   const [expiryView, setExpiryView] = useState<"expired" | "near" | null>(null);
   const [cardFilter, setCardFilter] = useState<CardFilter>("all");
 
@@ -95,17 +98,19 @@ const KitchenStock = () => {
     return () => clearTimeout(t);
   }, [search]);
 
-  // Load kitchen warehouses + all warehouses + categories on mount
+  // Load kitchen warehouses + all warehouses + categories + suppliers on mount
   useEffect(() => {
     Promise.all([
       warehouseService.getAll({ type: "KITCHEN" }),
       warehouseService.getAll(),
       inventoryService.getIngredientCategories(),
+      supplierService.getAll(),
     ])
-      .then(([kitchenWhs, allWhs, catList]) => {
+      .then(([kitchenWhs, allWhs, catList, supRes]) => {
         setKitchens(kitchenWhs);
         setAllWarehouses(allWhs);
         setCategories(catList);
+        setSuppliers(supRes.data);
         if (kitchenWhs.length > 0) setSelectedId(kitchenWhs[0].id);
         if (kitchenWhs.length === 0) setLoading(false);
       })
@@ -397,12 +402,13 @@ const KitchenStock = () => {
     if (categoryFilter) items = items.filter(s => s.ingredient.category?.id === categoryFilter);
     if (unitFilter) items = items.filter(s => s.ingredient.unit?.id === unitFilter);
     if (brandFilter) items = items.filter(s => s.ingredient.brand === brandFilter);
+    if (vendorFilter) items = items.filter(s => s.ingredient.supplierId === vendorFilter);
     return [...items].sort((a, b) => {
       const diff = STATUS_ORDER[getStatus(a)] - STATUS_ORDER[getStatus(b)];
       if (diff !== 0) return diff;
       return a.ingredient.name.localeCompare(b.ingredient.name);
     });
-  }, [stock, cardFilter, debouncedSearch, categoryFilter, unitFilter, brandFilter]);
+  }, [stock, cardFilter, debouncedSearch, categoryFilter, unitFilter, brandFilter, vendorFilter]);
 
   // Stats (memoized)
   const stats = useMemo(() => ({
@@ -497,6 +503,7 @@ const KitchenStock = () => {
             <div className="flex gap-3 items-end flex-wrap">
               <div className="flex-1 min-w-[180px]"><Label className="text-xs text-muted-foreground">Search</Label><div className="relative"><Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search name or brand..." className="pl-9" /></div></div>
               <div className="w-40"><Label className="text-xs text-muted-foreground">Category</Label><Select value={categoryFilter || "__all__"} onValueChange={v => setCategoryFilter(v === "__all__" ? "" : v)}><SelectTrigger><SelectValue placeholder="All" /></SelectTrigger><SelectContent><SelectItem value="__all__">All Categories</SelectItem>{categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent></Select></div>
+              <div className="w-44"><Label className="text-xs text-muted-foreground">Vendor</Label><Select value={vendorFilter || "__all__"} onValueChange={v => setVendorFilter(v === "__all__" ? "" : v)}><SelectTrigger><SelectValue placeholder="All" /></SelectTrigger><SelectContent><SelectItem value="__all__">All Vendors</SelectItem>{suppliers.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent></Select></div>
               <div className="w-36"><Label className="text-xs text-muted-foreground">Unit</Label><Select value={unitFilter || "__all__"} onValueChange={v => setUnitFilter(v === "__all__" ? "" : v)}><SelectTrigger><SelectValue placeholder="All" /></SelectTrigger><SelectContent><SelectItem value="__all__">All Units</SelectItem>{uniqueUnits.map(u => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}</SelectContent></Select></div>
               {uniqueBrands.length > 0 && (
                 <div className="w-40"><Label className="text-xs text-muted-foreground">Brand</Label><Select value={brandFilter || "__all__"} onValueChange={v => setBrandFilter(v === "__all__" ? "" : v)}><SelectTrigger><SelectValue placeholder="All" /></SelectTrigger><SelectContent><SelectItem value="__all__">All Brands</SelectItem>{uniqueBrands.map(b => <SelectItem key={b} value={b}>{b}</SelectItem>)}</SelectContent></Select></div>
@@ -695,7 +702,7 @@ const KitchenStock = () => {
                   <TableHeader className="sticky top-0 z-20 bg-card">
                     <TableRow className="bg-muted/50 hover:bg-muted/50">
                       {hasActions && <TableHead className="w-10"><Checkbox checked={selectedStockIds.size === filteredStock.length && filteredStock.length > 0} onCheckedChange={(v) => setSelectedStockIds(v ? new Set(filteredStock.map(s => s.id)) : new Set())} /></TableHead>}
-                      <TableHead className="w-12">SN</TableHead><TableHead>Ingredient</TableHead><TableHead>Brand</TableHead><TableHead>Category</TableHead><TableHead>Unit</TableHead>
+                      <TableHead className="w-12">SN</TableHead><TableHead>Ingredient</TableHead><TableHead>Vendor</TableHead><TableHead>Brand</TableHead><TableHead>Category</TableHead><TableHead>Unit</TableHead>
                       <TableHead className="text-right">Purchase Price</TableHead>
                       <TableHead className="text-right">Current Stock</TableHead><TableHead className="text-right">Low Stock Level</TableHead>
                       <TableHead>Status</TableHead>
@@ -723,6 +730,7 @@ const KitchenStock = () => {
                           )}
                           <TableCell className="text-muted-foreground">{i + 1}</TableCell>
                           <TableCell className="font-medium">{s.ingredient.name}</TableCell>
+                          <TableCell className="text-sm text-muted-foreground">{s.ingredient.supplier?.name || "—"}</TableCell>
                           <TableCell className="text-sm text-muted-foreground">{s.ingredient.brand ?? "—"}</TableCell>
                           <TableCell className="text-sm text-muted-foreground">{s.ingredient.category?.name ?? "—"}</TableCell>
                           <TableCell className="text-sm">{s.ingredient.unit?.symbol || s.ingredient.unit?.name || "—"}</TableCell>

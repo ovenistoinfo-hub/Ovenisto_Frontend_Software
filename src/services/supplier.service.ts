@@ -47,4 +47,8 @@ export const supplierService = {
     const res = await api.post<{ success: boolean; data: SupplierRecord }>(`/suppliers/${id}/payment`, data);
     return res.data;
   },
+
+  async getIngredients(id: string): Promise<{ success: boolean; data: any[] }> {
+    return api.get<{ success: boolean; data: any[] }>(`/suppliers/${id}/ingredients`);
+  },
 };

@@ -34,12 +34,15 @@ export interface PurchaseRequestRecord {
   warehouse: { id: string; name: string; type: string; outlet?: { id: string; name: string } | null };
   items: PurchaseRequestItemRecord[];
   purchase?: { id: string; invoiceNumber: string | null; status: string; date: string; total: number } | null;
+  supplierId?: string | null;
+  supplier?: { id: string; name: string } | null;
 }
 
 export interface CreatePurchaseRequestInput {
   warehouseId: string;
   items: { ingredientId: string; requestedQty: number }[];
   notes?: string;
+  supplierId?: string;
 }
 
 interface PaginatedResponse {

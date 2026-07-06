@@ -128,6 +128,7 @@ const Warehouses = () => {
   const [categoryFilter, setCategoryFilter] = useState("");
   const [unitFilter, setUnitFilter] = useState("");
   const [brandFilter, setBrandFilter] = useState("");
+  const [vendorFilter, setVendorFilter] = useState("");
   const [cardFilter, setCardFilter] = useState<CardFilter>("all");
   const [expiryView, setExpiryView] = useState<"expired" | "near" | null>(null);
 
@@ -138,7 +139,8 @@ const Warehouses = () => {
   const [apUnits, setApUnits] = useState<UnitRecord[]>([]);
   const [apCategories, setApCategories] = useState<IngredientCategoryRecord[]>([]);
   const [apApprovedRequests, setApApprovedRequests] = useState<PurchaseRequestRecord[]>([]);
-  const [apForm, setApForm] = useState({ supplierId: "", invoiceNumber: "" });
+  const [apForm, setApForm] = useState({ invoiceNumber: "" });
+  const [selectedApSuppliers, setSelectedApSuppliers] = useState<string[]>([]);
   const [apItems, setApItems] = useState<FormItem[]>([
     { ingredientId: "", name: "", qty: 0, unit: "", unitPrice: 0, wasteQty: 0, wasteReason: "", source: "manual" },
   ]);
@@ -174,20 +176,26 @@ const Warehouses = () => {
     return () => clearTimeout(t);
   }, [search]);
 
-  // Load warehouses + categories (primary list — cached, paints instantly on revisit)
+  // Load warehouses + categories + suppliers (primary list — cached, paints instantly on revisit)
   const { data: warehousesData, isLoading: loading } = useQuery({
     queryKey: ["warehouses-list", { isSuperAdmin }],
     queryFn: () =>
-      Promise.all([warehouseService.getAll(), inventoryService.getIngredientCategories()])
-        .then(([whList, catList]) => ({
+      Promise.all([
+        warehouseService.getAll(),
+        inventoryService.getIngredientCategories(),
+        supplierService.getAll(),
+      ])
+        .then(([whList, catList, supList]) => ({
           warehouses: isSuperAdmin
             ? whList.filter(w => w.type !== "KITCHEN")
             : whList.filter(w => w.type === "BRANCH"),
           categories: catList,
+          suppliers: supList.data,
         })),
   });
   const warehouses = useMemo(() => warehousesData?.warehouses ?? [], [warehousesData]);
   const categories: IngredientCategoryRecord[] = warehousesData?.categories ?? [];
+  const suppliers: SupplierRecord[] = warehousesData?.suppliers ?? [];
 
   // Auto-select the first warehouse once the list is available
   useEffect(() => {
@@ -237,12 +245,13 @@ const Warehouses = () => {
     if (categoryFilter) items = items.filter(s => s.ingredient.category?.id === categoryFilter);
     if (unitFilter) items = items.filter(s => s.ingredient.unit?.id === unitFilter);
     if (brandFilter) items = items.filter(s => s.ingredient.brand === brandFilter);
+    if (vendorFilter) items = items.filter(s => s.ingredient.supplierId === vendorFilter);
     return [...items].sort((a, b) => {
       const diff = STATUS_ORDER[getStatus(a)] - STATUS_ORDER[getStatus(b)];
       if (diff !== 0) return diff;
       return a.ingredient.name.localeCompare(b.ingredient.name);
     });
-  }, [stock, cardFilter, debouncedSearch, categoryFilter, unitFilter, brandFilter]);
+  }, [stock, cardFilter, debouncedSearch, categoryFilter, unitFilter, brandFilter, vendorFilter]);
 
   const stats = useMemo(() => ({
     total: stock.length,
@@ -260,7 +269,8 @@ const Warehouses = () => {
     preIngredientId?: string,
     ingList?: IngredientRecord[]
   ) => {
-    setApForm({ supplierId: "", invoiceNumber: "" });
+    setApForm({ invoiceNumber: "" });
+    setSelectedApSuppliers([]);
     setApTax(0); setApShipping(0); setApMisc(0);
     setApSelectedRequestId("");
     setApWarehouseId(preWarehouseId ?? selectedId ?? "");
@@ -353,10 +363,18 @@ const Warehouses = () => {
     if (invalidWaste) { toast.error(`Waste cannot exceed purchased qty for "${invalidWaste.name}"`); return; }
     const itemsSubtotal = validItems.reduce((s, i) => s + i.qty * i.unitPrice, 0);
     const grandTotal = itemsSubtotal + apTax + apShipping + apMisc;
+    const itemSupplierIds = validItems
+      .map(item => apIngredients.find(ig => ig.id === item.ingredientId)?.supplierId)
+      .filter(Boolean);
+    const uniqueApSuppliers = Array.from(new Set(itemSupplierIds));
+    const finalSupplierId = selectedApSuppliers.length === 1
+      ? selectedApSuppliers[0]
+      : (uniqueApSuppliers.length === 1 ? uniqueApSuppliers[0] : undefined);
+
     setApSaving(true);
     try {
       await purchaseService.create({
-        supplierId: apForm.supplierId || undefined,
+        supplierId: finalSupplierId,
         invoiceNumber: apForm.invoiceNumber || undefined,
         date: new Date().toISOString().split("T")[0],
         items: validItems.map(i => ({
@@ -490,6 +508,43 @@ const Warehouses = () => {
     for (const s of stock) map[s.ingredient.id] = Number(s.currentStock);
     return map;
   }, [stock]);
+
+  // Handlers for multi-vendor selection in Add Purchase
+  const handleAddApSupplier = useCallback((supplierId: string) => {
+    if (!supplierId || supplierId === "none" || selectedApSuppliers.includes(supplierId)) return;
+    setSelectedApSuppliers(prev => [...prev, supplierId]);
+    supplierService.getIngredients(supplierId).then(res => {
+      const newItems = res.data.map(ing => {
+        const currentStock = warehouseStockMap[ing.id] ?? 0;
+        const lowLevel = Number(ing.lowStockLevel) || 0;
+        return {
+          ingredientId: ing.id,
+          name: ing.name,
+          qty: Math.max(1, Math.round(lowLevel - currentStock)),
+          unit: ing.unit?.symbol || ing.unit?.name || "",
+          unitPrice: Number(ing.purchasePrice) || 0,
+          wasteQty: 0,
+          wasteReason: "",
+          source: "manual" as const,
+        };
+      });
+      setApItems(prev => {
+        const filteredPrev = prev.filter(p => p.ingredientId !== "");
+        const toAppend = newItems.filter(n => !filteredPrev.some(p => p.ingredientId === n.ingredientId));
+        return [...filteredPrev, ...toAppend];
+      });
+    }).catch(err => {
+      toast.error(err.message || "Failed to load supplier ingredients");
+    });
+  }, [selectedApSuppliers, warehouseStockMap]);
+
+  const handleRemoveApSupplier = useCallback((supplierId: string) => {
+    setSelectedApSuppliers(prev => prev.filter(id => id !== supplierId));
+    setApItems(prev => prev.filter(item => {
+      const ing = apIngredients.find(ig => ig.id === item.ingredientId);
+      return ing?.supplierId !== supplierId;
+    }));
+  }, [apIngredients]);
 
   // ── Toggle per-row ingredient in/out of form ──
   const handleToggleRequest = useCallback((s: WarehouseStockRecord) => {
@@ -711,6 +766,7 @@ const Warehouses = () => {
             <div className="flex gap-3 items-end flex-wrap">
               <div className="flex-1 min-w-[180px]"><Label className="text-xs text-muted-foreground">Search</Label><div className="relative"><Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search name or brand..." className="pl-9" /></div></div>
               <div className="w-40"><Label className="text-xs text-muted-foreground">Category</Label><Select value={categoryFilter || "__all__"} onValueChange={v => setCategoryFilter(v === "__all__" ? "" : v)}><SelectTrigger><SelectValue placeholder="All" /></SelectTrigger><SelectContent><SelectItem value="__all__">All Categories</SelectItem>{categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent></Select></div>
+              <div className="w-44"><Label className="text-xs text-muted-foreground">Vendor</Label><Select value={vendorFilter || "__all__"} onValueChange={v => setVendorFilter(v === "__all__" ? "" : v)}><SelectTrigger><SelectValue placeholder="All" /></SelectTrigger><SelectContent><SelectItem value="__all__">All Vendors</SelectItem>{suppliers.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent></Select></div>
               <div className="w-36"><Label className="text-xs text-muted-foreground">Unit</Label><Select value={unitFilter || "__all__"} onValueChange={v => setUnitFilter(v === "__all__" ? "" : v)}><SelectTrigger><SelectValue placeholder="All" /></SelectTrigger><SelectContent><SelectItem value="__all__">All Units</SelectItem>{uniqueUnits.map(u => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}</SelectContent></Select></div>
               {uniqueBrands.length > 0 && (
                 <div className="w-40"><Label className="text-xs text-muted-foreground">Brand</Label><Select value={brandFilter || "__all__"} onValueChange={v => setBrandFilter(v === "__all__" ? "" : v)}><SelectTrigger><SelectValue placeholder="All" /></SelectTrigger><SelectContent><SelectItem value="__all__">All Brands</SelectItem>{uniqueBrands.map(b => <SelectItem key={b} value={b}>{b}</SelectItem>)}</SelectContent></Select></div>
@@ -769,13 +825,36 @@ const Warehouses = () => {
                   <CardContent className="space-y-3">
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                       <div className="space-y-1.5">
-                        <Label>Supplier (optional)</Label>
-                        <Select value={apForm.supplierId} onValueChange={(v) => setApForm(p => ({ ...p, supplierId: v }))}>
-                          <SelectTrigger className="h-11"><SelectValue placeholder="Select Supplier" /></SelectTrigger>
+                        <Label>Add Supplier (optional)</Label>
+                        <Select value="" onValueChange={handleAddApSupplier}>
+                          <SelectTrigger className="h-11"><SelectValue placeholder="Add supplier to load ingredients..." /></SelectTrigger>
                           <SelectContent>
-                            {apSuppliers.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                            {apSuppliers
+                              .filter(s => !selectedApSuppliers.includes(s.id))
+                              .map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
                           </SelectContent>
                         </Select>
+                        {selectedApSuppliers.length > 0 && (
+                          <div className="flex flex-wrap gap-1.5 mt-2 p-2.5 bg-muted/40 rounded-lg border">
+                            <span className="text-xs text-muted-foreground self-center mr-1">Active:</span>
+                            {selectedApSuppliers.map(id => {
+                              const s = apSuppliers.find(sup => sup.id === id);
+                              if (!s) return null;
+                              return (
+                                <Badge key={id} variant="secondary" className="flex items-center gap-1 py-0.5 pr-1 pl-2">
+                                  <span className="text-xs font-semibold">{s.name}</span>
+                                  <Button
+                                    type="button" variant="ghost" size="icon"
+                                    className="h-4 w-4 rounded-full p-0 text-muted-foreground hover:text-foreground"
+                                    onClick={() => handleRemoveApSupplier(id)}
+                                  >
+                                    <X className="h-2.5 w-2.5" />
+                                  </Button>
+                                </Badge>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
                       <div className="space-y-1.5">
                         <Label>Invoice Number</Label>
@@ -1143,7 +1222,7 @@ const Warehouses = () => {
                           <Checkbox checked={allVisibleSelected && filteredStock.length > 0} onCheckedChange={toggleAllSelection} />
                         </TableHead>
                       )}
-                      <TableHead className="w-12">SN</TableHead><TableHead>Ingredient</TableHead><TableHead>Brand</TableHead><TableHead>Category</TableHead><TableHead>Unit</TableHead>
+                      <TableHead className="w-12">SN</TableHead><TableHead>Ingredient</TableHead><TableHead>Vendor</TableHead><TableHead>Brand</TableHead><TableHead>Category</TableHead><TableHead>Unit</TableHead>
                       <TableHead className="text-right">Current Stock</TableHead><TableHead className="text-right">Low Stock Level</TableHead>
                       <TableHead>Status</TableHead><TableHead className="text-right">Purchase Price</TableHead>
                       {(canRequest || canPurchase) && <TableHead className="text-center w-28">Actions</TableHead>}
@@ -1163,6 +1242,7 @@ const Warehouses = () => {
                           )}
                           <TableCell className="text-muted-foreground">{i + 1}</TableCell>
                           <TableCell className="font-medium">{s.ingredient.name}</TableCell>
+                          <TableCell className="text-sm text-muted-foreground">{s.ingredient.supplier?.name || "—"}</TableCell>
                           <TableCell className="text-sm text-muted-foreground">{s.ingredient.brand ?? "—"}</TableCell>
                           <TableCell className="text-sm text-muted-foreground">{s.ingredient.category?.name ?? "—"}</TableCell>
                           <TableCell className="text-sm">{s.ingredient.unit?.symbol || s.ingredient.unit?.name || "—"}</TableCell>

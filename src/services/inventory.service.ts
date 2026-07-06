@@ -40,6 +40,8 @@ export interface IngredientRecord {
   lowStockLevel: number;
   status: string;
   shelfLifeHours?: number | null;
+  supplierId: string | null;
+  supplier: { id: string; name: string } | null;
 }
 
 export interface PreMadeFoodRecord {
@@ -113,6 +115,7 @@ export const inventoryService = {
     currentStock?: number;
     lowStockLevel?: number;
     status?: string;
+    supplierId?: string | null;
   }): Promise<IngredientRecord> {
     const res = await api.post<{ success: boolean; data: IngredientRecord }>('/inventory/ingredients', data);
     return res.data;
@@ -127,6 +130,7 @@ export const inventoryService = {
     currentStock: number;
     lowStockLevel: number;
     status: string;
+    supplierId: string | null;
   }>): Promise<IngredientRecord> {
     const res = await api.put<{ success: boolean; data: IngredientRecord }>(`/inventory/ingredients/${id}`, data);
     return res.data;

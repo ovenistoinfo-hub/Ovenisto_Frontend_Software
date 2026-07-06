@@ -124,9 +124,11 @@ const Purchases = () => {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
+  const [vendorFilter, setVendorFilter] = useState("");
 
   // Add form state
-  const [form, setForm] = useState({ supplierId: "", invoiceNumber: "" });
+  const [form, setForm] = useState({ invoiceNumber: "" });
+  const [selectedSuppliers, setSelectedSuppliers] = useState<string[]>([]);
   const [items, setItems] = useState<FormItem[]>([
     { ingredientId: "", name: "", qty: 0, unit: "", unitPrice: 0, wasteQty: 0, wasteReason: "", source: "manual" },
   ]);
@@ -218,6 +220,44 @@ const Purchases = () => {
     }
   }, [searchParams, loading, loadRefData]);
 
+  // Handlers for multi-vendor selection
+  const handleAddSupplier = useCallback((supplierId: string) => {
+    if (!supplierId || supplierId === "none" || selectedSuppliers.includes(supplierId)) return;
+    setSelectedSuppliers(prev => [...prev, supplierId]);
+    supplierService.getIngredients(supplierId).then(res => {
+      const newItems = res.data.map(ing => {
+        const ws = warehouseStock[ing.id];
+        const currentStock = ws ? ws.qty : Number(ing.currentStock) || 0;
+        const lowLevel = Number(ing.lowStockLevel) || 0;
+        return {
+          ingredientId: ing.id,
+          name: ing.name,
+          qty: Math.max(1, Math.round(lowLevel - currentStock)),
+          unit: ing.unit?.symbol || ing.unit?.name || "",
+          unitPrice: Number(ing.purchasePrice) || 0,
+          wasteQty: 0,
+          wasteReason: "",
+          source: "manual" as const,
+        };
+      });
+      setItems(prev => {
+        const filteredPrev = prev.filter(p => p.ingredientId !== "");
+        const toAppend = newItems.filter(n => !filteredPrev.some(p => p.ingredientId === n.ingredientId));
+        return [...filteredPrev, ...toAppend];
+      });
+    }).catch(err => {
+      toast.error(err.message || "Failed to load supplier ingredients");
+    });
+  }, [selectedSuppliers, warehouseStock]);
+
+  const handleRemoveSupplier = useCallback((supplierId: string) => {
+    setSelectedSuppliers(prev => prev.filter(id => id !== supplierId));
+    setItems(prev => prev.filter(item => {
+      const ing = ingredients.find(ig => ig.id === item.ingredientId);
+      return ing?.supplierId !== supplierId;
+    }));
+  }, [ingredients]);
+
   useEffect(() => {
     if (autoFillDone.current || ingredients.length === 0) return;
     if (searchParams.get("auto") === "low-stock") {
@@ -267,14 +307,18 @@ const Purchases = () => {
 
   const filtered = purchases.filter(
     (p) =>
-      (p.supplierName || "").toLowerCase().includes(search.toLowerCase()) ||
-      (p.invoiceNumber || "").toLowerCase().includes(search.toLowerCase())
+      (!vendorFilter || p.supplierId === vendorFilter) &&
+      (
+        (p.supplierName || "").toLowerCase().includes(search.toLowerCase()) ||
+        (p.invoiceNumber || "").toLowerCase().includes(search.toLowerCase())
+      )
   );
 
   const openAdd = () => {
     loadRefData();
 
-    setForm({ supplierId: "", invoiceNumber: "" });
+    setForm({ invoiceNumber: "" });
+    setSelectedSuppliers([]);
     setItems([{ ingredientId: "", name: "", qty: 0, unit: "", unitPrice: 0, wasteQty: 0, wasteReason: "", source: "manual" }]);
     setSelectedRequestId("");
     setTaxAmount(0);
@@ -364,10 +408,18 @@ const Purchases = () => {
       toast.error(`Waste quantity cannot exceed purchased quantity for "${invalidWaste.name}"`);
       return;
     }
+    const itemSupplierIds = validItems
+      .map(item => ingredients.find(ig => ig.id === item.ingredientId)?.supplierId)
+      .filter(Boolean);
+    const uniqueItemSuppliers = Array.from(new Set(itemSupplierIds));
+    const finalSupplierId = selectedSuppliers.length === 1
+      ? selectedSuppliers[0]
+      : (uniqueItemSuppliers.length === 1 ? uniqueItemSuppliers[0] : undefined);
+
     setSaving(true);
     try {
       await purchaseService.create({
-        supplierId: form.supplierId || undefined,
+        supplierId: finalSupplierId,
         invoiceNumber: form.invoiceNumber || undefined,
         date: new Date().toISOString().split("T")[0],
         items: validItems.map((i) => ({
@@ -528,22 +580,46 @@ const Purchases = () => {
               <CardContent className="space-y-3">
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                   <div className="space-y-1.5">
-                    <Label>Supplier (optional)</Label>
+                    <Label>Add Supplier (optional)</Label>
                     <Select
-                      value={form.supplierId}
-                      onValueChange={(v) => setForm((p) => ({ ...p, supplierId: v }))}
+                      value=""
+                      onValueChange={handleAddSupplier}
                     >
                       <SelectTrigger className="h-11">
-                        <SelectValue placeholder="Select Supplier" />
+                        <SelectValue placeholder="Add supplier to load ingredients..." />
                       </SelectTrigger>
                       <SelectContent>
-                        {suppliers.map((s) => (
-                          <SelectItem key={s.id} value={s.id}>
-                            {s.name}
-                          </SelectItem>
-                        ))}
+                        {suppliers
+                          .filter(s => !selectedSuppliers.includes(s.id))
+                          .map((s) => (
+                            <SelectItem key={s.id} value={s.id}>
+                              {s.name}
+                            </SelectItem>
+                          ))}
                       </SelectContent>
                     </Select>
+                    {/* Selected Suppliers Badges */}
+                    {selectedSuppliers.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 mt-2 p-2.5 bg-muted/40 rounded-lg border">
+                        <span className="text-xs text-muted-foreground self-center mr-1">Active:</span>
+                        {selectedSuppliers.map(id => {
+                          const s = suppliers.find(sup => sup.id === id);
+                          if (!s) return null;
+                          return (
+                            <Badge key={id} variant="secondary" className="flex items-center gap-1 py-0.5 pr-1 pl-2">
+                              <span className="text-xs font-semibold">{s.name}</span>
+                              <Button
+                                type="button" variant="ghost" size="icon"
+                                className="h-4 w-4 rounded-full p-0 text-muted-foreground hover:text-foreground"
+                                onClick={() => handleRemoveSupplier(id)}
+                              >
+                                <X className="h-2.5 w-2.5" />
+                              </Button>
+                            </Badge>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                   <div className="space-y-1.5">
                     <Label>Invoice Number</Label>
@@ -908,14 +984,25 @@ const Purchases = () => {
 
       <Card className="shadow-sm">
         <CardHeader className="pb-3">
-          <div className="relative max-w-sm">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search by supplier or invoice..."
-              className="pl-9"
-            />
+          <div className="flex flex-wrap gap-3 items-end">
+            <div className="relative flex-1 min-w-[200px]">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search by supplier or invoice..."
+                className="pl-9"
+              />
+            </div>
+            <div className="w-48">
+              <Select value={vendorFilter || "__all__"} onValueChange={v => setVendorFilter(v === "__all__" ? "" : v)}>
+                <SelectTrigger><SelectValue placeholder="All Vendors" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__all__">All Vendors</SelectItem>
+                  {suppliers.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         </CardHeader>
         <CardContent>
@@ -1030,6 +1117,7 @@ const Purchases = () => {
                       <TableRow className="bg-muted/50 hover:bg-muted/50">
                         <TableHead>SN</TableHead>
                         <TableHead>Ingredient</TableHead>
+                        <TableHead>Vendor</TableHead>
                         <TableHead>Unit</TableHead>
                         {hasApproved && <TableHead className="text-right">Approved</TableHead>}
                         <TableHead className="text-right">Purchased</TableHead>
@@ -1047,6 +1135,10 @@ const Purchases = () => {
                           <TableRow key={i}>
                             <TableCell className="text-muted-foreground">{i + 1}</TableCell>
                             <TableCell className="font-medium">{item.name}</TableCell>
+                            <TableCell className="text-sm text-muted-foreground">{(() => {
+                              const ing = ingredients.find(ig => ig.id === (item as any).ingredientId);
+                              return ing?.supplier?.name || "—";
+                            })()}</TableCell>
                             <TableCell className="text-sm text-muted-foreground">{item.unit}</TableCell>
                             {hasApproved && (
                               <TableCell className="text-right text-sm text-muted-foreground">
@@ -1079,6 +1171,41 @@ const Purchases = () => {
                 </div>
               </div>
             );
+
+            const itemsBySupplier: Record<string, { supplierName: string; items: typeof sdItems }> = {};
+            sdItems.forEach(item => {
+              const ing = ingredients.find(i => i.id === item.ingredientId);
+              const supId = ing?.supplierId || "none";
+              const supName = ing?.supplier?.name || "General / No Supplier";
+              if (!itemsBySupplier[supId]) {
+                itemsBySupplier[supId] = { supplierName: supName, items: [] };
+              }
+              itemsBySupplier[supId].items.push(item);
+            });
+
+            const printSupplierReceipt = (supplierName: string, itemsList: typeof sdItems) => {
+              const w = window.open("", "_blank", "width=800,height=700");
+              if (!w) return;
+              const subtotalVal = itemsList.reduce((s, it) => s + it.qty * it.unitPrice, 0);
+              w.document.write(`<!DOCTYPE html><html><head><title>Purchase Receipt — ${supplierName}</title><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;padding:30px;color:#333;font-size:13px}h1{font-size:20px}table{width:100%;border-collapse:collapse;margin-top:16px}th,td{border:1px solid #ccc;padding:8px;text-align:left}th{background:#f0f0f0;font-weight:600;font-size:12px}.header{text-align:center;border-bottom:2px solid #333;padding-bottom:16px;margin-bottom:16px}.info-grid{display:flex;justify-content:space-between;margin-bottom:16px}.summary{text-align:right;margin-top:12px}.billing-row{display:flex;justify-content:flex-end;gap:24px;padding:3px 0;font-size:13px}.billing-total{font-weight:700;font-size:15px;border-top:2px solid #333;padding-top:6px;margin-top:4px}@media print{body{padding:15px}}</style></head><body>`);
+              w.document.write(`<div class="header"><h1>Purchase Receipt</h1><p style="color:#666;margin-top:4px">Supplier: ${supplierName}</p></div>`);
+              w.document.write(`<div class="info-grid"><div><p style="font-size:11px;color:#888;text-transform:uppercase;font-weight:600">Purchase ID</p><p style="font-family:monospace">${sd.invoiceNumber || sd.id.slice(0, 8)}</p><p style="font-size:11px;color:#888;margin-top:4px">${new Date(sd.createdAt).toLocaleString()}</p></div><div style="text-align:right"><p style="font-size:11px;color:#888;text-transform:uppercase;font-weight:600">Warehouse</p><p style="font-weight:600">${sd.warehouseName || "—"}</p></div></div>`);
+              w.document.write(`<table><thead><tr><th>SN</th><th>Ingredient</th><th>Unit</th><th style="text-align:right">Qty</th><th style="text-align:right">Unit Price</th><th style="text-align:right">Total</th></tr></thead><tbody>`);
+              itemsList.forEach((item, i) => {
+                w.document.write(`<tr>
+                  <td>${i + 1}</td><td>${item.name}</td><td>${item.unit}</td>
+                  <td style="text-align:right">${item.qty}</td>
+                  <td style="text-align:right">${currency} ${item.unitPrice.toLocaleString()}</td>
+                  <td style="text-align:right;font-weight:600">${currency} ${(item.qty * item.unitPrice).toLocaleString()}</td>
+                </tr>`);
+              });
+              w.document.write(`</tbody></table>`);
+              w.document.write(`<div class="summary">`);
+              w.document.write(`<div class="billing-row billing-total"><span>Supplier Total:</span><span>${currency} ${subtotalVal.toLocaleString()}</span></div>`);
+              w.document.write(`</div></body></html>`);
+              w.document.close();
+              w.print();
+            };
 
             return (
               <>
@@ -1194,6 +1321,31 @@ const Purchases = () => {
                     </div>
                   </div>
 
+                  {/* Split Receipts Section */}
+                  {Object.keys(itemsBySupplier).length > 1 && (
+                    <Card className="shadow-sm border-primary/20 bg-primary/[0.01]">
+                      <CardHeader className="py-2.5 flex flex-row items-center justify-between pb-1.5">
+                        <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                          Split Receipts by Supplier
+                        </Label>
+                      </CardHeader>
+                      <CardContent className="py-2 flex flex-wrap gap-2">
+                        {Object.entries(itemsBySupplier).map(([supId, group]) => (
+                          <Button 
+                            key={supId} 
+                            variant="outline" 
+                            size="sm" 
+                            onClick={() => printSupplierReceipt(group.supplierName, group.items)}
+                            className="text-xs"
+                          >
+                            <Printer className="h-3 w-3 mr-1" />
+                            Print: {group.supplierName} ({group.items.length} items)
+                          </Button>
+                        ))}
+                      </CardContent>
+                    </Card>
+                  )}
+
                   {/* Notes */}
                   {sd.notes && (
                     <div className="text-sm text-muted-foreground bg-muted/40 rounded px-3 py-2">
@@ -1214,7 +1366,7 @@ const Purchases = () => {
                     const renderPrintGroup = (rows: typeof sdItems, label: string) => {
                       let html = "";
                       if (label) html += `<p style="font-size:11px;font-weight:600;text-transform:uppercase;color:#888;margin:12px 0 4px">${label}</p>`;
-                      html += `<table><thead><tr><th>SN</th><th>Ingredient</th><th>Unit</th>`;
+                      html += `<table><thead><tr><th>SN</th><th>Ingredient</th><th>Vendor</th><th>Unit</th>`;
                       if (hasApproved) html += `<th style="text-align:right">Approved</th>`;
                       html += `<th style="text-align:right">Purchased</th>`;
                       if (hasWaste) {
@@ -1223,8 +1375,10 @@ const Purchases = () => {
                       html += `<th style="text-align:right">Unit Price</th><th style="text-align:right">Total</th></tr></thead><tbody>`;
                       rows.forEach((item, i) => {
                         const receivedQty = item.qty - (item.wasteQty ?? 0);
+                        const ing = ingredients.find(ig => ig.id === (item as any).ingredientId);
+                        const vendorName = ing?.supplier?.name || "—";
                         html += `<tr>
-                          <td>${i + 1}</td><td>${item.name}</td><td>${item.unit}</td>
+                          <td>${i + 1}</td><td>${item.name}</td><td>${vendorName}</td><td>${item.unit}</td>
                           ${hasApproved ? `<td style="text-align:right;color:#666">${item.approvedQty ?? "—"}</td>` : ""}
                           <td style="text-align:right">${item.qty}</td>
                           ${hasWaste ? `<td style="text-align:right;color:${(item.wasteQty ?? 0) > 0 ? "#d32f2f" : "#666"}">${(item.wasteQty ?? 0) > 0 ? item.wasteQty : "—"}</td>` : ""}
