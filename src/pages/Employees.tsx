@@ -35,6 +35,21 @@ const emptyForm: EmployeeInput = {
   emergencyContactName: "", emergencyContactRelation: "", emergencyContactPhone: "",
 };
 
+// Auto-format CNIC as XXXXX-XXXXXXX-X
+const formatCNIC = (val: string): string => {
+  const digits = val.replace(/\D/g, "").slice(0, 13);
+  if (digits.length <= 5) return digits;
+  if (digits.length <= 12) return `${digits.slice(0, 5)}-${digits.slice(5)}`;
+  return `${digits.slice(0, 5)}-${digits.slice(5, 12)}-${digits.slice(12, 13)}`;
+};
+
+// Auto-format phone as 03XX-XXXXXXX (11 digits)
+const formatPhone = (val: string): string => {
+  const digits = val.replace(/\D/g, "").slice(0, 11);
+  if (digits.length <= 4) return digits;
+  return `${digits.slice(0, 4)}-${digits.slice(4)}`;
+};
+
 const Employees = () => {
   const { user } = useAuth();
   const canManage = ["Super Admin", "Admin", "Manager", "Store Manager"].includes(user?.role ?? "");
@@ -125,6 +140,37 @@ const Employees = () => {
   const handleSave = async () => {
     if (!form.firstName.trim() || !form.phone.trim() || !form.designation.trim() || !form.hireDate || !form.rate) {
       toast.error("First name, phone, designation, hire date, and rate are required");
+      return;
+    }
+    // Duplicate checks
+    const lowerEmail = form.email?.trim().toLowerCase();
+    const cleanPhone = form.phone.trim();
+    const cleanCnic = form.cnic?.trim();
+    const cleanEmergencyPhone = form.emergencyContactPhone?.trim();
+
+    if (cleanPhone.replace(/\D/g, "").length !== 11) {
+      toast.error("Phone number must be exactly 11 digits");
+      return;
+    }
+    if (cleanEmergencyPhone && cleanEmergencyPhone.replace(/\D/g, "").length !== 11) {
+      toast.error("Emergency contact phone number must be exactly 11 digits");
+      return;
+    }
+
+    if (lowerEmail && list.some(e => e.id !== editingId && e.email?.trim().toLowerCase() === lowerEmail)) {
+      toast.error(`Email "${form.email}" is already assigned to another employee!`);
+      return;
+    }
+    if (list.some(e => e.id !== editingId && e.phone?.trim() === cleanPhone)) {
+      toast.error(`Phone number "${form.phone}" is already assigned to another employee!`);
+      return;
+    }
+    if (cleanCnic && cleanCnic.length === 15 && list.some(e => e.id !== editingId && e.cnic?.trim() === cleanCnic)) {
+      toast.error(`CNIC "${form.cnic}" is already assigned to another employee!`);
+      return;
+    }
+    if (cleanCnic && cleanCnic.length > 0 && cleanCnic.length < 15) {
+      toast.error("CNIC must be in format XXXXX-XXXXXXX-X (13 digits)");
       return;
     }
     setSaving(true);
@@ -256,10 +302,52 @@ const Employees = () => {
 
               <TabsContent value="basic" className="mt-4 space-y-3">
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                  <div className="space-y-1.5"><Label>First Name <span className="text-destructive">*</span></Label><Input value={form.firstName} onChange={(e) => setForm(p => ({ ...p, firstName: e.target.value }))} /></div>
-                  <div className="space-y-1.5"><Label>Last Name</Label><Input value={form.lastName ?? ""} onChange={(e) => setForm(p => ({ ...p, lastName: e.target.value }))} /></div>
-                  <div className="space-y-1.5"><Label>Phone <span className="text-destructive">*</span></Label><Input value={form.phone} onChange={(e) => setForm(p => ({ ...p, phone: e.target.value }))} /></div>
-                  <div className="space-y-1.5"><Label>Email</Label><Input type="email" value={form.email ?? ""} onChange={(e) => setForm(p => ({ ...p, email: e.target.value }))} /></div>
+                  <div className="space-y-1.5">
+                    <Label>First Name <span className="text-destructive">*</span></Label>
+                    <Input list="emp-first-name-list" value={form.firstName} onChange={(e) => setForm(p => ({ ...p, firstName: e.target.value }))} />
+                    <datalist id="emp-first-name-list">
+                      {[...new Set(list.map(e => e.firstName).filter(Boolean))].map(fn => <option key={fn} value={fn} />)}
+                    </datalist>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Last Name</Label>
+                    <Input list="emp-last-name-list" value={form.lastName ?? ""} onChange={(e) => setForm(p => ({ ...p, lastName: e.target.value }))} />
+                    <datalist id="emp-last-name-list">
+                      {[...new Set(list.map(e => e.lastName).filter(Boolean))].map(ln => <option key={ln} value={ln} />)}
+                    </datalist>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Phone <span className="text-destructive">*</span></Label>
+                    <Input
+                      list="emp-phone-list"
+                      value={form.phone}
+                      maxLength={12}
+                      onChange={(e) => setForm(p => ({ ...p, phone: formatPhone(e.target.value) }))}
+                      className={form.phone && list.some(e => e.id !== editingId && e.phone?.trim() === form.phone.trim()) ? "border-destructive" : ""}
+                    />
+                    <datalist id="emp-phone-list">
+                      {[...new Set(list.map(e => e.phone).filter(Boolean))].map(ph => <option key={ph} value={ph} />)}
+                    </datalist>
+                    {form.phone && list.some(e => e.id !== editingId && e.phone?.trim() === form.phone.trim()) && (
+                      <p className="text-[11px] text-destructive mt-0.5">⚠ This phone is already assigned to another employee</p>
+                    )}
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Email</Label>
+                    <Input
+                      type="email"
+                      list="emp-email-list"
+                      value={form.email ?? ""}
+                      onChange={(e) => setForm(p => ({ ...p, email: e.target.value }))}
+                      className={form.email && list.some(e => e.id !== editingId && e.email?.toLowerCase() === form.email?.toLowerCase()) ? "border-destructive" : ""}
+                    />
+                    <datalist id="emp-email-list">
+                      {[...new Set(list.map(e => e.email).filter(Boolean))].map(em => <option key={em} value={em} />)}
+                    </datalist>
+                    {form.email && list.some(e => e.id !== editingId && e.email?.toLowerCase() === form.email?.toLowerCase()) && (
+                      <p className="text-[11px] text-destructive mt-0.5">⚠ This email is already assigned to another employee</p>
+                    )}
+                  </div>
                   <div className="space-y-1.5">
                     <Label>Linked User Account</Label>
                     <Select value={form.userId ?? ""} onValueChange={(v) => setForm(p => ({ ...p, userId: v }))}>
@@ -288,8 +376,20 @@ const Employees = () => {
 
               <TabsContent value="positional" className="mt-4 space-y-3">
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                  <div className="space-y-1.5"><Label>Division</Label><Input value={form.division ?? ""} onChange={(e) => setForm(p => ({ ...p, division: e.target.value }))} /></div>
-                  <div className="space-y-1.5"><Label>Designation <span className="text-destructive">*</span></Label><Input value={form.designation} onChange={(e) => setForm(p => ({ ...p, designation: e.target.value }))} /></div>
+                  <div className="space-y-1.5">
+                    <Label>Division</Label>
+                    <Input list="employee-division-list" value={form.division ?? ""} onChange={(e) => setForm(p => ({ ...p, division: e.target.value }))} />
+                    <datalist id="employee-division-list">
+                      {[...new Set(list.map(e => e.division).filter(Boolean))].map(div => <option key={div} value={div} />)}
+                    </datalist>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Designation <span className="text-destructive">*</span></Label>
+                    <Input list="employee-designation-list" value={form.designation} onChange={(e) => setForm(p => ({ ...p, designation: e.target.value }))} />
+                    <datalist id="employee-designation-list">
+                      {[...new Set(list.map(e => e.designation).filter(Boolean))].map(des => <option key={des} value={des} />)}
+                    </datalist>
+                  </div>
                   <div className="space-y-1.5">
                     <Label>Duty Type</Label>
                     <Select value={form.dutyType ?? ""} onValueChange={(v) => setForm(p => ({ ...p, dutyType: v }))}>
@@ -348,15 +448,36 @@ const Employees = () => {
                       <SelectContent>{MARITAL_STATUSES.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
                     </Select>
                   </div>
-                  <div className="space-y-1.5"><Label>CNIC</Label><Input placeholder="42101-1234567-1" value={form.cnic ?? ""} onChange={(e) => setForm(p => ({ ...p, cnic: e.target.value }))} /></div>
+                  <div className="space-y-1.5">
+                    <Label>CNIC</Label>
+                    <Input
+                      placeholder="42101-1234567-1"
+                      value={form.cnic ?? ""}
+                      maxLength={15}
+                      onChange={(e) => setForm(p => ({ ...p, cnic: formatCNIC(e.target.value) }))}
+                      className={form.cnic && form.cnic.length > 0 && form.cnic.length < 15 ? "border-warning" : form.cnic?.length === 15 ? "border-success" : ""}
+                    />
+                    {form.cnic && form.cnic.length > 0 && form.cnic.length < 15 && (
+                      <p className="text-[11px] text-warning mt-0.5">Format: XXXXX-XXXXXXX-X</p>
+                    )}
+                    {form.cnic?.length === 15 && (
+                      <p className="text-[11px] text-success mt-0.5">✓ Valid format</p>
+                    )}
+                  </div>
                 </div>
               </TabsContent>
 
               <TabsContent value="emergency" className="mt-4 space-y-3">
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                   <div className="space-y-1.5"><Label>Contact Name</Label><Input value={form.emergencyContactName ?? ""} onChange={(e) => setForm(p => ({ ...p, emergencyContactName: e.target.value }))} /></div>
-                  <div className="space-y-1.5"><Label>Relationship</Label><Input value={form.emergencyContactRelation ?? ""} onChange={(e) => setForm(p => ({ ...p, emergencyContactRelation: e.target.value }))} /></div>
-                  <div className="space-y-1.5"><Label>Phone</Label><Input value={form.emergencyContactPhone ?? ""} onChange={(e) => setForm(p => ({ ...p, emergencyContactPhone: e.target.value }))} /></div>
+                  <div className="space-y-1.5">
+                    <Label>Relationship</Label>
+                    <Input list="employee-relation-list" value={form.emergencyContactRelation ?? ""} onChange={(e) => setForm(p => ({ ...p, emergencyContactRelation: e.target.value }))} />
+                    <datalist id="employee-relation-list">
+                      {["Father", "Mother", "Spouse", "Brother", "Sister", "Son", "Daughter", "Friend"].map(rel => <option key={rel} value={rel} />)}
+                    </datalist>
+                  </div>
+                  <div className="space-y-1.5"><Label>Phone</Label><Input value={form.emergencyContactPhone ?? ""} maxLength={12} onChange={(e) => setForm(p => ({ ...p, emergencyContactPhone: formatPhone(e.target.value) }))} /></div>
                 </div>
               </TabsContent>
             </Tabs>

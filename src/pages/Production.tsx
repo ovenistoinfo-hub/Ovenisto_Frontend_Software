@@ -199,11 +199,17 @@ const Production = () => {
             <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 items-end">
               <div className="space-y-1.5">
                 <Label>Name</Label>
-                <Input placeholder="e.g. Pizza Dough" value={itemForm.name} onChange={e => setItemForm(p => ({ ...p, name: e.target.value }))} />
+                <Input list="production-item-name-list" placeholder="e.g. Pizza Dough" value={itemForm.name} onChange={e => setItemForm(p => ({ ...p, name: e.target.value }))} />
+                <datalist id="production-item-name-list">
+                  {productionItems.map(i => <option key={i.id} value={i.name} />)}
+                </datalist>
               </div>
               <div className="space-y-1.5">
                 <Label>Unit</Label>
-                <Input placeholder="e.g. kg" value={itemForm.unit} onChange={e => setItemForm(p => ({ ...p, unit: e.target.value }))} />
+                <Input list="production-unit-list" placeholder="e.g. kg" value={itemForm.unit} onChange={e => setItemForm(p => ({ ...p, unit: e.target.value }))} />
+                <datalist id="production-unit-list">
+                  {["kg", "portion", "piece", "liter", "gram", "ml", "box"].map(u => <option key={u} value={u} />)}
+                </datalist>
               </div>
               <div className="space-y-1.5">
                 <Label>Default Shelf Life (hours)</Label>
@@ -377,10 +383,12 @@ const Production = () => {
               ))}
             </div>
 
-            {/* Notes */}
             <div className="space-y-1.5">
               <Label>Notes (optional)</Label>
-              <Input placeholder="e.g. morning batch" value={produceForm.notes} onChange={e => setProduceForm(p => ({ ...p, notes: e.target.value }))} />
+              <Input list="production-notes-list" placeholder="e.g. morning batch" value={produceForm.notes} onChange={e => setProduceForm(p => ({ ...p, notes: e.target.value }))} />
+              <datalist id="production-notes-list">
+                {["Morning Batch", "Evening Batch", "Night Shift", "Daily Prep", "Bulk Prep", "Special Order Prep"].map(n => <option key={n} value={n} />)}
+              </datalist>
             </div>
 
             {/* Footer buttons */}

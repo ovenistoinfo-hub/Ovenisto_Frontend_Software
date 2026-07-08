@@ -214,7 +214,13 @@ const Waste = () => {
               </div>
 
               {!form.ingredientId && (
-                <div className="space-y-1.5"><Label>Item Name</Label><Input placeholder="e.g. Chicken Tikka Pizza" value={form.itemName} onChange={(e) => setForm(p => ({ ...p, itemName: e.target.value }))} /></div>
+                <div className="space-y-1.5">
+                  <Label>Item Name</Label>
+                  <Input list="waste-item-name-list" placeholder="e.g. Chicken Tikka Pizza" value={form.itemName} onChange={(e) => setForm(p => ({ ...p, itemName: e.target.value }))} />
+                  <datalist id="waste-item-name-list">
+                    {[...new Set([...list.map(w => w.itemName).filter(Boolean), ...ingredients.map(ig => ig.name)])].map(name => <option key={name} value={name} />)}
+                  </datalist>
+                </div>
               )}
 
               <div className="space-y-1.5"><Label>Quantity{selectedIng ? ` (${selectedIng.unit?.name || ""})` : ""}</Label><Input type="number" value={form.quantity || ""} onChange={(e) => setForm(p => ({ ...p, quantity: Number(e.target.value) }))} /></div>

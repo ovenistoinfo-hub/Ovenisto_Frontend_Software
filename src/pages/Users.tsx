@@ -84,6 +84,13 @@ const rolePresets: Record<string, Record<string, string[]>> = {
 // Roles that should be scoped to a specific branch
 const branchScopedRoles = ["Admin", "Manager", "Floor Manager", "Kitchen Manager", "Store Manager", "Delivery Manager", "Cashier", "Waiter", "Kitchen Staff", "Accountant", "Rider", "Customer Screen"];
 
+// Auto-format phone as 03XX-XXXXXXX (11 digits)
+const formatPhone = (val: string): string => {
+  const digits = val.replace(/\D/g, "").slice(0, 11);
+  if (digits.length <= 4) return digits;
+  return `${digits.slice(0, 4)}-${digits.slice(4)}`;
+};
+
 const Users = () => {
   const queryClient = useQueryClient();
   const { user: authUser } = useAuth();
@@ -185,6 +192,21 @@ const Users = () => {
 
   const handleSave = async () => {
     if (!form.name || !form.email) { toast.error("Name and email are required"); return; }
+    // Duplicate checks against existing users
+    const lowerEmail = form.email.trim().toLowerCase();
+    const cleanPhone = form.phone.trim();
+    if (cleanPhone && cleanPhone.replace(/\D/g, "").length !== 11) {
+      toast.error("Phone number must be exactly 11 digits");
+      return;
+    }
+    if (list.some(u => u.id !== editingId && u.email.trim().toLowerCase() === lowerEmail)) {
+      toast.error(`Email "${form.email}" is already used by another user!`);
+      return;
+    }
+    if (cleanPhone && list.some(u => u.id !== editingId && (u.phone || "").trim() === cleanPhone)) {
+      toast.error(`Phone number "${form.phone}" is already used by another user!`);
+      return;
+    }
     setSaving(true);
     try {
       if (editingId) {
@@ -347,15 +369,44 @@ const Users = () => {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="text-sm font-medium mb-1 block">Full Name</label>
-                <Input placeholder="Full Name" value={form.name} onChange={(e) => setForm(p => ({ ...p, name: e.target.value }))} />
+                <Input list="usr-name-list" placeholder="Full Name" value={form.name} onChange={(e) => setForm(p => ({ ...p, name: e.target.value }))} />
+                <datalist id="usr-name-list">
+                  {[...new Set(list.map(u => u.name).filter(Boolean))].map(n => <option key={n} value={n} />)}
+                </datalist>
               </div>
               <div>
                 <label className="text-sm font-medium mb-1 block">Email</label>
-                <Input placeholder="Email" type="email" value={form.email} onChange={(e) => setForm(p => ({ ...p, email: e.target.value }))} />
+                <Input
+                  placeholder="Email"
+                  type="email"
+                  list="usr-email-list"
+                  value={form.email}
+                  onChange={(e) => setForm(p => ({ ...p, email: e.target.value }))}
+                  className={form.email && list.some(u => u.id !== editingId && u.email.toLowerCase() === form.email.toLowerCase()) ? "border-destructive" : ""}
+                />
+                <datalist id="usr-email-list">
+                  {[...new Set(list.map(u => u.email).filter(Boolean))].map(em => <option key={em} value={em} />)}
+                </datalist>
+                {form.email && list.some(u => u.id !== editingId && u.email.toLowerCase() === form.email.toLowerCase()) && (
+                  <p className="text-[11px] text-destructive mt-0.5">⚠ This email is already used by another user</p>
+                )}
               </div>
               <div>
                 <label className="text-sm font-medium mb-1 block">Phone</label>
-                <Input placeholder="Phone" value={form.phone} onChange={(e) => setForm(p => ({ ...p, phone: e.target.value }))} />
+                <Input
+                  placeholder="Phone"
+                  list="usr-phone-list"
+                  value={form.phone}
+                  maxLength={12}
+                  onChange={(e) => setForm(p => ({ ...p, phone: formatPhone(e.target.value) }))}
+                  className={form.phone && list.some(u => u.id !== editingId && (u.phone || "") === form.phone) ? "border-destructive" : ""}
+                />
+                <datalist id="usr-phone-list">
+                  {[...new Set(list.map(u => u.phone).filter(Boolean))].map(ph => <option key={ph} value={ph} />)}
+                </datalist>
+                {form.phone && list.some(u => u.id !== editingId && (u.phone || "") === form.phone) && (
+                  <p className="text-[11px] text-destructive mt-0.5">⚠ This phone is already used by another user</p>
+                )}
               </div>
               <div>
                 <label className="text-sm font-medium mb-1 block">{editingId ? "New Password (leave empty to keep)" : "Password"}</label>

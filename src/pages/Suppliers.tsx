@@ -16,6 +16,13 @@ import { TablePagination, paginate } from "@/components/TablePagination";
 import { useAuth } from "@/contexts/AuthContext";
 import { useData } from "@/contexts/DataContext";
 
+// Auto-format phone as 03XX-XXXXXXX (11 digits)
+const formatPhone = (val: string): string => {
+  const digits = val.replace(/\D/g, "").slice(0, 11);
+  if (digits.length <= 4) return digits;
+  return `${digits.slice(0, 4)}-${digits.slice(4)}`;
+};
+
 const Suppliers = () => {
   const { user } = useAuth();
   const { settings } = useData();
@@ -63,6 +70,21 @@ const Suppliers = () => {
 
   const handleSave = async () => {
     if (!form.name.trim()) { toast.error("Name is required"); return; }
+    // Duplicate checks
+    const lowerName = form.name.trim().toLowerCase();
+    const cleanPhone = form.phone.trim();
+    if (cleanPhone && cleanPhone.replace(/\D/g, "").length !== 11) {
+      toast.error("Phone number must be exactly 11 digits");
+      return;
+    }
+    if (suppliers.some(s => s.id !== editingId && s.name.trim().toLowerCase() === lowerName)) {
+      toast.error(`Supplier "${form.name}" already exists!`);
+      return;
+    }
+    if (cleanPhone && suppliers.some(s => s.id !== editingId && (s.phone || "").trim() === cleanPhone)) {
+      toast.error(`Phone number "${form.phone}" is already used by another supplier!`);
+      return;
+    }
     setSaving(true);
     try {
       if (editingId) {
@@ -107,10 +129,61 @@ const Suppliers = () => {
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-              <div className="space-y-1.5"><Label htmlFor="sup-name">Name <span className="text-destructive">*</span></Label><Input id="sup-name" placeholder="Enter name" value={form.name} onChange={(e) => setForm(p => ({ ...p, name: e.target.value }))} /></div>
-              <div className="space-y-1.5"><Label htmlFor="sup-company">Company</Label><Input id="sup-company" placeholder="Enter company" value={form.company} onChange={(e) => setForm(p => ({ ...p, company: e.target.value }))} /></div>
-              <div className="space-y-1.5"><Label htmlFor="sup-phone">Phone</Label><Input id="sup-phone" placeholder="Enter phone" value={form.phone} onChange={(e) => setForm(p => ({ ...p, phone: e.target.value }))} /></div>
-              <div className="space-y-1.5"><Label htmlFor="sup-email">Email</Label><Input id="sup-email" placeholder="Enter email" value={form.email} onChange={(e) => setForm(p => ({ ...p, email: e.target.value }))} /></div>
+              <div className="space-y-1.5">
+                <Label htmlFor="sup-name">Name <span className="text-destructive">*</span></Label>
+                <Input
+                  id="sup-name"
+                  list="supplier-name-list"
+                  placeholder="Enter name"
+                  value={form.name}
+                  onChange={(e) => setForm(p => ({ ...p, name: e.target.value }))}
+                  className={form.name && suppliers.some(s => s.id !== editingId && s.name.toLowerCase() === form.name.trim().toLowerCase()) ? "border-destructive" : ""}
+                />
+                <datalist id="supplier-name-list">
+                  {[...new Set(suppliers.map(s => s.name).filter(Boolean))].map(n => <option key={n} value={n} />)}
+                </datalist>
+                {form.name && suppliers.some(s => s.id !== editingId && s.name.toLowerCase() === form.name.trim().toLowerCase()) && (
+                  <p className="text-[11px] text-destructive mt-0.5">⚠ This supplier already exists</p>
+                )}
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="sup-company">Company</Label>
+                <Input id="sup-company" list="supplier-company-list" placeholder="Enter company" value={form.company} onChange={(e) => setForm(p => ({ ...p, company: e.target.value }))} />
+                <datalist id="supplier-company-list">
+                  {[...new Set(suppliers.map(s => s.company).filter(Boolean))].map(c => <option key={c!} value={c!} />)}
+                </datalist>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="sup-phone">Phone</Label>
+                <Input
+                  id="sup-phone"
+                  list="supplier-phone-list"
+                  placeholder="Enter phone"
+                  value={form.phone}
+                  maxLength={12}
+                  onChange={(e) => setForm(p => ({ ...p, phone: formatPhone(e.target.value) }))}
+                  className={form.phone && suppliers.some(s => s.id !== editingId && (s.phone || "") === form.phone.trim()) ? "border-destructive" : ""}
+                />
+                <datalist id="supplier-phone-list">
+                  {[...new Set(suppliers.map(s => s.phone).filter(Boolean))].map(ph => <option key={ph} value={ph} />)}
+                </datalist>
+                {form.phone && suppliers.some(s => s.id !== editingId && (s.phone || "") === form.phone.trim()) && (
+                  <p className="text-[11px] text-destructive mt-0.5">⚠ This phone is already used by another supplier</p>
+                )}
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="sup-email">Email</Label>
+                <Input
+                  id="sup-email"
+                  list="supplier-email-list"
+                  placeholder="Enter email"
+                  value={form.email}
+                  onChange={(e) => setForm(p => ({ ...p, email: e.target.value }))}
+                />
+                <datalist id="supplier-email-list">
+                  {[...new Set(suppliers.map(s => s.email).filter(Boolean))].map(em => <option key={em} value={em} />)}
+                </datalist>
+              </div>
             </div>
             <div className="flex justify-end gap-2 pt-1">
               <Button variant="outline" onClick={() => { setShowDialog(false); setEditingId(null); setForm({ name: "", company: "", phone: "", email: "" }); }}>Cancel</Button>

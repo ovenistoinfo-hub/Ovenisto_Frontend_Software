@@ -128,7 +128,10 @@ const Expenses = () => {
               </div>
               <div className="space-y-1.5">
                 <Label>Description</Label>
-                <Input placeholder="Enter description" value={form.description} onChange={(e) => setForm(p => ({ ...p, description: e.target.value }))} />
+                <Input list="expense-description-list" placeholder="Enter description" value={form.description} onChange={(e) => setForm(p => ({ ...p, description: e.target.value }))} />
+                <datalist id="expense-description-list">
+                  {[...new Set(expenses.map(e => e.description).filter(Boolean))].map(desc => <option key={desc} value={desc} />)}
+                </datalist>
               </div>
               <div className="space-y-1.5">
                 <Label>Amount</Label>
