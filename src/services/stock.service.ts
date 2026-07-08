@@ -89,6 +89,7 @@ export interface WasteRecord {
   cost: number | null;
   recordedBy: string | null;
   date: string;
+  orderId: string | null;
 }
 
 export interface ProductionBatchRecord {
@@ -211,16 +212,17 @@ export const stockService = {
   },
 
   // ── Waste Records ──
-  async getWasteRecords(params?: { search?: string; page?: number; limit?: number }): Promise<{ data: WasteRecord[]; meta: any }> {
+  async getWasteRecords(params?: { search?: string; page?: number; limit?: number; warehouseId?: string }): Promise<{ data: WasteRecord[]; meta: any }> {
     const q = new URLSearchParams();
     if (params?.search) q.set('search', params.search);
     if (params?.page) q.set('page', String(params.page));
     if (params?.limit) q.set('limit', String(params.limit));
+    if (params?.warehouseId) q.set('warehouseId', params.warehouseId);
     const res = await api.get<{ success: boolean; data: WasteRecord[]; meta: any }>(`/stock/waste?${q.toString()}`);
     return { data: res.data, meta: (res as any).meta };
   },
 
-  async createWasteRecord(data: { itemName: string; quantity?: number; unit?: string; reason?: string; cost?: number; ingredientId?: string }): Promise<WasteRecord> {
+  async createWasteRecord(data: { itemName: string; quantity?: number; unit?: string; reason?: string; cost?: number; ingredientId?: string; warehouseId?: string }): Promise<WasteRecord> {
     const res = await api.post<{ success: boolean; data: WasteRecord }>('/stock/waste', data);
     return res.data;
   },

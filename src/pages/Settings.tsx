@@ -48,7 +48,7 @@ function WarehousesTab() {
   const [saving, setSaving] = useState(false);
   const [showDialog, setShowDialog] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [form, setForm] = useState({ name: "", code: "", type: "MAIN" as WarehouseType, outletId: "", managerId: "", isActive: true });
+  const [form, setForm] = useState({ name: "", code: "", address: "", type: "MAIN" as WarehouseType, outletId: "", managerId: "", isActive: true });
 
   useEffect(() => {
     Promise.all([warehouseService.getAll(), outletService.getOutlets()])
@@ -67,25 +67,26 @@ function WarehousesTab() {
 
   const openAdd = () => {
     setEditingId(null);
-    setForm({ name: "", code: "", type: "MAIN", outletId: "", managerId: "", isActive: true });
+    setForm({ name: "", code: "", address: "", type: "MAIN", outletId: "", managerId: "", isActive: true });
     setShowDialog(true);
   };
 
   const openEdit = (w: WarehouseRecord) => {
     setEditingId(w.id);
-    setForm({ name: w.name, code: w.code, type: w.type, outletId: w.outletId || "", managerId: w.managerId || "", isActive: w.isActive });
+    setForm({ name: w.name, code: w.code, address: w.address || "", type: w.type, outletId: w.outletId || "", managerId: w.managerId || "", isActive: w.isActive });
     setShowDialog(true);
   };
 
   const handleSave = async () => {
     if (!form.name.trim()) { toast.error("Name is required"); return; }
+    if (!form.address.trim()) { toast.error("Address is required"); return; }
     setSaving(true);
     try {
       if (editingId) {
-        await warehouseService.update(editingId, { name: form.name, code: form.code || undefined, outletId: form.outletId || undefined, managerId: form.managerId || undefined, isActive: form.isActive });
+        await warehouseService.update(editingId, { name: form.name, code: form.code || undefined, address: form.address, outletId: form.outletId || undefined, managerId: form.managerId || undefined, isActive: form.isActive });
         toast.success("Updated");
       } else {
-        await warehouseService.create({ name: form.name, code: form.code || undefined, type: form.type, outletId: form.outletId || undefined, managerId: form.managerId || undefined });
+        await warehouseService.create({ name: form.name, code: form.code || undefined, address: form.address, type: form.type, outletId: form.outletId || undefined, managerId: form.managerId || undefined });
         toast.success("Warehouse added");
       }
       setShowDialog(false);
@@ -122,13 +123,14 @@ function WarehousesTab() {
           ) : (
             <div className="rounded-lg border overflow-auto">
               <Table>
-                <TableHeader><TableRow className="bg-muted/50"><TableHead>SN</TableHead><TableHead>Name</TableHead><TableHead>Code</TableHead><TableHead>Type</TableHead><TableHead>Outlet</TableHead><TableHead>Status</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader>
+                <TableHeader><TableRow className="bg-muted/50"><TableHead>SN</TableHead><TableHead>Name</TableHead><TableHead>Code</TableHead><TableHead>Type</TableHead><TableHead>Address</TableHead><TableHead>Outlet</TableHead><TableHead>Status</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader>
                 <TableBody>{list.map((w, i) => (
                   <TableRow key={w.id}>
                     <TableCell>{i + 1}</TableCell>
                     <TableCell className="font-medium">{w.name}</TableCell>
                     <TableCell className="font-mono text-sm">{w.code}</TableCell>
                     <TableCell><Badge variant="secondary" className={TYPE_COLOR[w.type]}>{w.type}</Badge></TableCell>
+                    <TableCell className="text-sm max-w-[180px] truncate" title={w.address}>{w.address || "—"}</TableCell>
                     <TableCell className="text-sm">{w.outlet?.name || "—"}</TableCell>
                     <TableCell><Badge variant="secondary" className={w.isActive ? "bg-success/10 text-success" : "bg-muted text-muted-foreground"}>{w.isActive ? "Active" : "Inactive"}</Badge></TableCell>
                     <TableCell>
@@ -155,6 +157,7 @@ function WarehousesTab() {
           <DialogHeader><DialogTitle>{editingId ? "Edit" : "Add"} Warehouse</DialogTitle></DialogHeader>
           <div className="space-y-3">
             <div className="space-y-1.5"><Label>Name *</Label><Input placeholder="e.g., Main Warehouse" value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} /></div>
+            <div className="space-y-1.5"><Label>Address *</Label><Textarea placeholder="Enter full address of the warehouse" value={form.address} onChange={e => setForm(p => ({ ...p, address: e.target.value }))} /></div>
             <div className="space-y-1.5"><Label>Code</Label><Input placeholder="Auto-generated if blank" value={form.code} onChange={e => setForm(p => ({ ...p, code: e.target.value }))} /></div>
             {!editingId && (
               <div className="space-y-1.5"><Label>Type *</Label><Select value={form.type} onValueChange={v => setForm(p => ({ ...p, type: v as WarehouseType }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="MAIN">Main</SelectItem><SelectItem value="BRANCH">Branch</SelectItem><SelectItem value="KITCHEN">Kitchen</SelectItem></SelectContent></Select></div>

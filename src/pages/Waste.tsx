@@ -8,13 +8,14 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Search, Trash2, TrendingDown, CalendarDays, BarChart3, Eye, User, ChevronUp, X } from "lucide-react";
+import { Plus, Search, Trash2, TrendingDown, CalendarDays, BarChart3, Eye, User, ChevronUp, X, ShoppingBag, AlertCircle } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { TablePagination, paginate } from "@/components/TablePagination";
 import { PageHeader } from "@/components/ui/page-header";
 import { stockService, type WasteRecord } from "@/services/stock.service";
 import { inventoryService, type IngredientRecord } from "@/services/inventory.service";
+import { warehouseService, type WarehouseRecord } from "@/services/warehouse.service";
 import { useData } from "@/contexts/DataContext";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -27,6 +28,8 @@ const Waste = () => {
   const canRecord = ['Super Admin', 'Admin', 'Manager', 'Kitchen Manager', 'Store Manager'].includes(user?.role ?? '');
   const [list, setList] = useState<WasteRecord[]>([]);
   const [ingredients, setIngredients] = useState<IngredientRecord[]>([]);
+  const [warehouses, setWarehouses] = useState<WarehouseRecord[]>([]);
+  const [selectedWarehouseId, setSelectedWarehouseId] = useState("all");
   const [showAdd, setShowAdd] = useState(false);
   const [showDetail, setShowDetail] = useState<WasteRecord | null>(null);
   const [search, setSearch] = useState("");
@@ -38,6 +41,7 @@ const Waste = () => {
     reason: "",
     cost: 0,
     notes: "",
+    warehouseId: "",
   });
   const [page, setPage] = useState(1);
   const [saving, setSaving] = useState(false);
@@ -46,24 +50,44 @@ const Waste = () => {
 
   const fetchData = useCallback(async () => {
     try {
-      const [wasteRes, ings] = await Promise.all([
-        stockService.getWasteRecords({ limit: 200 }),
+      const [wasteRes, ings, whs] = await Promise.all([
+        stockService.getWasteRecords({
+          warehouseId: selectedWarehouseId !== "all" ? selectedWarehouseId : undefined,
+          limit: 200,
+        }),
         inventoryService.getIngredients(),
+        warehouseService.getAll(),
       ]);
       setList(wasteRes.data);
       setIngredients(ings);
+      setWarehouses(whs);
     } catch (err: unknown) {
       toast.error((err as Error).message || "Failed to load waste records");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [selectedWarehouseId]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
   const totalLoss = list.reduce((s, w) => s + Number(w.cost || 0), 0);
   const filtered = list.filter((w) => (w.itemName || "").toLowerCase().includes(search.toLowerCase()));
   const paged = paginate(filtered, page);
+
+  // Parse penalty info from auto-generated reason strings
+  function parsePenaltyInfo(reason: string | null): { hasPenalty: boolean; fullPenalty: boolean; penaltyAmt: string; person: string; totalCost: string; netLoss: string; noCostData?: boolean } | null {
+    if (!reason) return null;
+    // Full penalty: "Order cancelled. Full cost penalty of Rs. X charged to Person. Total cost: Rs. Y. Net loss: Rs. 0."
+    const fullMatch = reason.match(/Full cost penalty of Rs\. ([\d.]+) charged to (.+?)\. Total cost: Rs\. ([\d.]+)\. Net loss/);
+    if (fullMatch) return { hasPenalty: true, fullPenalty: true, penaltyAmt: fullMatch[1], person: fullMatch[2], totalCost: fullMatch[3], netLoss: '0' };
+    // Partial penalty: "Order cancelled. Partial penalty of Rs. X charged to Person. Total cost: Rs. Y. Net loss: Rs. Z."
+    const partialMatch = reason.match(/Partial penalty of Rs\. ([\d.]+) charged to (.+?)\. Total cost: Rs\. ([\d.]+)\. Net loss: Rs\. ([\d.]+)/);
+    if (partialMatch) return { hasPenalty: true, fullPenalty: false, penaltyAmt: partialMatch[1], person: partialMatch[2], totalCost: partialMatch[3], netLoss: partialMatch[4] };
+    // Penalty only (recipe cost not available): "Order cancelled. Penalty of Rs. X charged to Person. (Recipe cost not available.)"
+    const penaltyOnlyMatch = reason.match(/Penalty of Rs\. ([\d.]+) charged to (.+?)\. \(Recipe cost/);
+    if (penaltyOnlyMatch) return { hasPenalty: true, fullPenalty: false, penaltyAmt: penaltyOnlyMatch[1], person: penaltyOnlyMatch[2], totalCost: '—', netLoss: '—', noCostData: true };
+    return null;
+  }
 
   const selectedIng = ingredients.find(i => i.id === form.ingredientId);
   const estimatedCost = selectedIng ? form.quantity * Number(selectedIng.purchasePrice || 0) : form.cost;
@@ -98,13 +122,14 @@ const Waste = () => {
   });
   const reasonBreakdown = Array.from(reasonMap.entries()).sort((a, b) => b[1].loss - a[1].loss);
 
-  const resetForm = () => setForm({ ingredientId: "", itemName: "", quantity: 0, unit: "", reason: "", cost: 0, notes: "" });
+  const resetForm = () => setForm({ ingredientId: "", itemName: "", quantity: 0, unit: "", reason: "", cost: 0, notes: "", warehouseId: "" });
 
   const handleSave = async () => {
     const name = form.ingredientId ? (selectedIng?.name || "") : form.itemName.trim();
     if (!name) { toast.error("Select ingredient or enter item name"); return; }
     if (form.quantity <= 0) { toast.error("Enter quantity"); return; }
     if (!form.reason) { toast.error("Select a waste reason"); return; }
+    if (form.ingredientId && !form.warehouseId) { toast.error("Select target warehouse for stock deduction"); return; }
 
     setSaving(true);
     try {
@@ -115,6 +140,7 @@ const Waste = () => {
         reason: form.reason,
         cost: form.ingredientId ? estimatedCost : (form.cost || undefined),
         ingredientId: form.ingredientId || undefined,
+        warehouseId: form.warehouseId || undefined,
       });
       toast.success(form.ingredientId ? "Waste recorded — stock deducted" : "Waste recorded");
       resetForm();
@@ -208,6 +234,18 @@ const Waste = () => {
                   <SelectContent>{WASTE_REASONS.map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
+
+              {form.ingredientId && (
+                <div className="space-y-1.5">
+                  <Label>Deduct From Warehouse *</Label>
+                  <Select value={form.warehouseId} onValueChange={(v) => setForm(p => ({ ...p, warehouseId: v }))}>
+                    <SelectTrigger><SelectValue placeholder="Select warehouse" /></SelectTrigger>
+                    <SelectContent>
+                      {warehouses.map(w => <SelectItem key={w.id} value={w.id}>{w.name} ({w.type})</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
             </div>
 
             {selectedIng && form.quantity > 0 && (
@@ -226,19 +264,50 @@ const Waste = () => {
 
       {/* Records Table */}
       <Card className="shadow-sm">
-        <CardHeader className="pb-3"><div className="relative max-w-sm"><Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} placeholder="Search..." className="pl-9" /></div></CardHeader>
+        <CardHeader className="pb-3">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div className="relative max-w-sm w-full">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} placeholder="Search..." className="pl-9" />
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground font-medium whitespace-nowrap">Warehouse:</span>
+              <Select value={selectedWarehouseId} onValueChange={(v) => { setSelectedWarehouseId(v); setPage(1); }}>
+                <SelectTrigger className="w-[180px] h-9">
+                  <SelectValue placeholder="All Warehouses" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Warehouses</SelectItem>
+                  {warehouses.map(w => (
+                    <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </CardHeader>
         <CardContent>
           {filtered.length === 0 ? (<div className="text-center py-12"><Trash2 className="h-12 w-12 text-muted-foreground mx-auto mb-3 opacity-30" /><p className="text-muted-foreground">No waste records found</p><p className="text-xs text-muted-foreground mt-1.5">Record waste to track losses.</p></div>) : (
             <>
-              <div className="rounded-lg border overflow-auto max-h-[calc(100vh-400px)]"><Table><TableHeader className="sticky top-0 z-10 bg-card"><TableRow className="bg-muted/50 hover:bg-muted/50"><TableHead>SN</TableHead><TableHead>Date</TableHead><TableHead>Item</TableHead><TableHead>Qty</TableHead><TableHead>Unit</TableHead><TableHead>Reason</TableHead><TableHead>Cost</TableHead><TableHead>Recorded By</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader>
+              <div className="rounded-lg border overflow-auto max-h-[calc(100vh-400px)]"><Table><TableHeader className="sticky top-0 z-10 bg-card"><TableRow className="bg-muted/50 hover:bg-muted/50"><TableHead>SN</TableHead><TableHead>Date</TableHead><TableHead>Item</TableHead><TableHead>Source</TableHead><TableHead>Qty</TableHead><TableHead>Unit</TableHead><TableHead>Reason</TableHead><TableHead>Cost / Net Loss</TableHead><TableHead>Recorded By</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader>
                 <TableBody>{paged.map((w, i) => (
                   <TableRow key={w.id} className="hover:bg-muted/30 transition-colors">
                     <TableCell>{(page-1)*10+i+1}</TableCell>
                     <TableCell>{w.date.slice(0, 10)}</TableCell>
                     <TableCell className="font-medium">{w.itemName}</TableCell>
+                    <TableCell>
+                      {w.orderId
+                        ? <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 text-[10px]"><ShoppingBag className="h-3 w-3 mr-1" />Order Cancel</Badge>
+                        : <Badge variant="secondary" className="text-[10px]">Manual</Badge>
+                      }
+                    </TableCell>
                     <TableCell>{w.quantity ?? "—"}</TableCell>
                     <TableCell>{w.unit || "—"}</TableCell>
-                    <TableCell>{w.reason || "—"}</TableCell>
+                    <TableCell className="max-w-[200px]">
+                      <span className="truncate block text-xs text-muted-foreground" title={w.reason ?? ""}>
+                        {w.orderId ? 'Order cancelled after preparation' : (w.reason || "—")}
+                      </span>
+                    </TableCell>
                     <TableCell className="text-destructive font-medium">{w.cost != null ? `${currency} ${Number(w.cost).toLocaleString()}` : "—"}</TableCell>
                     <TableCell>{w.recordedBy || "—"}</TableCell>
                     <TableCell><Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setShowDetail(w)}><Eye className="h-3 w-3" /></Button></TableCell>
@@ -257,10 +326,16 @@ const Waste = () => {
             <DialogTitle className="flex items-center gap-3">
               <Trash2 className="h-5 w-5 text-destructive" />
               <span>Waste Record</span>
-              {showDetail && <Badge variant="secondary" className="bg-destructive/10 text-destructive">{showDetail.reason || "Unknown"}</Badge>}
+              {showDetail && (
+                showDetail.orderId
+                  ? <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300"><ShoppingBag className="h-3 w-3 mr-1" />Order Cancellation</Badge>
+                  : <Badge variant="secondary">Manual Entry</Badge>
+              )}
             </DialogTitle>
           </DialogHeader>
-          {showDetail && (
+          {showDetail && (() => {
+            const penalty = parsePenaltyInfo(showDetail.reason);
+            return (
             <div className="space-y-4">
               <Card className="shadow-sm">
                 <CardHeader className="pb-2"><Label className="text-xs text-muted-foreground uppercase tracking-wider">Recorded By</Label></CardHeader>
@@ -279,24 +354,77 @@ const Waste = () => {
                     <TableRow className="bg-muted/50 hover:bg-muted/50">
                       <TableHead>Item</TableHead>
                       <TableHead>Unit</TableHead>
-                      <TableHead>Reason</TableHead>
                       <TableHead className="text-right">Quantity</TableHead>
-                      <TableHead className="text-right">Cost / Loss</TableHead>
+                      <TableHead className="text-right">Net Cost / Loss</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     <TableRow>
                       <TableCell className="font-medium">{showDetail.itemName || "—"}</TableCell>
                       <TableCell className="text-sm">{showDetail.unit || "—"}</TableCell>
-                      <TableCell><Badge variant="secondary" className="bg-destructive/10 text-destructive">{showDetail.reason || "—"}</Badge></TableCell>
                       <TableCell className="text-right text-lg font-bold text-destructive">-{showDetail.quantity ?? 0}</TableCell>
                       <TableCell className="text-right font-semibold text-destructive">{showDetail.cost != null ? `${currency} ${Number(showDetail.cost).toLocaleString()}` : "—"}</TableCell>
                     </TableRow>
                   </TableBody>
                 </Table>
               </div>
+
+              {/* Penalty info block — shown only for order cancellations with penalty */}
+              {penalty?.hasPenalty && (
+                <Card className={penalty.fullPenalty ? "border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-950/20" : "border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/20"}>
+                  <CardHeader className="pb-2">
+                    <CardTitle className={`text-sm flex items-center gap-2 ${penalty.fullPenalty ? 'text-emerald-700 dark:text-emerald-400' : 'text-amber-700 dark:text-amber-400'}`}>
+                      <AlertCircle className="h-4 w-4" />
+                      {penalty.noCostData
+                        ? 'Penalty Charged — Recipe Cost Not Available'
+                        : penalty.fullPenalty
+                          ? 'Full Penalty Applied — Loss Fully Recovered'
+                          : 'Partial Penalty Applied — Reduced Net Loss'}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-2">
+                    <div className="grid grid-cols-2 gap-3 text-sm">
+                      <div>
+                        <p className="text-xs text-muted-foreground">Responsible Staff</p>
+                        <p className="font-semibold">{penalty.person}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">Penalty Charged</p>
+                        <p className="font-semibold text-emerald-600 dark:text-emerald-400">{currency} {penalty.penaltyAmt}</p>
+                      </div>
+                      {!penalty.noCostData && (
+                        <>
+                          <div>
+                            <p className="text-xs text-muted-foreground">Total Preparation Cost</p>
+                            <p className="font-medium">{currency} {penalty.totalCost}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground">Net Business Loss</p>
+                            <p className={`font-bold ${penalty.netLoss === '0' || Number(penalty.netLoss) === 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-destructive'}`}>
+                              {currency} {penalty.netLoss}
+                            </p>
+                          </div>
+                        </>
+                      )}
+                      {penalty.noCostData && (
+                        <div className="col-span-2 text-xs text-muted-foreground italic">
+                          Recipe ingredients or prices are not configured for this item. Set purchase prices on ingredients to see full cost breakdown.
+                        </div>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+
+              {/* Full reason for non-penalty or manual records */}
+              {!penalty?.hasPenalty && showDetail.reason && (
+                <div className="p-3 rounded-lg bg-muted/50 text-sm text-muted-foreground">
+                  <span className="font-medium text-foreground">Reason: </span>{showDetail.reason}
+                </div>
+              )}
             </div>
-          )}
+          );})()}
           <DialogFooter><Button variant="outline" onClick={() => setShowDetail(null)}>Close</Button></DialogFooter>
         </DialogContent>
       </Dialog>

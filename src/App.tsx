@@ -68,6 +68,7 @@ const Reservations = lazy(() => import("./pages/Reservations"));
 const TableLayout = lazy(() => import("./pages/TableLayout"));
 const EmployeePortal = lazy(() => import("./pages/EmployeePortal"));
 const RiderPortal = lazy(() => import("./pages/RiderPortal"));
+const WarehouseDashboard = lazy(() => import("./pages/WarehouseDashboard"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -134,6 +135,7 @@ function AppRoutes() {
 
       {/* AppLayout routes */}
       <Route path="/" element={<ProtectedRoute module="dashboard"><AppLayout><Dashboard /></AppLayout></ProtectedRoute>} />
+      <Route path="/warehouse-dashboard" element={<ProtectedRoute module="warehouses"><AppLayout><WarehouseDashboard /></AppLayout></ProtectedRoute>} />
       <Route path="/analytics" element={<ProtectedRoute module="analytics"><AppLayout><Analytics /></AppLayout></ProtectedRoute>} />
       <Route path="/kitchens" element={<ProtectedRoute module="kitchens"><AppLayout><Kitchens /></AppLayout></ProtectedRoute>} />
       <Route path="/waiter" element={<ProtectedRoute module="waiter"><AppLayout><WaiterPanel /></AppLayout></ProtectedRoute>} />

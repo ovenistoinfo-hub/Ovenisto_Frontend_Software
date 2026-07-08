@@ -6,6 +6,7 @@ export interface WarehouseRecord {
   id: string;
   name: string;
   code: string;
+  address: string;
   type: WarehouseType;
   outletId: string | null;
   managerId: string | null;
@@ -105,11 +106,11 @@ export const warehouseService = {
     const res = await api.get<{ success: boolean; data: WarehouseStockRecord[] }>(`/warehouses/${id}/stock${qs ? `?${qs}` : ''}`);
     return res.data;
   },
-  async create(data: { name: string; code?: string; type: WarehouseType; outletId?: string; managerId?: string }): Promise<WarehouseRecord> {
+  async create(data: { name: string; code?: string; type: WarehouseType; outletId?: string; managerId?: string; address: string }): Promise<WarehouseRecord> {
     const res = await api.post<{ success: boolean; data: WarehouseRecord }>('/warehouses', data);
     return res.data;
   },
-  async update(id: string, data: Partial<{ name: string; code: string; outletId: string; managerId: string; isActive: boolean }>): Promise<WarehouseRecord> {
+  async update(id: string, data: Partial<{ name: string; code: string; outletId: string; managerId: string; isActive: boolean; address: string }>): Promise<WarehouseRecord> {
     const res = await api.put<{ success: boolean; data: WarehouseRecord }>(`/warehouses/${id}`, data);
     return res.data;
   },
