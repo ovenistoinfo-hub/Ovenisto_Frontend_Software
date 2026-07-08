@@ -97,6 +97,7 @@ export default function WarehouseDashboard() {
     setFilters({ warehouseId, startDate: startDate || undefined, endDate: endDate || undefined });
 
   const d = data;
+  const selectedWHName = warehouseId === "all" ? "All Warehouses" : d?.activeWarehouses.find(w => w.id === warehouseId)?.name || "Warehouse";
 
   return (
     <div className="space-y-6">
@@ -111,7 +112,10 @@ export default function WarehouseDashboard() {
           <div className="flex flex-wrap items-end gap-3">
             <div className="space-y-1">
               <Label className="text-xs">Warehouse</Label>
-              <Select value={warehouseId} onValueChange={setWarehouseId}>
+              <Select value={warehouseId} onValueChange={(val) => {
+                setWarehouseId(val);
+                setFilters(p => ({ ...p, warehouseId: val }));
+              }}>
                 <SelectTrigger className="h-9 w-[200px]">
                   <SelectValue placeholder="All Warehouses" />
                 </SelectTrigger>
@@ -125,18 +129,25 @@ export default function WarehouseDashboard() {
             </div>
             <div className="space-y-1">
               <Label className="text-xs">From Date</Label>
-              <Input type="date" className="h-9 w-[160px]" value={startDate} onChange={e => setStartDate(e.target.value)} />
+              <Input type="date" className="h-9 w-[160px]" value={startDate} onChange={e => {
+                const val = e.target.value;
+                setStartDate(val);
+                setFilters(p => ({ ...p, startDate: val || undefined }));
+              }} />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">To Date</Label>
-              <Input type="date" className="h-9 w-[160px]" value={endDate} onChange={e => setEndDate(e.target.value)} />
+              <Input type="date" className="h-9 w-[160px]" value={endDate} onChange={e => {
+                const val = e.target.value;
+                setEndDate(val);
+                setFilters(p => ({ ...p, endDate: val || undefined }));
+              }} />
             </div>
-            <Button className="gradient-primary text-primary-foreground h-9" onClick={applyFilters}>
-              Apply
-            </Button>
-            <Button variant="ghost" size="icon" className="h-9 w-9" onClick={() => refetch()} disabled={isFetching}>
-              <RefreshCw className={cn("h-4 w-4", isFetching && "animate-spin")} />
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button variant="ghost" size="icon" className="h-9 w-9" onClick={() => refetch()} disabled={isFetching}>
+                <RefreshCw className={cn("h-4 w-4", isFetching && "animate-spin")} />
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -149,32 +160,32 @@ export default function WarehouseDashboard() {
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <Card className="shadow-sm border-l-4 border-l-emerald-500 p-4 flex flex-col gap-1">
-            <div className="flex items-center gap-2 text-muted-foreground text-xs">
-              <Layers className="h-3.5 w-3.5" /> Inventory Value
+            <div className="flex items-center gap-2 text-muted-foreground text-xs font-medium">
+              <Layers className="h-3.5 w-3.5 text-emerald-500" /> Inventory Value
             </div>
-            <p className="text-2xl font-black text-emerald-600 dark:text-emerald-400">{fmt(d?.inventoryValue ?? 0)}</p>
-            <p className="text-xs text-muted-foreground">{fmtNum(d?.costingTable.length ?? 0)} items tracked</p>
+            <p className="text-xl font-black text-emerald-600 dark:text-emerald-400">{fmt(d?.inventoryValue ?? 0)}</p>
+            <p className="text-[11px] text-muted-foreground truncate" title={selectedWHName}>{selectedWHName}</p>
           </Card>
           <Card className="shadow-sm border-l-4 border-l-blue-500 p-4 flex flex-col gap-1">
-            <div className="flex items-center gap-2 text-muted-foreground text-xs">
-              <ShoppingBag className="h-3.5 w-3.5" /> Total Procurement
+            <div className="flex items-center gap-2 text-muted-foreground text-xs font-medium">
+              <ShoppingBag className="h-3.5 w-3.5 text-blue-500" /> Total Procurement
             </div>
-            <p className="text-2xl font-black text-blue-600 dark:text-blue-400">{fmt(d?.procurement.procurementCost ?? 0)}</p>
-            <p className="text-xs text-muted-foreground">{d?.procurement.totalOrders ?? 0} purchase orders</p>
+            <p className="text-xl font-black text-blue-600 dark:text-blue-400">{fmt(d?.procurement.procurementCost ?? 0)}</p>
+            <p className="text-[11px] text-muted-foreground truncate" title={`${d?.procurement.totalOrders ?? 0} orders - ${selectedWHName}`}>{d?.procurement.totalOrders ?? 0} orders - {selectedWHName}</p>
           </Card>
           <Card className="shadow-sm border-l-4 border-l-amber-500 p-4 flex flex-col gap-1">
-            <div className="flex items-center gap-2 text-muted-foreground text-xs">
-              <ClipboardList className="h-3.5 w-3.5" /> Active Demands
+            <div className="flex items-center gap-2 text-muted-foreground text-xs font-medium">
+              <ClipboardList className="h-3.5 w-3.5 text-amber-500" /> Active Demands
             </div>
-            <p className="text-2xl font-black text-amber-600 dark:text-amber-400">{d?.distribution.pendingDemands ?? 0}</p>
-            <p className="text-xs text-muted-foreground">{d?.distribution.totalDemands ?? 0} total demands</p>
+            <p className="text-xl font-black text-amber-600 dark:text-amber-400">{d?.distribution.pendingDemands ?? 0}</p>
+            <p className="text-[11px] text-muted-foreground truncate" title={`${d?.distribution.totalDemands ?? 0} total - ${selectedWHName}`}>{d?.distribution.totalDemands ?? 0} total - {selectedWHName}</p>
           </Card>
           <Card className="shadow-sm border-l-4 border-l-purple-500 p-4 flex flex-col gap-1">
-            <div className="flex items-center gap-2 text-muted-foreground text-xs">
-              <Truck className="h-3.5 w-3.5" /> Stock in Transit
+            <div className="flex items-center gap-2 text-muted-foreground text-xs font-medium">
+              <Truck className="h-3.5 w-3.5 text-purple-500" /> Stock in Transit
             </div>
-            <p className="text-2xl font-black text-purple-600 dark:text-purple-400">{d?.distribution.dispatchedChallans ?? 0}</p>
-            <p className="text-xs text-muted-foreground">{d?.distribution.totalChallans ?? 0} total challans</p>
+            <p className="text-xl font-black text-purple-600 dark:text-purple-400">{d?.distribution.dispatchedChallans ?? 0}</p>
+            <p className="text-[11px] text-muted-foreground truncate" title={`${d?.distribution.totalChallans ?? 0} total - ${selectedWHName}`}>{d?.distribution.totalChallans ?? 0} total - {selectedWHName}</p>
           </Card>
         </div>
       )}
@@ -264,10 +275,12 @@ export default function WarehouseDashboard() {
                         <TableCell className="text-sm text-muted-foreground">{item.category}</TableCell>
                         <TableCell className="text-right text-sm">
                           <span className={cn(item.currentStock <= item.lowStockLevel ? "text-amber-600 font-semibold" : "")}>
-                            {item.currentStock}
+                            {item.currentStock} <span className="text-xs text-muted-foreground font-normal">{item.unitSymbol || item.unitName}</span>
                           </span>
                         </TableCell>
-                        <TableCell className="text-right text-sm text-muted-foreground">{item.lowStockLevel}</TableCell>
+                        <TableCell className="text-right text-sm text-muted-foreground">
+                          {item.lowStockLevel} <span className="text-[10px] text-muted-foreground">{item.unitSymbol || item.unitName}</span>
+                        </TableCell>
                         <TableCell className="text-right text-sm">Rs. {item.unitPrice.toFixed(2)}</TableCell>
                         <TableCell className="text-right text-sm font-semibold text-emerald-600 dark:text-emerald-400">
                           {fmt(item.totalValue)}

@@ -12,6 +12,8 @@ export interface WarehouseDashboardData {
     unitPrice: number;
     totalValue: number;
     vendorName: string;
+    unitName?: string;
+    unitSymbol?: string;
   }[];
   recentTransactions: {
     date: string;
