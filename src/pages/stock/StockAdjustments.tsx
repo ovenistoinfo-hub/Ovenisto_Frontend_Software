@@ -21,7 +21,7 @@ import { TablePagination, paginate } from "@/components/TablePagination";
 import { PageHeader } from "@/components/ui/page-header";
 import { stockService, type WasteRecord, type StockAdjustmentRecord } from "@/services/stock.service";
 import { inventoryService, type IngredientRecord } from "@/services/inventory.service";
-import { warehouseService, type WarehouseRecord } from "@/services/warehouse.service";
+import { warehouseService, type WarehouseRecord, type WarehouseStockRecord } from "@/services/warehouse.service";
 import { useData } from "@/contexts/DataContext";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -72,6 +72,7 @@ const StockAdjustments = () => {
   const [list, setList] = useState<MergedRow[]>([]);
   const [ingredients, setIngredients] = useState<IngredientRecord[]>([]);
   const [warehouses, setWarehouses] = useState<WarehouseRecord[]>([]);
+  const [warehouseStock, setWarehouseStock] = useState<WarehouseStockRecord[]>([]);
   const [selectedWarehouseId, setSelectedWarehouseId] = useState("all");
   const [showAdd, setShowAdd] = useState(false);
   const [mode, setMode] = useState<RecordMode>("waste");
@@ -87,11 +88,12 @@ const StockAdjustments = () => {
   const fetchData = useCallback(async () => {
     try {
       const whParam = selectedWarehouseId !== "all" ? selectedWarehouseId : undefined;
-      const [wasteRes, adjRes, ings, whs] = await Promise.all([
+      const [wasteRes, adjRes, ings, whs, whStock] = await Promise.all([
         stockService.getWasteRecords({ warehouseId: whParam, limit: 200 }),
         stockService.getAdjustments({ warehouseId: whParam, limit: 200 }),
         inventoryService.getIngredients(),
         warehouseService.getAll(),
+        selectedWarehouseId !== "all" ? warehouseService.getStock(selectedWarehouseId) : Promise.resolve([]),
       ]);
 
       const wasteRows: MergedRow[] = wasteRes.data.map((w) => ({
@@ -131,6 +133,7 @@ const StockAdjustments = () => {
       setList(merged);
       setIngredients(ings);
       setWarehouses(whs);
+      setWarehouseStock(whStock);
     } catch (err: unknown) {
       toast.error((err as Error).message || "Failed to load stock adjustments");
     } finally {
@@ -141,6 +144,15 @@ const StockAdjustments = () => {
   useEffect(() => { fetchData(); }, [fetchData]);
 
   const wasteRows = useMemo(() => list.filter((r) => r.kind === "waste"), [list]);
+
+  const warehouseStockMap = useMemo(() => {
+    const map: Record<string, number> = {};
+    warehouseStock.forEach((s) => { map[s.ingredient.id] = Number(s.currentStock); });
+    return map;
+  }, [warehouseStock]);
+
+  const stockFor = (ingredientId: string, fallback: number) =>
+    selectedWarehouseId !== "all" ? (warehouseStockMap[ingredientId] ?? 0) : fallback;
 
   const filtered = useMemo(() => {
     if (!search) return list;
@@ -359,7 +371,7 @@ const StockAdjustments = () => {
                     <SelectTrigger><SelectValue placeholder="Select ingredient (optional)" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="__none__">— None (custom item) —</SelectItem>
-                      {ingredients.map((ig) => <SelectItem key={ig.id} value={ig.id}>{ig.name} (Stock: {Number(ig.currentStock)} {ig.unit?.name || ""})</SelectItem>)}
+                      {ingredients.map((ig) => <SelectItem key={ig.id} value={ig.id}>{ig.name} (Stock: {stockFor(ig.id, Number(ig.currentStock))} {ig.unit?.name || ""})</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
@@ -413,7 +425,7 @@ const StockAdjustments = () => {
                     <SelectContent>
                       <SelectItem value="__none__">Select ingredient</SelectItem>
                       {ingredients.map((ig) => (
-                        <SelectItem key={ig.id} value={ig.id}>{ig.name} (Stock: {Number(ig.currentStock)} {ig.unit?.name || ""})</SelectItem>
+                        <SelectItem key={ig.id} value={ig.id}>{ig.name} (Stock: {stockFor(ig.id, Number(ig.currentStock))} {ig.unit?.name || ""})</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
