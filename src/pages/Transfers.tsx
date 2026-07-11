@@ -27,7 +27,7 @@ const STATUS_STYLE: Record<string, string> = {
 };
 
 interface FormItem { ingredientId: string; name: string; unit: string; qty: number; availableStock: number; }
-interface ReceiveFormItem { id: string; ingredientName: string; unit: string; qty: number; receivedQty: number; wasteQty: number; wasteReason: string; }
+interface ReceiveFormItem { id: string; ingredientId: string; ingredientName: string; unit: string; qty: number; receivedQty: number; wasteQty: number; wasteReason: string; }
 
 const Transfers = () => {
   const { user } = useAuth();
@@ -72,6 +72,8 @@ const Transfers = () => {
   const [receiveItems, setReceiveItems] = useState<ReceiveFormItem[]>([]);
   const [receiveShipping, setReceiveShipping] = useState<number | "">(0);
   const [receiveMisc, setReceiveMisc] = useState<number | "">(0);
+  const [receiveTax, setReceiveTax] = useState<number | "">(0);
+  const [receivePaid, setReceivePaid] = useState<number | "">(0);
 
   // ── Data loading ──────────────────────────────────────────────────
   const fetchChallans = useCallback(async () => {
@@ -333,6 +335,7 @@ const Transfers = () => {
   const openReceiveForm = (c: ChallanRecord) => {
     setReceiveItems(c.items.map(item => ({
       id: item.id,
+      ingredientId: item.ingredientId,
       ingredientName: item.ingredientName,
       unit: item.unit,
       qty: item.qty,
@@ -342,8 +345,23 @@ const Transfers = () => {
     })));
     setReceiveShipping(c.shippingCost ?? 0);
     setReceiveMisc(c.miscAmount ?? 0);
+    setReceiveTax(c.tax ?? 0);
+    setReceivePaid(0);
     setReceiveChallan(c);
   };
+
+  const isMainTransfer = receiveChallan?.fromWarehouse?.type === 'MAIN';
+
+  const receiveSubtotal = useMemo(() => {
+    if (!isMainTransfer) return 0;
+    return receiveItems.reduce((sum, ri) => {
+      const price = ingredients.find(i => i.id === ri.ingredientId)?.purchasePrice ?? 0;
+      return sum + ri.qty * price; // full dispatched qty, matches backend (transit waste is absorbed by the branch)
+    }, 0);
+  }, [receiveItems, ingredients, isMainTransfer]);
+
+  const receiveTotal = receiveSubtotal + (Number(receiveTax) || 0) + (Number(receiveShipping) || 0) + (Number(receiveMisc) || 0);
+  const receiveDue = Math.max(0, receiveTotal - (Number(receivePaid) || 0));
 
   const handleReceive = async () => {
     if (!receiveChallan) return;
@@ -365,6 +383,7 @@ const Transfers = () => {
         })),
         shippingCost: Number(receiveShipping) || undefined,
         miscAmount: Number(receiveMisc) || undefined,
+        ...(isMainTransfer && { tax: Number(receiveTax) || undefined, paid: Number(receivePaid) || 0 }),
       });
       toast.success("Challan received — stock added to destination");
       setReceiveChallan(null);
@@ -1488,9 +1507,59 @@ const Transfers = () => {
                         onChange={(e) => setReceiveMisc(Number(e.target.value) || "")}
                       />
                     </div>
+                    {isMainTransfer && (
+                      <div className="flex items-center gap-3">
+                        <Label className="text-sm shrink-0 min-w-[7rem]">Tax</Label>
+                        <Input
+                          className="h-9 text-sm text-right flex-1 min-w-0"
+                          type="number"
+                          min={0}
+                          step={1}
+                          placeholder="0"
+                          value={receiveTax || ""}
+                          onChange={(e) => setReceiveTax(Number(e.target.value) || "")}
+                        />
+                      </div>
+                    )}
                   </div>
                 </CardContent>
               </Card>
+
+              {isMainTransfer && (
+                <Card className="shadow-sm border-primary/20">
+                  <CardHeader className="pb-2">
+                    <Label className="text-xs text-muted-foreground uppercase tracking-wider">Settlement</Label>
+                  </CardHeader>
+                  <CardContent className="space-y-2 w-full max-w-sm ml-auto">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground">Subtotal</span>
+                      <span className="font-medium">Rs. {receiveSubtotal.toLocaleString()}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-sm font-semibold border-t pt-2">
+                      <span>Total</span>
+                      <span>Rs. {receiveTotal.toLocaleString()}</span>
+                    </div>
+                    <div className="flex items-center gap-3 pt-1">
+                      <Label className="text-sm shrink-0 min-w-[7rem]">Paid Now</Label>
+                      <Input
+                        className="h-9 text-sm text-right flex-1 min-w-0"
+                        type="number"
+                        min={0}
+                        step={1}
+                        placeholder="0"
+                        value={receivePaid || ""}
+                        onChange={(e) => setReceivePaid(Number(e.target.value) || "")}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className={receiveDue > 0 ? "text-destructive font-medium" : "text-success font-medium"}>Due</span>
+                      <span className={receiveDue > 0 ? "text-destructive font-bold" : "text-success font-bold"}>
+                        Rs. {receiveDue.toLocaleString()}
+                      </span>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
             </div>
           )}
           <DialogFooter className="flex-col sm:flex-row gap-2 pt-2">
