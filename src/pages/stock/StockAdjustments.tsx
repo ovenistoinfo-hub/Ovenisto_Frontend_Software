@@ -88,12 +88,11 @@ const StockAdjustments = () => {
   const fetchData = useCallback(async () => {
     try {
       const whParam = selectedWarehouseId !== "all" ? selectedWarehouseId : undefined;
-      const [wasteRes, adjRes, ings, whs, whStock] = await Promise.all([
+      const [wasteRes, adjRes, ings, whs] = await Promise.all([
         stockService.getWasteRecords({ warehouseId: whParam, limit: 200 }),
         stockService.getAdjustments({ warehouseId: whParam, limit: 200 }),
         inventoryService.getIngredients(),
         warehouseService.getAll(),
-        selectedWarehouseId !== "all" ? warehouseService.getStock(selectedWarehouseId) : Promise.resolve([]),
       ]);
 
       const wasteRows: MergedRow[] = wasteRes.data.map((w) => ({
@@ -133,7 +132,6 @@ const StockAdjustments = () => {
       setList(merged);
       setIngredients(ings);
       setWarehouses(whs);
-      setWarehouseStock(whStock);
     } catch (err: unknown) {
       toast.error((err as Error).message || "Failed to load stock adjustments");
     } finally {
@@ -142,6 +140,13 @@ const StockAdjustments = () => {
   }, [selectedWarehouseId]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  const stockWarehouseId = form.warehouseId || (selectedWarehouseId !== "all" ? selectedWarehouseId : "");
+
+  useEffect(() => {
+    if (!stockWarehouseId) { setWarehouseStock([]); return; }
+    warehouseService.getStock(stockWarehouseId).then(setWarehouseStock);
+  }, [stockWarehouseId]);
 
   const wasteRows = useMemo(() => list.filter((r) => r.kind === "waste"), [list]);
 
@@ -152,7 +157,7 @@ const StockAdjustments = () => {
   }, [warehouseStock]);
 
   const stockFor = (ingredientId: string, fallback: number) =>
-    selectedWarehouseId !== "all" ? (warehouseStockMap[ingredientId] ?? 0) : fallback;
+    stockWarehouseId ? (warehouseStockMap[ingredientId] ?? 0) : fallback;
 
   const filtered = useMemo(() => {
     if (!search) return list;
@@ -374,6 +379,12 @@ const StockAdjustments = () => {
                       {ingredients.map((ig) => <SelectItem key={ig.id} value={ig.id}>{ig.name} (Stock: {stockFor(ig.id, Number(ig.currentStock))} {ig.unit?.name || ""})</SelectItem>)}
                     </SelectContent>
                   </Select>
+                  {form.ingredientId && (
+                    <p className="text-xs text-muted-foreground">
+                      Current stock{form.warehouseId ? ` at ${warehouses.find((w) => w.id === form.warehouseId)?.name ?? "selected warehouse"}` : ""}:{" "}
+                      <span className="font-semibold text-foreground">{stockFor(form.ingredientId, Number(selectedIng?.currentStock ?? 0))} {selectedIng?.unit?.name || ""}</span>
+                    </p>
+                  )}
                 </div>
 
                 {!form.ingredientId && (
@@ -429,6 +440,12 @@ const StockAdjustments = () => {
                       ))}
                     </SelectContent>
                   </Select>
+                  {form.ingredientId && (
+                    <p className="text-xs text-muted-foreground">
+                      Current stock{form.warehouseId ? ` at ${warehouses.find((w) => w.id === form.warehouseId)?.name ?? "selected warehouse"}` : ""}:{" "}
+                      <span className="font-semibold text-foreground">{stockFor(form.ingredientId, Number(selectedIng?.currentStock ?? 0))} {selectedIng?.unit?.name || ""}</span>
+                    </p>
+                  )}
                 </div>
 
                 <div className="space-y-1.5">
