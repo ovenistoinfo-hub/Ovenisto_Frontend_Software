@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { challanService, type ChallanRecord, type ChallanStatus } from "@/services/challan.service";
 import { warehouseService, type WarehouseRecord } from "@/services/warehouse.service";
 import { inventoryService, type IngredientRecord } from "@/services/inventory.service";
+import { warehouseLedgerService, type OutletLedgerBalance, type SettlementRecord } from "@/services/warehouseLedger.service";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -35,14 +36,17 @@ const Transfers = () => {
   const isSuperAdmin  = userRole === 'Super Admin';
   const isAdmin       = ['Super Admin', 'Admin'].includes(userRole);
   const isKitchenMgr  = userRole === 'Kitchen Manager';
+  const isAccountant  = userRole === 'Accountant';
   const userOutletId  = user?.outletId ?? null;
 
   // ── Role-based permissions ──────────────────────────────────────
   // Kitchen Manager: receive only, no create, no dispatch
   // Manager / Admin: create (branch→kitchen), dispatch KM demands, receive (from main)
   // Super Admin: create (main→branch), dispatch, NO receive
-  const canDispatch = !isKitchenMgr;                    // everyone except KM
-  const canReceive  = !isSuperAdmin;                    // everyone except Super Admin
+  // Accountant: no dispatch/receive rights at all — Ledger tab only
+  const canDispatch = !isKitchenMgr && !isAccountant;
+  const canReceive  = !isSuperAdmin && !isAccountant;
+  const canSeeLedger = isAdmin || isAccountant || userRole === 'Manager';
 
   // Data
   const [challans,     setChallans]     = useState<ChallanRecord[]>([]);
@@ -75,6 +79,17 @@ const Transfers = () => {
   const [receiveTax, setReceiveTax] = useState<number | "">(0);
   const [receivePaid, setReceivePaid] = useState<number | "">(0);
 
+  // Ledger state
+  const [ledgerOutlets, setLedgerOutlets] = useState<OutletLedgerBalance[]>([]);
+  const [ledgerChainTotal, setLedgerChainTotal] = useState(0);
+  const [ledgerLoading, setLedgerLoading] = useState(false);
+  const [ledgerHistoryFor, setLedgerHistoryFor] = useState<OutletLedgerBalance | null>(null);
+  const [ledgerHistory, setLedgerHistory] = useState<SettlementRecord[]>([]);
+  const [showRecordPayment, setShowRecordPayment] = useState<OutletLedgerBalance | null>(null);
+  const [paymentAmount, setPaymentAmount] = useState<number | "">("");
+  const [paymentNotes, setPaymentNotes] = useState("");
+  const [savingPayment, setSavingPayment] = useState(false);
+
   // ── Data loading ──────────────────────────────────────────────────
   const fetchChallans = useCallback(async () => {
     try {
@@ -105,6 +120,53 @@ const Transfers = () => {
     setLoading(true);
     fetchChallans();
   }, [fetchChallans]);
+
+  const fetchLedger = useCallback(async () => {
+    if (!canSeeLedger) return;
+    setLedgerLoading(true);
+    try {
+      const { outlets, chainTotal } = await warehouseLedgerService.getSummary();
+      setLedgerOutlets(outlets);
+      setLedgerChainTotal(chainTotal);
+    } catch (err: unknown) {
+      toast.error((err as Error).message || "Failed to load ledger");
+    } finally {
+      setLedgerLoading(false);
+    }
+  }, [canSeeLedger]);
+
+  useEffect(() => { fetchLedger(); }, [fetchLedger]);
+
+  const openLedgerHistory = async (o: OutletLedgerBalance) => {
+    setLedgerHistoryFor(o);
+    try {
+      const data = await warehouseLedgerService.getSettlements(o.id);
+      setLedgerHistory(data);
+    } catch (err: unknown) {
+      toast.error((err as Error).message || "Failed to load history");
+    }
+  };
+
+  const handleRecordPayment = async () => {
+    if (!showRecordPayment) return;
+    const amt = Number(paymentAmount);
+    if (!amt || amt <= 0) { toast.error("Enter a valid amount"); return; }
+    setSavingPayment(true);
+    try {
+      await warehouseLedgerService.recordPayment(showRecordPayment.id, { amount: amt, notes: paymentNotes || undefined });
+      toast.success("Payment recorded");
+      const settledId = showRecordPayment.id;
+      setShowRecordPayment(null);
+      setPaymentAmount("");
+      setPaymentNotes("");
+      await fetchLedger();
+      if (ledgerHistoryFor?.id === settledId) openLedgerHistory({ ...ledgerHistoryFor });
+    } catch (err: unknown) {
+      toast.error((err as Error).message || "Failed to record payment");
+    } finally {
+      setSavingPayment(false);
+    }
+  };
 
   // ── Role-based tab filtering ───────────────────────────────────────
   // Determine which warehouse types this user "owns" for dispatch/receive
@@ -147,8 +209,8 @@ const Transfers = () => {
   );
 
   // Which sections to show
-  const showOutgoingSection = !isKitchenMgr;   // Everyone except KM
-  const showIncomingSection = !isSuperAdmin;    // Everyone except Super Admin
+  const showOutgoingSection = !isKitchenMgr && !isAccountant;
+  const showIncomingSection = !isSuperAdmin && !isAccountant;
 
   // Helper for warehouse scope check (used by create form only)
   function isMyWarehouse(wh: { outletId: string | null; type: string } | null): boolean {
@@ -701,7 +763,7 @@ const Transfers = () => {
       )}
 
       {/* Single-section view for KM (incoming only) and Super Admin (outgoing only) */}
-      {showOutgoingSection && showIncomingSection ? (
+      {(showOutgoingSection || showIncomingSection) && (showOutgoingSection && showIncomingSection ? (
         /* Both sections — Manager / Admin */
         <Tabs defaultValue="outgoing">
           <TabsList>
@@ -791,6 +853,124 @@ const Transfers = () => {
               showDispatch={false}
               showReceive={true}
             />
+          </CardContent>
+        </Card>
+      ))}
+
+      {canSeeLedger && (
+        <Card className="shadow-sm mt-6">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <FileText className="h-4 w-4" />
+              Transfer Ledger{isAdmin ? ` — Chain Total: Rs. ${ledgerChainTotal.toLocaleString()}` : ""}
+            </CardTitle>
+            <p className="text-xs text-muted-foreground">
+              Balance owed to Main warehouse for received stock transfers.
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {ledgerLoading ? (
+              <Skeleton className="h-24 w-full rounded-lg" />
+            ) : (
+              <div className="rounded-lg border overflow-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-muted/50">
+                      <TableHead>Branch</TableHead>
+                      <TableHead className="text-right">Due to Main</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {ledgerOutlets.map((o) => (
+                      <TableRow key={o.id}>
+                        <TableCell className="font-medium">{o.name}</TableCell>
+                        <TableCell className={`text-right font-bold ${o.dueToMain > 0 ? "text-destructive" : "text-success"}`}>
+                          Rs. {o.dueToMain.toLocaleString()}
+                        </TableCell>
+                        <TableCell className="text-right space-x-2">
+                          <Button variant="ghost" size="sm" onClick={() => openLedgerHistory(o)}>History</Button>
+                          {o.dueToMain > 0 && (
+                            <Button size="sm" className="gradient-primary text-primary-foreground" onClick={() => { setShowRecordPayment(o); setPaymentAmount(o.dueToMain); }}>
+                              Record Payment
+                            </Button>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {ledgerOutlets.length === 0 && (
+                      <TableRow><TableCell colSpan={3} className="text-center text-muted-foreground py-6">No branches found</TableCell></TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+
+            {showRecordPayment && (
+              <Card className="shadow-sm border-primary/30">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base">Record Payment — {showRecordPayment.name}</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="settle-amount">Amount (outstanding: Rs. {showRecordPayment.dueToMain.toLocaleString()})</Label>
+                    <Input id="settle-amount" type="number" value={paymentAmount} onChange={(e) => setPaymentAmount(e.target.value === "" ? "" : Number(e.target.value))} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="settle-notes">Notes (optional)</Label>
+                    <Textarea id="settle-notes" value={paymentNotes} onChange={(e) => setPaymentNotes(e.target.value)} />
+                  </div>
+                  <div className="flex justify-end gap-2 pt-1">
+                    <Button variant="outline" onClick={() => setShowRecordPayment(null)}>Cancel</Button>
+                    <Button className="gradient-primary text-primary-foreground" onClick={handleRecordPayment} disabled={savingPayment}>
+                      {savingPayment ? "Saving..." : "Confirm Payment"}
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {ledgerHistoryFor && (
+              <Card className="shadow-sm">
+                <CardHeader className="pb-2 flex flex-row items-center justify-between">
+                  <CardTitle className="text-sm">Statement — {ledgerHistoryFor.name}</CardTitle>
+                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setLedgerHistoryFor(null)}><X className="h-4 w-4" /></Button>
+                </CardHeader>
+                <CardContent>
+                  <div className="rounded-lg border overflow-auto max-h-96">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="bg-muted/50">
+                          <TableHead>Date</TableHead>
+                          <TableHead>Entry</TableHead>
+                          <TableHead className="text-right">Amount</TableHead>
+                          <TableHead className="text-right">Balance</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {ledgerHistory.map((s) => (
+                          <TableRow key={s.id}>
+                            <TableCell className="text-xs">{new Date(s.createdAt).toLocaleDateString()}</TableCell>
+                            <TableCell className="text-xs">
+                              {s.type === 'CHARGE'
+                                ? `Transfer ${s.challanNo ?? ''}`
+                                : `Payment recorded by ${s.recordedBy?.name ?? '—'}${s.notes ? ` — ${s.notes}` : ''}`}
+                            </TableCell>
+                            <TableCell className={`text-right font-medium ${s.type === 'CHARGE' ? "text-destructive" : "text-success"}`}>
+                              {s.type === 'CHARGE' ? '+' : '−'}Rs. {s.amount.toLocaleString()}
+                            </TableCell>
+                            <TableCell className="text-right">Rs. {s.balanceAfter.toLocaleString()}</TableCell>
+                          </TableRow>
+                        ))}
+                        {ledgerHistory.length === 0 && (
+                          <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground py-6">No entries yet</TableCell></TableRow>
+                        )}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
           </CardContent>
         </Card>
       )}

@@ -28,7 +28,7 @@ const rolePermissions: Record<string, string[]> = {
   ],
   "Accountant": [
     "sales", "purchases", "suppliers", "supplier-dues",
-    "expenses", "reports", "my-portal",
+    "expenses", "reports", "my-portal", "transfers",
   ],
   "Rider": ["rider-portal", "my-portal"],
   "Customer Screen": ["customer-display"],
