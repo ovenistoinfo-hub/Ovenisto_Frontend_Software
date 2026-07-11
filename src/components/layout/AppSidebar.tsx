@@ -3,7 +3,7 @@ import { useLocation, Link } from "react-router-dom";
 import {
   Home, BarChart3, ShoppingCart, ChefHat, UtensilsCrossed, Store, Settings, Globe, CalendarDays,
   Pizza, Factory, Package, DollarSign, ShoppingBag, CreditCard, ArrowLeftRight,
-  Trash2, Users, Clock, FileText, MessageSquare, ChevronDown, ChevronRight, Flame, LogOut, Link2,
+  Users, Clock, FileText, MessageSquare, ChevronDown, ChevronRight, Flame, LogOut, Link2,
   Bike, CalendarCheck, LayoutGrid, ClipboardList, CalendarOff, UserCircle, IdCard, Coins, Ban
 } from "lucide-react";
 import {
@@ -80,7 +80,6 @@ const navSections = [
   { label: "Transfer / Damage", items: [
     { title: "Transfers", url: "/transfers", icon: ArrowLeftRight, module: "transfers" },
     { title: "Demand Lists", url: "/demands", icon: ClipboardList, module: "demands" },
-    { title: "Waste", url: "/waste", icon: Trash2, module: "waste" },
   ]},
   { label: "Account / HR", items: [
     { title: "My Portal", url: "/my-portal", icon: UserCircle, module: "my-portal" },

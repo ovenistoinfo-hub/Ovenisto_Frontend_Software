@@ -47,7 +47,6 @@ const Suppliers = lazy(() => import("./pages/Suppliers"));
 const Expenses = lazy(() => import("./pages/Expenses"));
 const Transfers = lazy(() => import("./pages/Transfers"));
 const Demands = lazy(() => import("./pages/Demands"));
-const Waste = lazy(() => import("./pages/Waste"));
 const Users = lazy(() => import("./pages/Users"));
 const Attendance = lazy(() => import("./pages/Attendance"));
 const CancellationRequests = lazy(() => import("./pages/CancellationRequests"));
@@ -169,7 +168,6 @@ function AppRoutes() {
       <Route path="/expenses" element={<ProtectedRoute module="expenses"><AppLayout><Expenses /></AppLayout></ProtectedRoute>} />
       <Route path="/transfers" element={<ProtectedRoute module="transfers"><AppLayout><Transfers /></AppLayout></ProtectedRoute>} />
       <Route path="/demands" element={<ProtectedRoute module="demands"><AppLayout><Demands /></AppLayout></ProtectedRoute>} />
-      <Route path="/waste" element={<ProtectedRoute module="waste"><AppLayout><Waste /></AppLayout></ProtectedRoute>} />
       <Route path="/users" element={<ProtectedRoute module="users"><AppLayout><Users /></AppLayout></ProtectedRoute>} />
       <Route path="/attendance" element={<ProtectedRoute module="attendance"><AppLayout><Attendance /></AppLayout></ProtectedRoute>} />
       <Route path="/cancellation-requests" element={<ProtectedRoute module="cancellation-requests"><AppLayout><CancellationRequests /></AppLayout></ProtectedRoute>} />
