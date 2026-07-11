@@ -12,6 +12,7 @@ export interface ChallanItem {
   receivedQty: number | null;
   wasteQty: number | null;
   wasteReason: string | null;
+  unitPrice: number | null;
 }
 
 export interface ChallanUser {
@@ -53,6 +54,12 @@ export interface ChallanRecord {
   notes: string | null;
   shippingCost: number | null;
   miscAmount: number | null;
+  tax: number | null;
+  subtotal: number | null;
+  total: number | null;
+  paid: number;
+  due: number;
+  paymentStatus: 'paid' | 'partial' | 'unpaid' | null;
   fromWarehouse: { id: string; name: string; type: string; outletId: string | null };
   toWarehouse:   { id: string; name: string; type: string; outletId: string | null };
   createdBy:    ChallanUser | null;
@@ -69,6 +76,8 @@ export interface ReceiveChallanPayload {
   items?: { id: string; receivedQty: number; wasteQty?: number; wasteReason?: string }[];
   shippingCost?: number;
   miscAmount?: number;
+  tax?: number;
+  paid?: number;
 }
 
 export const challanService = {
