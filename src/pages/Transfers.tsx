@@ -47,6 +47,9 @@ const Transfers = () => {
   const canDispatch = !isKitchenMgr && !isAccountant;
   const canReceive  = !isSuperAdmin && !isAccountant;
   const canSeeLedger = isAdmin || isAccountant || userRole === 'Manager';
+  // Super Admin represents Main warehouse (the creditor) — view every branch's balance, but
+  // never record a payment; only the owing branch's own Manager/Accountant/Admin can.
+  const canRecordPayment = canSeeLedger && !isSuperAdmin;
 
   // Data
   const [challans,     setChallans]     = useState<ChallanRecord[]>([]);
@@ -245,6 +248,19 @@ const Transfers = () => {
 
   // "To" options: valid destination based on fromWarehouse type
   const selectedFromWH = warehouses.find(w => w.id === fromWarehouseId);
+
+  // Estimated stock value for a Main→Branch transfer, priced at current Ingredient.purchasePrice.
+  // Informational only — the real total/tax/paid/due is locked in when the branch receives it.
+  const isMainCreateSource = selectedFromWH?.type === 'MAIN';
+  const createEstimatedValue = useMemo(() => {
+    if (!isMainCreateSource) return 0;
+    return items.reduce((sum, item) => {
+      if (!item.ingredientId || item.qty <= 0) return sum;
+      const price = ingredients.find(i => i.id === item.ingredientId)?.purchasePrice ?? 0;
+      return sum + item.qty * price;
+    }, 0);
+  }, [items, ingredients, isMainCreateSource]);
+
   const toWarehouseOptions = useMemo(() => {
     if (!selectedFromWH) return [];
     if (selectedFromWH.type === 'MAIN')
@@ -424,6 +440,17 @@ const Transfers = () => {
 
   const receiveTotal = receiveSubtotal + (Number(receiveTax) || 0) + (Number(receiveShipping) || 0) + (Number(receiveMisc) || 0);
   const receiveDue = Math.max(0, receiveTotal - (Number(receivePaid) || 0));
+
+  // Detail Dialog cost summary (create/dispatch/receipt views) for a Main→Branch transfer:
+  // once received, show the settled total/paid/due; before that, an estimate at current price.
+  const isMainDetailTransfer = showDetail?.fromWarehouse?.type === 'MAIN';
+  const detailEstimatedValue = useMemo(() => {
+    if (!showDetail || !isMainDetailTransfer || showDetail.total != null) return 0;
+    return showDetail.items.reduce((sum, item) => {
+      const price = ingredients.find(i => i.id === item.ingredientId)?.purchasePrice ?? 0;
+      return sum + item.qty * price;
+    }, 0);
+  }, [showDetail, ingredients, isMainDetailTransfer]);
 
   const handleReceive = async () => {
     if (!receiveChallan) return;
@@ -751,6 +778,20 @@ const Transfers = () => {
               </CardContent>
             </Card>
 
+            {isMainCreateSource && items.some(i => i.ingredientId && i.qty > 0) && (
+              <Card className="shadow-sm border-primary/20">
+                <CardContent className="pt-4 space-y-1">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">Estimated Stock Value</span>
+                    <span className="font-semibold">Rs. {createEstimatedValue.toLocaleString()}</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Based on current purchase price. Final total (with tax/shipping) is confirmed when the branch receives this transfer.
+                  </p>
+                </CardContent>
+              </Card>
+            )}
+
             <div className="flex justify-end gap-2 pt-1">
               <Button variant="outline" size="sm" onClick={() => setShowDialog(false)}>Cancel</Button>
               <Button className="gradient-primary text-primary-foreground" size="sm" onClick={handleCreateChallan} disabled={saving}>
@@ -890,7 +931,7 @@ const Transfers = () => {
                         </TableCell>
                         <TableCell className="text-right space-x-2">
                           <Button variant="ghost" size="sm" onClick={() => openLedgerHistory(o)}>History</Button>
-                          {o.dueToMain > 0 && (
+                          {canRecordPayment && o.dueToMain > 0 && (
                             <Button size="sm" className="gradient-primary text-primary-foreground" onClick={() => { setShowRecordPayment(o); setPaymentAmount(o.dueToMain); }}>
                               Record Payment
                             </Button>
@@ -1238,8 +1279,8 @@ const Transfers = () => {
                 Total Items: <span className="font-semibold text-foreground">{showDetail.demand.items.length}</span>
               </div>
 
-              {/* Cost Summary */}
-              {((showDetail.shippingCost ?? 0) > 0 || (showDetail.miscAmount ?? 0) > 0) && (
+              {/* Cost Summary — Kitchen↔Branch (no financial settlement) */}
+              {!isMainDetailTransfer && ((showDetail.shippingCost ?? 0) > 0 || (showDetail.miscAmount ?? 0) > 0) && (
                 <div className="flex justify-end">
                   <div className="w-64 space-y-1 text-sm border rounded-lg p-3 bg-muted/30">
                     {showDetail.shippingCost != null && showDetail.shippingCost > 0 && (
@@ -1258,6 +1299,62 @@ const Transfers = () => {
                       <span>Total Extra Cost</span>
                       <span>Rs. {((showDetail.shippingCost ?? 0) + (showDetail.miscAmount ?? 0)).toLocaleString()}</span>
                     </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Stock Value / Settlement — Main→Branch only */}
+              {isMainDetailTransfer && (
+                <div className="flex justify-end">
+                  <div className="w-64 space-y-1 text-sm border rounded-lg p-3 bg-muted/30">
+                    {showDetail.total != null ? (
+                      <>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Subtotal</span>
+                          <span>Rs. {(showDetail.subtotal ?? 0).toLocaleString()}</span>
+                        </div>
+                        {(showDetail.tax ?? 0) > 0 && (
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Tax</span>
+                            <span>Rs. {(showDetail.tax ?? 0).toLocaleString()}</span>
+                          </div>
+                        )}
+                        {(showDetail.shippingCost ?? 0) > 0 && (
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Shipping Cost</span>
+                            <span>Rs. {(showDetail.shippingCost ?? 0).toLocaleString()}</span>
+                          </div>
+                        )}
+                        {(showDetail.miscAmount ?? 0) > 0 && (
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Misc Charges</span>
+                            <span>Rs. {(showDetail.miscAmount ?? 0).toLocaleString()}</span>
+                          </div>
+                        )}
+                        <div className="flex justify-between border-t pt-1 font-semibold">
+                          <span>Total</span>
+                          <span>Rs. {(showDetail.total ?? 0).toLocaleString()}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Paid</span>
+                          <span>Rs. {showDetail.paid.toLocaleString()}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className={showDetail.due > 0 ? "text-destructive font-medium" : "text-success font-medium"}>Due</span>
+                          <span className={showDetail.due > 0 ? "text-destructive font-bold" : "text-success font-bold"}>
+                            Rs. {showDetail.due.toLocaleString()}
+                          </span>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Estimated Stock Value</span>
+                          <span className="font-semibold">Rs. {detailEstimatedValue.toLocaleString()}</span>
+                        </div>
+                        <p className="text-xs text-muted-foreground pt-1">Final amount is confirmed when the branch receives this transfer.</p>
+                      </>
+                    )}
                   </div>
                 </div>
               )}
@@ -1443,8 +1540,8 @@ const Transfers = () => {
                 Total Items: <span className="font-semibold text-foreground">{showDetail.items.length}</span>
               </div>
 
-              {/* Cost Summary */}
-              {(showDetail.shippingCost != null || showDetail.miscAmount != null) && (
+              {/* Cost Summary — Kitchen↔Branch (no financial settlement) */}
+              {!isMainDetailTransfer && (showDetail.shippingCost != null || showDetail.miscAmount != null) && (
                 <div className="flex justify-end">
                   <div className="w-64 space-y-1 text-sm border rounded-lg p-3 bg-muted/30">
                     {showDetail.shippingCost != null && showDetail.shippingCost > 0 && (
@@ -1466,6 +1563,62 @@ const Transfers = () => {
                   </div>
                 </div>
               )}
+
+              {/* Stock Value / Settlement — Main→Branch only */}
+              {isMainDetailTransfer && (
+                <div className="flex justify-end">
+                  <div className="w-64 space-y-1 text-sm border rounded-lg p-3 bg-muted/30">
+                    {showDetail.total != null ? (
+                      <>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Subtotal</span>
+                          <span>Rs. {(showDetail.subtotal ?? 0).toLocaleString()}</span>
+                        </div>
+                        {(showDetail.tax ?? 0) > 0 && (
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Tax</span>
+                            <span>Rs. {(showDetail.tax ?? 0).toLocaleString()}</span>
+                          </div>
+                        )}
+                        {(showDetail.shippingCost ?? 0) > 0 && (
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Shipping Cost</span>
+                            <span>Rs. {(showDetail.shippingCost ?? 0).toLocaleString()}</span>
+                          </div>
+                        )}
+                        {(showDetail.miscAmount ?? 0) > 0 && (
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Misc Charges</span>
+                            <span>Rs. {(showDetail.miscAmount ?? 0).toLocaleString()}</span>
+                          </div>
+                        )}
+                        <div className="flex justify-between border-t pt-1 font-semibold">
+                          <span>Total</span>
+                          <span>Rs. {(showDetail.total ?? 0).toLocaleString()}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Paid</span>
+                          <span>Rs. {showDetail.paid.toLocaleString()}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className={showDetail.due > 0 ? "text-destructive font-medium" : "text-success font-medium"}>Due</span>
+                          <span className={showDetail.due > 0 ? "text-destructive font-bold" : "text-success font-bold"}>
+                            Rs. {showDetail.due.toLocaleString()}
+                          </span>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Estimated Stock Value</span>
+                          <span className="font-semibold">Rs. {detailEstimatedValue.toLocaleString()}</span>
+                        </div>
+                        <p className="text-xs text-muted-foreground pt-1">Final amount is confirmed when the branch receives this transfer.</p>
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           ) : null}
           <DialogFooter className="gap-2">
@@ -1475,6 +1628,30 @@ const Transfers = () => {
               const w = window.open("", "_blank", "width=800,height=700");
               if (!w) return;
               const CSS = `*{margin:0;padding:0;box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;padding:30px;color:#333;font-size:13px}h1{font-size:20px}table{width:100%;border-collapse:collapse;margin-top:16px}th,td{border:1px solid #ccc;padding:8px;text-align:left}th{background:#f0f0f0;font-weight:600;font-size:12px}.header{text-align:center;border-bottom:2px solid #333;padding-bottom:16px;margin-bottom:16px}.info-grid{display:flex;justify-content:space-between;margin-bottom:16px}.badge{display:inline-block;padding:3px 12px;border-radius:12px;font-size:11px;font-weight:600;margin-top:6px}.summary{text-align:right;margin-top:12px}.cost-box{margin-top:16px;border-top:1px solid #ccc;padding-top:12px;text-align:right}@media print{body{padding:15px}}`;
+
+              // Main→Branch settlement block: settled total/paid/due once received, else an
+              // estimate at current purchase price. Kitchen↔Branch challans never show this.
+              const isMainPrint = c.fromWarehouse?.type === 'MAIN';
+              const settlementHtml = (() => {
+                if (!isMainPrint) return '';
+                if (c.total != null) {
+                  const rows = [
+                    `<p>Subtotal: <strong>Rs. ${(c.subtotal ?? 0).toLocaleString()}</strong></p>`,
+                    (c.tax ?? 0) > 0 ? `<p>Tax: <strong>Rs. ${(c.tax ?? 0).toLocaleString()}</strong></p>` : '',
+                    (c.shippingCost ?? 0) > 0 ? `<p>Shipping Cost: <strong>Rs. ${(c.shippingCost ?? 0).toLocaleString()}</strong></p>` : '',
+                    (c.miscAmount ?? 0) > 0 ? `<p>Misc Charges: <strong>Rs. ${(c.miscAmount ?? 0).toLocaleString()}</strong></p>` : '',
+                    `<p style="font-size:14px;font-weight:700;margin-top:6px">Total: Rs. ${(c.total ?? 0).toLocaleString()}</p>`,
+                    `<p>Paid: <strong>Rs. ${c.paid.toLocaleString()}</strong></p>`,
+                    `<p style="color:${c.due > 0 ? '#d32f2f' : '#1a7f37'}">Due: <strong>Rs. ${c.due.toLocaleString()}</strong></p>`,
+                  ].join('');
+                  return `<div class="cost-box">${rows}</div>`;
+                }
+                const estValue = c.items.reduce((sum, item) => {
+                  const price = ingredients.find(i => i.id === item.ingredientId)?.purchasePrice ?? 0;
+                  return sum + item.qty * price;
+                }, 0);
+                return `<div class="cost-box"><p>Estimated Stock Value: <strong>Rs. ${estValue.toLocaleString()}</strong></p><p style="font-size:11px;color:#888;margin-top:4px">Final amount confirmed when the branch receives this transfer.</p></div>`;
+              })();
 
               if (c.demand) {
                 // ── Demand-linked challan → print full demand invoice with challan lifecycle ──
@@ -1507,7 +1684,9 @@ const Transfers = () => {
                 });
                 w.document.write(`</tbody></table><p class="summary">Total Items: <strong>${d.items.length}</strong></p>`);
                 const totalExtra = (c.shippingCost ?? 0) + (c.miscAmount ?? 0);
-                if (totalExtra > 0) {
+                if (isMainPrint) {
+                  w.document.write(settlementHtml);
+                } else if (totalExtra > 0) {
                   w.document.write(`<div class="cost-box">${c.shippingCost ? `<p>Shipping Cost: <strong>Rs. ${c.shippingCost.toLocaleString()}</strong></p>` : ""}${c.miscAmount ? `<p>Misc Charges: <strong>Rs. ${c.miscAmount.toLocaleString()}</strong></p>` : ""}<p style="font-size:14px;font-weight:700;margin-top:6px">Total Extra Cost: Rs. ${totalExtra.toLocaleString()}</p></div>`);
                 }
                 w.document.write(`</body></html>`);
@@ -1534,7 +1713,9 @@ const Transfers = () => {
                   w.document.write(`<tr><td>${idx + 1}</td><td>${item.ingredientName}</td><td>${item.category ?? "—"}</td><td>${item.unit}</td><td style="text-align:right">${item.qty}</td>${isReceived ? `<td style="text-align:right;font-weight:600">${recv}</td><td style="text-align:right;color:${waste > 0 ? "#d32f2f" : "#888"}">${waste > 0 ? waste : "—"}</td><td style="text-align:right;font-weight:600;color:${net < item.qty ? "#d97706" : "#16a34a"}">${net}</td>` : ""}</tr>`);
                 });
                 w.document.write(`</tbody></table>`);
-                if (totalExtra > 0) {
+                if (isMainPrint) {
+                  w.document.write(settlementHtml);
+                } else if (totalExtra > 0) {
                   w.document.write(`<div class="cost-box">${c.shippingCost ? `<p>Shipping Cost: <strong>Rs. ${c.shippingCost.toLocaleString()}</strong></p>` : ""}${c.miscAmount ? `<p>Misc Charges: <strong>Rs. ${c.miscAmount.toLocaleString()}</strong></p>` : ""}<p style="font-size:14px;font-weight:700;margin-top:6px">Total Extra Cost: Rs. ${totalExtra.toLocaleString()}</p></div>`);
                 }
                 w.document.write(`<p class="summary">Total Items: <strong>${c.items.length}</strong></p></body></html>`);
