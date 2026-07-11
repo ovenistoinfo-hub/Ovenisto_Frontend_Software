@@ -6,7 +6,6 @@ import { Label } from "@/components/ui/label";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
@@ -59,7 +58,6 @@ const emptyForm = {
   unit: "",
   reason: "",
   cost: 0,
-  notes: "",
   warehouseId: "",
 };
 
@@ -145,7 +143,7 @@ const StockAdjustments = () => {
 
   useEffect(() => {
     if (!stockWarehouseId) { setWarehouseStock([]); return; }
-    warehouseService.getStock(stockWarehouseId).then(setWarehouseStock);
+    warehouseService.getStock(stockWarehouseId).then(setWarehouseStock).catch(() => setWarehouseStock([]));
   }, [stockWarehouseId]);
 
   const wasteRows = useMemo(() => list.filter((r) => r.kind === "waste"), [list]);
@@ -499,10 +497,6 @@ const StockAdjustments = () => {
 
             {mode === "waste" && selectedIng && form.quantity > 0 && (
               <p className="text-sm text-muted-foreground">Estimated Loss: <strong className="text-destructive">{currency} {estimatedCost.toLocaleString()}</strong></p>
-            )}
-
-            {mode === "waste" && (
-              <div className="space-y-1.5"><Label>Notes</Label><Textarea placeholder="Additional notes" value={form.notes} onChange={(e) => setForm((p) => ({ ...p, notes: e.target.value }))} /></div>
             )}
 
             <div className="flex justify-end gap-2 pt-1">
