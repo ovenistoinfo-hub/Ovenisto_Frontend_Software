@@ -3,6 +3,11 @@ import { api } from './api';
 export interface WarehouseDashboardData {
   activeWarehouses: { id: string; name: string; type: string }[];
   inventoryValue: number;
+  payable: number;
+  receivable: number;
+  receivableOutletsOwing: number;
+  waste: number;
+  wasteCount: number;
   costingTable: {
     ingredientId: string;
     name: string;
@@ -29,9 +34,15 @@ export interface WarehouseDashboardData {
     avgValue: number;
     payments: number;
     unpaid: number;
+    unpaidCount: number;
+    discount: number;
     gst: number;
     pendingRequests: number;
     approvedRequests: number;
+    stockReceivedPaid: number;
+    stockReceivedPaidCount: number;
+    stockReceivedUnpaid: number;
+    stockReceivedUnpaidCount: number;
   };
   distribution: {
     totalDemands: number;

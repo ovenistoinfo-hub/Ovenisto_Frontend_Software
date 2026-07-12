@@ -1,18 +1,17 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
-  Package, TrendingUp, TrendingDown, ArrowUpDown, ShoppingBag,
-  ClipboardList, ArrowLeftRight, AlertTriangle, CheckCircle2,
-  Clock, RefreshCw, DollarSign, Truck, Layers, BarChart3
+  ShoppingBag, AlertTriangle, CheckCircle2, TrendingUp,
+  RefreshCw, DollarSign, Layers, BarChart3,
+  Wallet, HandCoins, Trash2, PackageCheck,
+  ClipboardList, Truck, Package, ArrowLeftRight, Clock, TrendingDown, ArrowUpDown
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PageHeader } from "@/components/ui/page-header";
 import { warehouseDashboardService } from "@/services/warehouseDashboard.service";
 import { cn } from "@/lib/utils";
@@ -69,12 +68,6 @@ function StatCard({
   );
 }
 
-const TYPE_BADGE: Record<string, string> = {
-  INBOUND: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300",
-  OUTBOUND: "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300",
-  RECEIVED: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300",
-};
-
 export default function WarehouseDashboard() {
   const [warehouseId, setWarehouseId] = useState("all");
   const [startDate, setStartDate] = useState("");
@@ -97,7 +90,6 @@ export default function WarehouseDashboard() {
     setFilters({ warehouseId, startDate: startDate || undefined, endDate: endDate || undefined });
 
   const d = data;
-  const selectedWHName = warehouseId === "all" ? "All Warehouses" : d?.activeWarehouses.find(w => w.id === warehouseId)?.name || "Warehouse";
 
   return (
     <div className="space-y-6">
@@ -152,7 +144,7 @@ export default function WarehouseDashboard() {
         </CardContent>
       </Card>
 
-      {/* ── Hero KPI strip ── */}
+      {/* ── Hero KPI strip: Stock Value / Payable / Receivable / Waste ── */}
       {isLoading ? (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[1,2,3,4].map(i => <Skeleton key={i} className="h-24 rounded-xl" />)}
@@ -161,36 +153,36 @@ export default function WarehouseDashboard() {
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <Card className="shadow-sm border-l-4 border-l-emerald-500 p-4 flex flex-col gap-1">
             <div className="flex items-center gap-2 text-muted-foreground text-xs font-medium">
-              <Layers className="h-3.5 w-3.5 text-emerald-500" /> Inventory Value
+              <Layers className="h-3.5 w-3.5 text-emerald-500" /> Stock Value
             </div>
             <p className="text-xl font-black text-emerald-600 dark:text-emerald-400">{fmt(d?.inventoryValue ?? 0)}</p>
-            <p className="text-[11px] text-muted-foreground truncate" title={selectedWHName}>{selectedWHName}</p>
+            <p className="text-[11px] text-muted-foreground truncate">{d?.costingTable.length ?? 0} items tracked</p>
+          </Card>
+          <Card className="shadow-sm border-l-4 border-l-red-500 p-4 flex flex-col gap-1">
+            <div className="flex items-center gap-2 text-muted-foreground text-xs font-medium">
+              <Wallet className="h-3.5 w-3.5 text-red-500" /> Payable
+            </div>
+            <p className="text-xl font-black text-red-600 dark:text-red-400">{fmt(d?.payable ?? 0)}</p>
+            <p className="text-[11px] text-muted-foreground truncate">{d?.procurement.unpaidCount ?? 0} purchase orders</p>
           </Card>
           <Card className="shadow-sm border-l-4 border-l-blue-500 p-4 flex flex-col gap-1">
             <div className="flex items-center gap-2 text-muted-foreground text-xs font-medium">
-              <ShoppingBag className="h-3.5 w-3.5 text-blue-500" /> Total Procurement
+              <HandCoins className="h-3.5 w-3.5 text-blue-500" /> Receivable
             </div>
-            <p className="text-xl font-black text-blue-600 dark:text-blue-400">{fmt(d?.procurement.procurementCost ?? 0)}</p>
-            <p className="text-[11px] text-muted-foreground truncate" title={`${d?.procurement.totalOrders ?? 0} orders - ${selectedWHName}`}>{d?.procurement.totalOrders ?? 0} orders - {selectedWHName}</p>
-          </Card>
-          <Card className="shadow-sm border-l-4 border-l-amber-500 p-4 flex flex-col gap-1">
-            <div className="flex items-center gap-2 text-muted-foreground text-xs font-medium">
-              <ClipboardList className="h-3.5 w-3.5 text-amber-500" /> Active Demands
-            </div>
-            <p className="text-xl font-black text-amber-600 dark:text-amber-400">{d?.distribution.pendingDemands ?? 0}</p>
-            <p className="text-[11px] text-muted-foreground truncate" title={`${d?.distribution.totalDemands ?? 0} total - ${selectedWHName}`}>{d?.distribution.totalDemands ?? 0} total - {selectedWHName}</p>
+            <p className="text-xl font-black text-blue-600 dark:text-blue-400">{fmt(d?.receivable ?? 0)}</p>
+            <p className="text-[11px] text-muted-foreground truncate">{d?.receivableOutletsOwing ?? 0} outlets owing</p>
           </Card>
           <Card className="shadow-sm border-l-4 border-l-purple-500 p-4 flex flex-col gap-1">
             <div className="flex items-center gap-2 text-muted-foreground text-xs font-medium">
-              <Truck className="h-3.5 w-3.5 text-purple-500" /> Stock in Transit
+              <Trash2 className="h-3.5 w-3.5 text-purple-500" /> Waste
             </div>
-            <p className="text-xl font-black text-purple-600 dark:text-purple-400">{d?.distribution.dispatchedChallans ?? 0}</p>
-            <p className="text-[11px] text-muted-foreground truncate" title={`${d?.distribution.totalChallans ?? 0} total - ${selectedWHName}`}>{d?.distribution.totalChallans ?? 0} total - {selectedWHName}</p>
+            <p className="text-xl font-black text-purple-600 dark:text-purple-400">{fmt(d?.waste ?? 0)}</p>
+            <p className="text-[11px] text-muted-foreground truncate">{d?.wasteCount ?? 0} waste entries</p>
           </Card>
         </div>
       )}
 
-      {/* ── Double Column: Procurement vs Distribution ── */}
+      {/* ── Double Column: Purchase Orders vs Invoices ── */}
       {isLoading ? (
         <div className="grid md:grid-cols-2 gap-4">
           <Skeleton className="h-72 rounded-xl" />
@@ -208,17 +200,17 @@ export default function WarehouseDashboard() {
             </CardHeader>
             <CardContent className="grid grid-cols-2 gap-2">
               <StatCard icon={BarChart3} label="Total Orders" value={d?.procurement.totalOrders ?? 0} color="info" />
-              <StatCard icon={DollarSign} label="Procurement Cost" value={fmt(d?.procurement.procurementCost ?? 0)} color="info" />
-              <StatCard icon={TrendingUp} label="Avg. Procurement Value" value={fmt(d?.procurement.avgValue ?? 0)} />
+              <StatCard icon={DollarSign} label="Inventory Procurement Cost" value={fmt(d?.procurement.procurementCost ?? 0)} color="info" />
+              <StatCard icon={AlertTriangle} label={`Unpaid to Vendors (${d?.procurement.unpaidCount ?? 0})`} value={fmt(d?.procurement.unpaid ?? 0)} color={d?.procurement.unpaid ? "destructive" : "default"} />
               <StatCard icon={CheckCircle2} label="Vendor Payments" value={fmt(d?.procurement.payments ?? 0)} color="success" />
-              <StatCard icon={AlertTriangle} label="Unpaid to Vendors" value={fmt(d?.procurement.unpaid ?? 0)} color={d?.procurement.unpaid ? "destructive" : "default"} />
+              <StatCard icon={TrendingUp} label="Discount on Purchases" value={fmt(d?.procurement.discount ?? 0)} />
               <StatCard icon={DollarSign} label="GST on Purchases" value={fmt(d?.procurement.gst ?? 0)} />
-              <StatCard icon={Clock} label="Pending Requests" value={d?.procurement.pendingRequests ?? 0} color={d?.procurement.pendingRequests ? "warning" : "default"} />
-              <StatCard icon={CheckCircle2} label="Approved Requests" value={d?.procurement.approvedRequests ?? 0} color="success" />
+              <StatCard icon={AlertTriangle} label={`Stock Received - Unpaid (${d?.procurement.stockReceivedUnpaidCount ?? 0})`} value={fmt(d?.procurement.stockReceivedUnpaid ?? 0)} color={d?.procurement.stockReceivedUnpaid ? "warning" : "default"} />
+              <StatCard icon={PackageCheck} label={`Stock Received - Paid (${d?.procurement.stockReceivedPaidCount ?? 0})`} value={fmt(d?.procurement.stockReceivedPaid ?? 0)} color="success" />
             </CardContent>
           </Card>
 
-          {/* Demands & Challans / Distribution */}
+          {/* Stock Distribution — demands & transfers out of this warehouse */}
           <Card className="shadow-sm">
             <CardHeader className="pb-3">
               <CardTitle className="text-sm flex items-center gap-2">
@@ -227,130 +219,18 @@ export default function WarehouseDashboard() {
               </CardTitle>
             </CardHeader>
             <CardContent className="grid grid-cols-2 gap-2">
-              <StatCard icon={ClipboardList} label="Total Demands" value={d?.distribution.totalDemands ?? 0} color="info" />
-              <StatCard icon={CheckCircle2} label="Fulfilled Demands" value={d?.distribution.fulfilledDemands ?? 0} color="success" />
-              <StatCard icon={Clock} label="Pending Demands" value={d?.distribution.pendingDemands ?? 0} color={d?.distribution.pendingDemands ? "warning" : "default"} />
-              <StatCard icon={Truck} label="Dispatched Challans" value={d?.distribution.dispatchedChallans ?? 0} color="info" />
-              <StatCard icon={Package} label="Received Challans" value={d?.distribution.receivedChallans ?? 0} color="success" />
-              <StatCard icon={TrendingDown} label="Stock Outflow Value" value={fmt(d?.distribution.outflowValue ?? 0)} color="warning" />
-              <StatCard icon={DollarSign} label="Shipping Costs" value={fmt(d?.distribution.shippingCosts ?? 0)} />
-              <StatCard icon={ArrowUpDown} label="Total Challans" value={d?.distribution.totalChallans ?? 0} />
+              <StatCard icon={ClipboardList} label="Total Demands" value={d?.distribution?.totalDemands ?? 0} color="info" />
+              <StatCard icon={Clock} label="Pending Demands" value={d?.distribution?.pendingDemands ?? 0} color={d?.distribution?.pendingDemands ? "warning" : "default"} />
+              <StatCard icon={CheckCircle2} label="Fulfilled Demands" value={d?.distribution?.fulfilledDemands ?? 0} color="success" />
+              <StatCard icon={ArrowUpDown} label="Total Challans" value={d?.distribution?.totalChallans ?? 0} color="info" />
+              <StatCard icon={Truck} label="Dispatched (in transit)" value={d?.distribution?.dispatchedChallans ?? 0} color={d?.distribution?.dispatchedChallans ? "warning" : "default"} />
+              <StatCard icon={Package} label="Received Challans" value={d?.distribution?.receivedChallans ?? 0} color="success" />
+              <StatCard icon={TrendingDown} label="Stock Outflow Value" value={fmt(d?.distribution?.outflowValue ?? 0)} color="warning" />
+              <StatCard icon={DollarSign} label="Shipping Costs" value={fmt(d?.distribution?.shippingCosts ?? 0)} />
             </CardContent>
           </Card>
         </div>
       )}
-
-      {/* ── Stock Costing Table ── */}
-      <Card className="shadow-sm">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm flex items-center gap-2">
-            <Layers className="h-4 w-4 text-emerald-500" />
-            Stock Costing Table
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="p-0">
-          {isLoading ? (
-            <div className="p-4 space-y-2">{[1,2,3,4,5].map(i => <Skeleton key={i} className="h-9 w-full" />)}</div>
-          ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow className="bg-muted/50">
-                    <TableHead>Item</TableHead>
-                    <TableHead>Category</TableHead>
-                    <TableHead className="text-right">Stock Qty</TableHead>
-                    <TableHead className="text-right">Low Level</TableHead>
-                    <TableHead className="text-right">Unit Price</TableHead>
-                    <TableHead className="text-right">Total Value</TableHead>
-                    <TableHead>Vendor</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {(d?.costingTable ?? []).length === 0 ? (
-                    <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-8">No stock data available</TableCell></TableRow>
-                  ) : (
-                    (d?.costingTable ?? []).map(item => (
-                      <TableRow key={item.ingredientId} className={cn(item.currentStock <= item.lowStockLevel && item.currentStock > 0 && "bg-amber-50 dark:bg-amber-950/20")}>
-                        <TableCell className="font-medium text-sm">{item.name}</TableCell>
-                        <TableCell className="text-sm text-muted-foreground">{item.category}</TableCell>
-                        <TableCell className="text-right text-sm">
-                          <span className={cn(item.currentStock <= item.lowStockLevel ? "text-amber-600 font-semibold" : "")}>
-                            {item.currentStock} <span className="text-xs text-muted-foreground font-normal">{item.unitSymbol || item.unitName}</span>
-                          </span>
-                        </TableCell>
-                        <TableCell className="text-right text-sm text-muted-foreground">
-                          {item.lowStockLevel} <span className="text-[10px] text-muted-foreground">{item.unitSymbol || item.unitName}</span>
-                        </TableCell>
-                        <TableCell className="text-right text-sm">Rs. {item.unitPrice.toFixed(2)}</TableCell>
-                        <TableCell className="text-right text-sm font-semibold text-emerald-600 dark:text-emerald-400">
-                          {fmt(item.totalValue)}
-                        </TableCell>
-                        <TableCell className="text-sm text-muted-foreground">{item.vendorName}</TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* ── Recent Transactions ── */}
-      <Card className="shadow-sm">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm flex items-center gap-2">
-            <ArrowUpDown className="h-4 w-4 text-blue-500" />
-            Recent Stock Transactions
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="p-0">
-          {isLoading ? (
-            <div className="p-4 space-y-2">{[1,2,3,4,5].map(i => <Skeleton key={i} className="h-9 w-full" />)}</div>
-          ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow className="bg-muted/50">
-                    <TableHead>Date</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Module</TableHead>
-                    <TableHead>Description</TableHead>
-                    <TableHead>Target</TableHead>
-                    <TableHead className="text-right">Value</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {(d?.recentTransactions ?? []).length === 0 ? (
-                    <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">No recent transactions</TableCell></TableRow>
-                  ) : (
-                    (d?.recentTransactions ?? []).map((tx, i) => (
-                      <TableRow key={i}>
-                        <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
-                          {new Date(tx.date).toLocaleDateString("en-PK", { day: "2-digit", month: "short", year: "numeric" })}
-                        </TableCell>
-                        <TableCell>
-                          <Badge className={cn("text-[10px] px-1.5 py-0", TYPE_BADGE[tx.type] ?? "")}>
-                            {tx.type}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-xs text-muted-foreground">{tx.module}</TableCell>
-                        <TableCell className="text-xs max-w-[260px] truncate" title={tx.description}>{tx.description}</TableCell>
-                        <TableCell className="text-xs text-muted-foreground max-w-[160px] truncate" title={tx.target}>{tx.target}</TableCell>
-                        <TableCell className="text-right text-xs font-semibold">
-                          <span className={cn(tx.type === "INBOUND" ? "text-emerald-600" : "text-red-500")}>
-                            {tx.type === "INBOUND" ? "+" : "−"}{fmt(tx.value)}
-                          </span>
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
     </div>
   );
 }

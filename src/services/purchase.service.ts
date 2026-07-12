@@ -23,6 +23,7 @@ export interface PurchaseRecord {
   invoiceNumber: string | null;
   items: PurchaseItem[];
   subtotal: number | null;
+  discount: number;
   tax: number | null;
   shippingCost: number | null;
   miscAmount: number | null;
@@ -45,6 +46,7 @@ export interface CreatePurchaseInput {
   date: string;
   items: PurchaseItem[];
   subtotal?: number;
+  discount?: number;
   tax?: number;
   shippingCost?: number;
   miscAmount?: number;

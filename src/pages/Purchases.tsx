@@ -162,6 +162,7 @@ const Purchases = () => {
   const [taxAmount, setTaxAmount] = useState(0);
   const [shippingCost, setShippingCost] = useState(0);
   const [miscAmount, setMiscAmount] = useState(0);
+  const [discountAmount, setDiscountAmount] = useState(0);
 
 
   // Quick-add ingredient state
@@ -324,6 +325,7 @@ const Purchases = () => {
     setTaxAmount(0);
     setShippingCost(0);
     setMiscAmount(0);
+    setDiscountAmount(0);
     const main = warehouses.find((w) => w.type === "MAIN");
     setSelectedWarehouseId(main?.id || "");
     setShowDialog(true);
@@ -387,7 +389,7 @@ const Purchases = () => {
 
   // Computed totals
   const itemsSubtotal = items.reduce((s, it) => s + it.qty * it.unitPrice, 0);
-  const grandTotal = itemsSubtotal + taxAmount + shippingCost + miscAmount;
+  const grandTotal = Math.max(0, itemsSubtotal - discountAmount + taxAmount + shippingCost + miscAmount);
 
   const approvedItemCount = items.filter((i) => i.source === "approved").length;
   const manualItemCount = items.filter((i) => i.source === "manual").length;
@@ -436,6 +438,7 @@ const Purchases = () => {
           ...(i.expiryDate && { expiryDate: i.expiryDate }),
         })),
         subtotal: itemsSubtotal,
+        discount: discountAmount,
         tax: taxAmount,
         shippingCost,
         miscAmount,
@@ -923,6 +926,18 @@ const Purchases = () => {
                     <span className="font-medium tabular-nums">{currency} {itemsSubtotal.toLocaleString()}</span>
                   </div>
                   <div className="flex items-center gap-3">
+                    <Label className="text-sm shrink-0 min-w-[7rem]">Discount</Label>
+                    <Input
+                      className="h-9 text-sm text-right flex-1 min-w-0"
+                      type="number"
+                      min={0}
+                      step={1}
+                      placeholder="0"
+                      value={discountAmount || ""}
+                      onChange={(e) => setDiscountAmount(Number(e.target.value))}
+                    />
+                  </div>
+                  <div className="flex items-center gap-3">
                     <Label className="text-sm shrink-0 min-w-[7rem]">Shipping Cost</Label>
                     <Input
                       className="h-9 text-sm text-right flex-1 min-w-0"
@@ -1296,6 +1311,12 @@ const Purchases = () => {
                         <span className="tabular-nums whitespace-nowrap">{currency} {(sd.subtotal ?? 0).toLocaleString()}</span>
                       </div>
                     )}
+                    {(sd.discount ?? 0) > 0 && (
+                      <div className="flex justify-between gap-4 text-muted-foreground">
+                        <span>Discount:</span>
+                        <span className="tabular-nums whitespace-nowrap">-{currency} {(sd.discount ?? 0).toLocaleString()}</span>
+                      </div>
+                    )}
                     {(sd.shippingCost ?? 0) > 0 && (
                       <div className="flex justify-between gap-4 text-muted-foreground">
                         <span>Shipping:</span>
@@ -1406,6 +1427,7 @@ const Purchases = () => {
 
                     w.document.write(`<div class="summary">`);
                     if ((sd.subtotal ?? 0) > 0) w.document.write(`<div class="billing-row"><span>Subtotal:</span><span>${currency} ${(sd.subtotal ?? 0).toLocaleString()}</span></div>`);
+                    if ((sd.discount ?? 0) > 0) w.document.write(`<div class="billing-row"><span>Discount:</span><span>-${currency} ${(sd.discount ?? 0).toLocaleString()}</span></div>`);
                     if ((sd.shippingCost ?? 0) > 0) w.document.write(`<div class="billing-row"><span>Shipping:</span><span>${currency} ${(sd.shippingCost ?? 0).toLocaleString()}</span></div>`);
                     if ((sd.tax ?? 0) > 0) w.document.write(`<div class="billing-row"><span>Tax:</span><span>${currency} ${(sd.tax ?? 0).toLocaleString()}</span></div>`);
                     if ((sd.miscAmount ?? 0) > 0) w.document.write(`<div class="billing-row"><span>Miscellaneous:</span><span>${currency} ${(sd.miscAmount ?? 0).toLocaleString()}</span></div>`);
