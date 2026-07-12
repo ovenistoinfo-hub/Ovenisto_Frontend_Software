@@ -1909,9 +1909,6 @@ const Transfers = () => {
                         <span>Rs. {receiveTotal.toLocaleString()}</span>
                       </div>
                     )}
-                    <p className="text-xs text-muted-foreground">
-                      Tax/Shipping/Misc are the deliverer's own cost — only the Stock Value is owed to Main.
-                    </p>
                     <div className="flex items-center gap-3 pt-1">
                       <Label className="text-sm shrink-0 min-w-[7rem]">Paid to Main</Label>
                       <Input
