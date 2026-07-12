@@ -439,7 +439,9 @@ const Transfers = () => {
   }, [receiveItems, ingredients, isMainTransfer]);
 
   const receiveTotal = receiveSubtotal + (Number(receiveTax) || 0) + (Number(receiveShipping) || 0) + (Number(receiveMisc) || 0);
-  const receiveDue = Math.max(0, receiveTotal - (Number(receivePaid) || 0));
+  // Due to Main is driven by the stock Subtotal alone — Tax/Shipping/Misc are the
+  // deliverer's own out-of-pocket cost, never owed to Main (matches the backend).
+  const receiveDue = Math.max(0, receiveSubtotal - (Number(receivePaid) || 0));
 
   // Detail Dialog cost summary (create/dispatch/receipt views) for a Main→Branch transfer:
   // once received, show the settled total/paid/due; before that, an estimate at current price.
@@ -1310,8 +1312,8 @@ const Transfers = () => {
                     {showDetail.total != null ? (
                       <>
                         <div className="flex justify-between">
-                          <span className="text-muted-foreground">Subtotal</span>
-                          <span>Rs. {(showDetail.subtotal ?? 0).toLocaleString()}</span>
+                          <span className="text-muted-foreground">Stock Value (owed to Main)</span>
+                          <span className="font-medium">Rs. {(showDetail.subtotal ?? 0).toLocaleString()}</span>
                         </div>
                         {(showDetail.tax ?? 0) > 0 && (
                           <div className="flex justify-between">
@@ -1331,16 +1333,23 @@ const Transfers = () => {
                             <span>Rs. {(showDetail.miscAmount ?? 0).toLocaleString()}</span>
                           </div>
                         )}
-                        <div className="flex justify-between border-t pt-1 font-semibold">
-                          <span>Total</span>
-                          <span>Rs. {(showDetail.total ?? 0).toLocaleString()}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Paid</span>
+                        {((showDetail.tax ?? 0) > 0 || (showDetail.shippingCost ?? 0) > 0 || (showDetail.miscAmount ?? 0) > 0) && (
+                          <>
+                            <div className="flex justify-between border-t pt-1 font-semibold">
+                              <span>Total incl. Delivery Costs</span>
+                              <span>Rs. {(showDetail.total ?? 0).toLocaleString()}</span>
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                              Tax/Shipping/Misc are the deliverer's own cost — only the Stock Value is owed to Main.
+                            </p>
+                          </>
+                        )}
+                        <div className="flex justify-between border-t pt-1">
+                          <span className="text-muted-foreground">Paid to Main</span>
                           <span>Rs. {showDetail.paid.toLocaleString()}</span>
                         </div>
                         <div className="flex justify-between">
-                          <span className={showDetail.due > 0 ? "text-destructive font-medium" : "text-success font-medium"}>Due</span>
+                          <span className={showDetail.due > 0 ? "text-destructive font-medium" : "text-success font-medium"}>Due to Main</span>
                           <span className={showDetail.due > 0 ? "text-destructive font-bold" : "text-success font-bold"}>
                             Rs. {showDetail.due.toLocaleString()}
                           </span>
@@ -1352,7 +1361,7 @@ const Transfers = () => {
                           <span className="text-muted-foreground">Estimated Stock Value</span>
                           <span className="font-semibold">Rs. {detailEstimatedValue.toLocaleString()}</span>
                         </div>
-                        <p className="text-xs text-muted-foreground pt-1">Final amount is confirmed when the branch receives this transfer.</p>
+                        <p className="text-xs text-muted-foreground pt-1">Final amount owed to Main is confirmed when the branch receives this transfer.</p>
                       </>
                     )}
                   </div>
@@ -1571,8 +1580,8 @@ const Transfers = () => {
                     {showDetail.total != null ? (
                       <>
                         <div className="flex justify-between">
-                          <span className="text-muted-foreground">Subtotal</span>
-                          <span>Rs. {(showDetail.subtotal ?? 0).toLocaleString()}</span>
+                          <span className="text-muted-foreground">Stock Value (owed to Main)</span>
+                          <span className="font-medium">Rs. {(showDetail.subtotal ?? 0).toLocaleString()}</span>
                         </div>
                         {(showDetail.tax ?? 0) > 0 && (
                           <div className="flex justify-between">
@@ -1592,16 +1601,23 @@ const Transfers = () => {
                             <span>Rs. {(showDetail.miscAmount ?? 0).toLocaleString()}</span>
                           </div>
                         )}
-                        <div className="flex justify-between border-t pt-1 font-semibold">
-                          <span>Total</span>
-                          <span>Rs. {(showDetail.total ?? 0).toLocaleString()}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Paid</span>
+                        {((showDetail.tax ?? 0) > 0 || (showDetail.shippingCost ?? 0) > 0 || (showDetail.miscAmount ?? 0) > 0) && (
+                          <>
+                            <div className="flex justify-between border-t pt-1 font-semibold">
+                              <span>Total incl. Delivery Costs</span>
+                              <span>Rs. {(showDetail.total ?? 0).toLocaleString()}</span>
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                              Tax/Shipping/Misc are the deliverer's own cost — only the Stock Value is owed to Main.
+                            </p>
+                          </>
+                        )}
+                        <div className="flex justify-between border-t pt-1">
+                          <span className="text-muted-foreground">Paid to Main</span>
                           <span>Rs. {showDetail.paid.toLocaleString()}</span>
                         </div>
                         <div className="flex justify-between">
-                          <span className={showDetail.due > 0 ? "text-destructive font-medium" : "text-success font-medium"}>Due</span>
+                          <span className={showDetail.due > 0 ? "text-destructive font-medium" : "text-success font-medium"}>Due to Main</span>
                           <span className={showDetail.due > 0 ? "text-destructive font-bold" : "text-success font-bold"}>
                             Rs. {showDetail.due.toLocaleString()}
                           </span>
@@ -1613,7 +1629,7 @@ const Transfers = () => {
                           <span className="text-muted-foreground">Estimated Stock Value</span>
                           <span className="font-semibold">Rs. {detailEstimatedValue.toLocaleString()}</span>
                         </div>
-                        <p className="text-xs text-muted-foreground pt-1">Final amount is confirmed when the branch receives this transfer.</p>
+                        <p className="text-xs text-muted-foreground pt-1">Final amount owed to Main is confirmed when the branch receives this transfer.</p>
                       </>
                     )}
                   </div>
@@ -1635,14 +1651,16 @@ const Transfers = () => {
               const settlementHtml = (() => {
                 if (!isMainPrint) return '';
                 if (c.total != null) {
+                  const hasExtra = (c.tax ?? 0) > 0 || (c.shippingCost ?? 0) > 0 || (c.miscAmount ?? 0) > 0;
                   const rows = [
-                    `<p>Subtotal: <strong>Rs. ${(c.subtotal ?? 0).toLocaleString()}</strong></p>`,
+                    `<p>Stock Value (owed to Main): <strong>Rs. ${(c.subtotal ?? 0).toLocaleString()}</strong></p>`,
                     (c.tax ?? 0) > 0 ? `<p>Tax: <strong>Rs. ${(c.tax ?? 0).toLocaleString()}</strong></p>` : '',
                     (c.shippingCost ?? 0) > 0 ? `<p>Shipping Cost: <strong>Rs. ${(c.shippingCost ?? 0).toLocaleString()}</strong></p>` : '',
                     (c.miscAmount ?? 0) > 0 ? `<p>Misc Charges: <strong>Rs. ${(c.miscAmount ?? 0).toLocaleString()}</strong></p>` : '',
-                    `<p style="font-size:14px;font-weight:700;margin-top:6px">Total: Rs. ${(c.total ?? 0).toLocaleString()}</p>`,
-                    `<p>Paid: <strong>Rs. ${c.paid.toLocaleString()}</strong></p>`,
-                    `<p style="color:${c.due > 0 ? '#d32f2f' : '#1a7f37'}">Due: <strong>Rs. ${c.due.toLocaleString()}</strong></p>`,
+                    hasExtra ? `<p style="font-size:14px;font-weight:700;margin-top:6px">Total incl. Delivery Costs: Rs. ${(c.total ?? 0).toLocaleString()}</p>` : '',
+                    hasExtra ? `<p style="font-size:10px;color:#888">Tax/Shipping/Misc are the deliverer's own cost — only the Stock Value is owed to Main.</p>` : '',
+                    `<p style="margin-top:6px">Paid to Main: <strong>Rs. ${c.paid.toLocaleString()}</strong></p>`,
+                    `<p style="color:${c.due > 0 ? '#d32f2f' : '#1a7f37'}">Due to Main: <strong>Rs. ${c.due.toLocaleString()}</strong></p>`,
                   ].join('');
                   return `<div class="cost-box">${rows}</div>`;
                 }
@@ -1650,7 +1668,7 @@ const Transfers = () => {
                   const price = ingredients.find(i => i.id === item.ingredientId)?.purchasePrice ?? 0;
                   return sum + item.qty * price;
                 }, 0);
-                return `<div class="cost-box"><p>Estimated Stock Value: <strong>Rs. ${estValue.toLocaleString()}</strong></p><p style="font-size:11px;color:#888;margin-top:4px">Final amount confirmed when the branch receives this transfer.</p></div>`;
+                return `<div class="cost-box"><p>Estimated Stock Value: <strong>Rs. ${estValue.toLocaleString()}</strong></p><p style="font-size:11px;color:#888;margin-top:4px">Final amount owed to Main is confirmed when the branch receives this transfer.</p></div>`;
               })();
 
               if (c.demand) {
@@ -1893,15 +1911,20 @@ const Transfers = () => {
                   </CardHeader>
                   <CardContent className="space-y-2 w-full max-w-sm ml-auto">
                     <div className="flex items-center justify-between text-sm">
-                      <span className="text-muted-foreground">Subtotal</span>
+                      <span className="text-muted-foreground">Stock Value (owed to Main)</span>
                       <span className="font-medium">Rs. {receiveSubtotal.toLocaleString()}</span>
                     </div>
-                    <div className="flex items-center justify-between text-sm font-semibold border-t pt-2">
-                      <span>Total</span>
-                      <span>Rs. {receiveTotal.toLocaleString()}</span>
-                    </div>
+                    {(Number(receiveTax) > 0 || Number(receiveShipping) > 0 || Number(receiveMisc) > 0) && (
+                      <div className="flex items-center justify-between text-sm font-semibold border-t pt-2">
+                        <span>Total incl. Delivery Costs</span>
+                        <span>Rs. {receiveTotal.toLocaleString()}</span>
+                      </div>
+                    )}
+                    <p className="text-xs text-muted-foreground">
+                      Tax/Shipping/Misc are the deliverer's own cost — only the Stock Value is owed to Main.
+                    </p>
                     <div className="flex items-center gap-3 pt-1">
-                      <Label className="text-sm shrink-0 min-w-[7rem]">Paid Now</Label>
+                      <Label className="text-sm shrink-0 min-w-[7rem]">Paid to Main</Label>
                       <Input
                         className="h-9 text-sm text-right flex-1 min-w-0"
                         type="number"
@@ -1913,7 +1936,7 @@ const Transfers = () => {
                       />
                     </div>
                     <div className="flex items-center justify-between text-sm">
-                      <span className={receiveDue > 0 ? "text-destructive font-medium" : "text-success font-medium"}>Due</span>
+                      <span className={receiveDue > 0 ? "text-destructive font-medium" : "text-success font-medium"}>Due to Main</span>
                       <span className={receiveDue > 0 ? "text-destructive font-bold" : "text-success font-bold"}>
                         Rs. {receiveDue.toLocaleString()}
                       </span>
