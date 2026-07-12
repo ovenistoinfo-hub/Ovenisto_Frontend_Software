@@ -787,9 +787,6 @@ const Transfers = () => {
                     <span className="text-muted-foreground">Estimated Stock Value</span>
                     <span className="font-semibold">Rs. {createEstimatedValue.toLocaleString()}</span>
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    Based on current purchase price. Final total (with tax/shipping) is confirmed when the branch receives this transfer.
-                  </p>
                 </CardContent>
               </Card>
             )}
