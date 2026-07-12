@@ -1,3 +1,8 @@
+> The repo-root `../CLAUDE.md` holds the full project guide (architecture, module map,
+> roles, env vars, deployment gotchas, the Outlet Scoping access-control model). It loads
+> alongside this file in frontend sessions — read it first. This file has no
+> frontend-specific gotchas of its own yet beyond what's already in the root guide.
+
 <!-- code-review-graph MCP tools -->
 ## MCP Tools: code-review-graph
 
