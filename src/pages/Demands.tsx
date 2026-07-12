@@ -70,6 +70,11 @@ const Demands = () => {
     queryFn: () => demandService.getAll({
       ...(filterStatus !== "ALL" && { status: filterStatus }),
     }),
+    // This list changes from other users' actions (another branch approving/creating a
+    // demand) with no realtime push — override the app-wide "don't refetch" defaults so
+    // it doesn't go stale until an F5. Interval only ticks while the tab is visible.
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true,
   });
 
   useEffect(() => {

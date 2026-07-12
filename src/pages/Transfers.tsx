@@ -140,6 +140,24 @@ const Transfers = () => {
 
   useEffect(() => { fetchLedger(); }, [fetchLedger]);
 
+  // Challans/ledger can change from another user's action (a different branch
+  // dispatching/receiving, Main recording nothing since it can't pay, etc.) with
+  // no realtime push for this page — poll while the tab is visible, and refetch
+  // immediately when the user tabs back in, so the list doesn't go stale until F5.
+  useEffect(() => {
+    const tick = () => {
+      if (document.visibilityState !== 'visible') return;
+      fetchChallans();
+      fetchLedger();
+    };
+    const interval = setInterval(tick, 30_000);
+    window.addEventListener('focus', tick);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', tick);
+    };
+  }, [fetchChallans, fetchLedger]);
+
   const openLedgerHistory = async (o: OutletLedgerBalance) => {
     setLedgerHistoryFor(o);
     try {
