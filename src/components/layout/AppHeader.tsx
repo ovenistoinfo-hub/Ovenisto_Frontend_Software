@@ -25,6 +25,7 @@ const quickActions = [
 const breadcrumbConfig: Record<string, { label: string; parent?: { label: string; url: string } }> = {
   "/": { label: "Dashboard" },
   "/analytics": { label: "Analytics" },
+  "/warehouse-dashboard": { label: "Warehouse Management" },
   "/pos": { label: "Point of Sale" },
   "/kitchens": { label: "Kitchens" },
   "/waiter": { label: "Waiter Panel" },

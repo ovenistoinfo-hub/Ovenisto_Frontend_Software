@@ -64,6 +64,7 @@ const emptyForm = {
 const StockAdjustments = () => {
   const { settings } = useData();
   const { user } = useAuth();
+  const isSuperAdmin = user?.role === "Super Admin";
   const currency = settings.currency || "Rs.";
   const canRecord = ['Super Admin', 'Admin', 'Manager', 'Kitchen Manager', 'Store Manager'].includes(user?.role ?? '');
 
@@ -209,7 +210,13 @@ const StockAdjustments = () => {
   });
   const reasonBreakdown = Array.from(reasonMap.entries()).sort((a, b) => b[1].loss - a[1].loss);
 
-  const resetForm = () => setForm(emptyForm);
+  const resetForm = () => {
+    const mainWh = warehouses.find((w) => w.type === "MAIN");
+    setForm({
+      ...emptyForm,
+      warehouseId: isSuperAdmin && mainWh ? mainWh.id : "",
+    });
+  };
 
   const openAdd = () => {
     resetForm();
@@ -419,7 +426,9 @@ const StockAdjustments = () => {
                     <Select value={form.warehouseId} onValueChange={(v) => setForm((p) => ({ ...p, warehouseId: v }))}>
                       <SelectTrigger><SelectValue placeholder="Select warehouse" /></SelectTrigger>
                       <SelectContent>
-                        {warehouses.map((w) => <SelectItem key={w.id} value={w.id}>{w.name} ({w.type})</SelectItem>)}
+                        {warehouses
+                          .filter((w) => (isSuperAdmin ? w.type === "MAIN" : true))
+                          .map((w) => <SelectItem key={w.id} value={w.id}>{w.name} ({w.type})</SelectItem>)}
                       </SelectContent>
                     </Select>
                   </div>
@@ -488,7 +497,9 @@ const StockAdjustments = () => {
                   <Select value={form.warehouseId} onValueChange={(v) => setForm((p) => ({ ...p, warehouseId: v }))}>
                     <SelectTrigger><SelectValue placeholder="Select warehouse" /></SelectTrigger>
                     <SelectContent>
-                      {warehouses.map((w) => <SelectItem key={w.id} value={w.id}>{w.name} ({w.type})</SelectItem>)}
+                      {warehouses
+                        .filter((w) => (isSuperAdmin ? w.type === "MAIN" : true))
+                        .map((w) => <SelectItem key={w.id} value={w.id}>{w.name} ({w.type})</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>

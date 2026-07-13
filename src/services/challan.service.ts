@@ -114,4 +114,12 @@ export const challanService = {
     const res = await api.patch<{ success: boolean; data: ChallanRecord }>(`/challans/${id}/cancel`);
     return res.data;
   },
+
+  getStats: async (params?: { fromWarehouseId?: string; toWarehouseId?: string }): Promise<{ total: number; today: number; weekly: number; monthly: number }> => {
+    const qs = new URLSearchParams();
+    if (params?.fromWarehouseId) qs.set('fromWarehouseId', params.fromWarehouseId);
+    if (params?.toWarehouseId) qs.set('toWarehouseId', params.toWarehouseId);
+    const res = await api.get<{ success: boolean; data: { total: number; today: number; weekly: number; monthly: number } }>(`/challans/stats/summary${qs.toString() ? `?${qs}` : ''}`);
+    return res.data;
+  },
 };

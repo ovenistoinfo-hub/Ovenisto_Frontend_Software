@@ -1,10 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   ShoppingBag, AlertTriangle, CheckCircle2, TrendingUp,
   RefreshCw, DollarSign, Layers, BarChart3,
   Wallet, HandCoins, Trash2, PackageCheck,
-  ClipboardList, Truck, Package, ArrowLeftRight, Clock, TrendingDown, ArrowUpDown
+  ClipboardList, Truck, Package, ArrowLeftRight, Clock, TrendingDown, ArrowUpDown, FileText
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PageHeader } from "@/components/ui/page-header";
 import { warehouseDashboardService } from "@/services/warehouseDashboard.service";
+import { useAuth } from "@/contexts/AuthContext";
+import { useOutlet } from "@/contexts/OutletContext";
 import { cn } from "@/lib/utils";
 
 const fmt = (n: number) =>
@@ -69,6 +71,13 @@ function StatCard({
 }
 
 export default function WarehouseDashboard() {
+  const { user } = useAuth();
+  // The Receivable card is the CENTRAL store's ledger (what every branch owes Main), so
+  // it is Super-Admin-only. The backend already returns 0 for everyone else — this just
+  // avoids showing them a meaningless "Rs. 0 / 0 outlets owing" tile.
+  const isSuperAdmin = user?.role === "Super Admin";
+  const { selectedOutletId } = useOutlet();
+
   const [warehouseId, setWarehouseId] = useState("all");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
@@ -77,7 +86,9 @@ export default function WarehouseDashboard() {
   }>({ warehouseId: "all" });
 
   const { data, isLoading, refetch, isFetching } = useQuery({
-    queryKey: ["warehouse-dashboard", filters],
+    // selectedOutletId is part of the key because the response is outlet-scoped server-side
+    // (api.ts sends X-Outlet-Id) — without it, switching outlet would serve stale data.
+    queryKey: ["warehouse-dashboard", selectedOutletId, filters],
     queryFn: () =>
       warehouseDashboardService.getStats({
         warehouseId: filters.warehouseId !== "all" ? filters.warehouseId : undefined,
@@ -85,6 +96,13 @@ export default function WarehouseDashboard() {
         endDate: filters.endDate,
       }),
   });
+
+  // Switching outlet changes which warehouses exist for you, so a warehouse picked under
+  // the previous outlet is no longer selectable — the server would 404 it. Reset to "all".
+  useEffect(() => {
+    setWarehouseId("all");
+    setFilters(p => ({ ...p, warehouseId: "all" }));
+  }, [selectedOutletId]);
 
   const applyFilters = () =>
     setFilters({ warehouseId, startDate: startDate || undefined, endDate: endDate || undefined });
@@ -144,13 +162,13 @@ export default function WarehouseDashboard() {
         </CardContent>
       </Card>
 
-      {/* ── Hero KPI strip: Stock Value / Payable / Receivable / Waste ── */}
+      {/* ── Hero KPI strip: Stock Value / Payable / Receivable (Super Admin) / Waste ── */}
       {isLoading ? (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {[1,2,3,4].map(i => <Skeleton key={i} className="h-24 rounded-xl" />)}
+        <div className={cn("grid grid-cols-2 gap-3", isSuperAdmin ? "sm:grid-cols-4" : "sm:grid-cols-3")}>
+          {(isSuperAdmin ? [1,2,3,4] : [1,2,3]).map(i => <Skeleton key={i} className="h-24 rounded-xl" />)}
         </div>
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className={cn("grid grid-cols-2 gap-3", isSuperAdmin ? "sm:grid-cols-4" : "sm:grid-cols-3")}>
           <Card className="shadow-sm border-l-4 border-l-emerald-500 p-4 flex flex-col gap-1">
             <div className="flex items-center gap-2 text-muted-foreground text-xs font-medium">
               <Layers className="h-3.5 w-3.5 text-emerald-500" /> Stock Value
@@ -163,21 +181,20 @@ export default function WarehouseDashboard() {
               <Wallet className="h-3.5 w-3.5 text-red-500" /> Payable
             </div>
             <p className="text-xl font-black text-red-600 dark:text-red-400">{fmt(d?.payable ?? 0)}</p>
-            <p className="text-[11px] text-muted-foreground truncate">{d?.procurement.unpaidCount ?? 0} purchase orders</p>
           </Card>
-          <Card className="shadow-sm border-l-4 border-l-blue-500 p-4 flex flex-col gap-1">
-            <div className="flex items-center gap-2 text-muted-foreground text-xs font-medium">
-              <HandCoins className="h-3.5 w-3.5 text-blue-500" /> Receivable
-            </div>
-            <p className="text-xl font-black text-blue-600 dark:text-blue-400">{fmt(d?.receivable ?? 0)}</p>
-            <p className="text-[11px] text-muted-foreground truncate">{d?.receivableOutletsOwing ?? 0} outlets owing</p>
-          </Card>
+          {isSuperAdmin && (
+            <Card className="shadow-sm border-l-4 border-l-blue-500 p-4 flex flex-col gap-1">
+              <div className="flex items-center gap-2 text-muted-foreground text-xs font-medium">
+                <HandCoins className="h-3.5 w-3.5 text-blue-500" /> Receivable
+              </div>
+              <p className="text-xl font-black text-blue-600 dark:text-blue-400">{fmt(d?.receivable ?? 0)}</p>
+            </Card>
+          )}
           <Card className="shadow-sm border-l-4 border-l-purple-500 p-4 flex flex-col gap-1">
             <div className="flex items-center gap-2 text-muted-foreground text-xs font-medium">
               <Trash2 className="h-3.5 w-3.5 text-purple-500" /> Waste
             </div>
             <p className="text-xl font-black text-purple-600 dark:text-purple-400">{fmt(d?.waste ?? 0)}</p>
-            <p className="text-[11px] text-muted-foreground truncate">{d?.wasteCount ?? 0} waste entries</p>
           </Card>
         </div>
       )}
@@ -210,23 +227,22 @@ export default function WarehouseDashboard() {
             </CardContent>
           </Card>
 
-          {/* Stock Distribution — demands & transfers out of this warehouse */}
+          {/* Invoices — mapped from stock transfers and outflow value */}
           <Card className="shadow-sm">
             <CardHeader className="pb-3">
               <CardTitle className="text-sm flex items-center gap-2">
-                <ArrowLeftRight className="h-4 w-4 text-purple-500" />
-                Stock Distribution
+                <FileText className="h-4 w-4 text-emerald-500" />
+                Invoices
               </CardTitle>
             </CardHeader>
             <CardContent className="grid grid-cols-2 gap-2">
-              <StatCard icon={ClipboardList} label="Total Demands" value={d?.distribution?.totalDemands ?? 0} color="info" />
-              <StatCard icon={Clock} label="Pending Demands" value={d?.distribution?.pendingDemands ?? 0} color={d?.distribution?.pendingDemands ? "warning" : "default"} />
-              <StatCard icon={CheckCircle2} label="Fulfilled Demands" value={d?.distribution?.fulfilledDemands ?? 0} color="success" />
-              <StatCard icon={ArrowUpDown} label="Total Challans" value={d?.distribution?.totalChallans ?? 0} color="info" />
-              <StatCard icon={Truck} label="Dispatched (in transit)" value={d?.distribution?.dispatchedChallans ?? 0} color={d?.distribution?.dispatchedChallans ? "warning" : "default"} />
-              <StatCard icon={Package} label="Received Challans" value={d?.distribution?.receivedChallans ?? 0} color="success" />
-              <StatCard icon={TrendingDown} label="Stock Outflow Value" value={fmt(d?.distribution?.outflowValue ?? 0)} color="warning" />
-              <StatCard icon={DollarSign} label="Shipping Costs" value={fmt(d?.distribution?.shippingCosts ?? 0)} />
+              <StatCard icon={ArrowUpDown} label="Total Invoices" value={d?.distribution?.totalChallans ?? 0} color="info" />
+              <StatCard icon={DollarSign} label="Warehouse Revenue" value={fmt(d?.distribution?.outflowValue ?? 0)} color="success" />
+              <StatCard icon={TrendingUp} label="Avg. Sale Value" value={fmt(d?.distribution?.totalChallans ? (d.distribution.outflowValue / d.distribution.totalChallans) : 0)} color="info" />
+              <StatCard icon={CheckCircle2} label="Customer Collections" value={fmt(d?.distribution?.totalPaid ?? 0)} color="success" />
+              <StatCard icon={Clock} label="Pending Delivery" value={d?.distribution?.pendingChallans ?? 0} color={d?.distribution?.pendingChallans ? "warning" : "default"} />
+              <StatCard icon={Truck} label="Delivered - Unpaid" value={d?.distribution?.dispatchedChallans ?? 0} color={d?.distribution?.dispatchedChallans ? "warning" : "default"} />
+              <StatCard icon={PackageCheck} label="Delivered - Paid" value={d?.distribution?.receivedChallans ?? 0} color="success" />
             </CardContent>
           </Card>
         </div>

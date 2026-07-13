@@ -4,6 +4,7 @@ import { warehouseService, type WarehouseRecord } from "@/services/warehouse.ser
 import { inventoryService, type IngredientRecord } from "@/services/inventory.service";
 import { warehouseLedgerService, type OutletLedgerBalance, type SettlementRecord } from "@/services/warehouseLedger.service";
 import { useAuth } from "@/contexts/AuthContext";
+import { useData } from "@/contexts/DataContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,7 +16,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { Plus, Search, Eye, Truck, Trash2, ArrowLeftRight, XCircle, PackageCheck, Printer, Phone, User, FileText, ClipboardList, AlertTriangle, ChevronUp, X } from "lucide-react";
+import { Plus, Search, Eye, Truck, Trash2, ArrowLeftRight, XCircle, PackageCheck, Printer, Phone, User, FileText, ClipboardList, AlertTriangle, ChevronUp, X, CalendarDays, TrendingUp, BarChart3 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/ui/page-header";
@@ -32,6 +33,8 @@ interface ReceiveFormItem { id: string; ingredientId: string; ingredientName: st
 
 const Transfers = () => {
   const { user } = useAuth();
+  const { settings } = useData();
+  const currency = settings.currency || "Rs.";
   const userRole      = user?.role || '';
   const isSuperAdmin  = userRole === 'Super Admin';
   const isAdmin       = ['Super Admin', 'Admin'].includes(userRole);
@@ -56,6 +59,7 @@ const Transfers = () => {
   const [warehouses,   setWarehouses]   = useState<WarehouseRecord[]>([]);
   const [ingredients,  setIngredients]  = useState<IngredientRecord[]>([]);
   const [loading,      setLoading]      = useState(true);
+  const [stats,        setStats]        = useState({ total: 0, today: 0, weekly: 0, monthly: 0 });
 
   // UI
   const [saving,       setSaving]       = useState(false);
@@ -100,6 +104,7 @@ const Transfers = () => {
         filterStatus !== "ALL" ? { status: filterStatus } : {}
       );
       setChallans(data);
+      challanService.getStats().then(setStats).catch(console.error);
     } catch (err: unknown) {
       toast.error((err as Error).message || "Failed to load challans");
     } finally {
@@ -633,6 +638,70 @@ const Transfers = () => {
           </Button>
         ) : undefined}
       />
+
+      {/* KPI Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <Card className="shadow-sm border-primary/20">
+          <CardContent className="p-5">
+            <div className="flex items-center gap-4">
+              <div className="h-11 w-11 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                <ArrowLeftRight className="h-5 w-5 text-primary" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs text-muted-foreground">Total Transfers</p>
+                <p className="text-2xl font-bold tracking-tight text-primary">
+                  {currency} {stats.total.toLocaleString()}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="shadow-sm">
+          <CardContent className="p-5">
+            <div className="flex items-center gap-4">
+              <div className="h-11 w-11 rounded-xl bg-orange-500/10 flex items-center justify-center shrink-0">
+                <CalendarDays className="h-5 w-5 text-orange-500" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs text-muted-foreground">Today's Transfers</p>
+                <p className="text-2xl font-bold tracking-tight text-orange-500">
+                  {currency} {stats.today.toLocaleString()}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="shadow-sm">
+          <CardContent className="p-5">
+            <div className="flex items-center gap-4">
+              <div className="h-11 w-11 rounded-xl bg-warning/10 flex items-center justify-center shrink-0">
+                <TrendingUp className="h-5 w-5 text-warning" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs text-muted-foreground">This Week</p>
+                <p className="text-2xl font-bold tracking-tight text-warning">
+                  {currency} {stats.weekly.toLocaleString()}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="shadow-sm">
+          <CardContent className="p-5">
+            <div className="flex items-center gap-4">
+              <div className="h-11 w-11 rounded-xl bg-purple-500/10 flex items-center justify-center shrink-0">
+                <BarChart3 className="h-5 w-5 text-purple-500" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs text-muted-foreground">This Month</p>
+                <p className="text-2xl font-bold tracking-tight text-purple-500">
+                  {currency} {stats.monthly.toLocaleString()}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
 
       {/* Status filter pills */}
       <div className="flex gap-1.5 flex-wrap">

@@ -49,10 +49,12 @@ export interface WarehouseDashboardData {
     fulfilledDemands: number;
     pendingDemands: number;
     totalChallans: number;
+    pendingChallans?: number;
     dispatchedChallans: number;
     receivedChallans: number;
     outflowValue: number;
     shippingCosts: number;
+    totalPaid?: number;
   };
 }
 

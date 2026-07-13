@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { purchaseService, type PurchaseRecord } from "@/services/purchase.service";
 import { supplierService, type SupplierRecord } from "@/services/supplier.service";
@@ -17,7 +17,7 @@ import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { Plus, Search, Eye, Trash2, ShoppingCart, Printer, CalendarIcon, User, Phone, Mail, ChevronUp, X } from "lucide-react";
+import { Plus, Search, Eye, Trash2, ShoppingCart, Printer, CalendarIcon, User, Phone, Mail, ChevronUp, X, Wallet, CalendarDays, TrendingUp, BarChart3 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { format, parseISO } from "date-fns";
@@ -122,6 +122,11 @@ const Purchases = () => {
   const [showDialog, setShowDialog] = useState(false);
   const [showDetail, setShowDetail] = useState<PurchaseRecord | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [payingId, setPayingId] = useState<string | null>(null);
+  const [targetSupplierId, setTargetSupplierId] = useState<string | null>(null);
+  const [payDialogAmount, setPayDialogAmount] = useState(0);
+  const [payDialogNote, setPayDialogNote] = useState("");
+  const [payingSaving, setPayingSaving] = useState(false);
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [vendorFilter, setVendorFilter] = useState("");
@@ -162,8 +167,9 @@ const Purchases = () => {
   const [taxAmount, setTaxAmount] = useState(0);
   const [shippingCost, setShippingCost] = useState(0);
   const [miscAmount, setMiscAmount] = useState(0);
-  const [discountAmount, setDiscountAmount] = useState(0);
 
+  // Payment state per supplier for purchase form (status, paidAmount, discount)
+  const [supplierPayments, setSupplierPayments] = useState<Record<string, { status: 'paid' | 'partial' | 'unpaid'; paidAmount: number; discount?: number }>>({});
 
   // Quick-add ingredient state
   const [quickAddOpen, setQuickAddOpen] = useState(false);
@@ -179,6 +185,12 @@ const Purchases = () => {
   });
   const purchases = purchasesResp?.data ?? [];
   const totalItems = purchasesResp?.meta.total ?? 0;
+
+  const { data: purchaseStatsResp } = useQuery({
+    queryKey: ["purchases", "stats", { supplierId: vendorFilter }],
+    queryFn: () => purchaseService.getStats({ supplierId: vendorFilter || undefined }),
+  });
+  const stats = purchaseStatsResp?.data ?? { total: 0, today: 0, weekly: 0, monthly: 0 };
 
   // Load reference data lazily (on first dialog open, cached by api layer)
   const refDataLoaded = useRef(false);
@@ -220,6 +232,25 @@ const Purchases = () => {
       loadRefData();
     }
   }, [searchParams, loading, loadRefData]);
+
+  // Auto-select targetSupplierId if there's only one supplier with active due
+  useEffect(() => {
+    if (!payingId) {
+      setTargetSupplierId(null);
+      return;
+    }
+    const p = purchases.find((x) => x.id === payingId);
+    if (!p) return;
+    const activeDues = p.supplierDues && Array.isArray(p.supplierDues)
+      ? p.supplierDues.filter((d: any) => d.due > 0 && d.supplierId)
+      : [];
+    if (activeDues.length === 1) {
+      setTargetSupplierId(activeDues[0].supplierId);
+      setPayDialogAmount(activeDues[0].due);
+    } else if (p.supplierId) {
+      setTargetSupplierId(p.supplierId);
+    }
+  }, [payingId, purchases]);
 
   // Handlers for multi-vendor selection
   const handleAddSupplier = useCallback((supplierId: string) => {
@@ -325,7 +356,8 @@ const Purchases = () => {
     setTaxAmount(0);
     setShippingCost(0);
     setMiscAmount(0);
-    setDiscountAmount(0);
+    setSupplierPayments({});
+    setTargetSupplierId(null);
     const main = warehouses.find((w) => w.type === "MAIN");
     setSelectedWarehouseId(main?.id || "");
     setShowDialog(true);
@@ -387,14 +419,132 @@ const Purchases = () => {
     );
   };
 
+  // Group subtotal by supplier (pre-computed helper to prevent loops)
+  const groupings = useMemo(() => {
+    const map: Record<string, number> = {};
+    items.forEach(it => {
+      if (!it.ingredientId) return;
+      const ing = ingredients.find(ig => ig.id === it.ingredientId);
+      const sId = ing?.supplierId || "none";
+      map[sId] = (map[sId] || 0) + (it.qty * it.unitPrice);
+    });
+    return map;
+  }, [items, ingredients]);
+
+  const getSupplierPaymentDetails = useCallback((supplierId: string | null) => {
+    const key = supplierId || "none";
+    const details = supplierPayments[key];
+    if (details) {
+      return {
+        status: details.status,
+        paidAmount: details.paidAmount,
+        discount: details.discount ?? 0
+      };
+    }
+    const sub = groupings[key] || 0;
+    return { status: 'paid' as const, paidAmount: sub, discount: 0 };
+  }, [supplierPayments, groupings]);
+
+  const setSupplierPaymentDetails = useCallback((
+    supplierId: string | null,
+    status: 'paid' | 'partial' | 'unpaid',
+    paidVal?: number,
+    discVal?: number
+  ) => {
+    const key = supplierId || "none";
+    const sub = groupings[key] || 0;
+
+    setSupplierPayments(prev => {
+      const existing = prev[key] || { status: 'paid', paidAmount: sub, discount: 0 };
+      const newDiscount = discVal !== undefined ? discVal : (existing.discount ?? 0);
+      const netTotal = Math.max(0, sub - newDiscount);
+
+      let finalPaid = paidVal !== undefined ? paidVal : existing.paidAmount;
+      if (status === 'paid') finalPaid = netTotal;
+      else if (status === 'unpaid') finalPaid = 0;
+      else if (status === 'partial' && paidVal === undefined) {
+        finalPaid = Math.min(existing.paidAmount, netTotal);
+      }
+
+      return {
+        ...prev,
+        [key]: { status, paidAmount: finalPaid, discount: newDiscount }
+      };
+    });
+  }, [groupings]);
+
+  // Group subtotal and calculate totals for each supplier
+  const supplierBreakdowns = useMemo(() => {
+    const list: Array<{
+      supplierId: string | null;
+      supplierName: string;
+      subtotal: number;
+      discount: number;
+      total: number;
+    }> = [];
+
+    Object.entries(groupings).forEach(([sId, sub]) => {
+      const pay = getSupplierPaymentDetails(sId === "none" ? null : sId);
+      const sDiscount = pay.discount;
+      const sTotal = Math.max(0, sub - sDiscount);
+
+      if (sId === "none") {
+        list.push({
+          supplierId: null,
+          supplierName: "Non-Supplier Items (Cash)",
+          subtotal: sub,
+          discount: sDiscount,
+          total: sTotal
+        });
+      } else {
+        const supplier = suppliers.find(s => s.id === sId);
+        list.push({
+          supplierId: sId,
+          supplierName: supplier?.name || "Unknown Supplier",
+          subtotal: sub,
+          discount: sDiscount,
+          total: sTotal
+        });
+      }
+    });
+
+    return list;
+  }, [groupings, getSupplierPaymentDetails, suppliers]);
+
   // Computed totals
   const itemsSubtotal = items.reduce((s, it) => s + it.qty * it.unitPrice, 0);
+
+  const discountAmount = useMemo(() => {
+    return supplierBreakdowns.reduce((sum, b) => sum + b.discount, 0);
+  }, [supplierBreakdowns]);
+
   const grandTotal = Math.max(0, itemsSubtotal - discountAmount + taxAmount + shippingCost + miscAmount);
+
+  // Billing split: supplier-linked items vs cash items
+  const supplierItemsTotal = items.reduce((s, it) => {
+    const ing = ingredients.find(ig => ig.id === it.ingredientId);
+    return ing?.supplierId ? s + it.qty * it.unitPrice : s;
+  }, 0);
+  const nonSupplierItemsTotal = items.reduce((s, it) => {
+    const ing = ingredients.find(ig => ig.id === it.ingredientId);
+    return !it.ingredientId || !ing?.supplierId ? s + it.qty * it.unitPrice : s;
+  }, 0);
+
+  const overallDue = useMemo(() => {
+    return supplierBreakdowns.reduce((sum, b) => {
+      if (b.supplierId === null) return sum;
+      const pay = getSupplierPaymentDetails(b.supplierId);
+      return sum + Math.max(0, b.total - pay.paidAmount);
+    }, 0);
+  }, [supplierBreakdowns, getSupplierPaymentDetails]);
+
+  const overallPaid = Math.max(0, grandTotal - overallDue);
+  const overallStatus = overallDue <= 0 ? 'paid' : (overallPaid <= nonSupplierItemsTotal ? 'unpaid' : 'partial');
 
   const approvedItemCount = items.filter((i) => i.source === "approved").length;
   const manualItemCount = items.filter((i) => i.source === "manual").length;
 
-  const handleSave = async (status: "paid" | "unpaid") => {
+  const handleSave = async () => {
     if (!canManualEntry && !selectedRequestId) {
       toast.error("Please select an approved request to proceed");
       return;
@@ -410,6 +560,18 @@ const Purchases = () => {
       toast.error(`Waste quantity cannot exceed purchased quantity for "${invalidWaste.name}"`);
       return;
     }
+
+    // Validate partial payments per supplier
+    for (const b of supplierBreakdowns) {
+      if (b.supplierId) {
+        const pay = getSupplierPaymentDetails(b.supplierId);
+        if (pay.status === 'partial' && (pay.paidAmount < 0 || pay.paidAmount > b.total)) {
+          toast.error(`For ${b.supplierName}, partial payment must be between 0 and ${b.total}`);
+          return;
+        }
+      }
+    }
+
     const itemSupplierIds = validItems
       .map(item => ingredients.find(ig => ig.id === item.ingredientId)?.supplierId)
       .filter(Boolean);
@@ -417,6 +579,20 @@ const Purchases = () => {
     const finalSupplierId = selectedSuppliers.length === 1
       ? selectedSuppliers[0]
       : (uniqueItemSuppliers.length === 1 ? uniqueItemSuppliers[0] : undefined);
+
+    const duesArray = supplierBreakdowns
+      .filter(b => b.supplierId !== null)
+      .map(b => {
+        const pay = getSupplierPaymentDetails(b.supplierId!);
+        return {
+          supplierId: b.supplierId,
+          supplierName: b.supplierName,
+          total: b.total,
+          paid: pay.paidAmount,
+          due: Math.max(0, b.total - pay.paidAmount),
+          status: pay.status
+        };
+      });
 
     setSaving(true);
     try {
@@ -443,14 +619,16 @@ const Purchases = () => {
         shippingCost,
         miscAmount,
         total: grandTotal,
-        paid: status === "paid" ? grandTotal : 0,
-        status,
+        paid: overallPaid,
+        status: overallStatus,
         warehouseId: selectedWarehouseId || undefined,
         purchaseRequestId: selectedRequestId || undefined,
+        supplierDues: duesArray,
       });
       toast.success("Purchase added — stock updated");
       setShowDialog(false);
       queryClient.invalidateQueries({ queryKey: ["purchases"] });
+      queryClient.invalidateQueries({ queryKey: ["suppliers"] });
       if (selectedRequestId) {
         setApprovedRequests((prev) => prev.filter((r) => r.id !== selectedRequestId));
       }
@@ -461,7 +639,6 @@ const Purchases = () => {
     }
   };
 
-
   const handleDelete = async () => {
     if (!deleteId) return;
     try {
@@ -471,6 +648,34 @@ const Purchases = () => {
       queryClient.invalidateQueries({ queryKey: ["purchases"] });
     } catch (err: unknown) {
       toast.error((err as Error).message || "Failed to delete purchase");
+    }
+  };
+
+  const handlePay = async () => {
+    if (!payingId || payDialogAmount <= 0) return;
+    setPayingSaving(true);
+    try {
+      await purchaseService.pay(payingId, { 
+        amount: payDialogAmount, 
+        note: payDialogNote || undefined,
+        supplierId: targetSupplierId || undefined
+      });
+      toast.success("Payment recorded successfully");
+      setPayingId(null);
+      setTargetSupplierId(null);
+      setPayDialogAmount(0);
+      setPayDialogNote("");
+      queryClient.invalidateQueries({ queryKey: ["purchases"] });
+      queryClient.invalidateQueries({ queryKey: ["suppliers"] });
+      if (showDetail && showDetail.id === payingId) {
+        purchaseService.getById(payingId).then(updated => {
+          setShowDetail(updated);
+        });
+      }
+    } catch (err: unknown) {
+      toast.error((err as Error).message || "Failed to record payment");
+    } finally {
+      setPayingSaving(false);
     }
   };
 
@@ -525,6 +730,70 @@ const Purchases = () => {
           </Button>
         }
       />
+
+      {/* KPI Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <Card className="shadow-sm border-primary/20">
+          <CardContent className="p-5">
+            <div className="flex items-center gap-4">
+              <div className="h-11 w-11 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                <ShoppingCart className="h-5 w-5 text-primary" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs text-muted-foreground">Total Purchases</p>
+                <p className="text-2xl font-bold tracking-tight text-primary">
+                  {currency} {stats.total.toLocaleString()}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="shadow-sm">
+          <CardContent className="p-5">
+            <div className="flex items-center gap-4">
+              <div className="h-11 w-11 rounded-xl bg-orange-500/10 flex items-center justify-center shrink-0">
+                <CalendarDays className="h-5 w-5 text-orange-500" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs text-muted-foreground">Today's Purchases</p>
+                <p className="text-2xl font-bold tracking-tight text-orange-500">
+                  {currency} {stats.today.toLocaleString()}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="shadow-sm">
+          <CardContent className="p-5">
+            <div className="flex items-center gap-4">
+              <div className="h-11 w-11 rounded-xl bg-warning/10 flex items-center justify-center shrink-0">
+                <TrendingUp className="h-5 w-5 text-warning" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs text-muted-foreground">This Week</p>
+                <p className="text-2xl font-bold tracking-tight text-warning">
+                  {currency} {stats.weekly.toLocaleString()}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="shadow-sm">
+          <CardContent className="p-5">
+            <div className="flex items-center gap-4">
+              <div className="h-11 w-11 rounded-xl bg-purple-500/10 flex items-center justify-center shrink-0">
+                <BarChart3 className="h-5 w-5 text-purple-500" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs text-muted-foreground">This Month</p>
+                <p className="text-2xl font-bold tracking-tight text-purple-500">
+                  {currency} {stats.monthly.toLocaleString()}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
 
       {/* ── Inline Add Purchase Form Panel ── */}
       {showDialog && (
@@ -644,9 +913,9 @@ const Purchases = () => {
                         <SelectValue placeholder="Select warehouse" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="__none__">No warehouse</SelectItem>
+                        {!isSuperAdmin && <SelectItem value="__none__">No warehouse</SelectItem>}
                         {warehouses
-                          .filter((w) => (isSuperAdmin ? true : w.type === "BRANCH"))
+                          .filter((w) => (isSuperAdmin ? w.type === "MAIN" : w.type === "BRANCH"))
                           .map((w) => (
                             <SelectItem key={w.id} value={w.id}>
                               {w.name} ({w.type})
@@ -920,21 +1189,35 @@ const Purchases = () => {
                 <Label className="text-xs text-muted-foreground uppercase tracking-wider">Billing Summary</Label>
               </CardHeader>
               <CardContent>
-                <div className="space-y-2 w-full max-w-sm ml-auto">
+              <div className="space-y-2 w-full max-w-sm ml-auto">
+                  {/* Supplier / Non-Supplier split */}
+                  {supplierItemsTotal > 0 && (
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground">Supplier Items (Credit)</span>
+                      <span className="font-medium tabular-nums text-amber-600 dark:text-amber-400">{currency} {supplierItemsTotal.toLocaleString()}</span>
+                    </div>
+                  )}
+                  {nonSupplierItemsTotal > 0 && (
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground">Non-Supplier Items (Cash)</span>
+                      <span className="font-medium tabular-nums">{currency} {nonSupplierItemsTotal.toLocaleString()}</span>
+                    </div>
+                  )}
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-muted-foreground">Subtotal (items)</span>
                     <span className="font-medium tabular-nums">{currency} {itemsSubtotal.toLocaleString()}</span>
                   </div>
                   <div className="flex items-center gap-3">
-                    <Label className="text-sm shrink-0 min-w-[7rem]">Discount</Label>
+                    <Label className="text-sm shrink-0 min-w-[7rem] flex flex-col">
+                      <span>Discount</span>
+                      <span className="text-[10px] text-muted-foreground font-normal">(Sum of vendor discounts)</span>
+                    </Label>
                     <Input
-                      className="h-9 text-sm text-right flex-1 min-w-0"
+                      className="h-9 text-sm text-right flex-1 min-w-0 bg-muted/50 cursor-not-allowed"
                       type="number"
-                      min={0}
-                      step={1}
+                      disabled
                       placeholder="0"
                       value={discountAmount || ""}
-                      onChange={(e) => setDiscountAmount(Number(e.target.value))}
                     />
                   </div>
                   <div className="flex items-center gap-3">
@@ -978,6 +1261,119 @@ const Purchases = () => {
                     <span>Grand Total</span>
                     <span className="text-lg tabular-nums">{currency} {grandTotal.toLocaleString()}</span>
                   </div>
+
+                  {supplierBreakdowns.map((b, idx) => {
+                    if (b.supplierId === null) {
+                      const nonSupplierPay = getSupplierPaymentDetails(null);
+                      return (
+                        <div key="non-supplier" className="border p-3 rounded-lg bg-muted/40 space-y-2">
+                          <div className="flex justify-between text-xs font-semibold text-muted-foreground uppercase">
+                            <span>{b.supplierName}</span>
+                            <span className="text-emerald-600 dark:text-emerald-400 font-semibold">Fully Paid (Cash) ✓</span>
+                          </div>
+                          <div className="flex justify-between text-xs text-muted-foreground">
+                            <span>Subtotal:</span>
+                            <span>{currency} {b.subtotal.toLocaleString()}</span>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <Label className="text-xs shrink-0 min-w-[5rem]">Discount</Label>
+                            <Input
+                              className="h-8 text-xs text-right flex-1 min-w-0"
+                              type="number" min={0} max={b.subtotal} step={1} placeholder="0"
+                              value={nonSupplierPay.discount || ""}
+                              onChange={(e) => {
+                                const disc = Number(e.target.value);
+                                setSupplierPaymentDetails(null, 'paid', undefined, disc);
+                              }}
+                            />
+                          </div>
+                          <div className="flex justify-between text-sm pt-1 border-t">
+                            <span className="font-medium">Amount Paid (Net)</span>
+                            <span className="font-bold">{currency} {b.total.toLocaleString()}</span>
+                          </div>
+                        </div>
+                      );
+                    }
+
+                    const pay = getSupplierPaymentDetails(b.supplierId);
+                    return (
+                      <div key={b.supplierId} className="border p-3 rounded-lg bg-muted/20 space-y-2.5">
+                        <div className="flex justify-between text-xs font-semibold uppercase">
+                          <span className="text-amber-600 dark:text-amber-400">{b.supplierName}</span>
+                          <span>Subtotal: {currency} {b.subtotal.toLocaleString()}</span>
+                        </div>
+                        
+                        <div className="flex items-center gap-3">
+                          <Label className="text-xs shrink-0 min-w-[5rem]">Discount</Label>
+                          <Input
+                            className="h-8 text-xs text-right flex-1 min-w-0"
+                            type="number" min={0} max={b.subtotal} step={1} placeholder="0"
+                            value={pay.discount || ""}
+                            onChange={(e) => {
+                              const disc = Number(e.target.value);
+                              setSupplierPaymentDetails(b.supplierId!, pay.status, undefined, disc);
+                            }}
+                          />
+                        </div>
+
+                        <div className="flex justify-between text-xs font-semibold text-muted-foreground">
+                          <span>Net Share:</span>
+                          <span>{currency} {b.total.toLocaleString()}</span>
+                        </div>
+
+                        <div className="flex items-center gap-3">
+                          <Label className="text-xs shrink-0 min-w-[5rem]">Payment</Label>
+                          <Select
+                            value={pay.status}
+                            onValueChange={(v) => {
+                              setSupplierPaymentDetails(
+                                b.supplierId!, 
+                                v as 'paid' | 'partial' | 'unpaid', 
+                                v === 'paid' ? b.total : (v === 'unpaid' ? 0 : undefined)
+                              );
+                            }}
+                          >
+                            <SelectTrigger className="h-8 flex-1 text-xs">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="paid">✅ Paid in Full</SelectItem>
+                              <SelectItem value="partial">🟡 Partial Payment</SelectItem>
+                              <SelectItem value="unpaid">🔴 Unpaid (Credit)</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        {pay.status === 'partial' && (
+                          <div className="flex items-center gap-3">
+                            <Label className="text-xs shrink-0 min-w-[5rem]">Paid Amount</Label>
+                            <Input
+                              className="h-8 text-xs text-right flex-1 min-w-0"
+                              type="number" min={0} max={b.total} step={1} placeholder="0"
+                              value={pay.paidAmount || ""}
+                              onChange={(e) => setSupplierPaymentDetails(b.supplierId!, 'partial', Number(e.target.value))}
+                            />
+                          </div>
+                        )}
+
+                        <div className="flex justify-between text-xs text-muted-foreground pt-1.5 border-t">
+                          <span>Due to Vendor:</span>
+                          <span className={b.total - pay.paidAmount > 0 ? "font-bold text-red-600 dark:text-red-400" : "text-emerald-600 font-semibold"}>
+                            {currency} {Math.max(0, b.total - pay.paidAmount).toLocaleString()}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  
+                  {overallDue > 0 && (
+                    <div className="flex justify-between text-sm pt-1.5 border-t">
+                      <span className="font-semibold text-muted-foreground">Overall Due Udhaar:</span>
+                      <span className="font-bold text-red-600 dark:text-red-400">
+                        {currency} {overallDue.toLocaleString()}
+                      </span>
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -987,7 +1383,7 @@ const Purchases = () => {
               <Button
                 className="gradient-primary text-primary-foreground"
                 size="sm"
-                onClick={() => handleSave("paid")}
+                onClick={() => handleSave()}
                 disabled={saving}
               >
                 {saving ? "Saving..." : "Save Purchase"}
@@ -1044,6 +1440,8 @@ const Purchases = () => {
                       <TableHead>Warehouse</TableHead>
                       <TableHead>Items</TableHead>
                       <TableHead>Total</TableHead>
+                      <TableHead>Paid</TableHead>
+                      <TableHead>Due</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Actions</TableHead>
                     </TableRow>
@@ -1059,6 +1457,16 @@ const Purchases = () => {
                         <TableCell>{Array.isArray(p.items) ? p.items.length : 0}</TableCell>
                         <TableCell className="font-medium">
                           {currency} {(p.total ?? 0).toLocaleString()}
+                        </TableCell>
+                        <TableCell className="text-sm text-emerald-600 dark:text-emerald-400">
+                          {currency} {(p.paid ?? 0).toLocaleString()}
+                        </TableCell>
+                        <TableCell className="text-sm">
+                          {(p.due ?? 0) > 0 ? (
+                            <span className="font-semibold text-red-600 dark:text-red-400">{currency} {(p.due ?? 0).toLocaleString()}</span>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
                         </TableCell>
                         <TableCell>
                           <Badge variant="secondary" className={payColor[p.status] || ""}>
@@ -1076,6 +1484,17 @@ const Purchases = () => {
                             >
                               <Eye className="h-3 w-3" />
                             </Button>
+                            {(p.due ?? 0) > 0 && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 text-amber-600 hover:text-amber-700"
+                                onClick={() => { setPayingId(p.id); setPayDialogAmount(p.due ?? 0); setPayDialogNote(""); }}
+                                title="Record Payment"
+                              >
+                                <Wallet className="h-3 w-3" />
+                              </Button>
+                            )}
                             {isSuperAdmin && (
                               <Button
                                 variant="ghost"
@@ -1367,6 +1786,74 @@ const Purchases = () => {
                     </Card>
                   )}
 
+                  {/* Supplier Dues Section */}
+                  {sd.supplierDues && sd.supplierDues.length > 0 && (
+                    <div className="space-y-2 border-t pt-3">
+                      <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                        Vendor Dues & Payment Status
+                      </Label>
+                      <div className="rounded-lg border overflow-auto">
+                        <Table>
+                          <TableHeader>
+                            <TableRow className="bg-muted/50 hover:bg-muted/50">
+                              <TableHead className="text-xs">Vendor</TableHead>
+                              <TableHead className="text-right text-xs">Total Share</TableHead>
+                              <TableHead className="text-right text-xs">Paid</TableHead>
+                              <TableHead className="text-right text-xs">Due</TableHead>
+                              <TableHead className="text-xs">Status</TableHead>
+                              <TableHead className="text-xs text-right">Actions</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {sd.supplierDues.map((due) => (
+                              <TableRow key={due.supplierId || 'none'}>
+                                <TableCell className="font-medium text-sm">
+                                  {due.supplierName || 'General / No Supplier'}
+                                </TableCell>
+                                <TableCell className="text-right text-sm font-medium">
+                                  {currency} {due.total.toLocaleString()}
+                                </TableCell>
+                                <TableCell className="text-right text-sm text-emerald-600 dark:text-emerald-400">
+                                  {currency} {due.paid.toLocaleString()}
+                                </TableCell>
+                                <TableCell className="text-right text-sm">
+                                  {due.due > 0 ? (
+                                    <span className="font-semibold text-red-600 dark:text-red-400">{currency} {due.due.toLocaleString()}</span>
+                                  ) : (
+                                    <span className="text-emerald-600 dark:text-emerald-400 font-semibold">Fully Paid ✓</span>
+                                  )}
+                                </TableCell>
+                                <TableCell>
+                                  <Badge variant="secondary" className={payColor[due.status] || ""}>
+                                    {due.status}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  {due.due > 0 && due.supplierId && (
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      className="h-7 text-xs text-amber-600 border-amber-600 hover:bg-amber-50"
+                                      onClick={() => {
+                                        setPayingId(sd.id);
+                                        setPayDialogAmount(due.due);
+                                        setPayDialogNote("");
+                                        setTargetSupplierId(due.supplierId);
+                                      }}
+                                    >
+                                      <Wallet className="h-3 w-3 mr-1" />
+                                      Pay Vendor
+                                    </Button>
+                                  )}
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Notes */}
                   {sd.notes && (
                     <div className="text-sm text-muted-foreground bg-muted/40 rounded px-3 py-2">
@@ -1378,6 +1865,49 @@ const Purchases = () => {
                   <p className="text-right text-sm text-muted-foreground">
                     Total Items: <strong>{sdItems.length}</strong>
                   </p>
+
+                  {/* Payment History Ledger */}
+                  {sd.paymentHistory && sd.paymentHistory.length > 0 && (
+                    <div className="space-y-2 border-t pt-3">
+                      <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                        Payment History
+                      </Label>
+                      <div className="rounded-lg border overflow-auto">
+                        <Table>
+                          <TableHeader>
+                            <TableRow className="bg-muted/50 hover:bg-muted/50">
+                              <TableHead className="text-xs">Date &amp; Time</TableHead>
+                              <TableHead className="text-right text-xs">Amount Paid</TableHead>
+                              <TableHead className="text-right text-xs">Balance Remaining</TableHead>
+                              <TableHead className="text-xs">Note</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {sd.paymentHistory.map((ph, idx) => (
+                              <TableRow key={ph.id}>
+                                <TableCell className="text-sm text-muted-foreground">
+                                  {new Date(ph.createdAt).toLocaleString()}
+                                </TableCell>
+                                <TableCell className="text-right font-medium text-emerald-600 dark:text-emerald-400">
+                                  {currency} {ph.amount.toLocaleString()}
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  {ph.balanceAfter > 0 ? (
+                                    <span className="font-semibold text-red-600 dark:text-red-400">{currency} {ph.balanceAfter.toLocaleString()}</span>
+                                  ) : (
+                                    <span className="text-emerald-600 dark:text-emerald-400 font-semibold">Fully Paid ✓</span>
+                                  )}
+                                </TableCell>
+                                <TableCell className="text-sm text-muted-foreground">
+                                  {ph.note || (idx === 0 ? 'Initial payment' : '—')}
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <DialogFooter className="gap-2">
@@ -1467,6 +1997,120 @@ const Purchases = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* ── Pay Purchase Dialog ── */}
+      <Dialog open={!!payingId} onOpenChange={(open) => { if (!open) { setPayingId(null); setTargetSupplierId(null); setPayDialogAmount(0); setPayDialogNote(""); } }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Wallet className="h-4 w-4 text-amber-600" />
+              Record Vendor Payment
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            {payingId && (() => {
+              const p = purchases.find(x => x.id === payingId);
+              if (!p) return null;
+
+              const activeDues = p.supplierDues && Array.isArray(p.supplierDues)
+                ? p.supplierDues.filter((d: any) => d.due > 0 && d.supplierId)
+                : [];
+
+              return (
+                <>
+                  {activeDues.length > 1 ? (
+                    <div className="space-y-1.5">
+                      <Label>Select Vendor</Label>
+                      <Select
+                        value={targetSupplierId || ""}
+                        onValueChange={(val) => {
+                          setTargetSupplierId(val);
+                          const chosen = activeDues.find((d: any) => d.supplierId === val);
+                          if (chosen) setPayDialogAmount(chosen.due);
+                        }}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Choose a vendor to pay" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {activeDues.map((d: any) => (
+                            <SelectItem key={d.supplierId} value={d.supplierId}>
+                              {d.supplierName} (Due: {currency} {d.due.toLocaleString()})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  ) : (
+                    <div className="flex justify-between text-sm bg-muted/40 rounded-lg p-3">
+                      <span className="text-muted-foreground">
+                        {activeDues.length === 1 ? activeDues[0].supplierName : "Outstanding Due"}
+                      </span>
+                      <span className="font-bold text-red-600 dark:text-red-400">
+                        {currency} {(activeDues.length === 1 ? activeDues[0].due : (p.due ?? 0)).toLocaleString()}
+                      </span>
+                    </div>
+                  )}
+                </>
+              );
+            })()}
+            <div className="space-y-1.5">
+              <Label>Amount to Pay</Label>
+              <Input
+                type="number" min={1}
+                max={
+                  payingId ? (() => {
+                    const p = purchases.find(x => x.id === payingId);
+                    if (!p) return 0;
+                    if (targetSupplierId && p.supplierDues) {
+                      const sd = p.supplierDues.find((d: any) => d.supplierId === targetSupplierId);
+                      return sd ? sd.due : 0;
+                    }
+                    if (p.supplierDues && p.supplierDues.length > 0) {
+                      const activeDues = p.supplierDues.filter((d: any) => d.due > 0 && d.supplierId);
+                      if (activeDues.length === 1) return activeDues[0].due;
+                    }
+                    return p.due ?? 0;
+                  })() : 0
+                }
+                value={payDialogAmount || ""}
+                onChange={(e) => setPayDialogAmount(Number(e.target.value))}
+                placeholder="Enter amount"
+                className="h-10"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Note (optional)</Label>
+              <Input
+                value={payDialogNote}
+                onChange={(e) => setPayDialogNote(e.target.value)}
+                placeholder="e.g. Bank transfer, Cash payment..."
+                className="h-10"
+              />
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => { setPayingId(null); setTargetSupplierId(null); setPayDialogAmount(0); setPayDialogNote(""); }}>Cancel</Button>
+            <Button
+              className="gradient-primary text-primary-foreground"
+              onClick={handlePay}
+              disabled={
+                payingSaving || 
+                payDialogAmount <= 0 || 
+                (payingId && (() => {
+                  const p = purchases.find(x => x.id === payingId);
+                  const activeDues = p?.supplierDues && Array.isArray(p.supplierDues)
+                    ? p.supplierDues.filter((d: any) => d.due > 0 && d.supplierId)
+                    : [];
+                  return activeDues.length > 1 && !targetSupplierId;
+                })())
+              }
+            >
+              {payingSaving ? "Saving..." : "Record Payment"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* ── Quick Add Ingredient Dialog ── */}
       <Dialog open={quickAddOpen} onOpenChange={setQuickAddOpen}>

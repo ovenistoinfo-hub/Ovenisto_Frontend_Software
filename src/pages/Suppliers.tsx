@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { supplierService, type SupplierRecord } from "@/services/supplier.service";
+import { supplierService, type SupplierRecord, type SupplierLedger } from "@/services/supplier.service";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,7 +8,9 @@ import { Label } from "@/components/ui/label";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Plus, Search, Pencil, Trash2, Truck, Eye, User, Phone, ChevronUp, X } from "lucide-react";
+import { Plus, Search, Pencil, Trash2, Truck, Eye, User, Phone, ChevronUp, X, BookOpen } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/ui/page-header";
@@ -38,6 +40,9 @@ const Suppliers = () => {
   const [showDetail, setShowDetail] = useState<SupplierRecord | null>(null);
   const [associatedIngredients, setAssociatedIngredients] = useState<any[]>([]);
   const [loadingIngredients, setLoadingIngredients] = useState(false);
+  const [showLedger, setShowLedger] = useState(false);
+  const [ledgerData, setLedgerData] = useState<SupplierLedger | null>(null);
+  const [loadingLedger, setLoadingLedger] = useState(false);
 
   useEffect(() => {
     if (showDetail) {
@@ -54,8 +59,18 @@ const Suppliers = () => {
         });
     } else {
       setAssociatedIngredients([]);
+      setShowLedger(false);
+      setLedgerData(null);
     }
   }, [showDetail]);
+
+  const loadLedger = (supplierId: string) => {
+    setLoadingLedger(true);
+    supplierService.getLedger(supplierId)
+      .then(res => setLedgerData(res.data))
+      .catch(err => toast.error(err.message || "Failed to load ledger"))
+      .finally(() => setLoadingLedger(false));
+  };
 
   const { data: suppliers = [], isLoading: loading } = useQuery({
     queryKey: ["suppliers"],
@@ -201,8 +216,8 @@ const Suppliers = () => {
             <>
               <div className="rounded-lg border overflow-auto max-h-[calc(100vh-300px)]">
                 <Table>
-                  <TableHeader className="sticky top-0 z-10 bg-card"><TableRow className="bg-muted/50 hover:bg-muted/50"><TableHead>SN</TableHead><TableHead>Name</TableHead><TableHead>Company</TableHead><TableHead>Phone</TableHead><TableHead>Total Purchases</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader>
-                  <TableBody>{paged.map((s, i) => (<TableRow key={s.id} className="hover:bg-muted/30 transition-colors"><TableCell>{(page-1)*10+i+1}</TableCell><TableCell className="font-medium">{s.name}</TableCell><TableCell>{s.company}</TableCell><TableCell>{s.phone}</TableCell><TableCell>{currency} {(s.totalPurchases ?? 0).toLocaleString()}</TableCell><TableCell><div className="flex gap-1">
+                  <TableHeader className="sticky top-0 z-10 bg-card"><TableRow className="bg-muted/50 hover:bg-muted/50"><TableHead>SN</TableHead><TableHead>Name</TableHead><TableHead>Company</TableHead><TableHead>Phone</TableHead><TableHead>Total Purchases</TableHead><TableHead>Outstanding Due</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader>
+                  <TableBody>{paged.map((s, i) => (<TableRow key={s.id} className="hover:bg-muted/30 transition-colors"><TableCell>{(page-1)*10+i+1}</TableCell><TableCell className="font-medium">{s.name}</TableCell><TableCell>{s.company}</TableCell><TableCell>{s.phone}</TableCell><TableCell>{currency} {(s.totalPurchases ?? 0).toLocaleString()}</TableCell><TableCell className={s.totalDue > 0 ? "font-semibold text-red-600 dark:text-red-400" : "text-emerald-600 font-medium"}>{currency} {(s.totalDue ?? 0).toLocaleString()}</TableCell><TableCell><div className="flex gap-1">
                     <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setShowDetail(s)}><Eye className="h-3 w-3" /></Button>
                     {canManage && <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(s)}><Pencil className="h-3 w-3" /></Button>}
                     {canManage && <AlertDialog><AlertDialogTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"><Trash2 className="h-4 w-4" /></Button></AlertDialogTrigger><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Delete {s.name}?</AlertDialogTitle><AlertDialogDescription>This action cannot be undone.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={() => handleDelete(s.id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Delete</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>}
@@ -216,7 +231,7 @@ const Suppliers = () => {
 
       {/* Detail Dialog */}
       <Dialog open={!!showDetail} onOpenChange={() => setShowDetail(null)}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-3">
               <Truck className="h-5 w-5" />
@@ -240,42 +255,126 @@ const Suppliers = () => {
                   {showDetail.email && <div className="text-sm text-muted-foreground">Email: <span className="text-foreground">{showDetail.email}</span></div>}
                 </CardContent>
               </Card>
-              <div className="flex justify-between items-center px-1">
-                <span className="text-sm text-muted-foreground">Total Purchases</span>
-                <span className="text-lg font-bold">{currency} {(showDetail.totalPurchases ?? 0).toLocaleString()}</span>
+
+              {/* Summary cards */}
+              <div className="grid grid-cols-3 gap-3">
+                <div className="rounded-lg border p-3 text-center">
+                  <p className="text-xs text-muted-foreground mb-1">Total Purchases</p>
+                  <p className="text-base font-bold">{currency} {(showDetail.totalPurchases ?? 0).toLocaleString()}</p>
+                </div>
+                <div className="rounded-lg border p-3 text-center">
+                  <p className="text-xs text-muted-foreground mb-1">Total Paid</p>
+                  <p className="text-base font-bold text-emerald-600 dark:text-emerald-400">
+                    {currency} {((showDetail.totalPurchases ?? 0) - (showDetail.totalDue ?? 0)).toLocaleString()}
+                  </p>
+                </div>
+                <div className="rounded-lg border p-3 text-center bg-red-50 dark:bg-red-950/30">
+                  <p className="text-xs text-muted-foreground mb-1">Outstanding Due</p>
+                  <p className="text-base font-bold text-red-600 dark:text-red-400">
+                    {currency} {(showDetail.totalDue ?? 0).toLocaleString()}
+                  </p>
+                </div>
               </div>
-              <div className="space-y-2 pt-2 border-t">
-                <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Associated Ingredients</Label>
-                {loadingIngredients ? (
-                  <div className="space-y-2">
-                    <Skeleton className="h-8 w-full rounded" />
-                    <Skeleton className="h-8 w-full rounded" />
-                  </div>
-                ) : associatedIngredients.length === 0 ? (
-                  <p className="text-xs text-muted-foreground italic">No ingredients associated with this supplier yet.</p>
-                ) : (
-                  <div className="rounded-lg border max-h-48 overflow-y-auto">
-                    <Table>
-                      <TableHeader className="bg-muted/50">
-                        <TableRow>
-                          <TableHead className="py-2 text-xs">Name</TableHead>
-                          <TableHead className="py-2 text-xs">Category</TableHead>
-                          <TableHead className="py-2 text-xs">Price</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {associatedIngredients.map((ing) => (
-                          <TableRow key={ing.id} className="hover:bg-muted/20">
-                            <TableCell className="py-2 text-xs font-medium">{ing.name}</TableCell>
-                            <TableCell className="py-2 text-xs text-muted-foreground">{ing.category?.name || "—"}</TableCell>
-                            <TableCell className="py-2 text-xs">{currency} {Number(ing.purchasePrice) || 0}</TableCell>
+
+              {/* Tab buttons */}
+              <div className="flex gap-2">
+                <Button
+                  variant={!showLedger ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setShowLedger(false)}
+                >
+                  Ingredients
+                </Button>
+                <Button
+                  variant={showLedger ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => {
+                    setShowLedger(true);
+                    if (!ledgerData) loadLedger(showDetail.id);
+                  }}
+                >
+                  <BookOpen className="h-3.5 w-3.5 mr-1" />
+                  Purchase Ledger
+                </Button>
+              </div>
+
+              {!showLedger ? (
+                <div className="space-y-2 pt-1 border-t">
+                  <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Associated Ingredients</Label>
+                  {loadingIngredients ? (
+                    <div className="space-y-2">
+                      <Skeleton className="h-8 w-full rounded" />
+                      <Skeleton className="h-8 w-full rounded" />
+                    </div>
+                  ) : associatedIngredients.length === 0 ? (
+                    <p className="text-xs text-muted-foreground italic">No ingredients associated with this supplier yet.</p>
+                  ) : (
+                    <div className="rounded-lg border max-h-48 overflow-y-auto">
+                      <Table>
+                        <TableHeader className="bg-muted/50">
+                          <TableRow>
+                            <TableHead className="py-2 text-xs">Name</TableHead>
+                            <TableHead className="py-2 text-xs">Category</TableHead>
+                            <TableHead className="py-2 text-xs">Price</TableHead>
                           </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                )}
-              </div>
+                        </TableHeader>
+                        <TableBody>
+                          {associatedIngredients.map((ing) => (
+                            <TableRow key={ing.id} className="hover:bg-muted/20">
+                              <TableCell className="py-2 text-xs font-medium">{ing.name}</TableCell>
+                              <TableCell className="py-2 text-xs text-muted-foreground">{ing.category?.name || "—"}</TableCell>
+                              <TableCell className="py-2 text-xs">{currency} {Number(ing.purchasePrice) || 0}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-2 pt-1 border-t">
+                  <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Purchase Ledger</Label>
+                  {loadingLedger ? (
+                    <div className="space-y-2">
+                      <Skeleton className="h-8 w-full rounded" />
+                      <Skeleton className="h-8 w-full rounded" />
+                      <Skeleton className="h-8 w-full rounded" />
+                    </div>
+                  ) : !ledgerData || ledgerData.purchases.length === 0 ? (
+                    <p className="text-xs text-muted-foreground italic">No purchases recorded for this supplier yet.</p>
+                  ) : (
+                    <div className="space-y-3 max-h-64 overflow-y-auto pr-1">
+                      {ledgerData.purchases.map(p => (
+                        <div key={p.id} className="rounded-lg border p-3 space-y-1.5">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-medium">{p.invoiceNumber || `Purchase #${p.id.slice(0, 8)}`}</span>
+                            <Badge variant="secondary" className={
+                              p.status === 'paid' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' :
+                              p.status === 'unpaid' ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' :
+                              'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
+                            }>{p.status}</Badge>
+                          </div>
+                          <div className="grid grid-cols-3 gap-2 text-xs">
+                            <div><span className="text-muted-foreground">Total: </span><span className="font-medium">{currency} {p.total.toLocaleString()}</span></div>
+                            <div><span className="text-muted-foreground">Paid: </span><span className="font-medium text-emerald-600 dark:text-emerald-400">{currency} {p.paid.toLocaleString()}</span></div>
+                            <div><span className="text-muted-foreground">Due: </span><span className={p.due > 0 ? 'font-bold text-red-600 dark:text-red-400' : 'text-muted-foreground'}>{p.due > 0 ? `${currency} ${p.due.toLocaleString()}` : '—'}</span></div>
+                          </div>
+                          {p.paymentHistory.length > 0 && (
+                            <div className="pt-1.5 border-t space-y-1">
+                              {p.paymentHistory.map(ph => (
+                                <div key={ph.id} className="flex justify-between text-xs text-muted-foreground">
+                                  <span>{new Date(ph.createdAt).toLocaleDateString()} — {ph.note || 'Payment'}</span>
+                                  <span className="text-emerald-600 dark:text-emerald-400 font-medium">+{currency} {ph.amount.toLocaleString()}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
           <DialogFooter><Button variant="outline" onClick={() => setShowDetail(null)}>Close</Button></DialogFooter>

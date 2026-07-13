@@ -24,7 +24,7 @@ const navSections = [
   { label: "Common", items: [
     { title: "Dashboard", url: "/", icon: Home, module: "dashboard" },
     { title: "Analytics", url: "/analytics", icon: BarChart3, module: "analytics" },
-    { title: "Warehouse Dashboard", url: "/warehouse-dashboard", icon: Package, module: "warehouses" },
+    { title: "Warehouse Dashboard", url: "/warehouse-dashboard", icon: Package, module: "warehouse-dashboard" },
   ]},
   { label: "Panel", items: [
     { title: "POS", url: "/pos", icon: ShoppingCart, module: "pos" },
