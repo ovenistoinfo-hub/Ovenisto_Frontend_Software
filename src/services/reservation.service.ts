@@ -30,11 +30,12 @@ export interface CreateReservationInput {
 }
 
 export const reservationService = {
-  async getAll(params?: { date?: string; status?: string; upcoming?: boolean }): Promise<Reservation[]> {
+  async getAll(params?: { date?: string; status?: string; upcoming?: boolean; outletId?: string }): Promise<Reservation[]> {
     const qs = new URLSearchParams();
     if (params?.date) qs.set('date', params.date);
     if (params?.status) qs.set('status', params.status);
     if (params?.upcoming) qs.set('upcoming', 'true');
+    if (params?.outletId) qs.set('outletId', params.outletId);
     const res = await api.get<{ success: boolean; data: Reservation[] }>(
       `/reservations${qs.toString() ? `?${qs}` : ''}`
     );

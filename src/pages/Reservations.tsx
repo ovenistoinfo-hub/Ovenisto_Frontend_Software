@@ -15,7 +15,8 @@ import { PageHeader } from "@/components/ui/page-header";
 import { reservationService, type Reservation, type CreateReservationInput } from "@/services/reservation.service";
 import { tableService } from "@/services/table.service";
 import { toast } from "sonner";
-import { useOutlet } from "@/contexts/OutletContext";
+import { useOutletFilter } from "@/hooks/useOutletFilter";
+import { OutletFilterSelect } from "@/components/OutletFilterSelect";
 import { useAuth } from "@/contexts/AuthContext";
 
 const statusColors: Record<string, string> = {
@@ -41,7 +42,7 @@ const emptyForm = (): FormState => ({
 
 const Reservations = () => {
   const qc = useQueryClient();
-  const { selectedOutletId } = useOutlet();
+  const { outletId: selectedOutletId, setOutletId, outlets } = useOutletFilter();
   const { user } = useAuth();
   const isSuperAdmin = user?.role === "Super Admin";
   const [dateFilter, setDateFilter] = useState("Today");
@@ -55,7 +56,7 @@ const Reservations = () => {
 
   const { data: reservations = [], isLoading } = useQuery({
     queryKey: ["reservations", selectedOutletId],
-    queryFn: () => reservationService.getAll(),
+    queryFn: () => reservationService.getAll({ outletId: selectedOutletId !== "all" ? selectedOutletId : undefined }),
   });
 
   const { data: tables = [] } = useQuery({
@@ -140,12 +141,15 @@ const Reservations = () => {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        icon={<CalendarCheck className="h-5 w-5" />}
-        title="Reservations"
-        subtitle="Table bookings and reservation management"
-        actions={!isSuperAdmin ? <Button className="gradient-primary text-primary-foreground" onClick={openAdd}><Plus className="h-4 w-4 mr-2" />New Reservation</Button> : undefined}
-      />
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <PageHeader
+          icon={<CalendarCheck className="h-5 w-5" />}
+          title="Reservations"
+          subtitle="Table bookings and reservation management"
+          actions={!isSuperAdmin ? <Button className="gradient-primary text-primary-foreground" onClick={openAdd}><Plus className="h-4 w-4 mr-2" />New Reservation</Button> : undefined}
+        />
+        <OutletFilterSelect outletId={selectedOutletId} setOutletId={setOutletId} outlets={outlets} isSuperAdmin={isSuperAdmin} />
+      </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <Card className="shadow-sm"><CardContent className="p-4 text-center"><p className="text-xs text-muted-foreground">Today's</p><p className="text-2xl font-bold">{todayCount}</p></CardContent></Card>
