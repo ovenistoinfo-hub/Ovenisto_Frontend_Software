@@ -11,6 +11,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { tableService, type TableRecord, type CreateTableInput } from "@/services/table.service";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/contexts/AuthContext";
 
 const statusConfig: Record<string, { color: string; bg: string; emoji: string }> = {
   available:   { color: "text-success",          bg: "bg-success/10 border-success/30",          emoji: "🟢" },
@@ -22,6 +23,8 @@ const statusConfig: Record<string, { color: string; bg: string; emoji: string }>
 type FormState = Partial<CreateTableInput> & { status?: string };
 
 const TableLayout = () => {
+  const { user } = useAuth();
+  const isSuperAdmin = user?.role === "Super Admin";
   const [tables,     setTables]     = useState<TableRecord[]>([]);
   const [loading,    setLoading]    = useState(true);
   const [saving,     setSaving]     = useState(false);
@@ -105,7 +108,7 @@ const TableLayout = () => {
         icon={<LayoutGrid className="h-5 w-5" />}
         title="Table Layout"
         subtitle="Restaurant floor plan and table management"
-        actions={<Button className="gradient-primary text-primary-foreground" onClick={openAdd}><Plus className="h-4 w-4 mr-2" />Add Table</Button>}
+        actions={!isSuperAdmin ? <Button className="gradient-primary text-primary-foreground" onClick={openAdd}><Plus className="h-4 w-4 mr-2" />Add Table</Button> : undefined}
       />
 
       <div className="flex gap-1.5 flex-wrap">
@@ -149,7 +152,7 @@ const TableLayout = () => {
       </div>
 
       {/* Add/Edit Dialog */}
-      {showDialog && (
+      {showDialog && (!isSuperAdmin || editId) && (
         <Card className="shadow-sm border-primary/30">
           <CardHeader className="pb-3"><CardTitle className="text-base">{editId ? "Edit" : "Add"} Table</CardTitle></CardHeader>
           <CardContent className="space-y-3">
