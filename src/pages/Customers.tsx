@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useData } from "@/contexts/DataContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { customerService } from "@/services/customer.service";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -17,6 +18,8 @@ const Customers = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { settings } = useData();
+  const { user } = useAuth();
+  const isSuperAdmin = user?.role === "Super Admin";
   const [search, setSearch] = useState("");
   const [showAdd, setShowAdd] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
@@ -66,9 +69,9 @@ const Customers = () => {
         icon={<Users className="h-5 w-5" />}
         title="Customers"
         subtitle="Manage your customers"
-        actions={<Button className="gradient-primary text-primary-foreground" onClick={() => setShowAdd(v => !v)}><Plus className="h-4 w-4 mr-2" />Add Customer</Button>}
+        actions={!isSuperAdmin ? <Button className="gradient-primary text-primary-foreground" onClick={() => setShowAdd(v => !v)}><Plus className="h-4 w-4 mr-2" />Add Customer</Button> : undefined}
       />
-      {showAdd && (
+      {showAdd && !isSuperAdmin && (
         <Card className="shadow-sm border-primary/30">
           <CardHeader className="pb-3"><CardTitle className="text-base">Add Customer</CardTitle></CardHeader>
           <CardContent className="space-y-3">
