@@ -197,7 +197,7 @@ const Reservations = () => {
         </div>
       </CardContent></Card>
 
-      {showForm && !isSuperAdmin && (
+      {showForm && (!isSuperAdmin || editId) && (
         <Card className="shadow-sm border-primary/30">
           <CardHeader className="pb-3"><CardTitle className="text-base">{editId ? "Edit" : "New"} Reservation</CardTitle></CardHeader>
           <CardContent className="space-y-3">
