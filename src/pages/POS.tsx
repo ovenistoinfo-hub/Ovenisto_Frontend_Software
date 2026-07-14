@@ -1107,6 +1107,18 @@ const POS = () => {
     }
   };
 
+  if (user?.role === "Super Admin") {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] text-center p-6 space-y-3">
+        <AlertTriangle className="h-10 w-10 text-destructive animate-bounce" />
+        <h3 className="text-lg font-bold">Access Denied</h3>
+        <p className="text-sm text-muted-foreground max-w-sm">
+          Super Admin accounts do not operate the POS — this is a branch-level action.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="fixed inset-0 z-50 bg-background flex flex-col print:static print:z-auto">
       {/* POS Header */}
