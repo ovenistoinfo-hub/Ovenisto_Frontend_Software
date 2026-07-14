@@ -55,6 +55,7 @@ const Employees = () => {
   const isSuperAdmin = user?.role === "Super Admin";
   const canManage = !isSuperAdmin && ["Super Admin", "Admin", "Manager", "Store Manager"].includes(user?.role ?? "");
   const canEditOrDelete = ["Super Admin", "Admin"].includes(user?.role ?? "");
+  const canSeeActionsColumn = ["Super Admin", "Admin", "Manager", "Store Manager"].includes(user?.role ?? "");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("active");
   const [page, setPage] = useState(1);
@@ -529,7 +530,7 @@ const Employees = () => {
                       <TableHead>Hire Date</TableHead>
                       <TableHead>Supervisor</TableHead>
                       <TableHead>Status</TableHead>
-                      {canManage && <TableHead>Actions</TableHead>}
+                      {canSeeActionsColumn && <TableHead>Actions</TableHead>}
                     </TableRow>
                   </TableHeader>
                   <TableBody>{paged.map(e => (
@@ -558,7 +559,7 @@ const Employees = () => {
                           )}
                         </div>
                       </TableCell>
-                      {canManage && (
+                      {canSeeActionsColumn && (
                         <TableCell>
                           <div className="flex gap-1 items-center">
                             <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground" onClick={() => setViewEmployee(e)} title="View Employee Details">
