@@ -8,13 +8,14 @@ import { useQuery } from "@tanstack/react-query";
 import { useState, useEffect } from "react";
 import { reportService } from "@/services/report.service";
 import { stockService } from "@/services/stock.service";
-import { useOutlet } from "@/contexts/OutletContext";
+import { useOutletFilter } from "@/hooks/useOutletFilter";
+import { OutletFilterSelect } from "@/components/OutletFilterSelect";
 import { useVisiblePolling } from "@/hooks/use-visible-polling";
 import { Button } from "@/components/ui/button";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 
 const Dashboard = () => {
-  const { selectedOutletId: outletId } = useOutlet();
+  const { outletId, setOutletId, outlets, isSuperAdmin } = useOutletFilter();
   const { data: d, isLoading: loading } = useQuery({
     queryKey: ["dashboard", outletId],
     queryFn: () => reportService.getDashboard({ outletId }),
@@ -56,6 +57,7 @@ const Dashboard = () => {
             title="Dashboard"
             subtitle={d?.branchName ?? "Welcome back, here's your overview"}
           />
+          <OutletFilterSelect outletId={outletId} setOutletId={setOutletId} outlets={outlets} isSuperAdmin={isSuperAdmin} />
         </div>
         <Card className="shadow-sm">
           <CardHeader className="pb-2">
