@@ -16,6 +16,7 @@ import { reservationService, type Reservation, type CreateReservationInput } fro
 import { tableService } from "@/services/table.service";
 import { toast } from "sonner";
 import { useOutlet } from "@/contexts/OutletContext";
+import { useAuth } from "@/contexts/AuthContext";
 
 const statusColors: Record<string, string> = {
   pending: "bg-warning/10 text-warning",
@@ -41,6 +42,8 @@ const emptyForm = (): FormState => ({
 const Reservations = () => {
   const qc = useQueryClient();
   const { selectedOutletId } = useOutlet();
+  const { user } = useAuth();
+  const isSuperAdmin = user?.role === "Super Admin";
   const [dateFilter, setDateFilter] = useState("Today");
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
@@ -141,7 +144,7 @@ const Reservations = () => {
         icon={<CalendarCheck className="h-5 w-5" />}
         title="Reservations"
         subtitle="Table bookings and reservation management"
-        actions={<Button className="gradient-primary text-primary-foreground" onClick={openAdd}><Plus className="h-4 w-4 mr-2" />New Reservation</Button>}
+        actions={!isSuperAdmin ? <Button className="gradient-primary text-primary-foreground" onClick={openAdd}><Plus className="h-4 w-4 mr-2" />New Reservation</Button> : undefined}
       />
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
@@ -194,7 +197,7 @@ const Reservations = () => {
         </div>
       </CardContent></Card>
 
-      {showForm && (
+      {showForm && !isSuperAdmin && (
         <Card className="shadow-sm border-primary/30">
           <CardHeader className="pb-3"><CardTitle className="text-base">{editId ? "Edit" : "New"} Reservation</CardTitle></CardHeader>
           <CardContent className="space-y-3">
