@@ -52,7 +52,8 @@ const formatPhone = (val: string): string => {
 
 const Employees = () => {
   const { user } = useAuth();
-  const canManage = ["Super Admin", "Admin", "Manager", "Store Manager"].includes(user?.role ?? "");
+  const isSuperAdmin = user?.role === "Super Admin";
+  const canManage = !isSuperAdmin && ["Super Admin", "Admin", "Manager", "Store Manager"].includes(user?.role ?? "");
   const canEditOrDelete = ["Super Admin", "Admin"].includes(user?.role ?? "");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("active");
