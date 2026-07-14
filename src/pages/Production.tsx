@@ -69,6 +69,7 @@ const Production = () => {
   const [itemForm, setItemForm] = useState({ name: '', unit: '', shelfLifeHours: '' });
   const [savingItem, setSavingItem] = useState(false);
   const canManageItems = ['Super Admin', 'Admin', 'Manager'].includes(user?.role ?? '');
+  const isSuperAdmin = user?.role === 'Super Admin';
 
   // Production Stock tab state
   const { data: productionStock = [], refetch: refetchStock } = useQuery<ProductionStockRecord[]>({
@@ -189,7 +190,7 @@ const Production = () => {
 
   return (
     <div className="space-y-6">
-      <PageHeader icon={<Factory className="h-5 w-5" />} title="Production" subtitle="Production batches" actions={<div className="flex gap-2">{canManageItems && (<Button variant="outline" onClick={() => setShowManageItems(v => !v)}>{showManageItems ? 'Hide Items' : 'Manage Items'}</Button>)}<Button variant="outline" onClick={() => { setShowProduce(v => !v); setShowAdd(false); }}>{showProduce ? 'Cancel' : <><Plus className="h-4 w-4 mr-1" />Produce Item</>}</Button><Button className="gradient-primary text-primary-foreground" onClick={() => { setShowAdd(v => !v); setShowProduce(false); }}><Plus className="h-4 w-4 mr-2" />New Production</Button></div>} />
+      <PageHeader icon={<Factory className="h-5 w-5" />} title="Production" subtitle="Production batches" actions={<div className="flex gap-2">{canManageItems && (<Button variant="outline" onClick={() => setShowManageItems(v => !v)}>{showManageItems ? 'Hide Items' : 'Manage Items'}</Button>)}{!isSuperAdmin && (<><Button variant="outline" onClick={() => { setShowProduce(v => !v); setShowAdd(false); }}>{showProduce ? 'Cancel' : <><Plus className="h-4 w-4 mr-1" />Produce Item</>}</Button><Button className="gradient-primary text-primary-foreground" onClick={() => { setShowAdd(v => !v); setShowProduce(false); }}><Plus className="h-4 w-4 mr-2" />New Production</Button></>)}</div>} />
       {showManageItems && canManageItems && (
         <Card className="shadow-sm border-primary/30">
           <CardHeader className="pb-3">
@@ -278,7 +279,7 @@ const Production = () => {
         </Card>
       )}
 
-      {showAdd && (
+      {showAdd && !isSuperAdmin && (
         <Card className="shadow-sm border-primary/30">
           <CardHeader className="pb-3"><CardTitle className="text-base">New Production</CardTitle></CardHeader>
           <CardContent className="space-y-4">
@@ -312,7 +313,7 @@ const Production = () => {
         </Card>
       )}
 
-      {showProduce && (
+      {showProduce && !isSuperAdmin && (
         <Card className="shadow-sm border-primary/30">
           <CardHeader className="pb-3"><CardTitle className="text-base">Produce Item</CardTitle></CardHeader>
           <CardContent className="space-y-4">
