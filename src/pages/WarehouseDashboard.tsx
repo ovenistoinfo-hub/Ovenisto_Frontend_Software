@@ -15,7 +15,8 @@ import { Label } from "@/components/ui/label";
 import { PageHeader } from "@/components/ui/page-header";
 import { warehouseDashboardService } from "@/services/warehouseDashboard.service";
 import { useAuth } from "@/contexts/AuthContext";
-import { useOutlet } from "@/contexts/OutletContext";
+import { useOutletFilter } from "@/hooks/useOutletFilter";
+import { OutletFilterSelect } from "@/components/OutletFilterSelect";
 import { cn } from "@/lib/utils";
 
 const fmt = (n: number) =>
@@ -76,7 +77,7 @@ export default function WarehouseDashboard() {
   // it is Super-Admin-only. The backend already returns 0 for everyone else — this just
   // avoids showing them a meaningless "Rs. 0 / 0 outlets owing" tile.
   const isSuperAdmin = user?.role === "Super Admin";
-  const { selectedOutletId } = useOutlet();
+  const { outletId: selectedOutletId, setOutletId, outlets, isSuperAdmin: isSuperAdminFilter } = useOutletFilter();
 
   const [warehouseId, setWarehouseId] = useState("all");
   const [startDate, setStartDate] = useState("");
@@ -94,6 +95,7 @@ export default function WarehouseDashboard() {
         warehouseId: filters.warehouseId !== "all" ? filters.warehouseId : undefined,
         startDate: filters.startDate,
         endDate: filters.endDate,
+        outletId: selectedOutletId !== "all" ? selectedOutletId : undefined,
       }),
   });
 
@@ -120,6 +122,12 @@ export default function WarehouseDashboard() {
       <Card className="shadow-sm">
         <CardContent className="py-3">
           <div className="flex flex-wrap items-end gap-3">
+            {isSuperAdminFilter && (
+              <div className="space-y-1">
+                <Label className="text-xs">Outlet</Label>
+                <OutletFilterSelect outletId={selectedOutletId} setOutletId={setOutletId} outlets={outlets} isSuperAdmin={isSuperAdminFilter} />
+              </div>
+            )}
             <div className="space-y-1">
               <Label className="text-xs">Warehouse</Label>
               <Select value={warehouseId} onValueChange={(val) => {

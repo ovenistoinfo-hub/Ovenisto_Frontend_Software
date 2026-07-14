@@ -63,11 +63,13 @@ export const warehouseDashboardService = {
     warehouseId?: string;
     startDate?: string;
     endDate?: string;
+    outletId?: string;
   }): Promise<WarehouseDashboardData> {
     const qs = new URLSearchParams();
     if (params?.warehouseId) qs.set('warehouseId', params.warehouseId);
     if (params?.startDate) qs.set('startDate', params.startDate);
     if (params?.endDate) qs.set('endDate', params.endDate);
+    if (params?.outletId) qs.set('outletId', params.outletId);
     const query = qs.toString() ? `?${qs.toString()}` : '';
     const res = await api.get<{ success: boolean; data: WarehouseDashboardData }>(
       `/warehouses/dashboard-stats${query}`
