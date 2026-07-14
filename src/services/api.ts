@@ -51,12 +51,14 @@ async function request<T = unknown>(
   options: RequestInit = {}
 ): Promise<T> {
   const token = getAccessToken();
+  const outletId = outletStore.get();
+  const outletHeader = outletId && outletId !== 'all' ? { 'X-Outlet-Id': outletId } : {};
 
   const res = await fetch(`${API_BASE}${endpoint}`, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
-      'X-Outlet-Id': outletStore.get(),
+      ...outletHeader,
       ...(token && { Authorization: `Bearer ${token}` }),
       ...options.headers,
     },
@@ -72,7 +74,7 @@ async function request<T = unknown>(
         ...options,
         headers: {
           'Content-Type': 'application/json',
-          'X-Outlet-Id': outletStore.get(),
+          ...outletHeader,
           ...(newToken && { Authorization: `Bearer ${newToken}` }),
           ...options.headers,
         },
