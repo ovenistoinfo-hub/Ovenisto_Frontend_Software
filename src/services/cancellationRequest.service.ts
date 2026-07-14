@@ -68,9 +68,10 @@ export const cancellationRequestService = {
     return res.data;
   },
 
-  async list(params?: { status?: string }): Promise<CancellationRequestRecord[]> {
+  async list(params?: { status?: string; outletId?: string }): Promise<CancellationRequestRecord[]> {
     const q = new URLSearchParams();
-    if (params?.status) q.set('status', params.status);
+    if (params?.status)   q.set('status',   params.status);
+    if (params?.outletId) q.set('outletId', params.outletId);
     const res = await api.get<{ success: boolean; data: CancellationRequestRecord[] }>(
       `/cancellation-requests?${q.toString()}`,
     );

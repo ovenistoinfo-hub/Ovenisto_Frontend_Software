@@ -17,7 +17,8 @@ import {
   type CancellationRequestRecord,
 } from "@/services/cancellationRequest.service";
 import { userService } from "@/services/user.service";
-import { useOutlet } from "@/contexts/OutletContext";
+import { useOutletFilter } from "@/hooks/useOutletFilter";
+import { OutletFilterSelect } from "@/components/OutletFilterSelect";
 
 // Rank-and-file staff only — never a manager/admin (they're the approver pool, not
 // someone who gets blamed/penalized for a cancellation).
@@ -30,7 +31,7 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 const CancellationRequests = () => {
-  const { selectedOutletId } = useOutlet();
+  const { outletId: selectedOutletId, setOutletId, outlets, isSuperAdmin } = useOutletFilter();
   const queryClient = useQueryClient();
 
   const [statusFilter, setStatusFilter] = useState<"pending" | "approved" | "rejected" | "all">("pending");
@@ -41,7 +42,10 @@ const CancellationRequests = () => {
 
   const { data: requests = [], isLoading } = useQuery({
     queryKey: ["cancellation-requests", statusFilter, selectedOutletId],
-    queryFn: () => cancellationRequestService.list(statusFilter === "all" ? undefined : { status: statusFilter }),
+    queryFn: () => cancellationRequestService.list({
+      status: statusFilter === "all" ? undefined : statusFilter,
+      outletId: selectedOutletId !== "all" ? selectedOutletId : undefined,
+    }),
   });
 
   const { data: staffPicker = [] } = useQuery({
@@ -78,11 +82,14 @@ const CancellationRequests = () => {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        icon={<Ban className="h-5 w-5" />}
-        title="Cancellation Requests"
-        subtitle="Review and approve/reject order-cancellation requests from staff"
-      />
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <PageHeader
+          icon={<Ban className="h-5 w-5" />}
+          title="Cancellation Requests"
+          subtitle="Review and approve/reject order-cancellation requests from staff"
+        />
+        <OutletFilterSelect outletId={selectedOutletId} setOutletId={setOutletId} outlets={outlets} isSuperAdmin={isSuperAdmin} />
+      </div>
 
       <div className="flex gap-2 flex-wrap">
         {(["pending", "approved", "rejected", "all"] as const).map(f => (
