@@ -48,7 +48,7 @@ export const attendanceService = {
     return { data: res.data, meta: (res as any).meta };
   },
 
-  async getAll(params?: { date?: string; startDate?: string; endDate?: string; userId?: string; status?: string; page?: number }): Promise<AttendancePage> {
+  async getAll(params?: { date?: string; startDate?: string; endDate?: string; userId?: string; status?: string; page?: number; outletId?: string }): Promise<AttendancePage> {
     const q = new URLSearchParams();
     if (params?.date)      q.set('date',      params.date);
     if (params?.startDate) q.set('startDate', params.startDate);
@@ -56,6 +56,7 @@ export const attendanceService = {
     if (params?.userId)    q.set('userId',    params.userId);
     if (params?.status)    q.set('status',    params.status);
     if (params?.page)      q.set('page',      String(params.page));
+    if (params?.outletId)  q.set('outletId',  params.outletId);
     q.set('limit', '100');
     const res = await api.get<{ success: boolean; data: AttendanceRecord[]; meta: AttendancePage['meta'] }>(
       `/attendance?${q}`

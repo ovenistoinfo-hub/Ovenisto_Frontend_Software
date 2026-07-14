@@ -59,10 +59,11 @@ export const leaveService = {
     return res.data;
   },
 
-  async getAll(params?: { status?: string; userId?: string }): Promise<LeaveRequest[]> {
+  async getAll(params?: { status?: string; userId?: string; outletId?: string }): Promise<LeaveRequest[]> {
     const q = new URLSearchParams();
-    if (params?.status) q.set('status', params.status);
-    if (params?.userId) q.set('userId', params.userId);
+    if (params?.status)   q.set('status',   params.status);
+    if (params?.userId)   q.set('userId',   params.userId);
+    if (params?.outletId) q.set('outletId', params.outletId);
     const res = await api.get<{ success: boolean; data: LeaveRequest[] }>(`/leave-requests?${q}`);
     return res.data;
   },

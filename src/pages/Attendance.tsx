@@ -21,7 +21,8 @@ import { leaveService, type LeaveBalance } from "@/services/leave.service";
 import { scheduleService, type StaffSchedule, SHIFT_COLORS } from "@/services/schedule.service";
 import { userService, type UserRecord } from "@/services/user.service";
 import { settingsService } from "@/services/settings.service";
-import { useOutlet } from "@/contexts/OutletContext";
+import { useOutletFilter } from "@/hooks/useOutletFilter";
+import { OutletFilterSelect } from "@/components/OutletFilterSelect";
 import { useAuth } from "@/contexts/AuthContext";
 
 const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -131,7 +132,7 @@ function draftKey(userId: string, weekStart: string): string {
 
 export default function AttendancePage() {
   const qc = useQueryClient();
-  const { selectedOutletId } = useOutlet();
+  const { outletId: selectedOutletId, setOutletId, outlets, isSuperAdmin: isSuperAdminFilter } = useOutletFilter();
   const { user: authUser } = useAuth();
   const isAdminOrHigher = ["Super Admin", "Admin"].includes(authUser?.role ?? "");
   const isSuperAdmin = authUser?.role === "Super Admin";
@@ -172,7 +173,7 @@ export default function AttendancePage() {
   // ── Queries ──
   const { data: usersResult } = useQuery({
     queryKey: ["users-list", selectedOutletId],
-    queryFn: () => userService.getUsers({ limit: 500 } as any),
+    queryFn: () => userService.getUsers({ limit: 500, outletId: selectedOutletId !== "all" ? selectedOutletId : undefined } as any),
   });
   const users: UserRecord[] = usersResult?.data ?? [];
   const staffUsers = useMemo(() => users.filter(u => !["Rider", "Customer Screen", "Admin", "Super Admin"].includes(u.role)), [users]);
@@ -192,12 +193,16 @@ export default function AttendancePage() {
       startDate: attFrom,
       endDate:   attTo,
       userId: attUserFilter !== "all" ? attUserFilter : undefined,
+      outletId: selectedOutletId !== "all" ? selectedOutletId : undefined,
     }),
   });
 
   const { data: leaveRequests = [], refetch: refetchLeaves } = useQuery({
     queryKey: ["all-leaves", selectedOutletId, leaveFilter],
-    queryFn: () => leaveService.getAll({ status: leaveFilter === "all" ? undefined : leaveFilter }),
+    queryFn: () => leaveService.getAll({
+      status: leaveFilter === "all" ? undefined : leaveFilter,
+      outletId: selectedOutletId !== "all" ? selectedOutletId : undefined,
+    }),
   });
 
   const { data: balances = [], refetch: refetchBalances } = useQuery({
@@ -205,22 +210,23 @@ export default function AttendancePage() {
     queryFn: () => leaveService.getAllBalances(),
   });
 
+  const scheduleOutletId = selectedOutletId !== "all" ? selectedOutletId : undefined;
   const { data: prevSchedules = [] } = useQuery({
     queryKey: ["all-schedules", selectedOutletId, prevWeekStart],
-    queryFn: () => scheduleService.getAll({ weekStart: prevWeekStart }),
+    queryFn: () => scheduleService.getAll({ weekStart: prevWeekStart, outletId: scheduleOutletId }),
   });
   const { data: currSchedules = [] } = useQuery({
     queryKey: ["all-schedules", selectedOutletId, currentWeekStart],
-    queryFn: () => scheduleService.getAll({ weekStart: currentWeekStart }),
+    queryFn: () => scheduleService.getAll({ weekStart: currentWeekStart, outletId: scheduleOutletId }),
   });
   const { data: nextSchedules = [] } = useQuery({
     queryKey: ["all-schedules", selectedOutletId, nextWeekStart],
-    queryFn: () => scheduleService.getAll({ weekStart: nextWeekStart }),
+    queryFn: () => scheduleService.getAll({ weekStart: nextWeekStart, outletId: scheduleOutletId }),
   });
 
   const { data: approvedLeaves = [] } = useQuery({
     queryKey: ["approved-leaves-sched", selectedOutletId],
-    queryFn: () => leaveService.getAll({ status: "approved" }),
+    queryFn: () => leaveService.getAll({ status: "approved", outletId: scheduleOutletId }),
   });
 
   // ── Mutations ──
@@ -450,11 +456,14 @@ export default function AttendancePage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        icon={<Clock className="h-5 w-5" />}
-        title="HR Management"
-        subtitle="Attendance, leave requests, and schedules"
-      />
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <PageHeader
+          icon={<Clock className="h-5 w-5" />}
+          title="HR Management"
+          subtitle="Attendance, leave requests, and schedules"
+        />
+        <OutletFilterSelect outletId={selectedOutletId} setOutletId={setOutletId} outlets={outlets} isSuperAdmin={isSuperAdminFilter} />
+      </div>
 
       <Tabs defaultValue="attendance">
         <TabsList className="flex-wrap h-auto gap-1">

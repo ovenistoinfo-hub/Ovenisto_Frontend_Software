@@ -35,10 +35,11 @@ export const scheduleService = {
     return res.data;
   },
 
-  async getAll(params?: { weekStart?: string; userId?: string }): Promise<StaffSchedule[]> {
+  async getAll(params?: { weekStart?: string; userId?: string; outletId?: string }): Promise<StaffSchedule[]> {
     const q = new URLSearchParams();
     if (params?.weekStart) q.set('weekStart', params.weekStart);
     if (params?.userId)    q.set('userId',    params.userId);
+    if (params?.outletId)  q.set('outletId',  params.outletId);
     const res = await api.get<{ success: boolean; data: StaffSchedule[] }>(`/staff-schedules?${q}`);
     return res.data;
   },
