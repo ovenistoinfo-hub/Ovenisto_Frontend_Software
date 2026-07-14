@@ -134,6 +134,7 @@ export default function AttendancePage() {
   const { selectedOutletId } = useOutlet();
   const { user: authUser } = useAuth();
   const isAdminOrHigher = ["Super Admin", "Admin"].includes(authUser?.role ?? "");
+  const isSuperAdmin = authUser?.role === "Super Admin";
   const today = new Date().toISOString().split("T")[0];
   const thirtyDaysAgo = new Date(Date.now() - 30 * 86_400_000).toISOString().split("T")[0];
 
@@ -974,7 +975,7 @@ export default function AttendancePage() {
                           <div className="flex gap-1 justify-center flex-wrap">
                             {inEditMode ? (
                               <>
-                                {hasPending ? (
+                                {hasPending && !isSuperAdmin ? (
                                   <Button size="sm" variant="outline" className="h-6 text-[10px] px-1.5" disabled={saveSched.isPending}
                                     onClick={() => saveSched.mutate({ userId: u.id, weekStart: activeSection.weekStart, shifts: buildShiftsPayload(u.id, activeSection.weekStart, saved) })}>
                                     Save Draft
@@ -997,7 +998,7 @@ export default function AttendancePage() {
                                   <Lock className="h-2.5 w-2.5" />Published
                                 </span>
                               )
-                            ) : saved?.status === "draft" ? (
+                            ) : saved?.status === "draft" && !isSuperAdmin ? (
                               <Button size="sm" className="h-6 text-[10px] px-1.5 gradient-primary text-primary-foreground"
                                 disabled={publishSched.isPending} onClick={() => publishSched.mutate(saved.id)}>
                                 Publish
