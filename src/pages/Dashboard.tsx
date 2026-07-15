@@ -371,45 +371,6 @@ const Dashboard = () => {
         </div>
       </div>
 
-      {/* Payable & Receivable */}
-      <div>
-        <h3 className="text-sm font-semibold text-muted-foreground mb-3 flex items-center gap-2">
-          <ArrowUpCircle className="h-4 w-4" />
-          Payable & Receivable
-        </h3>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <Card className="shadow-sm border-warning/20">
-            <CardContent className="p-5">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs text-muted-foreground font-medium">Total Payable</p>
-                  <p className="text-2xl font-bold mt-1 text-warning">{currency} {(d?.payable ?? 0).toLocaleString()}</p>
-                  <span className="text-xs text-muted-foreground">Outstanding to suppliers</span>
-                </div>
-                <div className="h-10 w-10 rounded-lg flex items-center justify-center bg-warning/10">
-                  <ArrowUpCircle className="h-5 w-5 text-warning" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="shadow-sm border-info/20">
-            <CardContent className="p-5">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs text-muted-foreground font-medium">Total Receivable</p>
-                  <p className="text-2xl font-bold mt-1 text-info">{currency} {(d?.receivable ?? 0).toLocaleString()}</p>
-                  <span className="text-xs text-muted-foreground">Outstanding from customers</span>
-                </div>
-                <div className="h-10 w-10 rounded-lg flex items-center justify-center bg-info/10">
-                  <ArrowDownCircle className="h-5 w-5 text-info" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-
       {/* Top 10 Best-Selling Items */}
       <div>
         <h3 className="text-sm font-semibold text-muted-foreground mb-3 flex items-center gap-2">
