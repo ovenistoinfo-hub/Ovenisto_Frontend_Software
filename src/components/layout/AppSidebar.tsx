@@ -56,7 +56,6 @@ const navSections = [
       { title: "Meal Types", url: "/items/meal-types" },
       { title: "Food Menu", url: "/items/food-menu" },
       { title: "Add Food Item", url: "/items/food-menu/add" },
-      { title: "Pre-Made Food", url: "/items/pre-made-food" },
     ]},
     { title: "Production", url: "/production", icon: Factory, module: "production" },
     { title: "Stock", icon: Package, module: "stock", children: [

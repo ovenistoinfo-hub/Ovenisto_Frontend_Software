@@ -33,7 +33,6 @@ const MenuCategories = lazy(() => import("./pages/items/MenuCategories"));
 const FoodMenu = lazy(() => import("./pages/items/FoodMenu"));
 const FoodMenuForm = lazy(() => import("./pages/items/FoodMenuForm"));
 const MealTypes = lazy(() => import("./pages/items/MealTypes"));
-const PreMadeFood = lazy(() => import("./pages/items/PreMadeFood"));
 const Warehouses = lazy(() => import("./pages/Warehouses"));
 const KitchenStock = lazy(() => import("./pages/KitchenStock"));
 const Production = lazy(() => import("./pages/Production"));
@@ -153,7 +152,6 @@ function AppRoutes() {
       <Route path="/items/food-menu" element={<ProtectedRoute module="items"><AppLayout><FoodMenu /></AppLayout></ProtectedRoute>} />
       <Route path="/items/food-menu/add" element={<ProtectedRoute module="items"><AppLayout><FoodMenuForm /></AppLayout></ProtectedRoute>} />
       <Route path="/items/food-menu/edit/:id" element={<ProtectedRoute module="items"><AppLayout><FoodMenuForm /></AppLayout></ProtectedRoute>} />
-      <Route path="/items/pre-made-food" element={<ProtectedRoute module="items"><AppLayout><PreMadeFood /></AppLayout></ProtectedRoute>} />
       <Route path="/production" element={<ProtectedRoute module="production"><AppLayout><Production /></AppLayout></ProtectedRoute>} />
       <Route path="/stock/adjustments" element={<ProtectedRoute module="stock"><AppLayout><StockAdjustments /></AppLayout></ProtectedRoute>} />
       <Route path="/sales" element={<ProtectedRoute module="sales"><AppLayout><Sales /></AppLayout></ProtectedRoute>} />

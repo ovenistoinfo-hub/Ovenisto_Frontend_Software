@@ -19,6 +19,7 @@ import { Plus, Search, Eye, CheckCircle2, XCircle, Trash2, ClipboardList, Printe
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/ui/page-header";
+import { useOutletFilter } from "@/hooks/useOutletFilter";
 
 const STATUS_STYLE: Record<string, string> = {
   PENDING: "bg-yellow-100 text-yellow-800",
@@ -35,6 +36,7 @@ const Demands = () => {
   const queryClient = useQueryClient();
   const canCreate  = ['Kitchen Manager', 'Manager', 'Admin'].includes(user?.role ?? '');
   const canApprove = ['Super Admin', 'Admin', 'Manager'].includes(user?.role ?? '');
+  const { outletId } = useOutletFilter();
 
   // Data state
   const [warehouses, setWarehouses] = useState<WarehouseRecord[]>([]);
@@ -66,9 +68,10 @@ const Demands = () => {
   const [loadingSupplyStock, setLoadingSupplyStock] = useState(false);
 
   const { data: demands = [], isLoading: loading } = useQuery({
-    queryKey: ["demands", { status: filterStatus }],
+    queryKey: ["demands", { status: filterStatus, outletId }],
     queryFn: () => demandService.getAll({
       ...(filterStatus !== "ALL" && { status: filterStatus }),
+      outletId,
     }),
     // This list changes from other users' actions (another branch approving/creating a
     // demand) with no realtime push — override the app-wide "don't refetch" defaults so
@@ -368,7 +371,11 @@ const Demands = () => {
 
   return (
     <div className="space-y-6">
-      <PageHeader icon={<ClipboardList className="h-5 w-5" />} title="Demand Lists" subtitle="Warehouse stock request and approval management" actions={canCreate ? (<Button className="gradient-primary text-primary-foreground" onClick={() => { if (showDialog) { setShowDialog(false); } else { openAdd(); } }}>{showDialog ? <><X className="h-4 w-4 mr-2" />Close Form</> : <><Plus className="h-4 w-4 mr-2" />New Demand</>}</Button>) : undefined} />
+      <PageHeader icon={<ClipboardList className="h-5 w-5" />} title="Demand Lists" subtitle="Warehouse stock request and approval management" actions={
+        <div className="flex items-center gap-2">
+          {canCreate && (<Button className="gradient-primary text-primary-foreground" onClick={() => { if (showDialog) { setShowDialog(false); } else { openAdd(); } }}>{showDialog ? <><X className="h-4 w-4 mr-2" />Close Form</> : <><Plus className="h-4 w-4 mr-2" />New Demand</>}</Button>)}
+        </div>
+      } />
 
       {/* Status filter pills — PR style */}
       <div className="flex gap-1.5 flex-wrap">

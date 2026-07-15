@@ -177,7 +177,7 @@ const Sales = () => {
               </Table>
             </div>
           )}
-          <TablePagination currentPage={page} totalItems={total} onPageChange={setPage} />
+          <TablePagination currentPage={page} totalItems={total} onPageChange={setPage} pageSize={PAGE_SIZE} />
         </CardContent>
       </Card>
 

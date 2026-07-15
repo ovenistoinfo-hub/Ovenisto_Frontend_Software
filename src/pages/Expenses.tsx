@@ -169,7 +169,7 @@ const Expenses = () => {
                   </div></TableCell></TableRow>))}</TableBody>
                 </Table>
               </div>
-              <TablePagination currentPage={page} totalItems={totalItems} onPageChange={setPage} />
+              <TablePagination currentPage={page} totalItems={totalItems} onPageChange={setPage} pageSize={20} />
             </>
           )}
         </CardContent></Card>

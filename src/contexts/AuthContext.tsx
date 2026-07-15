@@ -148,6 +148,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const hasPermission = useCallback((module: string) => {
     if (!user) return false;
+    // Explicitly exclude purchase requests for Super Admin as it is outlet-specific
+    if (module === "purchase-requests" && user.role === "Super Admin") {
+      return false;
+    }
     const perms = rolePermissions[user.role] || [];
     if (perms.includes("*")) return true;
     return perms.includes(module);

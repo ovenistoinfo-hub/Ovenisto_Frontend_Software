@@ -16,7 +16,7 @@ export function OutletFilterSelect({ outletId, setOutletId, outlets, isSuperAdmi
         <SelectValue placeholder="Outlet" />
       </SelectTrigger>
       <SelectContent>
-        <SelectItem value="all">All Outlets</SelectItem>
+        <SelectItem value="none">Null</SelectItem>
         {outlets.map((o) => (
           <SelectItem key={o.id} value={o.id}>{o.name}</SelectItem>
         ))}

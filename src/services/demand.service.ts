@@ -38,6 +38,7 @@ interface DemandFilters {
   status?: DemandStatus;
   requestingWHId?: string;
   supplyingWHId?: string;
+  outletId?: string;
 }
 
 interface CreateDemandPayload {
@@ -57,6 +58,7 @@ export const demandService = {
     if (filters.status)         params.set('status',         filters.status);
     if (filters.requestingWHId) params.set('requestingWHId', filters.requestingWHId);
     if (filters.supplyingWHId)  params.set('supplyingWHId',  filters.supplyingWHId);
+    if (filters.outletId)       params.set('outletId',       filters.outletId);
     const qs = params.toString();
     const res = await api.get<{ success: boolean; data: DemandRecord[] }>(`/demands${qs ? `?${qs}` : ''}`);
     return res.data;

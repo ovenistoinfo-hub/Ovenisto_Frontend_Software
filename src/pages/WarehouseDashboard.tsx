@@ -79,7 +79,10 @@ export default function WarehouseDashboard() {
   const isSuperAdmin = user?.role === "Super Admin";
   const { outlets, isSuperAdmin: isSuperAdminFilter } = useOutletFilter();
 
-  const [localOutletId, setLocalOutletId] = useState(() => localStorage.getItem("wh_dashboard_selected_outlet_id") || "all");
+  const [localOutletId, setLocalOutletId] = useState(() => {
+    const cached = localStorage.getItem("wh_dashboard_selected_outlet_id");
+    return cached && cached !== "all" ? cached : "none";
+  });
   const [warehouseId, setWarehouseId] = useState(() => localStorage.getItem("wh_dashboard_selected_id") || "");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
@@ -126,6 +129,24 @@ export default function WarehouseDashboard() {
     }
   }, [d, warehouseId, user?.role, isSuperAdminFilter]);
 
+  // When localOutletId changes, auto-select the first warehouse matching that outlet
+  useEffect(() => {
+    if (d?.activeWarehouses && d.activeWarehouses.length > 0) {
+      const visibleWHs = d.activeWarehouses.filter(w => {
+        if (!isSuperAdminFilter) return true;
+        if (localOutletId === "none") return w.type === 'MAIN';
+        return w.outletId === localOutletId;
+      });
+      // If the currently selected warehouse is not in the visible list, select the first one
+      if (visibleWHs.length > 0 && !visibleWHs.some(w => w.id === warehouseId)) {
+        const defId = visibleWHs[0].id;
+        setWarehouseId(defId);
+        setFilters(p => ({ ...p, warehouseId: defId }));
+        localStorage.setItem("wh_dashboard_selected_id", defId);
+      }
+    }
+  }, [localOutletId, d?.activeWarehouses, warehouseId, isSuperAdminFilter]);
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -166,7 +187,11 @@ export default function WarehouseDashboard() {
                 </SelectTrigger>
                 <SelectContent>
                   {(d?.activeWarehouses ?? [])
-                    .filter(w => localOutletId === "all" || w.outletId === localOutletId)
+                    .filter(w => {
+                      if (!isSuperAdminFilter) return true;
+                      if (localOutletId === "none") return w.type === 'MAIN';
+                      return w.outletId === localOutletId;
+                    })
                     .map(w => (
                       <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
                     ))}
@@ -199,8 +224,8 @@ export default function WarehouseDashboard() {
                   size="sm" 
                   className="h-9 px-3"
                   onClick={() => {
-                    setLocalOutletId("all");
-                    localStorage.setItem("wh_dashboard_selected_outlet_id", "all");
+                    setLocalOutletId("none");
+                    localStorage.setItem("wh_dashboard_selected_outlet_id", "none");
                     const mainWh = (d?.activeWarehouses ?? []).find(w => w.type === 'MAIN');
                     if (mainWh) {
                       setWarehouseId(mainWh.id);
