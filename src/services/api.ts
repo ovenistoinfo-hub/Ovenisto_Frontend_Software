@@ -186,7 +186,7 @@ function invalidateCache(endpoint: string): void {
   keysToDelete.forEach(k => cache.delete(k));
 }
 
-async function cachedGet<T>(endpoint: string): Promise<T> {
+async function cachedGet<T>(endpoint: string, options?: RequestInit): Promise<T> {
   const key = getCacheKey(endpoint);
   const ttl = getCacheTTL(endpoint);
   const now = Date.now();
@@ -204,7 +204,7 @@ async function cachedGet<T>(endpoint: string): Promise<T> {
   }
 
   // Make the request and cache the promise for deduplication
-  const promise = request<T>(endpoint).then(data => {
+  const promise = request<T>(endpoint, options).then(data => {
     cache.set(key, { data, timestamp: Date.now() });
     return data;
   }).catch(err => {
@@ -220,7 +220,7 @@ async function cachedGet<T>(endpoint: string): Promise<T> {
 // --- Exported API methods ---
 
 export const api = {
-  get: <T = unknown>(endpoint: string) => cachedGet<T>(endpoint),
+  get: <T = unknown>(endpoint: string, options?: RequestInit) => cachedGet<T>(endpoint, options),
 
   /** Bypass cache — always fetch fresh */
   getFresh: <T = unknown>(endpoint: string) => {
