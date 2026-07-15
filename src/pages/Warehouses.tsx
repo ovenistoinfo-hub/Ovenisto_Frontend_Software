@@ -116,9 +116,6 @@ const Warehouses = () => {
   const queryClient = useQueryClient();
   const currency = settings.currency || "Rs.";
   const isSuperAdmin = user?.role === "Super Admin";
-  // Manager → Purchase Request only; Admin/Super Admin → Add Purchase only
-  const canRequest  = user?.role === "Manager";
-  const canPurchase = ["Super Admin", "Admin"].includes(user?.role ?? "");
 
   // ── Main page state ──
   const [selectedId, setSelectedId] = useState("");
@@ -194,6 +191,13 @@ const Warehouses = () => {
         })),
   });
   const warehouses = useMemo(() => warehousesData?.warehouses ?? [], [warehousesData]);
+  const selectedWarehouse = useMemo(() => warehouses.find(w => w.id === selectedId), [warehouses, selectedId]);
+  const isMainWarehouseSelected = selectedWarehouse?.type === "MAIN" || selectedWarehouse?.outletId === null;
+
+  // Manager → Purchase Request only; Admin/Super Admin → Add Purchase only (restricted to Main Warehouse for Super Admin)
+  const canRequest  = user?.role === "Manager" && (!isSuperAdmin || isMainWarehouseSelected);
+  const canPurchase = ["Super Admin", "Admin"].includes(user?.role ?? "") && (!isSuperAdmin || isMainWarehouseSelected);
+
   const categories: IngredientCategoryRecord[] = warehousesData?.categories ?? [];
   const suppliers: SupplierRecord[] = warehousesData?.suppliers ?? [];
 
@@ -357,6 +361,7 @@ const Warehouses = () => {
   };
 
   const handleApSave = async () => {
+    if (!canPurchase) { toast.error("You are not authorized to perform actions on this warehouse"); return; }
     const validItems = apItems.filter(i => i.ingredientId && i.qty > 0);
     if (!validItems.length) { toast.error("Add at least one item with quantity"); return; }
     const invalidWaste = validItems.find(i => i.wasteQty > i.qty);
@@ -479,6 +484,7 @@ const Warehouses = () => {
   };
 
   const handlePrSave = async () => {
+    if (!canRequest) { toast.error("You are not authorized to create requests for this warehouse"); return; }
     if (!prWarehouseId) { toast.error("Select a warehouse"); return; }
     const valid = prItems.filter(i => i.ingredientId && i.requestedQty > 0);
     if (!valid.length) { toast.error("Add at least one ingredient with quantity"); return; }
