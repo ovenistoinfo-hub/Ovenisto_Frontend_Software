@@ -77,39 +77,54 @@ export default function WarehouseDashboard() {
   // it is Super-Admin-only. The backend already returns 0 for everyone else — this just
   // avoids showing them a meaningless "Rs. 0 / 0 outlets owing" tile.
   const isSuperAdmin = user?.role === "Super Admin";
-  const { outletId: selectedOutletId, setOutletId, outlets, isSuperAdmin: isSuperAdminFilter } = useOutletFilter();
+  const { outlets, isSuperAdmin: isSuperAdminFilter } = useOutletFilter();
 
-  const [warehouseId, setWarehouseId] = useState("all");
+  const [localOutletId, setLocalOutletId] = useState(() => localStorage.getItem("wh_dashboard_selected_outlet_id") || "all");
+  const [warehouseId, setWarehouseId] = useState(() => localStorage.getItem("wh_dashboard_selected_id") || "");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [filters, setFilters] = useState<{
     warehouseId: string; startDate?: string; endDate?: string;
-  }>({ warehouseId: "all" });
+  }>(() => ({
+    warehouseId: localStorage.getItem("wh_dashboard_selected_id") || "",
+    startDate: undefined,
+    endDate: undefined,
+  }));
 
   const { data, isLoading, refetch, isFetching } = useQuery({
-    // selectedOutletId is part of the key because the response is outlet-scoped server-side
-    // (api.ts sends X-Outlet-Id) — without it, switching outlet would serve stale data.
-    queryKey: ["warehouse-dashboard", selectedOutletId, filters],
+    queryKey: ["warehouse-dashboard", warehouseId, filters],
     queryFn: () =>
       warehouseDashboardService.getStats({
-        warehouseId: filters.warehouseId !== "all" ? filters.warehouseId : undefined,
+        warehouseId: filters.warehouseId || undefined,
         startDate: filters.startDate,
         endDate: filters.endDate,
-        outletId: selectedOutletId !== "all" ? selectedOutletId : undefined,
+        bypassGlobalOutlet: isSuperAdminFilter,
       }),
   });
 
-  // Switching outlet changes which warehouses exist for you, so a warehouse picked under
-  // the previous outlet is no longer selectable — the server would 404 it. Reset to "all".
-  useEffect(() => {
-    setWarehouseId("all");
-    setFilters(p => ({ ...p, warehouseId: "all" }));
-  }, [selectedOutletId]);
-
-  const applyFilters = () =>
-    setFilters({ warehouseId, startDate: startDate || undefined, endDate: endDate || undefined });
-
   const d = data;
+
+  // Handle Auto-Defaults on first load or when warehouseId is unset
+  useEffect(() => {
+    if (d?.activeWarehouses && d.activeWarehouses.length > 0 && !warehouseId) {
+      let defId = "";
+      if (isSuperAdminFilter) {
+        defId = d.activeWarehouses.find(w => w.type === 'MAIN')?.id || d.activeWarehouses[0].id;
+      } else if (user?.role === 'Kitchen Manager') {
+        defId = d.activeWarehouses.find(w => w.type === 'KITCHEN')?.id || d.activeWarehouses[0].id;
+      } else if (user?.role === 'Store Manager') {
+        defId = d.activeWarehouses.find(w => w.type === 'BRANCH')?.id || d.activeWarehouses[0].id;
+      } else {
+        defId = d.activeWarehouses.find(w => w.type === 'BRANCH')?.id || d.activeWarehouses.find(w => w.type === 'KITCHEN')?.id || d.activeWarehouses[0].id;
+      }
+
+      if (defId) {
+        setWarehouseId(defId);
+        setFilters(p => ({ ...p, warehouseId: defId }));
+        localStorage.setItem("wh_dashboard_selected_id", defId);
+      }
+    }
+  }, [d, warehouseId, user?.role, isSuperAdminFilter]);
 
   return (
     <div className="space-y-6">
@@ -125,23 +140,36 @@ export default function WarehouseDashboard() {
             {isSuperAdminFilter && (
               <div className="space-y-1">
                 <Label className="text-xs">Outlet</Label>
-                <OutletFilterSelect outletId={selectedOutletId} setOutletId={setOutletId} outlets={outlets} isSuperAdmin={isSuperAdminFilter} />
+                <OutletFilterSelect 
+                  outletId={localOutletId} 
+                  setOutletId={(id) => {
+                    setLocalOutletId(id);
+                    localStorage.setItem("wh_dashboard_selected_outlet_id", id);
+                  }} 
+                  outlets={outlets} 
+                  isSuperAdmin={isSuperAdminFilter} 
+                />
               </div>
             )}
             <div className="space-y-1">
               <Label className="text-xs">Warehouse</Label>
-              <Select value={warehouseId} onValueChange={(val) => {
-                setWarehouseId(val);
-                setFilters(p => ({ ...p, warehouseId: val }));
-              }}>
+              <Select 
+                value={warehouseId} 
+                onValueChange={(val) => {
+                  setWarehouseId(val);
+                  setFilters(p => ({ ...p, warehouseId: val }));
+                  localStorage.setItem("wh_dashboard_selected_id", val);
+                }}
+              >
                 <SelectTrigger className="h-9 w-[200px]">
-                  <SelectValue placeholder="All Warehouses" />
+                  <SelectValue placeholder="Select Warehouse..." />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Warehouses</SelectItem>
-                  {d?.activeWarehouses.map(w => (
-                    <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
-                  ))}
+                  {(d?.activeWarehouses ?? [])
+                    .filter(w => localOutletId === "all" || w.outletId === localOutletId)
+                    .map(w => (
+                      <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
+                    ))}
                 </SelectContent>
               </Select>
             </div>
@@ -165,6 +193,25 @@ export default function WarehouseDashboard() {
               <Button variant="ghost" size="icon" className="h-9 w-9" onClick={() => refetch()} disabled={isFetching}>
                 <RefreshCw className={cn("h-4 w-4", isFetching && "animate-spin")} />
               </Button>
+              {isSuperAdminFilter && (
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="h-9 px-3"
+                  onClick={() => {
+                    setLocalOutletId("all");
+                    localStorage.setItem("wh_dashboard_selected_outlet_id", "all");
+                    const mainWh = (d?.activeWarehouses ?? []).find(w => w.type === 'MAIN');
+                    if (mainWh) {
+                      setWarehouseId(mainWh.id);
+                      setFilters(p => ({ ...p, warehouseId: mainWh.id }));
+                      localStorage.setItem("wh_dashboard_selected_id", mainWh.id);
+                    }
+                  }}
+                >
+                  Clear Filter
+                </Button>
+              )}
             </div>
           </div>
         </CardContent>
@@ -176,84 +223,129 @@ export default function WarehouseDashboard() {
           {(isSuperAdmin ? [1,2,3,4] : [1,2,3]).map(i => <Skeleton key={i} className="h-24 rounded-xl" />)}
         </div>
       ) : (
-        <div className={cn("grid grid-cols-2 gap-3", isSuperAdmin ? "sm:grid-cols-4" : "sm:grid-cols-3")}>
-          <Card className="shadow-sm border-l-4 border-l-emerald-500 p-4 flex flex-col gap-1">
-            <div className="flex items-center gap-2 text-muted-foreground text-xs font-medium">
-              <Layers className="h-3.5 w-3.5 text-emerald-500" /> Stock Value
-            </div>
-            <p className="text-xl font-black text-emerald-600 dark:text-emerald-400">{fmt(d?.inventoryValue ?? 0)}</p>
-            <p className="text-[11px] text-muted-foreground truncate">{d?.costingTable.length ?? 0} items tracked</p>
-          </Card>
-          <Card className="shadow-sm border-l-4 border-l-red-500 p-4 flex flex-col gap-1">
-            <div className="flex items-center gap-2 text-muted-foreground text-xs font-medium">
-              <Wallet className="h-3.5 w-3.5 text-red-500" /> Payable
-            </div>
-            <p className="text-xl font-black text-red-600 dark:text-red-400">{fmt(d?.payable ?? 0)}</p>
-          </Card>
-          {isSuperAdmin && (
-            <Card className="shadow-sm border-l-4 border-l-blue-500 p-4 flex flex-col gap-1">
-              <div className="flex items-center gap-2 text-muted-foreground text-xs font-medium">
-                <HandCoins className="h-3.5 w-3.5 text-blue-500" /> Receivable
+        (() => {
+          const selectedWH = (d?.activeWarehouses ?? []).find(w => w.id === warehouseId);
+          const warehouseType = selectedWH?.type || (isSuperAdminFilter ? 'MAIN' : 'BRANCH');
+
+          const showPayable = warehouseType === 'MAIN' || warehouseType === 'BRANCH';
+          const showReceivable = warehouseType === 'MAIN';
+          const showProcurement = warehouseType === 'MAIN' || warehouseType === 'BRANCH';
+          const showDistribution = warehouseType === 'MAIN' || warehouseType === 'BRANCH';
+          const showDemands = true; // Demands are relevant to all (MAIN handles incoming, KITCHEN handles outgoing, BRANCH handles both)
+
+          const demandsLabel = warehouseType === 'MAIN' ? 'Incoming Demands' 
+                             : warehouseType === 'KITCHEN' ? 'Outgoing Demands' 
+                             : 'Demands Log';
+
+          const kpiCount = 2 + (showPayable ? 1 : 0) + (showReceivable ? 1 : 0);
+
+          return (
+            <div className="space-y-6">
+              {/* KPI Cards */}
+              <div className={cn("grid grid-cols-2 gap-3", 
+                kpiCount === 4 ? "sm:grid-cols-4" : 
+                kpiCount === 3 ? "sm:grid-cols-3" : 
+                "sm:grid-cols-2"
+              )}>
+                <Card className="shadow-sm border-l-4 border-l-emerald-500 p-4 flex flex-col gap-1">
+                  <div className="flex items-center gap-2 text-muted-foreground text-xs font-medium">
+                    <Layers className="h-3.5 w-3.5 text-emerald-500" /> Stock Value
+                  </div>
+                  <p className="text-xl font-black text-emerald-600 dark:text-emerald-400">{fmt(d?.inventoryValue ?? 0)}</p>
+                  <p className="text-[11px] text-muted-foreground truncate">{d?.costingTable.length ?? 0} items tracked</p>
+                </Card>
+
+                {showPayable && (
+                  <Card className="shadow-sm border-l-4 border-l-red-500 p-4 flex flex-col gap-1">
+                    <div className="flex items-center gap-2 text-muted-foreground text-xs font-medium">
+                      <Wallet className="h-3.5 w-3.5 text-red-500" /> Payable
+                    </div>
+                    <p className="text-xl font-black text-red-600 dark:text-red-400">{fmt(d?.payable ?? 0)}</p>
+                  </Card>
+                )}
+
+                {showReceivable && (
+                  <Card className="shadow-sm border-l-4 border-l-blue-500 p-4 flex flex-col gap-1">
+                    <div className="flex items-center gap-2 text-muted-foreground text-xs font-medium">
+                      <HandCoins className="h-3.5 w-3.5 text-blue-500" /> Receivable
+                    </div>
+                    <p className="text-xl font-black text-blue-600 dark:text-blue-400">{fmt(d?.receivable ?? 0)}</p>
+                  </Card>
+                )}
+
+                <Card className="shadow-sm border-l-4 border-l-purple-500 p-4 flex flex-col gap-1">
+                  <div className="flex items-center gap-2 text-muted-foreground text-xs font-medium">
+                    <Trash2 className="h-3.5 w-3.5 text-purple-500" /> Waste
+                  </div>
+                  <p className="text-xl font-black text-purple-600 dark:text-purple-400">{fmt(d?.waste ?? 0)}</p>
+                </Card>
               </div>
-              <p className="text-xl font-black text-blue-600 dark:text-blue-400">{fmt(d?.receivable ?? 0)}</p>
-            </Card>
-          )}
-          <Card className="shadow-sm border-l-4 border-l-purple-500 p-4 flex flex-col gap-1">
-            <div className="flex items-center gap-2 text-muted-foreground text-xs font-medium">
-              <Trash2 className="h-3.5 w-3.5 text-purple-500" /> Waste
+
+              {/* Detail Stats Sections */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {/* 1. Purchase Orders (Procurement) */}
+                {showProcurement && (
+                  <Card className="shadow-sm">
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-sm flex items-center gap-2">
+                        <ShoppingBag className="h-4 w-4 text-blue-500" />
+                        Purchase Orders
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="grid grid-cols-2 gap-2">
+                      <StatCard icon={BarChart3} label="Total Orders" value={d?.procurement.totalOrders ?? 0} color="info" />
+                      <StatCard icon={DollarSign} label="Procurement Cost" value={fmt(d?.procurement.procurementCost ?? 0)} color="info" />
+                      <StatCard icon={AlertTriangle} label={`Unpaid to Vendors (${d?.procurement.unpaidCount ?? 0})`} value={fmt(d?.procurement.unpaid ?? 0)} color={d?.procurement.unpaid ? "destructive" : "default"} />
+                      <StatCard icon={CheckCircle2} label="Vendor Payments" value={fmt(d?.procurement.payments ?? 0)} color="success" />
+                      <StatCard icon={TrendingUp} label="Discount on Purchases" value={fmt(d?.procurement.discount ?? 0)} />
+                      <StatCard icon={DollarSign} label="GST on Purchases" value={fmt(d?.procurement.gst ?? 0)} />
+                      <StatCard icon={AlertTriangle} label={`Stock Received - Unpaid (${d?.procurement.stockReceivedUnpaidCount ?? 0})`} value={fmt(d?.procurement.stockReceivedUnpaid ?? 0)} color={d?.procurement.stockReceivedUnpaid ? "warning" : "default"} />
+                      <StatCard icon={PackageCheck} label={`Stock Received - Paid (${d?.procurement.stockReceivedPaidCount ?? 0})`} value={fmt(d?.procurement.stockReceivedPaid ?? 0)} color="success" />
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* 2. Invoices (Distribution / Outflow) */}
+                {showDistribution && (
+                  <Card className="shadow-sm">
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-sm flex items-center gap-2">
+                        <FileText className="h-4 w-4 text-emerald-500" />
+                        Invoices
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="grid grid-cols-2 gap-2">
+                      <StatCard icon={ArrowUpDown} label="Total Invoices" value={d?.distribution?.totalChallans ?? 0} color="info" />
+                      <StatCard icon={DollarSign} label="Warehouse Revenue" value={fmt(d?.distribution?.outflowValue ?? 0)} color="success" />
+                      <StatCard icon={TrendingUp} label="Avg. Sale Value" value={fmt(d?.distribution?.totalChallans ? (d.distribution.outflowValue / d.distribution.totalChallans) : 0)} color="info" />
+                      <StatCard icon={CheckCircle2} label="Customer Collections" value={fmt(d?.distribution?.totalPaid ?? 0)} color="success" />
+                      <StatCard icon={Clock} label="Pending Delivery" value={d?.distribution?.pendingChallans ?? 0} color={d?.distribution?.pendingChallans ? "warning" : "default"} />
+                      <StatCard icon={Truck} label="Delivered - Unpaid" value={d?.distribution?.dispatchedChallans ?? 0} color={d?.distribution?.dispatchedChallans ? "warning" : "default"} />
+                      <StatCard icon={PackageCheck} label="Delivered - Paid" value={d?.distribution?.receivedChallans ?? 0} color="success" />
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* 3. Stock Demands (Inbound/Outbound requests) */}
+                {showDemands && (
+                  <Card className={cn("shadow-sm", !showProcurement && !showDistribution ? "col-span-1 md:col-span-2 lg:col-span-3" : "")}>
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-sm flex items-center gap-2">
+                        <ClipboardList className="h-4 w-4 text-purple-500" />
+                        {demandsLabel}
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="grid grid-cols-2 gap-2">
+                      <StatCard icon={BarChart3} label="Total Demands" value={d?.distribution?.totalDemands ?? 0} color="info" />
+                      <StatCard icon={Clock} label="Pending Demands" value={d?.distribution?.pendingDemands ?? 0} color={d?.distribution?.pendingDemands ? "warning" : "default"} />
+                      <StatCard icon={CheckCircle2} label="Fulfilled Demands" value={d?.distribution?.fulfilledDemands ?? 0} color="success" />
+                    </CardContent>
+                  </Card>
+                )}
+              </div>
             </div>
-            <p className="text-xl font-black text-purple-600 dark:text-purple-400">{fmt(d?.waste ?? 0)}</p>
-          </Card>
-        </div>
-      )}
-
-      {/* ── Double Column: Purchase Orders vs Invoices ── */}
-      {isLoading ? (
-        <div className="grid md:grid-cols-2 gap-4">
-          <Skeleton className="h-72 rounded-xl" />
-          <Skeleton className="h-72 rounded-xl" />
-        </div>
-      ) : (
-        <div className="grid md:grid-cols-2 gap-4">
-          {/* Purchase Orders */}
-          <Card className="shadow-sm">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm flex items-center gap-2">
-                <ShoppingBag className="h-4 w-4 text-blue-500" />
-                Purchase Orders
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="grid grid-cols-2 gap-2">
-              <StatCard icon={BarChart3} label="Total Orders" value={d?.procurement.totalOrders ?? 0} color="info" />
-              <StatCard icon={DollarSign} label="Inventory Procurement Cost" value={fmt(d?.procurement.procurementCost ?? 0)} color="info" />
-              <StatCard icon={AlertTriangle} label={`Unpaid to Vendors (${d?.procurement.unpaidCount ?? 0})`} value={fmt(d?.procurement.unpaid ?? 0)} color={d?.procurement.unpaid ? "destructive" : "default"} />
-              <StatCard icon={CheckCircle2} label="Vendor Payments" value={fmt(d?.procurement.payments ?? 0)} color="success" />
-              <StatCard icon={TrendingUp} label="Discount on Purchases" value={fmt(d?.procurement.discount ?? 0)} />
-              <StatCard icon={DollarSign} label="GST on Purchases" value={fmt(d?.procurement.gst ?? 0)} />
-              <StatCard icon={AlertTriangle} label={`Stock Received - Unpaid (${d?.procurement.stockReceivedUnpaidCount ?? 0})`} value={fmt(d?.procurement.stockReceivedUnpaid ?? 0)} color={d?.procurement.stockReceivedUnpaid ? "warning" : "default"} />
-              <StatCard icon={PackageCheck} label={`Stock Received - Paid (${d?.procurement.stockReceivedPaidCount ?? 0})`} value={fmt(d?.procurement.stockReceivedPaid ?? 0)} color="success" />
-            </CardContent>
-          </Card>
-
-          {/* Invoices — mapped from stock transfers and outflow value */}
-          <Card className="shadow-sm">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm flex items-center gap-2">
-                <FileText className="h-4 w-4 text-emerald-500" />
-                Invoices
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="grid grid-cols-2 gap-2">
-              <StatCard icon={ArrowUpDown} label="Total Invoices" value={d?.distribution?.totalChallans ?? 0} color="info" />
-              <StatCard icon={DollarSign} label="Warehouse Revenue" value={fmt(d?.distribution?.outflowValue ?? 0)} color="success" />
-              <StatCard icon={TrendingUp} label="Avg. Sale Value" value={fmt(d?.distribution?.totalChallans ? (d.distribution.outflowValue / d.distribution.totalChallans) : 0)} color="info" />
-              <StatCard icon={CheckCircle2} label="Customer Collections" value={fmt(d?.distribution?.totalPaid ?? 0)} color="success" />
-              <StatCard icon={Clock} label="Pending Delivery" value={d?.distribution?.pendingChallans ?? 0} color={d?.distribution?.pendingChallans ? "warning" : "default"} />
-              <StatCard icon={Truck} label="Delivered - Unpaid" value={d?.distribution?.dispatchedChallans ?? 0} color={d?.distribution?.dispatchedChallans ? "warning" : "default"} />
-              <StatCard icon={PackageCheck} label="Delivered - Paid" value={d?.distribution?.receivedChallans ?? 0} color="success" />
-            </CardContent>
-          </Card>
-        </div>
+          );
+        })()
       )}
     </div>
   );
