@@ -80,12 +80,13 @@ interface ListResponse {
 }
 
 export const employeeService = {
-  async getAll(params?: { page?: number; limit?: number; search?: string; status?: string }): Promise<{ data: EmployeeRecord[]; meta: ListResponse['meta'] }> {
+  async getAll(params?: { page?: number; limit?: number; search?: string; status?: string; outletId?: string }): Promise<{ data: EmployeeRecord[]; meta: ListResponse['meta'] }> {
     const query = new URLSearchParams();
     if (params?.page) query.set('page', String(params.page));
     if (params?.limit) query.set('limit', String(params.limit));
     if (params?.search) query.set('search', params.search);
     if (params?.status) query.set('status', params.status);
+    if (params?.outletId) query.set('outletId', params.outletId);
     const qs = query.toString();
     const res = await api.get<ListResponse>(`/employees${qs ? `?${qs}` : ''}`);
     return { data: res.data, meta: res.meta };

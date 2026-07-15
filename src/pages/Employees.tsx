@@ -19,6 +19,8 @@ import { PageHeader } from "@/components/ui/page-header";
 import { TablePagination, paginate } from "@/components/TablePagination";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
+import { useOutletFilter } from "@/hooks/useOutletFilter";
+import { OutletFilterSelect } from "@/components/OutletFilterSelect";
 
 const RATE_TYPES = ["Hourly", "Daily", "Monthly", "PerShift"];
 const PAY_FREQUENCIES = ["Weekly", "BiWeekly", "Monthly"];
@@ -56,6 +58,7 @@ const Employees = () => {
   const canManage = !isSuperAdmin && ["Super Admin", "Admin", "Manager", "Store Manager"].includes(user?.role ?? "");
   const canEditOrDelete = ["Super Admin", "Admin"].includes(user?.role ?? "");
   const canSeeActionsColumn = ["Super Admin", "Admin", "Manager", "Store Manager"].includes(user?.role ?? "");
+  const { outletId, setOutletId, outlets } = useOutletFilter();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("active");
   const [page, setPage] = useState(1);
@@ -261,8 +264,8 @@ const Employees = () => {
   };
 
   const { data: list = [], isLoading: loading } = useQuery({
-    queryKey: ["employees", statusFilter],
-    queryFn: () => employeeService.getAll({ limit: 200, status: statusFilter === "all" ? undefined : statusFilter }).then(r => r.data),
+    queryKey: ["employees", statusFilter, outletId],
+    queryFn: () => employeeService.getAll({ limit: 200, status: statusFilter === "all" ? undefined : statusFilter, outletId }).then(r => r.data),
   });
 
   const filtered = list.filter(e => {
@@ -283,7 +286,12 @@ const Employees = () => {
         icon={<IdCard className="h-5 w-5" />}
         title="Employees"
         subtitle={`${list.length} employee records`}
-        actions={canManage ? <Button className="gradient-primary text-primary-foreground" onClick={openAdd}><Plus className="h-4 w-4 mr-2" />Add Employee</Button> : undefined}
+        actions={
+          <div className="flex items-center gap-2">
+            <OutletFilterSelect outletId={outletId} setOutletId={setOutletId} outlets={outlets} isSuperAdmin={isSuperAdmin} />
+            {canManage && <Button className="gradient-primary text-primary-foreground" onClick={openAdd}><Plus className="h-4 w-4 mr-2" />Add Employee</Button>}
+          </div>
+        }
       />
 
       {showForm && canManage && (
