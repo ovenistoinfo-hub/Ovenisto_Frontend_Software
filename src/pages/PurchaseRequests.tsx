@@ -28,6 +28,8 @@ import {
 import { warehouseService, type WarehouseRecord } from "@/services/warehouse.service";
 import { inventoryService, type IngredientRecord } from "@/services/inventory.service";
 import { supplierService, type SupplierRecord } from "@/services/supplier.service";
+import { useOutletFilter } from "@/hooks/useOutletFilter";
+import { OutletFilterSelect } from "@/components/OutletFilterSelect";
 
 const STATUS_STYLE: Record<string, { label: string; cls: string }> = {
   PENDING: { label: "Pending", cls: "bg-warning/10 text-warning" },
@@ -51,6 +53,7 @@ const PurchaseRequests = () => {
   const currency = settings.currency || "Rs.";
   const canApprove = ["Super Admin", "Admin"].includes(user?.role ?? "");
   const canCreate = !canApprove; // Only Manager can create requests; Admin/Super Admin supervise only
+  const { outletId, setOutletId, outlets, isSuperAdmin } = useOutletFilter();
   const [searchParams] = useSearchParams();
   const paramAutoOpenDone = useRef(false);
 
@@ -86,8 +89,9 @@ const PurchaseRequests = () => {
   // Fetch list
   const fetchRequests = useCallback(async () => {
     try {
-      const params: { status?: string; page?: number; limit?: number } = { limit: 200 };
+      const params: { status?: string; page?: number; limit?: number; outletId?: string } = { limit: 200 };
       if (statusFilter !== "ALL") params.status = statusFilter;
+      if (outletId) params.outletId = outletId;
       const res = await purchaseRequestService.getAll(params);
       setRequests(res.data);
     } catch (err: Error | unknown) {
@@ -95,7 +99,7 @@ const PurchaseRequests = () => {
     } finally {
       setLoading(false);
     }
-  }, [statusFilter]);
+  }, [statusFilter, outletId]);
 
   useEffect(() => { fetchRequests(); }, [fetchRequests]);
 
@@ -370,11 +374,16 @@ const PurchaseRequests = () => {
         icon={<ClipboardList className="h-5 w-5" />}
         title="Purchase Requests"
         subtitle="Ingredient requisition workflow"
-        actions={canCreate ? (
-          showCreate
-            ? <Button variant="outline" onClick={() => setShowCreate(false)}><X className="h-4 w-4 mr-2" />Close Form</Button>
-            : <Button className="gradient-primary text-primary-foreground" onClick={openCreateDialog}><Plus className="h-4 w-4 mr-2" />New Request</Button>
-        ) : undefined}
+        actions={
+          <div className="flex items-center gap-2">
+            <OutletFilterSelect outletId={outletId} setOutletId={setOutletId} outlets={outlets} isSuperAdmin={isSuperAdmin} />
+            {canCreate && (
+              showCreate
+                ? <Button variant="outline" onClick={() => setShowCreate(false)}><X className="h-4 w-4 mr-2" />Close Form</Button>
+                : <Button className="gradient-primary text-primary-foreground" onClick={openCreateDialog}><Plus className="h-4 w-4 mr-2" />New Request</Button>
+            )}
+          </div>
+        }
       />
 
       {/* Status Filters */}

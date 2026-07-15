@@ -52,12 +52,13 @@ interface PaginatedResponse {
 }
 
 export const purchaseRequestService = {
-  async getAll(params?: { status?: string; warehouseId?: string; page?: number; limit?: number }): Promise<{ data: PurchaseRequestRecord[]; meta: PaginatedResponse['meta'] }> {
+  async getAll(params?: { status?: string; warehouseId?: string; page?: number; limit?: number; outletId?: string }): Promise<{ data: PurchaseRequestRecord[]; meta: PaginatedResponse['meta'] }> {
     const query = new URLSearchParams();
     if (params?.status) query.set('status', params.status);
     if (params?.warehouseId) query.set('warehouseId', params.warehouseId);
     if (params?.page) query.set('page', String(params.page));
     if (params?.limit) query.set('limit', String(params.limit));
+    if (params?.outletId) query.set('outletId', params.outletId);
     const qs = query.toString();
     const res = await api.get<PaginatedResponse>(`/purchase-requests${qs ? `?${qs}` : ''}`);
     return { data: res.data, meta: res.meta };
