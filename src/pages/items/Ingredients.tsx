@@ -164,12 +164,7 @@ const Ingredients = () => {
                   </SelectContent>
                 </Select>
               </div>
-              {editingId && (
-                <>
-                  <div className="space-y-1.5"><Label>Current Stock</Label><div className="h-9 px-3 flex items-center rounded-md border bg-muted/50 text-sm text-muted-foreground">{form.currentStock ?? 0} <span className="ml-1 text-xs">(updated via Purchases)</span></div></div>
-                  <div className="space-y-1.5"><Label>Purchase Price</Label><div className="h-9 px-3 flex items-center rounded-md border bg-muted/50 text-sm text-muted-foreground">Rs. {form.purchasePrice ?? 0} <span className="ml-1 text-xs">(auto-updated from purchases)</span></div></div>
-                </>
-              )}
+
             </div>
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={() => { setShowDialog(false); setEditingId(null); }}>Cancel</Button>
