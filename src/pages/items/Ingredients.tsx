@@ -29,21 +29,24 @@ const Ingredients = () => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [suppliers, setSuppliers] = useState<SupplierRecord[]>([]);
+  const [globalIngredientNames, setGlobalIngredientNames] = useState<string[]>([]);
   const [form, setForm] = useState<{ name: string; brand: string; categoryId: string; unitId: string; lowStockLevel: number; purchasePrice?: number; currentStock?: number; supplierId: string }>(emptyForm);
   const [page, setPage] = useState(1);
 
   const fetchAll = useCallback(async () => {
     try {
-      const [ingredients, cats, unitList, supplierList] = await Promise.all([
+      const [ingredients, cats, unitList, supplierList, globalNames] = await Promise.all([
         inventoryService.getIngredients(),
         inventoryService.getIngredientCategories(),
         inventoryService.getUnits(),
         supplierService.getAll().then(r => r.data),
+        inventoryService.getIngredientNames(),
       ]);
       setList(ingredients);
       setCategories(cats);
       setUnits(unitList);
       setSuppliers(supplierList);
+      setGlobalIngredientNames(globalNames);
     } catch (err: any) {
       toast.error(err.message || "Failed to load ingredients");
     } finally {
@@ -144,7 +147,7 @@ const Ingredients = () => {
                 <Label>Ingredient Name *</Label>
                 <Input list="ingredient-name-list" placeholder="Enter name" value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} />
                 <datalist id="ingredient-name-list">
-                  {[...new Set(list.map(i => i.name))].map(name => <option key={name} value={name} />)}
+                  {globalIngredientNames.map(name => <option key={name} value={name} />)}
                 </datalist>
               </div>
               <div className="space-y-1.5"><Label>Brand</Label><Input list="brand-list" placeholder="Select or type brand" value={form.brand} onChange={(e) => setForm((p) => ({ ...p, brand: e.target.value }))} /><datalist id="brand-list">{[...new Set([...COMMON_BRANDS, ...list.map(i => i.brand).filter(Boolean)])].map(b => <option key={b!} value={b!} />)}</datalist></div>

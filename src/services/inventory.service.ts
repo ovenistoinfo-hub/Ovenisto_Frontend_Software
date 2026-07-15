@@ -106,6 +106,11 @@ export const inventoryService = {
     return res.data;
   },
 
+  async getIngredientNames(): Promise<string[]> {
+    const res = await api.get<{ success: boolean; data: string[] }>('/inventory/ingredients/names');
+    return res.data;
+  },
+
   async createIngredient(data: {
     name: string;
     brand?: string | null;
