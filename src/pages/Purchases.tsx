@@ -211,13 +211,17 @@ const Purchases = () => {
       setUnits(unitList);
       setWarehouses(whList);
       setApprovedRequests(prRes.data);
-      // Pre-select warehouse from URL param if present, otherwise fall back to MAIN
+      // Pre-select warehouse from URL param if present, otherwise:
+      // - Super Admin → MAIN warehouse
+      // - Branch user → their outlet's BRANCH warehouse
       const paramWarehouseId = searchParams.get("warehouseId");
       if (paramWarehouseId && whList.find((w) => w.id === paramWarehouseId)) {
         setSelectedWarehouseId(paramWarehouseId);
-      } else {
-        const main = whList.find((w) => w.type === "MAIN");
-        if (main && !selectedWarehouseId) setSelectedWarehouseId(main.id);
+      } else if (!selectedWarehouseId) {
+        const defaultWh = isSuperAdmin
+          ? whList.find((w) => w.type === "MAIN")
+          : whList.find((w) => w.type === "BRANCH" && w.outletId === user?.outletId);
+        if (defaultWh) setSelectedWarehouseId(defaultWh.id);
       }
       refDataLoaded.current = true;
     } catch (err: Error | unknown) {
@@ -358,8 +362,10 @@ const Purchases = () => {
     setMiscAmount(0);
     setSupplierPayments({});
     setTargetSupplierId(null);
-    const main = warehouses.find((w) => w.type === "MAIN");
-    setSelectedWarehouseId(main?.id || "");
+    const defaultWh = isSuperAdmin
+      ? warehouses.find((w) => w.type === "MAIN")
+      : warehouses.find((w) => w.type === "BRANCH" && w.outletId === user?.outletId);
+    setSelectedWarehouseId(defaultWh?.id || "");
     setShowDialog(true);
   };
 
