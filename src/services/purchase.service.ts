@@ -84,6 +84,7 @@ export const purchaseService = {
     limit?: number;
     supplierId?: string;
     status?: string;
+    outletId?: string;
   }): Promise<{
     success: boolean;
     data: PurchaseRecord[];
@@ -94,6 +95,7 @@ export const purchaseService = {
     if (params?.limit) qs.set('limit', String(params.limit));
     if (params?.supplierId) qs.set('supplierId', params.supplierId);
     if (params?.status) qs.set('status', params.status);
+    if (params?.outletId) qs.set('outletId', params.outletId);
     return api.get(`/purchases${qs.toString() ? `?${qs}` : ''}`);
   },
 

@@ -27,6 +27,8 @@ import { toast } from "sonner";
 import { useSearchParams } from "react-router-dom";
 import { TablePagination } from "@/components/TablePagination";
 import { PageHeader } from "@/components/ui/page-header";
+import { useOutletFilter } from "@/hooks/useOutletFilter";
+import { OutletFilterSelect } from "@/components/OutletFilterSelect";
 
 const payColor: Record<string, string> = {
   paid: "bg-success/10 text-success",
@@ -103,6 +105,7 @@ const Purchases = () => {
   const queryClient = useQueryClient();
   const currency = settings.currency || "Rs.";
   const isSuperAdmin = user?.role === "Super Admin";
+  const { outletId, setOutletId, outlets } = useOutletFilter();
   const isAdminOrAbove = ["Super Admin", "Admin"].includes(user?.role ?? "");
   // Manager can purchase only from approved requests — no manual ingredient entry
   const canManualEntry = isAdminOrAbove;
@@ -180,8 +183,8 @@ const Purchases = () => {
   const autoFillDone = useRef(false);
 
   const { data: purchasesResp, isLoading: loading } = useQuery({
-    queryKey: ["purchases", { page, limit: 20 }],
-    queryFn: () => purchaseService.getAll({ page, limit: 20 }),
+    queryKey: ["purchases", { page, limit: 20, outletId }],
+    queryFn: () => purchaseService.getAll({ page, limit: 20, outletId }),
   });
   const purchases = purchasesResp?.data ?? [];
   const totalItems = purchasesResp?.meta.total ?? 0;
@@ -725,9 +728,12 @@ const Purchases = () => {
         title="Purchases"
         subtitle="Purchase orders and invoices"
         actions={
-          <Button className="gradient-primary text-primary-foreground" onClick={() => { if (showDialog) { setShowDialog(false); } else { openAdd(); } }}>
-            {showDialog ? <><X className="h-4 w-4 mr-2" />Close Form</> : <><Plus className="h-4 w-4 mr-2" />Add Purchase</>}
-          </Button>
+          <div className="flex items-center gap-2">
+            <OutletFilterSelect outletId={outletId} setOutletId={setOutletId} outlets={outlets} isSuperAdmin={isSuperAdmin} />
+            <Button className="gradient-primary text-primary-foreground" onClick={() => { if (showDialog) { setShowDialog(false); } else { openAdd(); } }}>
+              {showDialog ? <><X className="h-4 w-4 mr-2" />Close Form</> : <><Plus className="h-4 w-4 mr-2" />Add Purchase</>}
+            </Button>
+          </div>
         }
       />
 
