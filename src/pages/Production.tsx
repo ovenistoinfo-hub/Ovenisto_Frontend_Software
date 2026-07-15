@@ -19,6 +19,8 @@ import { inventoryService, type IngredientRecord } from "@/services/inventory.se
 import { warehouseService } from "@/services/warehouse.service";
 import { useAuth } from "@/contexts/AuthContext";
 import productionItemService, { type ProductionItemRecord } from "@/services/production-items.service";
+import { useOutletFilter } from "@/hooks/useOutletFilter";
+import { OutletFilterSelect } from "@/components/OutletFilterSelect";
 
 function expiryColor(effectiveExpiry: string | null): string {
   if (!effectiveExpiry) return '';
@@ -70,11 +72,12 @@ const Production = () => {
   const [savingItem, setSavingItem] = useState(false);
   const canManageItems = ['Super Admin', 'Admin', 'Manager'].includes(user?.role ?? '');
   const isSuperAdmin = user?.role === 'Super Admin';
+  const { outletId, setOutletId, outlets } = useOutletFilter();
 
   // Production Stock tab state
   const { data: productionStock = [], refetch: refetchStock } = useQuery<ProductionStockRecord[]>({
-    queryKey: ['production-stock'],
-    queryFn: () => stockService.getProductionStock(),
+    queryKey: ['production-stock', outletId],
+    queryFn: () => stockService.getProductionStock({ outletId }),
   });
   const [wasteTarget, setWasteTarget] = useState<{ batchId: string; max: number } | null>(null);
   const [wasteQty, setWasteQty] = useState('');
@@ -84,7 +87,7 @@ const Production = () => {
   const fetchData = useCallback(async () => {
     try {
       const [prodRes, itemsRes] = await Promise.all([
-        stockService.getProductions({ limit: 200 }),
+        stockService.getProductions({ limit: 200, outletId }),
         menuService.getMenuItems(),
       ]);
       setList(prodRes.data);
@@ -111,7 +114,7 @@ const Production = () => {
       }
       setKitchenStock(map);
     }).catch(() => {});
-  }, []);
+  }, [outletId]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
   useEffect(() => { productionItemService.getAll().then(setProductionItems).catch(() => {}); }, []);
@@ -190,7 +193,7 @@ const Production = () => {
 
   return (
     <div className="space-y-6">
-      <PageHeader icon={<Factory className="h-5 w-5" />} title="Production" subtitle="Production batches" actions={<div className="flex gap-2">{canManageItems && (<Button variant="outline" onClick={() => setShowManageItems(v => !v)}>{showManageItems ? 'Hide Items' : 'Manage Items'}</Button>)}{!isSuperAdmin && (<><Button variant="outline" onClick={() => { setShowProduce(v => !v); setShowAdd(false); }}>{showProduce ? 'Cancel' : <><Plus className="h-4 w-4 mr-1" />Produce Item</>}</Button><Button className="gradient-primary text-primary-foreground" onClick={() => { setShowAdd(v => !v); setShowProduce(false); }}><Plus className="h-4 w-4 mr-2" />New Production</Button></>)}</div>} />
+      <PageHeader icon={<Factory className="h-5 w-5" />} title="Production" subtitle="Production batches" actions={<div className="flex gap-2 items-center"><OutletFilterSelect outletId={outletId} setOutletId={setOutletId} outlets={outlets} isSuperAdmin={isSuperAdmin} />{canManageItems && (<Button variant="outline" onClick={() => setShowManageItems(v => !v)}>{showManageItems ? 'Hide Items' : 'Manage Items'}</Button>)}{!isSuperAdmin && (<><Button variant="outline" onClick={() => { setShowProduce(v => !v); setShowAdd(false); }}>{showProduce ? 'Cancel' : <><Plus className="h-4 w-4 mr-1" />Produce Item</>}</Button><Button className="gradient-primary text-primary-foreground" onClick={() => { setShowAdd(v => !v); setShowProduce(false); }}><Plus className="h-4 w-4 mr-2" />New Production</Button></>)}</div>} />
       {showManageItems && canManageItems && (
         <Card className="shadow-sm border-primary/30">
           <CardHeader className="pb-3">

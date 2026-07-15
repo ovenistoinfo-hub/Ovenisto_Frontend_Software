@@ -159,11 +159,12 @@ export const stockService = {
   },
 
   // ── Productions ──
-  async getProductions(params?: { search?: string; page?: number; limit?: number }): Promise<{ data: ProductionRecord[]; meta: any }> {
+  async getProductions(params?: { search?: string; page?: number; limit?: number; outletId?: string }): Promise<{ data: ProductionRecord[]; meta: any }> {
     const q = new URLSearchParams();
     if (params?.search) q.set('search', params.search);
     if (params?.page) q.set('page', String(params.page));
     if (params?.limit) q.set('limit', String(params.limit));
+    if (params?.outletId) q.set('outletId', params.outletId);
     const res = await api.get<{ success: boolean; data: ProductionRecord[]; meta: any }>(`/stock/productions?${q.toString()}`);
     return { data: res.data, meta: (res as any).meta };
   },
@@ -228,8 +229,11 @@ export const stockService = {
   },
 
   // ── Production Items Stock ──
-  getProductionStock: async (): Promise<ProductionStockRecord[]> => {
-    const res = await api.get<{ success: boolean; data: ProductionStockRecord[] }>('/stock/production-stock');
+  getProductionStock: async (params?: { outletId?: string }): Promise<ProductionStockRecord[]> => {
+    const q = new URLSearchParams();
+    if (params?.outletId) q.set('outletId', params.outletId);
+    const qs = q.toString();
+    const res = await api.get<{ success: boolean; data: ProductionStockRecord[] }>(`/stock/production-stock${qs ? `?${qs}` : ''}`);
     return res.data;
   },
 
