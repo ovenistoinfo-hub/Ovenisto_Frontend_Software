@@ -64,6 +64,7 @@ export const warehouseDashboardService = {
     startDate?: string;
     endDate?: string;
     outletId?: string;
+    bypassGlobalOutlet?: boolean;
   }): Promise<WarehouseDashboardData> {
     const qs = new URLSearchParams();
     if (params?.warehouseId) qs.set('warehouseId', params.warehouseId);
@@ -71,8 +72,15 @@ export const warehouseDashboardService = {
     if (params?.endDate) qs.set('endDate', params.endDate);
     if (params?.outletId) qs.set('outletId', params.outletId);
     const query = qs.toString() ? `?${qs.toString()}` : '';
+
+    const options: RequestInit = {};
+    if (params?.bypassGlobalOutlet) {
+      options.headers = { 'X-Outlet-Id': 'all' };
+    }
+
     const res = await api.get<{ success: boolean; data: WarehouseDashboardData }>(
-      `/warehouses/dashboard-stats${query}`
+      `/warehouses/dashboard-stats${query}`,
+      options
     );
     return res.data;
   },
