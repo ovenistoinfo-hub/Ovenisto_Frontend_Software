@@ -20,6 +20,7 @@ import { Plus, Search, Eye, Truck, Trash2, ArrowLeftRight, XCircle, PackageCheck
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/ui/page-header";
+import { useModuleEvents } from "@/hooks/use-module-events";
 
 const STATUS_STYLE: Record<string, string> = {
   PENDING:    "bg-yellow-100 text-yellow-800",
@@ -112,6 +113,14 @@ const Transfers = () => {
     }
   }, [filterStatus]);
 
+  // Live updates: the backend pushes challan changes to this outlet's room only,
+  // so any event we receive is relevant to this user — refetch and tell them.
+  const CHALLAN_EVENTS = ["challan:created", "challan:updated"] as const;
+  useModuleEvents(CHALLAN_EVENTS, () => {
+    fetchChallans();
+    toast.info("Transfers updated");
+  });
+
   useEffect(() => {
     Promise.all([
       warehouseService.getAll(),
@@ -145,17 +154,19 @@ const Transfers = () => {
 
   useEffect(() => { fetchLedger(); }, [fetchLedger]);
 
-  // Challans/ledger can change from another user's action (a different branch
-  // dispatching/receiving, Main recording nothing since it can't pay, etc.) with
-  // no realtime push for this page — poll while the tab is visible, and refetch
-  // immediately when the user tabs back in, so the list doesn't go stale until F5.
+  // Challan push events (above) are the primary freshness mechanism, and the hook also
+  // refetches on reconnect, so a dropped-and-restored socket catches up on its own.
+  // This poll is the last-resort floor: it covers a socket that NEVER connects (the
+  // client is websocket-only with no HTTP fallback, and a failed auth handshake is
+  // silent), and it also covers the ledger, which has no push events of its own.
+  // Kept visibility-gated — an always-on interval keeps Neon's compute awake 24/7.
   useEffect(() => {
     const tick = () => {
       if (document.visibilityState !== 'visible') return;
       fetchChallans();
       fetchLedger();
     };
-    const interval = setInterval(tick, 30_000);
+    const interval = setInterval(tick, 120_000);
     window.addEventListener('focus', tick);
     return () => {
       clearInterval(interval);
