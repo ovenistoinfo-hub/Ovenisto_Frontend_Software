@@ -20,6 +20,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/ui/page-header";
 import { useOutletFilter } from "@/hooks/useOutletFilter";
+import { useModuleEvents } from "@/hooks/use-module-events";
 
 const STATUS_STYLE: Record<string, string> = {
   PENDING: "bg-yellow-100 text-yellow-800",
@@ -73,11 +74,23 @@ const Demands = () => {
       ...(filterStatus !== "ALL" && { status: filterStatus }),
       outletId,
     }),
-    // This list changes from other users' actions (another branch approving/creating a
-    // demand) with no realtime push — override the app-wide "don't refetch" defaults so
-    // it doesn't go stale until an F5. Interval only ticks while the tab is visible.
-    refetchInterval: 30_000,
+    // Demand push events (below) are the primary freshness mechanism, and the hook also
+    // refetches on reconnect, so a dropped-and-restored socket catches up on its own.
+    // This interval is the last-resort floor for a socket that NEVER connects (the client
+    // is websocket-only with no HTTP fallback, and a failed auth handshake is silent).
+    // Left at the react-query default of not refetching in the background, so a hidden
+    // tab stops polling and Neon's compute can scale to zero.
+    refetchInterval: 120_000,
     refetchOnWindowFocus: true,
+  });
+
+  // Live updates: the backend pushes demand changes to this outlet's room only.
+  // Invalidate the same key the page's own mutations use, so the active filter
+  // and outlet variants all refetch.
+  const DEMAND_EVENTS = ["demand:created", "demand:updated"] as const;
+  useModuleEvents(DEMAND_EVENTS, () => {
+    queryClient.invalidateQueries({ queryKey: ["demands"] });
+    toast.info("Demands updated");
   });
 
   useEffect(() => {
