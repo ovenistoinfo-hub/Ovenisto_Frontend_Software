@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from "react";
 import { authService, type AuthUser } from "@/services/auth.service";
 import { getAccessToken, clearTokens } from "@/services/api";
+import { resetSocket } from "@/lib/socket";
 
 // Role-based permissions mapping.
 //
@@ -140,6 +141,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const logout = useCallback(async () => {
     await authService.logout();
+    // Drop the authenticated socket too — logout does not reload the page, so it
+    // would otherwise carry this user's outlet room into the next user's session.
+    resetSocket();
     setUser(null);
     localStorage.removeItem("ovenisto_user");
     localStorage.removeItem("ovenisto_selected_outlet");
