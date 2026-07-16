@@ -17,7 +17,7 @@ const rolePermissions: Record<string, string[]> = {
     "warehouse-dashboard",
     "sales", "customers", "purchases", "purchase-requests", "suppliers", "supplier-dues",
     "expenses", "transfers", "demands", "attendance", "employees", "reports", "sms",
-    "settings", "my-portal", "cancellation-requests",
+    "settings", "my-portal", "cancellation-requests", "table-layout", "online-orders",
   ],
   "Floor Manager": [
     "dashboard", "waiter", "order-status", "customer-display", "customers",
@@ -148,10 +148,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const hasPermission = useCallback((module: string) => {
     if (!user) return false;
-    // Explicitly exclude purchase requests for Super Admin as it is outlet-specific
-    if (module === "purchase-requests" && user.role === "Super Admin") {
-      return false;
+
+    // Super Admin exclusions — branch-level PANEL pages that don't apply to chain HQ
+    if (user.role === "Super Admin") {
+      const superAdminExcluded = [
+        "purchase-requests", // outlet-specific stock requests
+        "pos",               // branch POS terminal
+        "self-order",        // branch self-order kiosk
+        "kitchens",          // branch kitchen panel
+        "rider-portal",      // branch delivery riders
+        "waiter",            // branch floor / waiter panel
+        "customer-display",  // branch customer display screen
+        "cancellation-requests", // branch order cancellations
+        "table-layout",      // branch floor table layout
+        "online-orders",     // branch online orders panel
+        // "order-status" is intentionally NOT excluded — Super Admin can monitor chain-wide orders
+      ];
+      if (superAdminExcluded.includes(module)) return false;
     }
+
     const perms = rolePermissions[user.role] || [];
     if (perms.includes("*")) return true;
     return perms.includes(module);
