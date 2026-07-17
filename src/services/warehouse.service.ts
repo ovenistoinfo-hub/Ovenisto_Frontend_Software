@@ -27,7 +27,7 @@ export interface WarehouseStockRecord {
     brand?: string | null;
     purchasePrice: number | null;
     supplierId: string | null;
-    supplier: { id: string; name: string } | null;
+    supplier: { id: string; name: string; outletId?: string | null } | null;
     unit?: { id: string; name: string; symbol: string };
     category?: { id: string; name: string };
   };

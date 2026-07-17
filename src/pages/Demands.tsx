@@ -449,12 +449,12 @@ const Demands = () => {
             {/* Warehouses */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <Label>Requesting Warehouse ({user?.role === 'Manager' ? 'Branch' : 'Kitchen'}) *</Label>
+                <Label>Requesting Warehouse *</Label>
                 {requestingOptions.length <= 1 ? (
                   <Input value={requestingOptions[0]?.name ?? "No warehouse found"} disabled />
                 ) : (
                   <Select value={requestingWHId || "__none__"} onValueChange={handleReqWHChange}>
-                    <SelectTrigger><SelectValue placeholder="Select kitchen warehouse" /></SelectTrigger>
+                    <SelectTrigger><SelectValue placeholder="Select warehouse" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="__none__">Select warehouse</SelectItem>
                       {requestingOptions.map(w => <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>)}
@@ -463,7 +463,7 @@ const Demands = () => {
                 )}
               </div>
               <div className="space-y-1.5">
-                <Label>Supplying Warehouse ({selectedReqWH?.type === 'BRANCH' ? 'Main' : 'Branch'}) *</Label>
+                <Label>Supplying Warehouse *</Label>
                 {supplyingOptions.length <= 1 ? (
                   <Input
                     value={supplyingOptions[0]?.name ?? (requestingWHId ? `No ${selectedReqWH?.type === 'BRANCH' ? 'main' : 'branch'} warehouse found` : "Select requesting warehouse first")}
