@@ -92,9 +92,31 @@ const Demands = () => {
   // Invalidate the same key the page's own mutations use, so the active filter
   // and outlet variants all refetch.
   const DEMAND_EVENTS = ["demand:created", "demand:updated"] as const;
-  useModuleEvents(DEMAND_EVENTS, () => {
+  useModuleEvents(DEMAND_EVENTS, (payload: any) => {
     queryClient.invalidateQueries({ queryKey: ["demands"] });
-    toast.info("Demands updated");
+
+    if (payload && payload.demandNo) {
+      const demandNo = payload.demandNo;
+      const status = payload.status;
+      const reqName = payload.requestingWH?.name;
+      const supName = payload.supplyingWH?.name;
+
+      if (status === 'APPROVED') {
+        toast.success(`Demand ${demandNo} has been approved by ${supName ?? 'supplier'}`);
+      } else if (status === 'REJECTED') {
+        toast.error(`Demand ${demandNo} has been rejected`);
+      } else if (status === 'CANCELLED') {
+        toast.warning(`Demand ${demandNo} has been cancelled`);
+      } else if (status === 'FULFILLED') {
+        toast.success(`Demand ${demandNo} has been fulfilled`);
+      } else if (status === 'PENDING') {
+        toast.info(`New Demand ${demandNo} requested by ${reqName ?? 'branch'}`);
+      } else {
+        toast.info(`Demand ${demandNo} updated`);
+      }
+    } else {
+      toast.info("Demands updated");
+    }
   });
 
   useEffect(() => {

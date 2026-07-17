@@ -154,12 +154,32 @@ const Transfers = () => {
   // The ledger is refetched too, not just the challan list: receiving a challan
   // settles it and writes an OutletLedgerEntry, so the balances change with it.
   const CHALLAN_EVENTS = ["challan:created", "challan:updated"] as const;
-  useModuleEvents(CHALLAN_EVENTS, () => {
+  useModuleEvents(CHALLAN_EVENTS, (payload: any) => {
     api.clearCache('/challans');
     api.clearCache('/warehouse-ledger');
     fetchChallans();
     fetchLedger();
-    toast.info("Transfers updated");
+
+    if (payload && payload.challanNo) {
+      const challanNo = payload.challanNo;
+      const status = payload.status;
+      const fromName = payload.fromWarehouse?.name;
+      const toName = payload.toWarehouse?.name;
+
+      if (status === 'RECEIVED') {
+        toast.success(`Challan ${challanNo} has been received by ${toName ?? 'destination'}`);
+      } else if (status === 'DISPATCHED') {
+        toast.success(`Challan ${challanNo} has been dispatched from ${fromName ?? 'source'}`);
+      } else if (status === 'CANCELLED') {
+        toast.warning(`Challan ${challanNo} has been cancelled`);
+      } else if (status === 'PENDING' || !status) {
+        toast.info(`New Transfer Challan ${challanNo} created`);
+      } else {
+        toast.info(`Transfer ${challanNo} updated`);
+      }
+    } else {
+      toast.info("Transfers updated");
+    }
   });
 
   // Challan push events (above) are the primary freshness mechanism, and the hook also
