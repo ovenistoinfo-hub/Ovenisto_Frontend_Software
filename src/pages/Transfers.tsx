@@ -807,7 +807,7 @@ const Transfers = () => {
                       {loadingLowStock ? "Loading..." : "Add Low Stock"}
                     </Button>
                   )}
-                  <Button variant="outline" size="sm" className="h-8 min-h-[32px]" onClick={addItemRow}>
+                  <Button variant="outline" size="sm" className="h-8 min-h-[32px]" onClick={addItemRow} disabled={!fromWarehouseId}>
                     <Plus className="h-3 w-3 mr-1" />Add Item
                   </Button>
                 </div>
@@ -833,7 +833,10 @@ const Transfers = () => {
                             <SelectContent>
                               <SelectItem value="__none__">Select ingredient</SelectItem>
                               {ingredients
-                                .filter(ig => !items.some((it, ii) => ii !== idx && it.ingredientId === ig.id))
+                                .filter(ig => {
+                                  const stockInfo = sourceStockMap[ig.id];
+                                  return stockInfo && stockInfo.stock > 0 && !items.some((it, ii) => ii !== idx && it.ingredientId === ig.id);
+                                })
                                 .map(ig => (
                                   <SelectItem key={ig.id} value={ig.id}>{ig.name} (Warehouse: {sourceStockMap[ig.id]?.stock ?? 0} {sourceStockMap[ig.id]?.unit ?? ig.unit?.name ?? ""})</SelectItem>
                                 ))}
