@@ -218,7 +218,7 @@ const Transfers = () => {
     if (isKitchenMgr) return false; // KM never dispatches
     // Manager/Admin with outlet → owns BRANCH of their outlet (dispatches from branch)
     if (userOutletId) return wh.outletId === userOutletId && wh.type === 'BRANCH';
-    return wh.type === 'MAIN';
+    return wh.type === 'BRANCH';
   }
 
   function isMyDestWarehouse(wh: { outletId: string | null; type: string } | null): boolean {
@@ -231,7 +231,7 @@ const Transfers = () => {
     }
     // Manager/Admin with outlet → receives at BRANCH (from main) — NOT kitchen
     if (userOutletId) return wh.outletId === userOutletId && wh.type === 'BRANCH';
-    return false;
+    return wh.type === 'BRANCH';
   }
 
   // Admin has the same permissions as Manager (outlet-scoped, dispatch + receive)
@@ -254,9 +254,10 @@ const Transfers = () => {
   // Helper for warehouse scope check (used by create form only)
   function isMyWarehouse(wh: { outletId: string | null; type: string } | null): boolean {
     if (!wh) return false;
-    if (isAdmin) return true;
-    if (userOutletId) return wh.outletId === userOutletId;
-    return wh.type === 'MAIN';
+    if (isSuperAdmin) return wh.type === 'MAIN';
+    // Other users can only manage BRANCH warehouses (scoped to their outlet, or any BRANCH if global)
+    if (userOutletId) return wh.outletId === userOutletId && wh.type === 'BRANCH';
+    return wh.type === 'BRANCH';
   }
 
   // Apply search filter
@@ -275,11 +276,10 @@ const Transfers = () => {
   const displayedIncoming = applySearch(incomingChallans);
 
   // ── Warehouse dropdowns in create form ───────────────────────────
-  // "From" options: non-KITCHEN warehouses that belong to this user's scope
+  // "From" options: warehouses that belong to this user's scope
   const fromWarehouseOptions = useMemo(() =>
-    warehouses.filter(w => w.type !== 'KITCHEN' && (isAdmin || isMyWarehouse(w))),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [warehouses, isAdmin, userOutletId]
+    warehouses.filter(w => isMyWarehouse(w)),
+    [warehouses, isSuperAdmin, userOutletId]
   );
 
   // "To" options: valid destination based on fromWarehouse type
