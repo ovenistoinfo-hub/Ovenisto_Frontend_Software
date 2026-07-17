@@ -113,14 +113,6 @@ const Transfers = () => {
     }
   }, [filterStatus]);
 
-  // Live updates: the backend pushes challan changes to this outlet's room only,
-  // so any event we receive is relevant to this user — refetch and tell them.
-  const CHALLAN_EVENTS = ["challan:created", "challan:updated"] as const;
-  useModuleEvents(CHALLAN_EVENTS, () => {
-    fetchChallans();
-    toast.info("Transfers updated");
-  });
-
   useEffect(() => {
     Promise.all([
       warehouseService.getAll(),
@@ -154,12 +146,22 @@ const Transfers = () => {
 
   useEffect(() => { fetchLedger(); }, [fetchLedger]);
 
+  // Live updates: the backend pushes challan changes to this outlet's room only,
+  // so any event we receive is relevant to this user — refetch and tell them.
+  // The ledger is refetched too, not just the challan list: receiving a challan
+  // settles it and writes an OutletLedgerEntry, so the balances change with it.
+  const CHALLAN_EVENTS = ["challan:created", "challan:updated"] as const;
+  useModuleEvents(CHALLAN_EVENTS, () => {
+    fetchChallans();
+    fetchLedger();
+    toast.info("Transfers updated");
+  });
+
   // Challan push events (above) are the primary freshness mechanism, and the hook also
   // refetches on reconnect, so a dropped-and-restored socket catches up on its own.
   // This poll is the last-resort floor: it covers a socket that NEVER connects (the
   // client is websocket-only with no HTTP fallback, and a failed auth handshake is
-  // silent), and it also covers the ledger, which has no push events of its own.
-  // Kept visibility-gated — an always-on interval keeps Neon's compute awake 24/7.
+  // silent). Kept visibility-gated — an always-on interval keeps Neon's compute awake 24/7.
   useEffect(() => {
     const tick = () => {
       if (document.visibilityState !== 'visible') return;
