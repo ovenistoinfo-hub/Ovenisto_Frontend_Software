@@ -41,7 +41,7 @@ export interface IngredientRecord {
   status: string;
   shelfLifeHours?: number | null;
   supplierId: string | null;
-  supplier: { id: string; name: string } | null;
+  supplier: { id: string; name: string; outletId?: string | null } | null;
 }
 
 export interface PreMadeFoodRecord {
