@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
+import { api } from "@/services/api";
 import { challanService, type ChallanRecord, type ChallanStatus } from "@/services/challan.service";
 import { warehouseService, type WarehouseRecord } from "@/services/warehouse.service";
 import { inventoryService, type IngredientRecord } from "@/services/inventory.service";
@@ -101,6 +102,7 @@ const Transfers = () => {
   // ── Data loading ──────────────────────────────────────────────────
   const fetchChallans = useCallback(async () => {
     try {
+      api.clearCache('/challans');
       const data = await challanService.getAll(
         filterStatus !== "ALL" ? { status: filterStatus } : {}
       );
@@ -134,6 +136,7 @@ const Transfers = () => {
     if (!canSeeLedger) return;
     setLedgerLoading(true);
     try {
+      api.clearCache('/warehouse-ledger');
       const { outlets, chainTotal } = await warehouseLedgerService.getSummary();
       setLedgerOutlets(outlets);
       setLedgerChainTotal(chainTotal);
@@ -152,6 +155,8 @@ const Transfers = () => {
   // settles it and writes an OutletLedgerEntry, so the balances change with it.
   const CHALLAN_EVENTS = ["challan:created", "challan:updated"] as const;
   useModuleEvents(CHALLAN_EVENTS, () => {
+    api.clearCache('/challans');
+    api.clearCache('/warehouse-ledger');
     fetchChallans();
     fetchLedger();
     toast.info("Transfers updated");
@@ -165,6 +170,8 @@ const Transfers = () => {
   useEffect(() => {
     const tick = () => {
       if (document.visibilityState !== 'visible') return;
+      api.clearCache('/challans');
+      api.clearCache('/warehouse-ledger');
       fetchChallans();
       fetchLedger();
     };
@@ -198,6 +205,7 @@ const Transfers = () => {
       setShowRecordPayment(null);
       setPaymentAmount("");
       setPaymentNotes("");
+      api.clearCache('/warehouse-ledger');
       await fetchLedger();
       if (ledgerHistoryFor?.id === settledId) openLedgerHistory({ ...ledgerHistoryFor });
     } catch (err: unknown) {
@@ -423,6 +431,7 @@ const Transfers = () => {
       });
       toast.success("Transfer challan created");
       setShowDialog(false);
+      api.clearCache('/challans');
       await fetchChallans();
     } catch (err: unknown) {
       toast.error((err as Error).message || "Failed to create challan");
@@ -438,6 +447,7 @@ const Transfers = () => {
       await challanService.dispatch(dispatchId);
       toast.success("Challan dispatched — stock deducted from source");
       setDispatchId(null);
+      api.clearCache('/challans');
       await fetchChallans();
     } catch (err: unknown) {
       toast.error((err as Error).message || "Failed to dispatch");
@@ -456,6 +466,7 @@ const Transfers = () => {
       receivedQty: item.qty,
       wasteQty: 0,
       wasteReason: "",
+      purchasePrice: (item as any).purchasePrice ?? 0,
     })));
     setReceiveShipping(c.shippingCost ?? 0);
     setReceiveMisc(c.miscAmount ?? 0);
@@ -469,10 +480,10 @@ const Transfers = () => {
   const receiveSubtotal = useMemo(() => {
     if (!isMainTransfer) return 0;
     return receiveItems.reduce((sum, ri) => {
-      const price = ingredients.find(i => i.id === ri.ingredientId)?.purchasePrice ?? 0;
+      const price = (ri as any).purchasePrice ?? 0;
       return sum + ri.qty * price; // full dispatched qty, matches backend (transit waste is absorbed by the branch)
     }, 0);
-  }, [receiveItems, ingredients, isMainTransfer]);
+  }, [receiveItems, isMainTransfer]);
 
   const receiveTotal = receiveSubtotal + (Number(receiveTax) || 0) + (Number(receiveShipping) || 0) + (Number(receiveMisc) || 0);
   // Due to Main is driven by the stock Subtotal alone — Tax/Shipping/Misc are the
@@ -482,13 +493,13 @@ const Transfers = () => {
   // Detail Dialog cost summary (create/dispatch/receipt views) for a Main→Branch transfer:
   // once received, show the settled total/paid/due; before that, an estimate at current price.
   const isMainDetailTransfer = showDetail?.fromWarehouse?.type === 'MAIN';
-  const detailEstimatedValue = useMemo(() => {
+  const detailStockValue = useMemo(() => {
     if (!showDetail || !isMainDetailTransfer || showDetail.total != null) return 0;
     return showDetail.items.reduce((sum, item) => {
-      const price = ingredients.find(i => i.id === item.ingredientId)?.purchasePrice ?? 0;
+      const price = (item as any).purchasePrice ?? 0;
       return sum + item.qty * price;
     }, 0);
-  }, [showDetail, ingredients, isMainDetailTransfer]);
+  }, [showDetail, isMainDetailTransfer]);
 
   const handleReceive = async () => {
     if (!receiveChallan) return;
@@ -514,6 +525,8 @@ const Transfers = () => {
       });
       toast.success("Challan received — stock added to destination");
       setReceiveChallan(null);
+      api.clearCache('/challans');
+      api.clearCache('/warehouse-ledger');
       await fetchChallans();
     } catch (err: unknown) {
       toast.error((err as Error).message || "Failed to receive");
@@ -529,6 +542,7 @@ const Transfers = () => {
       await challanService.cancel(cancelId);
       toast.success("Challan cancelled");
       setCancelId(null);
+      api.clearCache('/challans');
       await fetchChallans();
     } catch (err: unknown) {
       toast.error((err as Error).message || "Failed to cancel");
@@ -1455,8 +1469,8 @@ const Transfers = () => {
                       )
                     ) : (
                       <div className="flex justify-between">
-                        <span className="text-muted-foreground">Estimated Stock Value</span>
-                        <span className="font-semibold">Rs. {detailEstimatedValue.toLocaleString()}</span>
+                        <span className="text-muted-foreground">Stock Value</span>
+                        <span className="font-semibold">Rs. {detailStockValue.toLocaleString()}</span>
                       </div>
                     )}
                   </div>
@@ -1757,10 +1771,10 @@ const Transfers = () => {
                   return `<div class="cost-box">${rows}</div>`;
                 }
                 const estValue = c.items.reduce((sum, item) => {
-                  const price = ingredients.find(i => i.id === item.ingredientId)?.purchasePrice ?? 0;
+                  const price = (item as any).purchasePrice ?? 0;
                   return sum + item.qty * price;
                 }, 0);
-                return `<div class="cost-box"><p>Estimated Stock Value: <strong>Rs. ${estValue.toLocaleString()}</strong></p><p style="font-size:11px;color:#888;margin-top:4px">Final amount owed to Main is confirmed when the branch receives this transfer.</p></div>`;
+                return `<div class="cost-box"><p>Stock Value: <strong>Rs. ${estValue.toLocaleString()}</strong></p><p style="font-size:11px;color:#888;margin-top:4px">Final amount confirmed when the branch receives this transfer.</p></div>`;
               })();
 
               if (c.demand) {

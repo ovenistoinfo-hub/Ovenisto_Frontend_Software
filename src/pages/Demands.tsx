@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
+import { api } from "@/services/api";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { demandService, type DemandRecord, type DemandStatus, type DemandItem } from "@/services/demand.service";
 import { warehouseService, type WarehouseRecord, type WarehouseStockRecord } from "@/services/warehouse.service";
@@ -70,10 +71,13 @@ const Demands = () => {
 
   const { data: demands = [], isLoading: loading } = useQuery({
     queryKey: ["demands", { status: filterStatus, outletId }],
-    queryFn: () => demandService.getAll({
-      ...(filterStatus !== "ALL" && { status: filterStatus }),
-      outletId,
-    }),
+    queryFn: () => {
+      api.clearCache('/demands');
+      return demandService.getAll({
+        ...(filterStatus !== "ALL" && { status: filterStatus }),
+        outletId,
+      });
+    },
     // Demand push events (below) are the primary freshness mechanism, and the hook also
     // refetches on reconnect, so a dropped-and-restored socket catches up on its own.
     // This interval is the last-resort floor for a socket that NEVER connects (the client
