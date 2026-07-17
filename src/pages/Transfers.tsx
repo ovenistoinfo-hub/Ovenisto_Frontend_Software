@@ -1732,8 +1732,8 @@ const Transfers = () => {
                       )
                     ) : (
                       <div className="flex justify-between">
-                        <span className="text-muted-foreground">Estimated Stock Value</span>
-                        <span className="font-semibold">Rs. {detailEstimatedValue.toLocaleString()}</span>
+                        <span className="text-muted-foreground">Stock Value</span>
+                        <span className="font-semibold">Rs. {detailStockValue.toLocaleString()}</span>
                       </div>
                     )}
                   </div>
