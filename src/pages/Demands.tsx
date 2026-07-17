@@ -164,12 +164,17 @@ const Demands = () => {
   // Role-based requesting warehouse options
   const requestingOptions = useMemo(() => {
     const role = user?.role;
-    if (role === 'Kitchen Manager' && user?.outletId)
+    if (role === 'Super Admin') {
+      return warehouses.filter(w => w.type === 'KITCHEN' || w.type === 'BRANCH');
+    }
+    if (role === 'Kitchen Manager' && user?.outletId) {
       return warehouses.filter(w => w.type === 'KITCHEN' && w.outletId === user.outletId);
-    if (role === 'Manager' && user?.outletId)
+    }
+    // Local Admin (Branch Admin) / local Manager (Branch Manager) scoped to their outlet
+    if (user?.outletId) {
       return warehouses.filter(w => w.type === 'BRANCH' && w.outletId === user.outletId);
-    // Admin / Super Admin: all non-MAIN
-    return warehouses.filter(w => w.type === 'KITCHEN' || w.type === 'BRANCH');
+    }
+    return [];
   }, [warehouses, user?.role, user?.outletId]);
 
   const handleReqWHChange = (v: string) => {
