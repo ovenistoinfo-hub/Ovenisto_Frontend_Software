@@ -730,7 +730,11 @@ const KitchenStock = () => {
                           )}
                           <TableCell className="text-muted-foreground">{i + 1}</TableCell>
                           <TableCell className="font-medium">{s.ingredient.name}</TableCell>
-                          <TableCell className="text-sm text-muted-foreground">{s.ingredient.supplier?.name || "—"}</TableCell>
+                          <TableCell className="text-sm text-muted-foreground">
+                            {(user?.role === "Super Admin" || s.ingredient.supplier?.outletId === user?.outletId)
+                              ? (s.ingredient.supplier?.name || "—")
+                              : "—"}
+                          </TableCell>
                           <TableCell className="text-sm text-muted-foreground">{s.ingredient.brand ?? "—"}</TableCell>
                           <TableCell className="text-sm text-muted-foreground">{s.ingredient.category?.name ?? "—"}</TableCell>
                           <TableCell className="text-sm">{s.ingredient.unit?.symbol || s.ingredient.unit?.name || "—"}</TableCell>
