@@ -93,6 +93,13 @@ const Demands = () => {
   // and outlet variants all refetch.
   const DEMAND_EVENTS = ["demand:created", "demand:updated"] as const;
   useModuleEvents(DEMAND_EVENTS, (payload: any) => {
+    // Clear the api.ts GET cache FIRST: react-query's refetch still goes through
+    // api.get, whose 30s TTL is only invalidated by THIS client's own mutations.
+    // Another user's action never touches it, so without this the refetch would
+    // re-serve the stale cached list and the toast would fire with no visible
+    // change. Also drops /warehouses + /inventory via MUTATION_DEPENDENCIES,
+    // which an approval legitimately changes (it creates a challan).
+    api.clearCache('/demands');
     queryClient.invalidateQueries({ queryKey: ["demands"] });
 
     if (payload && payload.demandNo) {
