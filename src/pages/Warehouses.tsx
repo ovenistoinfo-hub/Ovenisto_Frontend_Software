@@ -344,6 +344,11 @@ const Warehouses = () => {
     const pr = apApprovedRequests.find(r => r.id === requestId);
     if (!pr) return;
     setApWarehouseId(pr.warehouseId);
+    if (pr.supplierId) {
+      setSelectedApSuppliers([pr.supplierId]);
+    } else {
+      setSelectedApSuppliers([]);
+    }
     const approvedItems: FormItem[] = pr.items
       .filter(item => (item.approvedQty ?? 0) > 0)
       .map(item => ({
@@ -839,8 +844,14 @@ const Warehouses = () => {
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                       <div className="space-y-1.5">
                         <Label>Add Supplier (optional)</Label>
-                        <Select value="" onValueChange={handleAddApSupplier}>
-                          <SelectTrigger className="h-11"><SelectValue placeholder="Add supplier to load ingredients..." /></SelectTrigger>
+                        <Select
+                          value=""
+                          onValueChange={handleAddApSupplier}
+                          disabled={!canManualEntry && !!apSelectedRequestId}
+                        >
+                          <SelectTrigger className="h-11">
+                            <SelectValue placeholder={(!canManualEntry && !!apSelectedRequestId) ? "Supplier fixed by request" : "Add supplier to load ingredients..."} />
+                          </SelectTrigger>
                           <SelectContent>
                             {apSuppliers
                               .filter(s => !selectedApSuppliers.includes(s.id))
@@ -856,13 +867,15 @@ const Warehouses = () => {
                               return (
                                 <Badge key={id} variant="secondary" className="flex items-center gap-1 py-0.5 pr-1 pl-2">
                                   <span className="text-xs font-semibold">{s.name}</span>
-                                  <Button
-                                    type="button" variant="ghost" size="icon"
-                                    className="h-4 w-4 rounded-full p-0 text-muted-foreground hover:text-foreground"
-                                    onClick={() => handleRemoveApSupplier(id)}
-                                  >
-                                    <X className="h-2.5 w-2.5" />
-                                  </Button>
+                                  {(!(!canManualEntry && !!apSelectedRequestId)) && (
+                                    <Button
+                                      type="button" variant="ghost" size="icon"
+                                      className="h-4 w-4 rounded-full p-0 text-muted-foreground hover:text-foreground"
+                                      onClick={() => handleRemoveApSupplier(id)}
+                                    >
+                                      <X className="h-2.5 w-2.5" />
+                                    </Button>
+                                  )}
                                 </Badge>
                               );
                             })}
@@ -934,7 +947,14 @@ const Warehouses = () => {
                                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                                   <div className="space-y-1">
                                     <Label className="text-xs text-muted-foreground">Purchased Qty ({item.unit})</Label>
-                                    <Input className="h-10 text-sm" type="number" min={0} value={item.qty || ""} onChange={e => apUpdateItemRow(originalIdx, "qty", Number(e.target.value))} />
+                                    <Input
+                                      className="h-10 text-sm"
+                                      type="number"
+                                      min={0}
+                                      value={item.qty || ""}
+                                      onChange={e => apUpdateItemRow(originalIdx, "qty", Number(e.target.value))}
+                                      disabled={!canManualEntry}
+                                    />
                                   </div>
                                   <div className="space-y-1">
                                     <Label className="text-xs text-muted-foreground">Waste Qty</Label>
@@ -942,7 +962,14 @@ const Warehouses = () => {
                                   </div>
                                   <div className="space-y-1">
                                     <Label className="text-xs text-muted-foreground">Unit Price</Label>
-                                    <Input className="h-10 text-sm" type="number" min={0} value={item.unitPrice || ""} onChange={e => apUpdateItemRow(originalIdx, "unitPrice", Number(e.target.value))} />
+                                    <Input
+                                      className="h-10 text-sm"
+                                      type="number"
+                                      min={0}
+                                      value={item.unitPrice || ""}
+                                      onChange={e => apUpdateItemRow(originalIdx, "unitPrice", Number(e.target.value))}
+                                      disabled={!canManualEntry}
+                                    />
                                   </div>
                                   <div className="space-y-1">
                                     <Label className="text-xs text-muted-foreground">Expiry Date</Label>

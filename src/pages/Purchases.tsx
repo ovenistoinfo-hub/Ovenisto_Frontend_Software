@@ -402,6 +402,11 @@ const Purchases = () => {
     const pr = approvedRequests.find((r) => r.id === requestId);
     if (!pr) return;
     setSelectedWarehouseId(pr.warehouseId);
+    if (pr.supplierId) {
+      setSelectedSuppliers([pr.supplierId]);
+    } else {
+      setSelectedSuppliers([]);
+    }
     const approvedItems: FormItem[] = pr.items
       .filter((item) => (item.approvedQty ?? 0) > 0)
       .map((item) => ({
@@ -887,9 +892,10 @@ const Purchases = () => {
                     <Select
                       value=""
                       onValueChange={handleAddSupplier}
+                      disabled={!canManualEntry && !!selectedRequestId}
                     >
                       <SelectTrigger className="h-11">
-                        <SelectValue placeholder="Add supplier to load ingredients..." />
+                        <SelectValue placeholder={(!canManualEntry && !!selectedRequestId) ? "Supplier fixed by request" : "Add supplier to load ingredients..."} />
                       </SelectTrigger>
                       <SelectContent>
                         {suppliers
@@ -911,13 +917,15 @@ const Purchases = () => {
                           return (
                             <Badge key={id} variant="secondary" className="flex items-center gap-1 py-0.5 pr-1 pl-2">
                               <span className="text-xs font-semibold">{s.name}</span>
-                              <Button
-                                type="button" variant="ghost" size="icon"
-                                className="h-4 w-4 rounded-full p-0 text-muted-foreground hover:text-foreground"
-                                onClick={() => handleRemoveSupplier(id)}
-                              >
-                                <X className="h-2.5 w-2.5" />
-                              </Button>
+                              {(!(!canManualEntry && !!selectedRequestId)) && (
+                                <Button
+                                  type="button" variant="ghost" size="icon"
+                                  className="h-4 w-4 rounded-full p-0 text-muted-foreground hover:text-foreground"
+                                  onClick={() => handleRemoveSupplier(id)}
+                                >
+                                  <X className="h-2.5 w-2.5" />
+                                </Button>
+                              )}
                             </Badge>
                           );
                         })}
@@ -1022,6 +1030,7 @@ const Purchases = () => {
                                     min={0}
                                     value={item.qty || ""}
                                     onChange={(e) => updateItemRow(originalIdx, "qty", Number(e.target.value))}
+                                    disabled={!canManualEntry}
                                   />
                                 </div>
                                 <div className="space-y-1">
@@ -1043,6 +1052,7 @@ const Purchases = () => {
                                     min={0}
                                     value={item.unitPrice || ""}
                                     onChange={(e) => updateItemRow(originalIdx, "unitPrice", Number(e.target.value))}
+                                    disabled={!canManualEntry}
                                   />
                                 </div>
                                 <div className="space-y-1">
