@@ -696,7 +696,7 @@ const Transfers = () => {
                   <ArrowLeftRight className="h-5 w-5 text-primary" />
                 </div>
                 <div className="min-w-0">
-                  <p className="text-xs text-muted-foreground">Total Transfers</p>
+                  <p className="text-xs text-muted-foreground">{isSuperAdmin ? "Total Transfers" : "Total Receives"}</p>
                   <p className="text-2xl font-bold tracking-tight text-primary">
                     {currency} {stats.total.toLocaleString()}
                   </p>
@@ -711,7 +711,7 @@ const Transfers = () => {
                   <CalendarDays className="h-5 w-5 text-orange-500" />
                 </div>
                 <div className="min-w-0">
-                  <p className="text-xs text-muted-foreground">Today's Transfers</p>
+                  <p className="text-xs text-muted-foreground">{isSuperAdmin ? "Today's Transfers" : "Today's Receives"}</p>
                   <p className="text-2xl font-bold tracking-tight text-orange-500">
                     {currency} {stats.today.toLocaleString()}
                   </p>
