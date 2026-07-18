@@ -137,7 +137,7 @@ function AppRoutes() {
       <Route path="/analytics" element={<ProtectedRoute module="analytics"><AppLayout><Analytics /></AppLayout></ProtectedRoute>} />
       <Route path="/kitchens" element={<ProtectedRoute module="kitchens"><AppLayout><Kitchens /></AppLayout></ProtectedRoute>} />
       <Route path="/waiter" element={<ProtectedRoute module="waiter"><AppLayout><WaiterPanel /></AppLayout></ProtectedRoute>} />
-      <Route path="/table-layout" element={<ProtectedRoute module="settings"><AppLayout><TableLayout /></AppLayout></ProtectedRoute>} />
+      <Route path="/table-layout" element={<ProtectedRoute module="table-layout"><AppLayout><TableLayout /></AppLayout></ProtectedRoute>} />
       <Route path="/outlets" element={<ProtectedRoute module="outlets"><AppLayout><Outlets /></AppLayout></ProtectedRoute>} />
       <Route path="/warehouses" element={<ProtectedRoute module="warehouses"><AppLayout><Warehouses /></AppLayout></ProtectedRoute>} />
       <Route path="/kitchen-stock" element={<ProtectedRoute module="kitchens"><AppLayout><KitchenStock /></AppLayout></ProtectedRoute>} />

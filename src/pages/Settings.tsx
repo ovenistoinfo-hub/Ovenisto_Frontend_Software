@@ -1,8 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
-import { QRCodeSVG } from "qrcode.react";
-import { Settings as SettingsIcon, Download, Printer, Plus, Pencil, Trash2 } from "lucide-react";
+import { Settings as SettingsIcon, Plus, Pencil, Trash2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -174,70 +173,6 @@ function WarehousesTab() {
   );
 }
 
-const QRCodeGenerator = ({ restaurantName }: { restaurantName: string }) => {
-  const [tableNum, setTableNum] = useState("1");
-  const [generated, setGenerated] = useState(false);
-  const qrRef = useRef<HTMLDivElement>(null);
-  const qrUrl = `${window.location.origin}/self-order?table=${tableNum}`;
-
-  const handleGenerate = () => { if (!tableNum) { toast.error("Enter a table number"); return; } setGenerated(true); };
-
-  const downloadPNG = useCallback(() => {
-    const svg = qrRef.current?.querySelector("svg");
-    if (!svg) return;
-    const canvas = document.createElement("canvas");
-    const size = 600;
-    canvas.width = size; canvas.height = size + 100;
-    const ctx = canvas.getContext("2d")!;
-    ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, canvas.width, canvas.height);
-    const svgData = new XMLSerializer().serializeToString(svg);
-    const img = new Image();
-    img.onload = () => {
-      ctx.drawImage(img, 50, 30, 500, 500);
-      ctx.fillStyle = "#000000"; ctx.font = "bold 24px sans-serif"; ctx.textAlign = "center";
-      ctx.fillText(`${restaurantName} — Table ${tableNum}`, size / 2, size + 70);
-      const a = document.createElement("a");
-      a.download = `qr-table-${tableNum}.png`;
-      a.href = canvas.toDataURL("image/png"); a.click();
-    };
-    img.src = "data:image/svg+xml;base64," + btoa(unescape(encodeURIComponent(svgData)));
-  }, [tableNum, restaurantName]);
-
-  const printQR = useCallback(() => {
-    const svg = qrRef.current?.querySelector("svg");
-    if (!svg) return;
-    const svgData = new XMLSerializer().serializeToString(svg);
-    const win = window.open("", "_blank");
-    if (!win) return;
-    win.document.write(`<html><head><title>QR - Table ${tableNum}</title><style>body{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;font-family:sans-serif;margin:0}h2{margin-top:16px}p{color:#666;margin:4px 0}@media print{button{display:none}}</style></head><body>${svgData}<h2>${restaurantName}</h2><p>Scan to order at Table ${tableNum}</p><br/><button onclick="window.print()">Print</button></body></html>`);
-    win.document.close();
-  }, [tableNum, restaurantName]);
-
-  return (
-    <Card className="shadow-sm"><CardHeader><CardTitle>QR Code Generator</CardTitle></CardHeader><CardContent className="space-y-4">
-      <p className="text-sm text-muted-foreground">Generate table-specific QR codes for customers to scan and order directly from their phones.</p>
-      <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-end">
-        <div><label className="text-sm font-medium">Table Number</label><Input type="number" min={1} value={tableNum} onChange={e => { setTableNum(e.target.value); setGenerated(false); }} className="w-28 mt-1" /></div>
-        <Button className="gradient-primary text-primary-foreground" onClick={handleGenerate}>Generate QR</Button>
-      </div>
-      {generated && (
-        <div className="flex flex-col sm:flex-row gap-6 items-center sm:items-start pt-2">
-          <div ref={qrRef} className="bg-white p-4 rounded-xl border border-border shadow-sm">
-            <QRCodeSVG value={qrUrl} size={200} level="H" includeMargin />
-          </div>
-          <div className="space-y-3 text-center sm:text-left">
-            <div><p className="font-medium">Scan to order at</p><p className="text-lg font-bold text-primary">Table {tableNum}</p></div>
-            <p className="text-xs text-muted-foreground break-all max-w-[250px]">{qrUrl}</p>
-            <div className="flex gap-2 flex-wrap justify-center sm:justify-start">
-              <Button variant="outline" size="sm" onClick={downloadPNG}><Download className="h-4 w-4 mr-1" />Download PNG</Button>
-              <Button variant="outline" size="sm" onClick={printQR}><Printer className="h-4 w-4 mr-1" />Print</Button>
-            </div>
-          </div>
-        </div>
-      )}
-    </CardContent></Card>
-  );
-};
 
 const SettingsPage = () => {
   const location = useLocation();
@@ -332,7 +267,7 @@ const SettingsPage = () => {
     <div className="space-y-6">
       <PageHeader icon={<SettingsIcon className="h-5 w-5" />} title="Settings" subtitle="System configuration" />
       <Tabs value={tab} onValueChange={handleTabChange}>
-        <div className="overflow-x-auto -mx-1 px-1"><TabsList className="inline-flex w-auto min-w-full sm:w-full"><TabsTrigger value="general">General</TabsTrigger><TabsTrigger value="self-order">Self Order</TabsTrigger><TabsTrigger value="warehouses">Warehouses</TabsTrigger></TabsList></div>
+        <div className="overflow-x-auto -mx-1 px-1"><TabsList className="inline-flex w-auto min-w-full sm:w-full"><TabsTrigger value="general">General</TabsTrigger><TabsTrigger value="warehouses">Warehouses</TabsTrigger></TabsList></div>
 
         {/* General Tab */}
         <TabsContent value="general"><Card className="shadow-sm"><CardHeader><CardTitle>General Settings</CardTitle></CardHeader><CardContent className="space-y-4">
@@ -369,10 +304,6 @@ const SettingsPage = () => {
           </div>
         </CardContent></Card></TabsContent>
 
-        {/* Self Order Tab — QR Code Generator only */}
-        <TabsContent value="self-order">
-          <QRCodeGenerator restaurantName={general.businessName || "Ovenisto"} />
-        </TabsContent>
 
         {/* Warehouses Tab */}
         <TabsContent value="warehouses"><WarehousesTab /></TabsContent>

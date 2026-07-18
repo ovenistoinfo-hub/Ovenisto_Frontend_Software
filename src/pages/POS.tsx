@@ -13,6 +13,7 @@ import { tableService, type TableRecord } from "@/services/table.service";
 import { reservationService, type Reservation as ReservationRecord } from "@/services/reservation.service";
 import { useVisiblePolling } from "@/hooks/use-visible-polling";
 import { useOrderEvents } from "@/hooks/use-order-events";
+import { useTableEvents } from "@/hooks/use-table-events";
 import { getSocket } from "@/lib/socket";
 import { Search, Plus, Minus, X, ShoppingCart, FileText, Printer, ArrowLeft, Trash2, User, MapPin, Phone, Flame, Check, CreditCard, Banknote, Smartphone, RotateCcw, Download, ClipboardList, AlertTriangle, UtensilsCrossed, CalendarClock, Calendar, Timer, ChefHat, Tag, Zap, History, Monitor, BookOpen, StickyNote, Eye, Building2, Crown, CircleAlert, Bell, DollarSign, Package, Ban } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -510,10 +511,16 @@ const POS = () => {
 
   const runningOrders = allOrdersData.filter((o) => o.status === "preparing" || o.status === "pending");
 
-  // Load tables from backend once on mount
-  useEffect(() => {
+  // Load tables from backend
+  const loadTables = useCallback(() => {
     tableService.getTables().then(setBackendTables).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    loadTables();
+  }, [loadTables]);
+
+  useTableEvents(loadTables);
 
   // Load available riders when delivery type is selected
   useEffect(() => {
@@ -1376,7 +1383,14 @@ const POS = () => {
                   {backendTables.length > 0
                     ? backendTables.map((t) => (
                         <SelectItem key={t.id} value={String(Number(t.number))}>
-                          Table {t.number}{t.floor ? ` (${t.floor})` : ""}{t.capacity ? ` · ${t.capacity}` : ""}
+                          {t.status === "available" && "🟢 "}
+                          {t.status === "occupied" && "🔴 "}
+                          {t.status === "bill-requested" && "🧾 "}
+                          {t.status === "reserved" && "🟡 "}
+                          {t.status === "maintenance" && "🔧 "}
+                          Table {t.number}
+                          {t.floor ? ` (${t.floor})` : ""}
+                          {t.status && ` · ${t.status === 'bill-requested' ? 'Bill Req' : t.status.charAt(0).toUpperCase() + t.status.slice(1)}`}
                         </SelectItem>
                       ))
                     : Array.from({ length: 12 }, (_, i) => i + 1).map((t) => (
