@@ -361,12 +361,12 @@ const Demands = () => {
   };
 
 
-  function DemandTable({ list }: { list: DemandRecord[] }) {
+  function DemandTable({ list, showCreateButton = true }: { list: DemandRecord[]; showCreateButton?: boolean }) {
     if (list.length === 0) return (
       <div className="text-center py-12">
         <ClipboardList className="h-12 w-12 text-muted-foreground mx-auto mb-3 opacity-30" />
         <p className="text-muted-foreground">No demands found</p>
-        {canCreate && <Button size="sm" className="gradient-primary text-primary-foreground mt-3" onClick={openAdd}><Plus className="h-4 w-4 mr-1" />Create Demand</Button>}
+        {canCreate && showCreateButton && <Button size="sm" className="gradient-primary text-primary-foreground mt-3" onClick={openAdd}><Plus className="h-4 w-4 mr-1" />Create Demand</Button>}
       </div>
     );
     return (
@@ -556,7 +556,7 @@ const Demands = () => {
       {user?.role === 'Super Admin' ? (
         <Card className="shadow-sm">
           <CardHeader className="pb-2"><p className="text-xs text-muted-foreground">Stock requests awaiting your review.</p></CardHeader>
-          <CardContent><DemandTable list={filtered} /></CardContent>
+          <CardContent><DemandTable list={filtered} showCreateButton={false} /></CardContent>
         </Card>
       ) : canApprove ? (
         <Tabs defaultValue="incoming">
@@ -573,7 +573,7 @@ const Demands = () => {
           <TabsContent value="incoming" className="mt-4">
             <Card className="shadow-sm">
               <CardHeader className="pb-2"><p className="text-xs text-muted-foreground">Stock requests from your team awaiting your review.</p></CardHeader>
-              <CardContent><DemandTable list={incomingDemands} /></CardContent>
+              <CardContent><DemandTable list={incomingDemands} showCreateButton={false} /></CardContent>
             </Card>
           </TabsContent>
           <TabsContent value="mine" className="mt-4">
