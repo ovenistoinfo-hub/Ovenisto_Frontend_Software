@@ -27,6 +27,8 @@ import { toast } from "sonner";
 import { useSearchParams } from "react-router-dom";
 import { TablePagination } from "@/components/TablePagination";
 import { PageHeader } from "@/components/ui/page-header";
+import { useModuleEvents } from "@/hooks/use-module-events";
+import { api } from "@/services/api";
 
 const payColor: Record<string, string> = {
   paid: "bg-success/10 text-success",
@@ -191,6 +193,26 @@ const Purchases = () => {
     queryFn: () => purchaseService.getStats({ supplierId: vendorFilter || undefined }),
   });
   const stats = purchaseStatsResp?.data ?? { total: 0, today: 0, weekly: 0, monthly: 0 };
+
+  // Live updates: the backend pushes purchase changes to the owning outlet's room only.
+  const PURCHASE_EVENTS = ["purchase:created", "purchase:updated", "purchase:deleted"] as const;
+  useModuleEvents(PURCHASE_EVENTS, (payload: any) => {
+    // Clear the api.ts GET cache FIRST — react-query's refetch still goes through
+    // api.get, whose 30s TTL is only invalidated by THIS client's own mutations.
+    // Another user's action never touches it, so without this the refetch would
+    // re-serve the stale list and the toast would fire with no visible change.
+    // This also drops /suppliers + /warehouses + /inventory via MUTATION_DEPENDENCIES,
+    // which a purchase legitimately changes (supplier dues, stock levels).
+    api.clearCache('/purchases');
+    queryClient.invalidateQueries({ queryKey: ["purchases"] });
+
+    const invoiceNo = payload?.invoiceNo ?? payload?.billNo ?? payload?.invoiceNumber;
+    if (invoiceNo) {
+      toast.info(`Purchase ${invoiceNo} updated`);
+    } else {
+      toast.info("Purchases updated");
+    }
+  });
 
   // Load reference data lazily (on first dialog open, cached by api layer)
   const refDataLoaded = useRef(false);
