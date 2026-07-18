@@ -17,6 +17,8 @@ import { PageHeader } from "@/components/ui/page-header";
 import { TablePagination, paginate } from "@/components/TablePagination";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { useModuleEvents } from "@/hooks/use-module-events";
+import { api } from "@/services/api";
 import {
   ClipboardList, Plus, Search, Eye, PackageX, Trash2, Check, X, AlertTriangle, User, Phone, Mail, Printer, ChevronUp,
 } from "lucide-react";
@@ -102,6 +104,29 @@ const PurchaseRequests = () => {
   }, [statusFilter, outletId]);
 
   useEffect(() => { fetchRequests(); }, [fetchRequests]);
+
+  // Live updates: the backend pushes requisition changes to the target warehouse's
+  // outlet room only, so any event we receive is relevant to this user.
+  const PR_EVENTS = ["purchaseRequest:created", "purchaseRequest:updated"] as const;
+  useModuleEvents(PR_EVENTS, (payload: any) => {
+    // Clear the api.ts GET cache first — see the same note in Purchases.tsx.
+    api.clearCache('/purchase-requests');
+    fetchRequests();
+
+    const requestNo = payload?.requestNo;
+    const status = payload?.status;
+    if (requestNo && status === 'APPROVED') {
+      toast.success(`Request ${requestNo} approved`);
+    } else if (requestNo && status === 'REJECTED') {
+      toast.error(`Request ${requestNo} rejected`);
+    } else if (requestNo && status === 'CANCELLED') {
+      toast.warning(`Request ${requestNo} cancelled`);
+    } else if (requestNo && status === 'PENDING') {
+      toast.info(`New request ${requestNo} raised`);
+    } else {
+      toast.info("Purchase requests updated");
+    }
+  });
 
   // Auto-open create dialog when arriving from Branch Stock page with URL params (only if Manager can create)
   useEffect(() => {
