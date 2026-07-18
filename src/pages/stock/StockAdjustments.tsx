@@ -84,6 +84,21 @@ const StockAdjustments = () => {
   const [reportView, setReportView] = useState<"daily" | "weekly" | "monthly">("daily");
   const [reasonOpen, setReasonOpen] = useState(false);
 
+  const filteredWarehouses = useMemo(() => {
+    if (!user) return [];
+    if (user.role === "Super Admin") {
+      return warehouses.filter((w) => w.type === "MAIN");
+    }
+    if (user.role === "Kitchen Manager") {
+      return warehouses.filter((w) => w.type === "KITCHEN" && w.outletId === user.outletId);
+    }
+    if (user.role === "Store Manager") {
+      return warehouses.filter((w) => w.type === "BRANCH" && w.outletId === user.outletId);
+    }
+    // Admin, Manager, Accountant see all branch and kitchen warehouses of their outlet
+    return warehouses.filter((w) => w.outletId === user.outletId);
+  }, [warehouses, user]);
+
   const fetchData = useCallback(async () => {
     try {
       const whParam = selectedWarehouseId !== "all" ? selectedWarehouseId : undefined;
@@ -211,10 +226,18 @@ const StockAdjustments = () => {
   const reasonBreakdown = Array.from(reasonMap.entries()).sort((a, b) => b[1].loss - a[1].loss);
 
   const resetForm = () => {
-    const mainWh = warehouses.find((w) => w.type === "MAIN");
+    let initialWhId = "";
+    if (filteredWarehouses.length === 1) {
+      initialWhId = filteredWarehouses[0].id;
+    } else {
+      const mainWh = filteredWarehouses.find((w) => w.type === "MAIN");
+      if (isSuperAdmin && mainWh) {
+        initialWhId = mainWh.id;
+      }
+    }
     setForm({
       ...emptyForm,
-      warehouseId: isSuperAdmin && mainWh ? mainWh.id : "",
+      warehouseId: initialWhId,
     });
   };
 
@@ -386,7 +409,7 @@ const StockAdjustments = () => {
                   </Select>
                   {form.ingredientId && (
                     <p className="text-xs text-muted-foreground">
-                      Current stock{form.warehouseId ? ` at ${warehouses.find((w) => w.id === form.warehouseId)?.name ?? "selected warehouse"}` : ""}:{" "}
+                      Current stock{form.warehouseId ? ` at ${filteredWarehouses.find((w) => w.id === form.warehouseId)?.name ?? "selected warehouse"}` : ""}:{" "}
                       <span className="font-semibold text-foreground">{stockFor(form.ingredientId, Number(selectedIng?.currentStock ?? 0))} {selectedIng?.unit?.name || ""}</span>
                     </p>
                   )}
@@ -426,9 +449,9 @@ const StockAdjustments = () => {
                     <Select value={form.warehouseId} onValueChange={(v) => setForm((p) => ({ ...p, warehouseId: v }))}>
                       <SelectTrigger><SelectValue placeholder="Select warehouse" /></SelectTrigger>
                       <SelectContent>
-                        {warehouses
-                          .filter((w) => (isSuperAdmin ? w.type === "MAIN" : true))
-                          .map((w) => <SelectItem key={w.id} value={w.id}>{w.name} ({w.type})</SelectItem>)}
+                        {filteredWarehouses.map((w) => (
+                          <SelectItem key={w.id} value={w.id}>{w.name} ({w.type})</SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
@@ -497,9 +520,9 @@ const StockAdjustments = () => {
                   <Select value={form.warehouseId} onValueChange={(v) => setForm((p) => ({ ...p, warehouseId: v }))}>
                     <SelectTrigger><SelectValue placeholder="Select warehouse" /></SelectTrigger>
                     <SelectContent>
-                      {warehouses
-                        .filter((w) => (isSuperAdmin ? w.type === "MAIN" : true))
-                        .map((w) => <SelectItem key={w.id} value={w.id}>{w.name} ({w.type})</SelectItem>)}
+                      {filteredWarehouses.map((w) => (
+                        <SelectItem key={w.id} value={w.id}>{w.name} ({w.type})</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -534,7 +557,7 @@ const StockAdjustments = () => {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Warehouses</SelectItem>
-                  {warehouses.map((w) => (
+                  {filteredWarehouses.map((w) => (
                     <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
                   ))}
                 </SelectContent>
