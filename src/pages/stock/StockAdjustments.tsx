@@ -549,20 +549,22 @@ const StockAdjustments = () => {
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} placeholder="Search..." className="pl-9" />
             </div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground font-medium whitespace-nowrap">Warehouse:</span>
-              <Select value={selectedWarehouseId} onValueChange={(v) => { setSelectedWarehouseId(v); setPage(1); }}>
-                <SelectTrigger className="w-[180px] h-9">
-                  <SelectValue placeholder="All Warehouses" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Warehouses</SelectItem>
-                  {filteredWarehouses.map((w) => (
-                    <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            {!isSuperAdmin && (
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground font-medium whitespace-nowrap">Warehouse:</span>
+                <Select value={selectedWarehouseId} onValueChange={(v) => { setSelectedWarehouseId(v); setPage(1); }}>
+                  <SelectTrigger className="w-[180px] h-9">
+                    <SelectValue placeholder="All Warehouses" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Warehouses</SelectItem>
+                    {filteredWarehouses.map((w) => (
+                      <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
           </div>
         </CardHeader>
         <CardContent>

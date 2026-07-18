@@ -52,7 +52,7 @@ const KitchenStock = () => {
   const userRole = user?.role ?? '';
   const isKitchenMgr = userRole === 'Kitchen Manager';
   const canDemand   = isKitchenMgr;                                       // KM creates demands (kitchen→branch)
-  const canTransfer = ['Manager', 'Admin'].includes(userRole);             // M/A create transfers (branch→kitchen)
+  const canTransfer = ['Super Admin', 'Admin', 'Manager', 'Store Manager'].includes(userRole);             // M/A/SM create transfers (branch→kitchen)
   const hasActions  = canDemand || canTransfer;
 
   const [kitchens, setKitchens] = useState<WarehouseRecord[]>([]);

@@ -194,9 +194,10 @@ const Warehouses = () => {
   const selectedWarehouse = useMemo(() => warehouses.find(w => w.id === selectedId), [warehouses, selectedId]);
   const isMainWarehouseSelected = selectedWarehouse?.type === "MAIN" || selectedWarehouse?.outletId === null;
 
-  // Manager → Purchase Request only; Admin/Super Admin → Add Purchase only (restricted to Main Warehouse for Super Admin)
-  const canRequest  = user?.role === "Manager" && (!isSuperAdmin || isMainWarehouseSelected);
-  const canPurchase = ["Super Admin", "Admin"].includes(user?.role ?? "") && (!isSuperAdmin || isMainWarehouseSelected);
+  // Manager / Store Manager → Purchase Request; Admin / Super Admin / Manager / Store Manager → Add Purchase (Manager/Store Manager must select an approved request)
+  const canRequest  = ["Manager", "Store Manager"].includes(user?.role ?? "") && (!isSuperAdmin || isMainWarehouseSelected);
+  const canPurchase = ["Super Admin", "Admin", "Manager", "Store Manager"].includes(user?.role ?? "") && (!isSuperAdmin || isMainWarehouseSelected);
+  const canManualEntry = ["Super Admin", "Admin"].includes(user?.role ?? "");
 
   const categories: IngredientCategoryRecord[] = warehousesData?.categories ?? [];
   const suppliers: SupplierRecord[] = warehousesData?.suppliers ?? [];
@@ -362,6 +363,10 @@ const Warehouses = () => {
 
   const handleApSave = async () => {
     if (!canPurchase) { toast.error("You are not authorized to perform actions on this warehouse"); return; }
+    if (!canManualEntry && !apSelectedRequestId) {
+      toast.error("Please select an approved purchase request first.");
+      return;
+    }
     const validItems = apItems.filter(i => i.ingredientId && i.qty > 0);
     if (!validItems.length) { toast.error("Add at least one item with quantity"); return; }
     const invalidWaste = validItems.find(i => i.wasteQty > i.qty);
@@ -797,7 +802,9 @@ const Warehouses = () => {
                 {/* Approved Request */}
                 <Card className="shadow-sm">
                   <CardHeader className="pb-2">
-                    <Label className="text-xs text-muted-foreground uppercase tracking-wider">Link to Approved Request (Optional)</Label>
+                    <Label className="text-xs text-muted-foreground uppercase tracking-wider">
+                      {canManualEntry ? "Link to Approved Request (Optional)" : "Select Approved Request *"}
+                    </Label>
                   </CardHeader>
                   <CardContent>
                     <Select
@@ -806,7 +813,7 @@ const Warehouses = () => {
                     >
                       <SelectTrigger><SelectValue placeholder="Select an approved request" /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="__none__">— No Request —</SelectItem>
+                        {canManualEntry && <SelectItem value="__none__">— No Request —</SelectItem>}
                         {apApprovedRequests.map(pr => {
                           const activeItems = pr.items.filter(i => (i.approvedQty ?? 0) > 0).length;
                           return (
@@ -892,14 +899,16 @@ const Warehouses = () => {
                     <Label className="text-xs text-muted-foreground uppercase tracking-wider">
                       Items ({apItems.filter(i => i.ingredientId).length})
                     </Label>
-                    <Button variant="outline" size="sm" onClick={apAddItemRow} className="h-8 min-h-[32px]">
-                      <Plus className="h-3 w-3 mr-1" />Add Item
-                    </Button>
+                    {canManualEntry && (
+                      <Button variant="outline" size="sm" onClick={apAddItemRow} className="h-8 min-h-[32px]">
+                        <Plus className="h-3 w-3 mr-1" />Add Item
+                      </Button>
+                    )}
                   </CardHeader>
                   <CardContent className="space-y-3">
                     {apItems.filter(i => i.ingredientId || i.source === "manual").length === 0 && (
                       <div className="text-center py-8 text-muted-foreground text-sm">
-                        Select an approved request above or add items manually
+                        {canManualEntry ? "Select an approved request above or add items manually" : "Please select an approved request above"}
                       </div>
                     )}
 
@@ -967,66 +976,67 @@ const Warehouses = () => {
                       <div className="flex items-center gap-2 py-1">
                         <Separator className="flex-1" />
                         <span className="text-xs text-muted-foreground whitespace-nowrap">Additional Items</span>
-                        <Separator className="flex-1" />
+                                      {/* Manual Items */}
+                    {canManualEntry && (
+                      <div className="space-y-2">
+                        {apItems.map((item, originalIdx) => {
+                          if (item.source !== "manual") return null;
+                          const receivedQty = item.qty - (item.wasteQty ?? 0);
+                          return (
+                            <div key={originalIdx} className="border rounded-lg p-3 space-y-2">
+                              <div className="flex gap-2">
+                                <Select value={item.ingredientId} onValueChange={v => apUpdateItemRow(originalIdx, "ingredientId", v)}>
+                                  <SelectTrigger className="h-11 text-sm flex-1"><SelectValue placeholder="Select Ingredient" /></SelectTrigger>
+                                  <SelectContent>
+                                    {apIngredients.map(ig => <SelectItem key={ig.id} value={ig.id}>{ig.name} (Branch: {warehouseStockMap[ig.id] ?? 0} {ig.unit?.name ?? ""})</SelectItem>)}
+                                  </SelectContent>
+                                </Select>
+                                <Button
+                                  type="button" variant="ghost" size="icon" className="h-11 w-11 shrink-0" title="Add new ingredient"
+                                  onClick={() => { setApQuickAddTargetIdx(originalIdx); setApQuickAddForm({ name: "", categoryId: "", unitId: "" }); setApQuickAddOpen(true); }}
+                                >
+                                  <Plus className="h-4 w-4" />
+                                </Button>
+                                <Button variant="ghost" size="icon" className="h-11 w-11 shrink-0 text-destructive" onClick={() => apRemoveItemRow(originalIdx)}>
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                                <div className="space-y-1">
+                                  <Label className="text-xs text-muted-foreground">Qty {item.unit ? `(${item.unit})` : ""}</Label>
+                                  <Input className="h-11 text-sm" type="number" min={0} placeholder="Qty" value={item.qty || ""} onChange={e => apUpdateItemRow(originalIdx, "qty", Number(e.target.value))} />
+                                </div>
+                                <div className="space-y-1">
+                                  <Label className="text-xs text-muted-foreground">Waste Qty</Label>
+                                  <Input className="h-11 text-sm" type="number" min={0} max={item.qty} placeholder="Waste" value={item.wasteQty || ""} onChange={e => apUpdateItemRow(originalIdx, "wasteQty", Number(e.target.value))} />
+                                </div>
+                                <div className="space-y-1">
+                                  <Label className="text-xs text-muted-foreground">Unit Price</Label>
+                                  <Input className="h-11 text-sm" type="number" min={0} placeholder="Price" value={item.unitPrice || ""} onChange={e => apUpdateItemRow(originalIdx, "unitPrice", Number(e.target.value))} />
+                                </div>
+                                <div className="space-y-1">
+                                  <Label className="text-xs text-muted-foreground">Expiry Date</Label>
+                                  <DatePickerField value={item.expiryDate || ""} onChange={v => apUpdateItemRow(originalIdx, "expiryDate", v)} />
+                                </div>
+                              </div>
+                              <div className="flex flex-col sm:flex-row gap-2 items-start sm:items-center justify-between">
+                                <div className="flex-1 w-full">
+                                  {item.wasteQty > 0 && (
+                                    <Input className="h-9 text-xs" placeholder="Waste reason (e.g. Broken during transport)" value={item.wasteReason} onChange={e => apUpdateItemRow(originalIdx, "wasteReason", e.target.value)} />
+                                  )}
+                                </div>
+                                <div className="text-right shrink-0">
+                                  <div className="text-sm font-medium whitespace-nowrap">{currency} {(item.qty * item.unitPrice).toLocaleString()}</div>
+                                  {item.wasteQty > 0 && (
+                                    <Badge variant="secondary" className="text-xs bg-success/10 text-success mt-0.5">Received: {receivedQty}</Badge>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
-                    )}
-
-                    {/* Manual Items */}
-                    <div className="space-y-2">
-                      {apItems.map((item, originalIdx) => {
-                        if (item.source !== "manual") return null;
-                        const receivedQty = item.qty - (item.wasteQty ?? 0);
-                        return (
-                          <div key={originalIdx} className="border rounded-lg p-3 space-y-2">
-                            <div className="flex gap-2">
-                              <Select value={item.ingredientId} onValueChange={v => apUpdateItemRow(originalIdx, "ingredientId", v)}>
-                                <SelectTrigger className="h-11 text-sm flex-1"><SelectValue placeholder="Select Ingredient" /></SelectTrigger>
-                                <SelectContent>
-                                  {apIngredients.map(ig => <SelectItem key={ig.id} value={ig.id}>{ig.name} (Branch: {warehouseStockMap[ig.id] ?? 0} {ig.unit?.name ?? ""})</SelectItem>)}
-                                </SelectContent>
-                              </Select>
-                              <Button
-                                type="button" variant="ghost" size="icon" className="h-11 w-11 shrink-0" title="Add new ingredient"
-                                onClick={() => { setApQuickAddTargetIdx(originalIdx); setApQuickAddForm({ name: "", categoryId: "", unitId: "" }); setApQuickAddOpen(true); }}
-                              >
-                                <Plus className="h-4 w-4" />
-                              </Button>
-                              <Button variant="ghost" size="icon" className="h-11 w-11 shrink-0 text-destructive" onClick={() => apRemoveItemRow(originalIdx)}>
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </div>
-                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                              <div className="space-y-1">
-                                <Label className="text-xs text-muted-foreground">Qty {item.unit ? `(${item.unit})` : ""}</Label>
-                                <Input className="h-11 text-sm" type="number" min={0} placeholder="Qty" value={item.qty || ""} onChange={e => apUpdateItemRow(originalIdx, "qty", Number(e.target.value))} />
-                              </div>
-                              <div className="space-y-1">
-                                <Label className="text-xs text-muted-foreground">Waste Qty</Label>
-                                <Input className="h-11 text-sm" type="number" min={0} max={item.qty} placeholder="Waste" value={item.wasteQty || ""} onChange={e => apUpdateItemRow(originalIdx, "wasteQty", Number(e.target.value))} />
-                              </div>
-                              <div className="space-y-1">
-                                <Label className="text-xs text-muted-foreground">Unit Price</Label>
-                                <Input className="h-11 text-sm" type="number" min={0} placeholder="Price" value={item.unitPrice || ""} onChange={e => apUpdateItemRow(originalIdx, "unitPrice", Number(e.target.value))} />
-                              </div>
-                              <div className="space-y-1">
-                                <Label className="text-xs text-muted-foreground">Expiry Date</Label>
-                                <DatePickerField value={item.expiryDate || ""} onChange={v => apUpdateItemRow(originalIdx, "expiryDate", v)} />
-                              </div>
-                            </div>
-                            <div className="flex flex-col sm:flex-row gap-2 items-start sm:items-center justify-between">
-                              <div className="flex-1 w-full">
-                                {item.wasteQty > 0 && (
-                                  <Input className="h-9 text-xs" placeholder="Waste reason (e.g. Broken during transport)" value={item.wasteReason} onChange={e => apUpdateItemRow(originalIdx, "wasteReason", e.target.value)} />
-                                )}
-                              </div>
-                              <div className="text-right shrink-0">
-                                <div className="text-sm font-medium whitespace-nowrap">{currency} {(item.qty * item.unitPrice).toLocaleString()}</div>
-                                {item.wasteQty > 0 && (
-                                  <Badge variant="secondary" className="text-xs bg-success/10 text-success mt-0.5">Received: {receivedQty}</Badge>
-                                )}
-                              </div>
-                            </div>
-                          </div>
+                    )}       </div>
                         );
                       })}
                     </div>
