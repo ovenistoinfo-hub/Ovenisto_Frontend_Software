@@ -687,68 +687,70 @@ const Transfers = () => {
       />
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card className="shadow-sm border-primary/20">
-          <CardContent className="p-5">
-            <div className="flex items-center gap-4">
-              <div className="h-11 w-11 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
-                <ArrowLeftRight className="h-5 w-5 text-primary" />
+      {!isKitchenMgr && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <Card className="shadow-sm border-primary/20">
+            <CardContent className="p-5">
+              <div className="flex items-center gap-4">
+                <div className="h-11 w-11 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                  <ArrowLeftRight className="h-5 w-5 text-primary" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs text-muted-foreground">Total Transfers</p>
+                  <p className="text-2xl font-bold tracking-tight text-primary">
+                    {currency} {stats.total.toLocaleString()}
+                  </p>
+                </div>
               </div>
-              <div className="min-w-0">
-                <p className="text-xs text-muted-foreground">Total Transfers</p>
-                <p className="text-2xl font-bold tracking-tight text-primary">
-                  {currency} {stats.total.toLocaleString()}
-                </p>
+            </CardContent>
+          </Card>
+          <Card className="shadow-sm">
+            <CardContent className="p-5">
+              <div className="flex items-center gap-4">
+                <div className="h-11 w-11 rounded-xl bg-orange-500/10 flex items-center justify-center shrink-0">
+                  <CalendarDays className="h-5 w-5 text-orange-500" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs text-muted-foreground">Today's Transfers</p>
+                  <p className="text-2xl font-bold tracking-tight text-orange-500">
+                    {currency} {stats.today.toLocaleString()}
+                  </p>
+                </div>
               </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="shadow-sm">
-          <CardContent className="p-5">
-            <div className="flex items-center gap-4">
-              <div className="h-11 w-11 rounded-xl bg-orange-500/10 flex items-center justify-center shrink-0">
-                <CalendarDays className="h-5 w-5 text-orange-500" />
+            </CardContent>
+          </Card>
+          <Card className="shadow-sm">
+            <CardContent className="p-5">
+              <div className="flex items-center gap-4">
+                <div className="h-11 w-11 rounded-xl bg-warning/10 flex items-center justify-center shrink-0">
+                  <TrendingUp className="h-5 w-5 text-warning" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs text-muted-foreground">This Week</p>
+                  <p className="text-2xl font-bold tracking-tight text-warning">
+                    {currency} {stats.weekly.toLocaleString()}
+                  </p>
+                </div>
               </div>
-              <div className="min-w-0">
-                <p className="text-xs text-muted-foreground">Today's Transfers</p>
-                <p className="text-2xl font-bold tracking-tight text-orange-500">
-                  {currency} {stats.today.toLocaleString()}
-                </p>
+            </CardContent>
+          </Card>
+          <Card className="shadow-sm">
+            <CardContent className="p-5">
+              <div className="flex items-center gap-4">
+                <div className="h-11 w-11 rounded-xl bg-purple-500/10 flex items-center justify-center shrink-0">
+                  <BarChart3 className="h-5 w-5 text-purple-500" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs text-muted-foreground">This Month</p>
+                  <p className="text-2xl font-bold tracking-tight text-purple-500">
+                    {currency} {stats.monthly.toLocaleString()}
+                  </p>
+                </div>
               </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="shadow-sm">
-          <CardContent className="p-5">
-            <div className="flex items-center gap-4">
-              <div className="h-11 w-11 rounded-xl bg-warning/10 flex items-center justify-center shrink-0">
-                <TrendingUp className="h-5 w-5 text-warning" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-xs text-muted-foreground">This Week</p>
-                <p className="text-2xl font-bold tracking-tight text-warning">
-                  {currency} {stats.weekly.toLocaleString()}
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="shadow-sm">
-          <CardContent className="p-5">
-            <div className="flex items-center gap-4">
-              <div className="h-11 w-11 rounded-xl bg-purple-500/10 flex items-center justify-center shrink-0">
-                <BarChart3 className="h-5 w-5 text-purple-500" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-xs text-muted-foreground">This Month</p>
-                <p className="text-2xl font-bold tracking-tight text-purple-500">
-                  {currency} {stats.monthly.toLocaleString()}
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       {/* Status filter pills */}
       <div className="flex gap-1.5 flex-wrap">
