@@ -175,13 +175,31 @@ function getBasePath(endpoint: string): string {
   return '/' + (parts[0] || '');
 }
 
+const MUTATION_DEPENDENCIES: Record<string, string[]> = {
+  '/purchases': ['/suppliers', '/warehouses', '/inventory'],
+  '/suppliers': ['/purchases'],
+  '/stock': ['/warehouses', '/inventory'],
+  '/challans': ['/warehouses', '/inventory'],
+  '/demands': ['/warehouses', '/inventory'],
+  '/purchase-requests': ['/warehouses', '/inventory'],
+  '/orders': ['/warehouses', '/inventory'],
+};
+
 function invalidateCache(endpoint: string): void {
   const base = getBasePath(endpoint);
+  const pathsToInvalidate = [base];
+
+  if (MUTATION_DEPENDENCIES[base]) {
+    pathsToInvalidate.push(...MUTATION_DEPENDENCIES[base]);
+  }
+
   const keysToDelete: string[] = [];
   cache.forEach((_, key) => {
     const sep = key.indexOf('::');
     const path = sep >= 0 ? key.slice(sep + 2) : key;
-    if (path.startsWith(base)) keysToDelete.push(key);
+    if (pathsToInvalidate.some(p => path.startsWith(p))) {
+      keysToDelete.push(key);
+    }
   });
   keysToDelete.forEach(k => cache.delete(k));
 }

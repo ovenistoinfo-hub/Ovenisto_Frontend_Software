@@ -652,6 +652,7 @@ const Purchases = () => {
       setDeleteId(null);
       toast.success("Purchase deleted");
       queryClient.invalidateQueries({ queryKey: ["purchases"] });
+      queryClient.invalidateQueries({ queryKey: ["suppliers"] });
     } catch (err: unknown) {
       toast.error((err as Error).message || "Failed to delete purchase");
     }
