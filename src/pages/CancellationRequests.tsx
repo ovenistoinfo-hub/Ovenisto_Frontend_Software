@@ -19,6 +19,8 @@ import {
 import { userService } from "@/services/user.service";
 import { useOutletFilter } from "@/hooks/useOutletFilter";
 import { OutletFilterSelect } from "@/components/OutletFilterSelect";
+import { useModuleEvents } from "@/hooks/use-module-events";
+import { api } from "@/services/api";
 
 // Rank-and-file staff only — never a manager/admin (they're the approver pool, not
 // someone who gets blamed/penalized for a cancellation).
@@ -42,10 +44,41 @@ const CancellationRequests = () => {
 
   const { data: requests = [], isLoading } = useQuery({
     queryKey: ["cancellation-requests", statusFilter, selectedOutletId],
-    queryFn: () => cancellationRequestService.list({
-      status: statusFilter === "all" ? undefined : statusFilter,
-      outletId: selectedOutletId !== "all" ? selectedOutletId : undefined,
-    }),
+    queryFn: () => {
+      // api.ts caches GETs for 30s, so an event-driven invalidation would otherwise
+      // be served the same stale list it was pushed to replace.
+      api.clearCache('/cancellation-requests');
+      return cancellationRequestService.list({
+        status: statusFilter === "all" ? undefined : statusFilter,
+        outletId: selectedOutletId !== "all" ? selectedOutletId : undefined,
+      });
+    },
+    // Cancellation-request push events (below) are the primary freshness mechanism, and
+    // the hook also refetches on reconnect, so a dropped-and-restored socket catches up
+    // on its own. This interval is the last-resort floor for a socket that NEVER connects
+    // (the client is websocket-only with no HTTP fallback, and a failed auth handshake is
+    // silent). Left at the react-query default of not refetching in the background, so a
+    // hidden tab stops polling and Neon's compute can scale to zero.
+    refetchInterval: 120_000,
+    refetchOnWindowFocus: true,
+  });
+
+  // Live updates: the backend pushes cancellation-request changes to this outlet's room
+  // only, so any event we receive is relevant to this approver. Invalidate the same key
+  // the review mutation uses, so every status-filter and outlet variant refetches.
+  const CANCELLATION_REQUEST_EVENTS = ["cancellationRequest:created", "cancellationRequest:updated"] as const;
+  useModuleEvents(CANCELLATION_REQUEST_EVENTS, (payload: any) => {
+    queryClient.invalidateQueries({ queryKey: ["cancellation-requests"] });
+
+    const orderNo = payload?.order?.orderNumber;
+    if (!orderNo) return;
+    if (payload.status === "pending") {
+      toast.info(`New cancellation request for order ${orderNo} by ${payload.requestedBy?.name ?? "staff"}`);
+    } else if (payload.status === "approved") {
+      toast.success(`Cancellation for order ${orderNo} approved`);
+    } else if (payload.status === "rejected") {
+      toast.error(`Cancellation for order ${orderNo} rejected`);
+    }
   });
 
   const { data: staffPicker = [] } = useQuery({

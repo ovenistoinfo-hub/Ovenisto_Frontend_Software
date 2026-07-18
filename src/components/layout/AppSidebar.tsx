@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { useLocation, Link } from "react-router-dom";
 import {
   Home, BarChart3, ShoppingCart, ChefHat, UtensilsCrossed, Store, Settings, Globe, CalendarDays,
@@ -18,7 +18,11 @@ import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useVisiblePolling } from "@/hooks/use-visible-polling";
+import { useModuleEvents } from "@/hooks/use-module-events";
 import { cancellationRequestService } from "@/services/cancellationRequest.service";
+import { api } from "@/services/api";
+
+const CANCELLATION_REQUEST_EVENTS = ["cancellationRequest:created", "cancellationRequest:updated"] as const;
 
 const navSections = [
   { label: "Common", items: [
@@ -101,11 +105,21 @@ export function AppSidebar() {
 
   const canReviewCancellations = hasPermission("cancellation-requests");
   const [pendingCancelCount, setPendingCancelCount] = useState(0);
-  useVisiblePolling(() => {
+  const refreshPendingCancelCount = useCallback(() => {
+    // useModuleEvents has no enabled flag, so the permission check lives here — a user
+    // who can't review cancellations must not fire this request from the event path.
+    if (!canReviewCancellations) return;
+    api.clearCache('/cancellation-requests');
     cancellationRequestService.list({ status: "pending" })
       .then(r => setPendingCancelCount(r.length))
       .catch(() => {});
-  }, 30000, canReviewCancellations);
+  }, [canReviewCancellations]);
+
+  // The badge tracks the same push events as the approver inbox, so it moves the moment
+  // a request is raised or reviewed rather than lagging a poll interval behind. The poll
+  // stays as the floor for a socket that never connects, but can now be much slower.
+  useModuleEvents(CANCELLATION_REQUEST_EVENTS, refreshPendingCancelCount);
+  useVisiblePolling(refreshPendingCancelCount, 120000, canReviewCancellations);
 
   const isActive = (url?: string) => {
     if (!url) return false;
