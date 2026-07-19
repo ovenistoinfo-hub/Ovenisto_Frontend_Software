@@ -1062,11 +1062,8 @@ const Warehouses = () => {
                             </div>
                           );
                         })}
-                      </div>
-                    )}       </div>
-                        );
-                      })}
-                    </div>
+                       </div>
+                    )}
                   </CardContent>
                 </Card>
 
