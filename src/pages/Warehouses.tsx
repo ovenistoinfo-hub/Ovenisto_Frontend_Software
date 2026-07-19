@@ -1003,7 +1003,11 @@ const Warehouses = () => {
                       <div className="flex items-center gap-2 py-1">
                         <Separator className="flex-1" />
                         <span className="text-xs text-muted-foreground whitespace-nowrap">Additional Items</span>
-                                      {/* Manual Items */}
+                        <Separator className="flex-1" />
+                      </div>
+                    )}
+
+                    {/* Manual Items */}
                     {canManualEntry && (
                       <div className="space-y-2">
                         {apItems.map((item, originalIdx) => {
