@@ -819,21 +819,10 @@ const KitchenStock = () => {
                           </div>
                           <div className="flex items-center gap-2">
                             <div className={`w-3 h-3 rounded-full ${isExpiredView ? "bg-destructive" : "bg-orange-500"}`} />
-                            <span className="text-muted-foreground">{isExpiredView ? "Expired:" : "Expiring:"}</span>
+                            <span className="text-muted-foreground">{isExpiredView ? "Expired Today:" : "Expiring:"}</span>
                             <span className={`font-bold ${isExpiredView ? "text-destructive" : "text-orange-500"}`}>{g.affectedQty} {g.unit}</span>
                           </div>
-                          <div className="flex items-center gap-2">
-                            <div className="w-3 h-3 rounded-full bg-success" />
-                            <span className="text-muted-foreground">Safe:</span>
-                            <span className="font-bold text-success">{g.safeQty} {g.unit}</span>
-                          </div>
                         </div>
-                        {g.totalCurrentStock > 0 && (
-                          <div className="flex h-2 rounded-full overflow-hidden mt-2 bg-muted">
-                            <div className={`${isExpiredView ? "bg-destructive" : "bg-orange-500"}`} style={{ width: `${(g.affectedQty / g.totalCurrentStock) * 100}%` }} />
-                            <div className="bg-success" style={{ width: `${(g.safeQty / g.totalCurrentStock) * 100}%` }} />
-                          </div>
-                        )}
                       </div>
                       <div className="text-xs text-muted-foreground uppercase tracking-wider font-semibold mb-2">Batch Breakdown</div>
                       <div className="space-y-2">
