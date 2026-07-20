@@ -291,13 +291,20 @@ const WaiterPanel = () => {
 
   const getTableStatus = (tableNum: number): TableStatus => {
     if (billReqSet.has(tableNum)) return "bill-requested";
-    const hasActive = orders.some((o) => o.tableNumber === tableNum && ACTIVE_STATUSES.includes(o.status));
-    if (hasActive) return "occupied";
     const t = tables.find((tbl) => Number(tbl.number) === tableNum);
+    if (t && t.status === "bill-requested") return "bill-requested";
+
+    const activeOrders = orders.filter((o) => o.tableNumber === tableNum && ACTIVE_STATUSES.includes(o.status));
+    if (activeOrders.length > 0) {
+      // If food is ready (prepared/served to customers), mark table as bill-requested
+      const allReady = activeOrders.every((o) => o.status === "ready");
+      if (allReady) return "bill-requested";
+      return "occupied";
+    }
+
     if (t) {
       if (t.status === "occupied") return "occupied";
       if (t.status === "reserved") return "occupied"; // map reserved to occupied for UI session
-      if (t.status === "bill-requested") return "bill-requested";
     }
     return "available";
   };
@@ -1175,22 +1182,31 @@ const WaiterPanel = () => {
                           })();
 
                       const statusDotColor =
-                        status === "available" ? "bg-success shadow-[0_0_8px_rgba(34,197,94,0.5)]" :
-                        status === "occupied" ? "bg-destructive shadow-[0_0_8px_rgba(239,68,68,0.5)]" :
-                        status === "bill-requested" ? "bg-destructive shadow-[0_0_8px_rgba(239,68,68,0.5)]" :
-                        "bg-muted-foreground";
+                        status === "available" ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)]" :
+                        status === "occupied" ? "bg-orange-500 shadow-[0_0_8px_rgba(249,115,22,0.6)]" :
+                        status === "bill-requested" ? "bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.8)]" :
+                        "bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.6)]";
 
                       const statusBorderClass =
-                        status === "available" ? "border-success/35" :
-                        status === "occupied" ? "border-destructive/35" :
-                        status === "bill-requested" ? "border-destructive/60" :
-                        "border-muted";
+                        status === "available" ? "border-emerald-500/50" :
+                        status === "occupied" ? "border-orange-500/50" :
+                        status === "bill-requested" ? "border-red-500/80" :
+                        "border-amber-500/50";
+
+                      const cardStatusClass =
+                        status === "bill-requested"
+                          ? "border-red-500/80 bg-red-950/20 shadow-[0_0_12px_rgba(239,68,68,0.25)] animate-pulse border-2 ring-1 ring-red-500/40"
+                          : status === "occupied"
+                          ? "border-orange-500/50 bg-orange-950/10 hover:border-orange-400 dark:bg-orange-950/20"
+                          : isReservedToday
+                          ? "border-amber-500/50 bg-amber-950/10 hover:border-amber-400 dark:bg-amber-950/20"
+                          : "border-emerald-500/50 bg-emerald-950/10 hover:border-emerald-400 dark:bg-emerald-950/20";
 
                       const chairBgClass =
-                        status === "available" ? "bg-success/50" :
-                        status === "occupied" ? "bg-destructive/50" :
-                        status === "bill-requested" ? "bg-destructive animate-pulse" :
-                        "bg-muted-foreground/50";
+                        status === "available" ? "bg-emerald-500/60" :
+                        status === "occupied" ? "bg-orange-500/60" :
+                        status === "bill-requested" ? "bg-red-500 animate-pulse" :
+                        "bg-amber-500/60";
 
                       const isOccupiedState = status === "occupied" || status === "bill-requested";
                       const elapsedStr = isOccupiedState && oldest ? getElapsed(oldest) : "";
@@ -1202,27 +1218,27 @@ const WaiterPanel = () => {
                       const isReservedToday = reservedTableNums.has(tNum) || t.status === "reserved";
 
                       return (
-                        <div key={t.id} className="p-1">
+                        <div key={t.id} className="p-1.5">
                           <Card
                             onClick={() => handleTableClick(t)}
                             className={cn(
-                              "shadow-md bg-white dark:bg-zinc-900/40 border border-zinc-200 dark:border-zinc-800/80 rounded-2xl flex flex-col justify-between p-3.5 h-52 w-full cursor-pointer hover:border-zinc-300 dark:hover:border-zinc-700 hover:-translate-y-1 hover:shadow-lg hover:shadow-zinc-200/50 dark:hover:shadow-zinc-950/20 transition-all duration-300 relative overflow-hidden",
-                              status === "bill-requested" && "animate-pulse border-destructive/30",
+                              "shadow-md bg-white dark:bg-zinc-900/40 border rounded-2xl flex flex-col justify-between p-3.5 h-52 w-full cursor-pointer transition-all duration-300 relative hover:scale-[1.02]",
+                              cardStatusClass,
                               selectedTableId === t.id && "ring-2 ring-primary ring-offset-2 dark:ring-offset-zinc-950 shadow-lg"
                             )}
                           >
                             {/* Top Bar: Table Label & Pulse Status */}
                             <div className="flex items-center justify-between w-full select-none shrink-0">
-                              <div className="flex items-center gap-1.5">
+                              <div className="flex items-center gap-2">
                                 <span className={cn(
-                                  "h-2 w-2 rounded-full",
+                                  "h-2.5 w-2.5 rounded-full",
                                   status === "bill-requested" && "animate-ping",
                                   statusDotColor
                                 )} />
-                                <span className="text-xs font-black uppercase tracking-wide text-foreground">Table {t.number}</span>
+                                <span className="text-sm font-black uppercase tracking-wider text-foreground">Table {t.number}</span>
                               </div>
                               {isReservedToday && (
-                                <Badge variant="secondary" className="bg-amber-500/15 text-amber-500 text-[10px] font-extrabold px-2 py-0.5 border-none rounded-full">
+                                <Badge variant="secondary" className="bg-amber-500/20 text-amber-500 text-[10px] font-black px-2 py-0.5 border border-amber-500/30 rounded-full">
                                   Reserved
                                 </Badge>
                               )}
@@ -1231,19 +1247,19 @@ const WaiterPanel = () => {
                             {/* Middle Area: Graphical Table Blueprint Diagram */}
                             <div className="flex-grow flex items-center justify-center relative my-1 w-full select-none">
                               {t.shape === "round" && (
-                                <div className={cn("h-16 w-16 rounded-full border-2 flex items-center justify-center relative bg-zinc-50 dark:bg-zinc-950/30", statusBorderClass)}>
+                                <div className={cn("h-16 w-16 rounded-full border-2 flex items-center justify-center relative bg-zinc-50 dark:bg-zinc-950/40", statusBorderClass)}>
                                   <span className={centerTextClass}>{centerText}</span>
                                   {renderMiniChairs("round", t.capacity, chairBgClass)}
                                 </div>
                               )}
                               {t.shape === "square" && (
-                                <div className={cn("h-14 w-14 rounded-xl border-2 flex items-center justify-center relative bg-zinc-50 dark:bg-zinc-950/30", statusBorderClass)}>
+                                <div className={cn("h-14 w-14 rounded-xl border-2 flex items-center justify-center relative bg-zinc-50 dark:bg-zinc-950/40", statusBorderClass)}>
                                   <span className={centerTextClass}>{centerText}</span>
                                   {renderMiniChairs("square", t.capacity, chairBgClass)}
                                 </div>
                               )}
                               {t.shape === "rectangle" && (
-                                <div className={cn("h-12 w-20 rounded-xl border-2 flex items-center justify-center relative bg-zinc-50 dark:bg-zinc-950/30", statusBorderClass)}>
+                                <div className={cn("h-12 w-20 rounded-xl border-2 flex items-center justify-center relative bg-zinc-50 dark:bg-zinc-950/40", statusBorderClass)}>
                                   <span className={centerTextClass}>{centerText}</span>
                                   {renderMiniChairs("rectangle", t.capacity, chairBgClass)}
                                 </div>
@@ -1252,11 +1268,11 @@ const WaiterPanel = () => {
 
                             {/* Bottom Bar: Area Name and Customer Count */}
                             <div className="flex items-center justify-between w-full mt-1 shrink-0 select-none">
-                              <span className="text-xs text-muted-foreground font-bold tracking-wide truncate max-w-[110px]">
+                              <span className="text-xs text-muted-foreground font-extrabold tracking-wide truncate max-w-[110px]">
                                 {t.floor || "Main Hall"}
                               </span>
                               <div className="flex items-center gap-1.5">
-                                <div className="flex items-center gap-1 text-xs font-black text-foreground bg-zinc-100 dark:bg-zinc-800/80 px-2.5 py-1 rounded-full border border-zinc-200 dark:border-zinc-700/60 shadow-xs">
+                                <div className="flex items-center gap-1.5 text-xs font-black text-foreground bg-zinc-100 dark:bg-zinc-800/90 px-2.5 py-1 rounded-full border border-zinc-200 dark:border-zinc-700/80 shadow-xs">
                                   <Users className="h-3.5 w-3.5 text-muted-foreground" />
                                   <span>{isOccupiedState ? getGuestsCount(t) : t.capacity}</span>
                                 </div>
