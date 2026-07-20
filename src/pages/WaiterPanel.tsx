@@ -806,7 +806,8 @@ const WaiterPanel = () => {
             <strong>Table:</strong> ${selectedTable.number}<br/>
             <strong>Date:</strong> ${new Date().toLocaleDateString()}<br/>
             <strong>Time:</strong> ${new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}<br/>
-            <strong>Server:</strong> ${user?.name || "Unknown"} (${user?.role || "Waiter"})
+            <strong>Server:</strong> ${user?.name || "Unknown"} (${user?.role || "Waiter"})<br/>
+            <strong>Customer:</strong> ${selectedCustomerData?.name || activeTableOrders[0]?.customerName || "Walk-in"}${selectedCustomerData?.phone || activeTableOrders[0]?.phone ? `<br/><strong>Phone:</strong> ${selectedCustomerData?.phone || activeTableOrders[0]?.phone}` : ''}
           </div>
           
           <table style="width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 11px; text-align: left;">

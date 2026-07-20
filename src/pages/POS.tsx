@@ -1948,7 +1948,10 @@ const POS = () => {
               <p className="text-xs text-muted-foreground">{effectiveSettings.address} — {effectiveSettings.phone}</p>
             </div>
             <Separator />
-            <p className="text-xs">Customer: <strong>{selectedCustomerData?.name || "Walk-in"}</strong> | Type: <strong>{orderType}</strong></p>
+            <div className="text-xs space-y-0.5">
+              <p>Customer: <strong>{selectedCustomerData?.name || "Walk-in"}</strong> {selectedCustomerData?.phone ? `(${selectedCustomerData.phone})` : ""} | Type: <strong>{orderType}</strong></p>
+              {selectedCustomerData?.address && <p className="text-muted-foreground text-[11px]">Address: {selectedCustomerData.address}</p>}
+            </div>
             <Table>
               <TableHeader><TableRow><TableHead className="text-xs">Item</TableHead><TableHead className="text-xs text-center">Qty</TableHead><TableHead className="text-xs text-right">Total</TableHead></TableRow></TableHeader>
               <TableBody>{cart.map((c, i) => <TableRow key={i}><TableCell className="text-xs">{c.name}</TableCell><TableCell className="text-xs text-center">{c.qty}</TableCell><TableCell className="text-xs text-right">Rs. {((c.price * c.qty) - c.discount).toLocaleString()}</TableCell></TableRow>)}</TableBody>
