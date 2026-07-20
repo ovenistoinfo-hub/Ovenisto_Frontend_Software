@@ -615,6 +615,7 @@ const WaiterPanel = () => {
       setBillReqSet((p) => { const n = new Set(p); n.delete(selectedTableNum); return n; });
       toast.success(`Table ${selectedTable.number} settled via ${paymentMethod}`);
       setShowBillDialog(false);
+      setShowPayBillDialog(false);
     } catch {
       toast.error("Failed to settle billing");
     } finally {
@@ -1118,13 +1119,13 @@ const WaiterPanel = () => {
         </div>
 
         {/* RIGHT AREA: Floor map grid OR Menu Ordering View */}
-        <div className="flex-grow flex flex-col overflow-y-auto">
+        <div className="flex-grow flex flex-col overflow-y-auto pt-2 px-2 pb-6">
           {!isOrderingMode ? (
             /* State A: Floor Map view */
             <div className="space-y-6 flex-grow flex flex-col justify-between">
               <div className="space-y-6">
                 {/* Stats */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-1">
                   {[
                     { key: "available",    count: stats.available,        label: "Available",          color: "text-emerald-500", bg: "bg-emerald-500/10", border: "border-emerald-500/30", Icon: CircleDot },
                     { key: "occupied",     count: stats.occupied,         label: "Occupied",           color: "text-orange-500",  bg: "bg-orange-500/10",  border: "border-orange-500/30",  Icon: Users },
@@ -1137,7 +1138,7 @@ const WaiterPanel = () => {
                         key={key}
                         onClick={() => setStatusFilter(prev => prev === key ? "all" : (key as any))}
                         className={cn(
-                          "border bg-white dark:bg-zinc-900/40 rounded-xl overflow-hidden shadow-sm cursor-pointer transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md select-none",
+                          "border bg-white dark:bg-zinc-900/40 rounded-xl shadow-sm cursor-pointer transition-all duration-200 hover:scale-[1.02] select-none",
                           isActive ? `ring-2 ring-primary ${border}` : "border-zinc-200 dark:border-zinc-800/80 hover:border-zinc-300 dark:hover:border-zinc-700"
                         )}
                       >
@@ -1165,7 +1166,7 @@ const WaiterPanel = () => {
                     </CardContent>
                   </Card>
                 ) : (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-4">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-4 pt-1">
                     {filteredTables.map((t) => {
                       const tNum    = Number(t.number);
                       const status  = getTableStatus(tNum);
