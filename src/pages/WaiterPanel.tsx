@@ -24,6 +24,7 @@ import { useOrderEvents } from "@/hooks/use-order-events";
 import { useTableEvents } from "@/hooks/use-table-events";
 import { menuService, type MenuItemRecord, type CategoryRecord, type ModifierRecord, type MenuItemVariant } from "@/services/menu.service";
 import { tableService, type TableRecord } from "@/services/table.service";
+import { reservationService, type Reservation } from "@/services/reservation.service";
 import { settingsService } from "@/services/settings.service";
 import { PageHeader } from "@/components/ui/page-header";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
@@ -170,14 +171,16 @@ const WaiterPanel = () => {
   }, []);
 
   // ── Backend data ──
-  const [tables,    setTables]    = useState<TableRecord[]>([]);
-  const [orders,    setOrders]    = useState<OrderRecord[]>([]);
-  const [menuItems, setMenuItems] = useState<MenuItemRecord[]>([]);
-  const [cats,      setCats]      = useState<CategoryRecord[]>([]);
-  const [globalMods, setGlobalMods] = useState<ModifierRecord[]>([]);
-  const [loading,   setLoading]   = useState(true);
+  const [tables,       setTables]       = useState<TableRecord[]>([]);
+  const [orders,       setOrders]       = useState<OrderRecord[]>([]);
+  const [reservations, setReservations] = useState<Reservation[]>([]);
+  const [menuItems,    setMenuItems]    = useState<MenuItemRecord[]>([]);
+  const [cats,         setCats]         = useState<CategoryRecord[]>([]);
+  const [globalMods,   setGlobalMods]   = useState<ModifierRecord[]>([]);
+  const [loading,      setLoading]      = useState(true);
 
   // ── Local UI state ──
+  const [statusFilter, setStatusFilter] = useState<"all" | "available" | "occupied" | "bill" | "reservations">("all");
   const [billReqSet,    setBillReqSet]    = useState<Set<number>>(new Set());
   const [acceptingId,   setAcceptingId]   = useState<string | null>(null);
   const [selectedTableId, setSelectedTableId] = useState<string | null>(null);
@@ -226,21 +229,34 @@ const WaiterPanel = () => {
     } catch { /* silent polling */ }
   }, []);
 
+  const loadReservations = useCallback(async () => {
+    try {
+      const pkt = new Date(Date.now() + 5 * 60 * 60 * 1000);
+      const todayStr = pkt.toISOString().split("T")[0];
+      const data = await reservationService.getAll({ date: todayStr });
+      setReservations(data);
+    } catch { /* silent polling */ }
+  }, []);
+
   useEffect(() => {
     const init = async () => {
       try {
-        const [tableData, itemData, catData, modData, apiSettings] = await Promise.all([
+        const pkt = new Date(Date.now() + 5 * 60 * 60 * 1000);
+        const todayStr = pkt.toISOString().split("T")[0];
+        const [tableData, itemData, catData, modData, apiSettings, resData] = await Promise.all([
           tableService.getTables(),
           menuService.getMenuItems({ available: true, limit: 200 }),
           menuService.getCategories("active"),
           menuService.getModifiers(),
           settingsService.getSettings(),
+          reservationService.getAll({ date: todayStr }).catch(() => []),
         ]);
         setTables(tableData);
         setMenuItems(itemData);
         setCats(catData);
         setGlobalMods(modData.filter((m) => m.status === "active"));
         setTaxRate(Number(apiSettings.taxRate) ?? 0);
+        setReservations(resData);
         updateSettings({
           restaurantName: apiSettings.restaurantName || "",
           phone: apiSettings.phone || "",
@@ -269,6 +285,7 @@ const WaiterPanel = () => {
   useTableEvents(loadTables);
   useVisiblePolling(loadOrders, 60000);
   useVisiblePolling(loadTables, 60000);
+  useVisiblePolling(loadReservations, 60000);
 
   // ── Derived ──
 
@@ -321,11 +338,37 @@ const WaiterPanel = () => {
   const hasReady = unpaidOrders.some(o => o.status === "ready");
   const canPayBill = hasUnpaid && !hasPendingOrPreparing && hasReady;
 
+  const reservedTableNums = useMemo(() => {
+    const set = new Set<number>();
+    for (const r of reservations) {
+      if (r.tableNumber && !isNaN(Number(r.tableNumber)) && r.status !== "cancelled" && r.status !== "noShow") {
+        set.add(Number(r.tableNumber));
+      }
+    }
+    return set;
+  }, [reservations]);
+
+  const todayReservationsCount = useMemo(() => {
+    return reservations.filter(r => r.status !== "cancelled" && r.status !== "noShow").length;
+  }, [reservations]);
+
   const stats = {
     available: tables.filter((t) => getTableStatus(Number(t.number)) === "available").length,
     occupied:  tables.filter((t) => getTableStatus(Number(t.number)) === "occupied").length,
     bill:      tables.filter((t) => getTableStatus(Number(t.number)) === "bill-requested").length,
   };
+
+  const filteredTables = useMemo(() => {
+    return tables.filter((t) => {
+      const tNum = Number(t.number);
+      const st = getTableStatus(tNum);
+      if (statusFilter === "available") return st === "available";
+      if (statusFilter === "occupied") return st === "occupied";
+      if (statusFilter === "bill") return st === "bill-requested";
+      if (statusFilter === "reservations") return reservedTableNums.has(tNum) || t.status === "reserved";
+      return true;
+    });
+  }, [tables, statusFilter, reservedTableNums, billReqSet, orders]);
 
   const categoryNames = ["All", ...cats.map((c) => c.name)];
   const filteredMenu   = menuItems.filter(
@@ -1074,38 +1117,49 @@ const WaiterPanel = () => {
             <div className="space-y-6 flex-grow flex flex-col justify-between">
               <div className="space-y-6">
                 {/* Stats */}
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   {[
-                    { count: stats.available, label: "Available", color: "success", Icon: CircleDot },
-                    { count: stats.occupied,  label: "Occupied",  color: "accent",  Icon: Users },
-                    { count: stats.bill,      label: "Bill Req.", color: "destructive", Icon: Receipt },
-                  ].map(({ count, label, color, Icon }) => (
-                    <Card key={label} className="border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/20 rounded-xl overflow-hidden shadow-sm">
-                      <CardContent className="p-4 flex items-center gap-3">
-                        <div className={`h-9 w-9 rounded-xl bg-${color}/10 flex items-center justify-center shrink-0`}>
-                          <Icon className={`h-5 w-5 text-${color}`} />
-                        </div>
-                        <div>
-                          <p className={`text-2xl font-bold text-${color}`}>{count}</p>
-                          <p className="text-xs text-muted-foreground font-medium">{label}</p>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
+                    { key: "available",    count: stats.available,        label: "Available",          color: "text-emerald-500", bg: "bg-emerald-500/10", border: "border-emerald-500/30", Icon: CircleDot },
+                    { key: "occupied",     count: stats.occupied,         label: "Occupied",           color: "text-orange-500",  bg: "bg-orange-500/10",  border: "border-orange-500/30",  Icon: Users },
+                    { key: "bill",         count: stats.bill,             label: "Bill Req.",          color: "text-red-500",     bg: "bg-red-500/10",     border: "border-red-500/30",     Icon: Receipt },
+                    { key: "reservations", count: todayReservationsCount, label: "Today Reservations", color: "text-amber-500",   bg: "bg-amber-500/10",   border: "border-amber-500/30",   Icon: BookOpen },
+                  ].map(({ key, count, label, color, bg, border, Icon }) => {
+                    const isActive = statusFilter === key;
+                    return (
+                      <Card
+                        key={key}
+                        onClick={() => setStatusFilter(prev => prev === key ? "all" : (key as any))}
+                        className={cn(
+                          "border bg-white dark:bg-zinc-900/40 rounded-xl overflow-hidden shadow-sm cursor-pointer transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md select-none",
+                          isActive ? `ring-2 ring-primary ${border}` : "border-zinc-200 dark:border-zinc-800/80 hover:border-zinc-300 dark:hover:border-zinc-700"
+                        )}
+                      >
+                        <CardContent className="p-3.5 flex items-center gap-3">
+                          <div className={cn("h-9 w-9 rounded-xl flex items-center justify-center shrink-0", bg)}>
+                            <Icon className={cn("h-5 w-5", color)} />
+                          </div>
+                          <div>
+                            <p className={cn("text-2xl font-black tracking-tight", color)}>{count}</p>
+                            <p className="text-xs text-muted-foreground font-semibold">{label}</p>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
                 </div>
 
                 {/* Table Grid */}
-                {tables.length === 0 ? (
+                {filteredTables.length === 0 ? (
                   <Card className="rounded-xl border-dashed">
                     <CardContent className="flex flex-col items-center justify-center py-12 gap-3 text-muted-foreground">
                       <UtensilsCrossed className="h-10 w-10 opacity-30" />
-                      <p className="text-sm font-medium">No tables configured</p>
-                      <p className="text-xs">Go to Table Layout to add tables</p>
+                      <p className="text-sm font-medium">No tables found</p>
+                      <p className="text-xs">Try clearing the status filter or configure tables in Table Layout</p>
                     </CardContent>
                   </Card>
                 ) : (
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-4">
-                    {tables.map((t) => {
+                    {filteredTables.map((t) => {
                       const tNum    = Number(t.number);
                       const status  = getTableStatus(tNum);
                       const cfg     = statusConfig[status];
@@ -1142,8 +1196,10 @@ const WaiterPanel = () => {
                       const elapsedStr = isOccupiedState && oldest ? getElapsed(oldest) : "";
                       const centerText = isOccupiedState ? (elapsedStr || t.number) : t.number;
                       const centerTextClass = isOccupiedState 
-                        ? "font-bold text-[10px] text-primary tracking-tight leading-none text-center px-1" 
-                        : "font-extrabold text-base text-foreground tracking-tight";
+                        ? "font-black text-xs text-primary tracking-tight leading-none text-center px-1" 
+                        : "font-black text-lg text-foreground tracking-tight";
+
+                      const isReservedToday = reservedTableNums.has(tNum) || t.status === "reserved";
 
                       return (
                         <div key={t.id} className="p-1">
@@ -1159,12 +1215,17 @@ const WaiterPanel = () => {
                             <div className="flex items-center justify-between w-full select-none shrink-0">
                               <div className="flex items-center gap-1.5">
                                 <span className={cn(
-                                  "h-1.5 w-1.5 rounded-full",
+                                  "h-2 w-2 rounded-full",
                                   status === "bill-requested" && "animate-ping",
                                   statusDotColor
                                 )} />
-                                <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60">Table {t.number}</span>
+                                <span className="text-xs font-black uppercase tracking-wide text-foreground">Table {t.number}</span>
                               </div>
+                              {isReservedToday && (
+                                <Badge variant="secondary" className="bg-amber-500/15 text-amber-500 text-[10px] font-extrabold px-2 py-0.5 border-none rounded-full">
+                                  Reserved
+                                </Badge>
+                              )}
                             </div>
 
                             {/* Middle Area: Graphical Table Blueprint Diagram */}
@@ -1189,31 +1250,16 @@ const WaiterPanel = () => {
                               )}
                             </div>
 
-                            {/* Bottom Bar: Capacity and Status Label */}
+                            {/* Bottom Bar: Area Name and Customer Count */}
                             <div className="flex items-center justify-between w-full mt-1 shrink-0 select-none">
-                              <span className="text-[9px] text-muted-foreground/60 font-semibold tracking-wide">
-                                {status === "occupied" && oldest ? (
-                                  <span className="flex items-center gap-1 text-muted-foreground">
-                                    <Clock className="h-2.5 w-2.5" />
-                                    <span>{getElapsed(oldest)}</span>
-                                  </span>
-                                ) : (
-                                  t.floor || "Floor"
-                                )}
+                              <span className="text-xs text-muted-foreground font-bold tracking-wide truncate max-w-[110px]">
+                                {t.floor || "Main Hall"}
                               </span>
                               <div className="flex items-center gap-1.5">
-                                <div className="flex items-center gap-0.5 text-[9px] text-muted-foreground font-bold bg-zinc-100 dark:bg-zinc-950/40 px-2 py-0.5 rounded-full border border-zinc-200 dark:border-border/10">
-                                  <Users className="h-2.5 w-2.5 text-muted-foreground/50" />
+                                <div className="flex items-center gap-1 text-xs font-black text-foreground bg-zinc-100 dark:bg-zinc-800/80 px-2.5 py-1 rounded-full border border-zinc-200 dark:border-zinc-700/60 shadow-xs">
+                                  <Users className="h-3.5 w-3.5 text-muted-foreground" />
                                   <span>{isOccupiedState ? getGuestsCount(t) : t.capacity}</span>
                                 </div>
-                                <Badge variant="secondary" className={cn(
-                                  "text-[8px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider leading-none border-none",
-                                  status === "available" && "bg-success/10 text-success hover:bg-success/10",
-                                  status === "occupied" && "bg-destructive/10 text-destructive hover:bg-destructive/10",
-                                  status === "bill-requested" && "bg-destructive/20 text-destructive hover:bg-destructive/20 animate-pulse"
-                                )}>
-                                  {status === "bill-requested" ? "Bill" : cfg.label}
-                                </Badge>
                               </div>
                             </div>
                           </Card>
