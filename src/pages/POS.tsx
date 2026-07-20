@@ -1106,8 +1106,18 @@ const POS = () => {
     toast.success(`Future order ${order.orderNumber} loaded \u2014 Advance paid: Rs.${order.advancePayment || 0}`);
   };
 
+  const formatPhoneNumber = (val: string): string => {
+    const digitsOnly = val.replace(/\D/g, "").slice(0, 11);
+    if (digitsOnly.length > 4) {
+      return `${digitsOnly.slice(0, 4)}-${digitsOnly.slice(4)}`;
+    }
+    return digitsOnly;
+  };
+
   const addNewCustomer = async () => {
-    if (!newCustomer.name.trim() || !newCustomer.phone.trim()) { toast.error("Name and phone required"); return; }
+    if (!newCustomer.name.trim()) { toast.error("Name is required"); return; }
+    const cleanPhone = newCustomer.phone.replace(/\D/g, "");
+    if (cleanPhone.length !== 11) { toast.error("Phone number must be exactly 11 digits (e.g. 0300-1234567)"); return; }
     try {
       const created = await customerService.createCustomer({
         name: newCustomer.name.trim(),

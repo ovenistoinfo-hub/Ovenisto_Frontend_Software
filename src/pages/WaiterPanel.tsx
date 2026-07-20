@@ -434,9 +434,22 @@ const WaiterPanel = () => {
     };
   }, [selectedCustomerData, orders]);
 
+  const formatPhoneNumber = (val: string): string => {
+    const digitsOnly = val.replace(/\D/g, "").slice(0, 11);
+    if (digitsOnly.length > 4) {
+      return `${digitsOnly.slice(0, 4)}-${digitsOnly.slice(4)}`;
+    }
+    return digitsOnly;
+  };
+
   const handleAddCustomerSubmit = async () => {
-    if (!newCustomerForm.name.trim() || !newCustomerForm.phone.trim()) {
-      toast.error("Customer name and phone are required");
+    if (!newCustomerForm.name.trim()) {
+      toast.error("Customer name is required");
+      return;
+    }
+    const cleanPhone = newCustomerForm.phone.replace(/\D/g, "");
+    if (cleanPhone.length !== 11) {
+      toast.error("Phone number must be exactly 11 digits (e.g. 0300-1234567)");
       return;
     }
     setCreatingCustomer(true);
@@ -2129,11 +2142,12 @@ const WaiterPanel = () => {
               />
             </div>
             <div>
-              <Label className="text-xs font-semibold">Phone Number *</Label>
+              <Label className="text-xs font-semibold">Phone Number (11 Digits) *</Label>
               <Input
                 value={newCustomerForm.phone}
-                onChange={(e) => setNewCustomerForm(prev => ({ ...prev, phone: e.target.value }))}
+                onChange={(e) => setNewCustomerForm(prev => ({ ...prev, phone: formatPhoneNumber(e.target.value) }))}
                 placeholder="0300-1234567"
+                maxLength={12}
                 className="mt-1 h-9 text-xs rounded-xl"
               />
             </div>

@@ -35,8 +35,18 @@ const Customers = () => {
   const customers = resp?.data ?? [];
   const paged = paginate(customers, page);
 
+  const formatPhoneNumber = (val: string): string => {
+    const digitsOnly = val.replace(/\D/g, "").slice(0, 11);
+    if (digitsOnly.length > 4) {
+      return `${digitsOnly.slice(0, 4)}-${digitsOnly.slice(4)}`;
+    }
+    return digitsOnly;
+  };
+
   const handleAdd = async () => {
-    if (!form.name.trim() || !form.phone.trim()) { toast.error("Name and phone are required"); return; }
+    if (!form.name.trim()) { toast.error("Name is required"); return; }
+    const cleanPhone = form.phone.replace(/\D/g, "");
+    if (cleanPhone.length !== 11) { toast.error("Phone number must be exactly 11 digits (e.g. 0300-1234567)"); return; }
     setSaving(true);
     try {
       await customerService.createCustomer({ name: form.name.trim(), phone: form.phone.trim(), email: form.email.trim() || undefined, address: form.address.trim() || undefined });
@@ -76,7 +86,7 @@ const Customers = () => {
           <CardHeader className="pb-3"><CardTitle className="text-base">Add Customer</CardTitle></CardHeader>
           <CardContent className="space-y-3">
             <Input placeholder="Name *" value={form.name} onChange={(e) => setForm(p => ({ ...p, name: e.target.value }))} />
-            <Input placeholder="Phone *" value={form.phone} onChange={(e) => setForm(p => ({ ...p, phone: e.target.value }))} />
+            <Input placeholder="Phone (11 Digits) *" value={form.phone} maxLength={12} onChange={(e) => setForm(p => ({ ...p, phone: formatPhoneNumber(e.target.value) }))} />
             <Input placeholder="Email" value={form.email} onChange={(e) => setForm(p => ({ ...p, email: e.target.value }))} />
             <Input placeholder="Address" value={form.address} onChange={(e) => setForm(p => ({ ...p, address: e.target.value }))} />
             <div className="flex justify-end gap-2 pt-1">
