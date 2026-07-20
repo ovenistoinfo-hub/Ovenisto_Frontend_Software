@@ -410,14 +410,17 @@ const KitchenPanel = () => {
 
                     {/* Action Button */}
                     <div className="p-3">
-                      {order.status !== "completed" ? (
+                      {order.status === "ready" ? (
+                        <div className="flex items-center justify-center gap-1.5 text-sm text-green-500 font-bold bg-green-500/10 border border-green-500/20 py-2.5 rounded-lg select-none">
+                          <CheckCircle2 className="h-4 w-4" /> Ready to Serve
+                        </div>
+                      ) : order.status !== "completed" ? (
                         <Button
                           className={cn("w-full text-sm font-semibold rounded-lg h-11 transition-all", btnColors[order.status])}
                           onClick={() => advanceStatus(order.id)}
                         >
                           {order.status === "new" && <Bell className="h-4 w-4 mr-1.5" />}
                           {order.status === "preparing" && <Flame className="h-4 w-4 mr-1.5" />}
-                          {order.status === "ready" && <CheckCircle2 className="h-4 w-4 mr-1.5" />}
                           {btnLabel[order.status]}
                         </Button>
                       ) : (

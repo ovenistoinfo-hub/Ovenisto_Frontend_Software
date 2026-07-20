@@ -13,6 +13,9 @@ export interface TableRecord {
   status: string; // 'available' | 'occupied' | 'reserved' | 'cleaning'
   currentOrderId: string | null;
   reservationId: string | null;
+  occupiedById?: string | null;
+  occupiedByName?: string | null;
+  occupiedByRole?: string | null;
 }
 
 export interface CreateTableInput {

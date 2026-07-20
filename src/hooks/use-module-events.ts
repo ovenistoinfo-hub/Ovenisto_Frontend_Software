@@ -1,5 +1,32 @@
 import { useEffect, useRef } from "react";
 import { getSocket } from "@/lib/socket";
+import { api } from "@/services/api";
+
+/**
+ * Helper to clear API cache for endpoints related to received socket events.
+ * This guarantees that when a push event is received, subsequent GET requests
+ * bypass any cached responses and retrieve fresh data.
+ */
+function invalidateCacheForEvents(eventsList: string[]): void {
+  eventsList.forEach((evt) => {
+    if (evt.startsWith("order:")) {
+      api.clearCache("/orders");
+    } else if (evt.startsWith("table:")) {
+      api.clearCache("/tables");
+    } else if (evt.startsWith("cancellationRequest:")) {
+      api.clearCache("/cancellation-requests");
+      api.clearCache("/orders");
+    } else if (evt.startsWith("challan:")) {
+      api.clearCache("/challans");
+    } else if (evt.startsWith("demand:")) {
+      api.clearCache("/demands");
+    } else if (evt.startsWith("purchaseRequest:")) {
+      api.clearCache("/purchase-requests");
+    } else if (evt.startsWith("purchase:")) {
+      api.clearCache("/purchases");
+    }
+  });
+}
 
 /**
  * Subscribes to a set of backend push events and invokes `onChange` when any of
@@ -36,12 +63,20 @@ export function useModuleEvents(
 
   useEffect(() => {
     const socket = getSocket();
-    const handler = (payload?: unknown) => saved.current(payload);
     const list = key ? key.split(",") : [];
+
+    const handler = (payload?: unknown) => {
+      invalidateCacheForEvents(list);
+      saved.current(payload);
+    };
+
     list.forEach((evt) => socket.on(evt, handler));
 
     // Catch up on whatever was missed while we were disconnected.
-    const onReconnect = () => saved.current();
+    const onReconnect = () => {
+      invalidateCacheForEvents(list);
+      saved.current();
+    };
     socket.io.on("reconnect", onReconnect);
 
     return () => {

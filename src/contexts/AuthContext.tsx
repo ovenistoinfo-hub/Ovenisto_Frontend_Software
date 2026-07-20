@@ -133,6 +133,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       };
       setUser(authUser);
       localStorage.setItem("ovenisto_user", JSON.stringify(authUser));
+      resetSocket();
       return true;
     } catch {
       return false;

@@ -34,6 +34,8 @@ export function getSocket(): Socket {
       reconnectionDelayMax: 10000,
       auth: (cb) => cb({ token: getAccessToken() }),
     });
+  } else if (socket.disconnected) {
+    socket.connect();
   }
   return socket;
 }

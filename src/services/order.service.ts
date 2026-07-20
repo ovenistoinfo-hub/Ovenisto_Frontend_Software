@@ -49,6 +49,7 @@ export interface OrderRecord {
   customerType: string | null;
   orderSource: string | null;
   createdAt: string;
+  updatedAt?: string;
   items: OrderItemRecord[];
 }
 

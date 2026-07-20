@@ -1382,7 +1382,7 @@ const POS = () => {
                 <SelectContent>
                   {backendTables.length > 0
                     ? backendTables.map((t) => (
-                        <SelectItem key={t.id} value={String(Number(t.number))}>
+                        <SelectItem key={t.id} value={String(Number(t.number))} disabled={t.status === "occupied" || t.status === "bill-requested"}>
                           {t.status === "available" && "🟢 "}
                           {t.status === "occupied" && "🔴 "}
                           {t.status === "bill-requested" && "🧾 "}
@@ -2126,21 +2126,6 @@ const POS = () => {
                         })()}
 
                         <div className="flex gap-1.5">
-                          {status === "pending" && (
-                            <Button size="sm" className="h-7 text-xs flex-1 gradient-primary text-primary-foreground" onClick={() => { handleOrderStatusUpdate(order.id, "preparing"); }}>
-                              Accept Order
-                            </Button>
-                          )}
-                          {status === "preparing" && (
-                            <Button size="sm" className="h-7 text-xs flex-1" variant="outline" onClick={() => { handleOrderStatusUpdate(order.id, "ready"); }}>
-                              Mark Ready
-                            </Button>
-                          )}
-                          {status === "ready" && (
-                            <Button size="sm" className="h-7 text-xs flex-1 bg-success text-success-foreground hover:bg-success/90" onClick={() => { handleOrderStatusUpdate(order.id, "completed"); }}>
-                              Complete
-                            </Button>
-                          )}
                           <Button size="sm" variant="outline" className="h-7 text-xs border-warning/30 text-warning hover:bg-warning/5" onClick={() => { setModifyCancelAction("modify"); setModifyCancelReason(""); setShowModifyOrder(order.id); }}>
                             Modify
                           </Button>
@@ -2764,10 +2749,9 @@ const POS = () => {
                   ))}
                 </div>
                 <div className="flex gap-1.5">
-                  <Button size="sm" className="h-7 text-xs flex-1 bg-success text-success-foreground hover:bg-success/90"
-                    onClick={() => { handleOrderStatusUpdate(order.id, "completed"); toast.success(`Order ${order.orderNumber} completed`); }}>
-                    <Check className="h-3 w-3 mr-1" />Complete & Serve
-                  </Button>
+                  <div className="flex items-center justify-center gap-1.5 text-xs text-green-500 font-bold bg-green-500/10 border border-green-500/20 py-1.5 rounded-lg w-full select-none">
+                    <Check className="h-3.5 w-3.5" /> Ready (Settle to Complete)
+                  </div>
                 </div>
               </Card>
             ))}
