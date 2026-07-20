@@ -13,7 +13,7 @@ import {
   Plus, Minus, X, ShoppingCart, UtensilsCrossed, Clock, Users,
   Receipt, CircleDot, ChevronDown, ChevronUp, Bell, Check, Loader2, Trash2,
   Play, Power, Eye, CreditCard, Percent, CornerUpRight, Printer, ArrowLeft, Search,
-  Coins, Wallet, Smartphone, BookOpen
+  Coins, Wallet, Smartphone, BookOpen, User, History, Building2, Crown, Phone, MapPin, Calendar, DollarSign
 } from "lucide-react";
 import { toast } from "sonner";
 import { useData } from "@/contexts/DataContext";
@@ -25,6 +25,7 @@ import { useTableEvents } from "@/hooks/use-table-events";
 import { menuService, type MenuItemRecord, type CategoryRecord, type ModifierRecord, type MenuItemVariant } from "@/services/menu.service";
 import { tableService, type TableRecord } from "@/services/table.service";
 import { reservationService, type Reservation } from "@/services/reservation.service";
+import { customerService, type CustomerRecord } from "@/services/customer.service";
 import { settingsService } from "@/services/settings.service";
 import { PageHeader } from "@/components/ui/page-header";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
@@ -174,10 +175,24 @@ const WaiterPanel = () => {
   const [tables,       setTables]       = useState<TableRecord[]>([]);
   const [orders,       setOrders]       = useState<OrderRecord[]>([]);
   const [reservations, setReservations] = useState<Reservation[]>([]);
+  const [customers,    setCustomers]    = useState<CustomerRecord[]>([]);
   const [menuItems,    setMenuItems]    = useState<MenuItemRecord[]>([]);
   const [cats,         setCats]         = useState<CategoryRecord[]>([]);
   const [globalMods,   setGlobalMods]   = useState<ModifierRecord[]>([]);
   const [loading,      setLoading]      = useState(true);
+
+  // ── Customer Association ──
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string>("");
+  const [showCustomerAddDialog, setShowCustomerAddDialog] = useState(false);
+  const [showCustomerHistoryDialog, setShowCustomerHistoryDialog] = useState(false);
+  const [creatingCustomer, setCreatingCustomer] = useState(false);
+  const [newCustomerForm, setNewCustomerForm] = useState({
+    name: "",
+    phone: "",
+    email: "",
+    address: "",
+    customerType: "walk-in",
+  });
 
   // ── Local UI state ──
   const [statusFilter, setStatusFilter] = useState<"all" | "available" | "occupied" | "bill" | "reservations">("all");
@@ -238,18 +253,26 @@ const WaiterPanel = () => {
     } catch { /* silent polling */ }
   }, []);
 
+  const loadCustomers = useCallback(async () => {
+    try {
+      const res = await customerService.getCustomers({ limit: 500 });
+      setCustomers(res.data);
+    } catch { /* silent polling */ }
+  }, []);
+
   useEffect(() => {
     const init = async () => {
       try {
         const pkt = new Date(Date.now() + 5 * 60 * 60 * 1000);
         const todayStr = pkt.toISOString().split("T")[0];
-        const [tableData, itemData, catData, modData, apiSettings, resData] = await Promise.all([
+        const [tableData, itemData, catData, modData, apiSettings, resData, custRes] = await Promise.all([
           tableService.getTables(),
           menuService.getMenuItems({ available: true, limit: 200 }),
           menuService.getCategories("active"),
           menuService.getModifiers(),
           settingsService.getSettings(),
           reservationService.getAll({ date: todayStr }).catch(() => []),
+          customerService.getCustomers({ limit: 500 }).catch(() => ({ data: [] })),
         ]);
         setTables(tableData);
         setMenuItems(itemData);
@@ -257,6 +280,7 @@ const WaiterPanel = () => {
         setGlobalMods(modData.filter((m) => m.status === "active"));
         setTaxRate(Number(apiSettings.taxRate) ?? 0);
         setReservations(resData);
+        setCustomers(custRes.data);
         updateSettings({
           restaurantName: apiSettings.restaurantName || "",
           phone: apiSettings.phone || "",
@@ -286,6 +310,7 @@ const WaiterPanel = () => {
   useVisiblePolling(loadOrders, 60000);
   useVisiblePolling(loadTables, 60000);
   useVisiblePolling(loadReservations, 60000);
+  useVisiblePolling(loadCustomers, 60000);
 
   // ── Derived ──
 
@@ -524,7 +549,8 @@ const WaiterPanel = () => {
       await orderService.createOrder({
         type: "Dine In",
         tableNumber: selectedTableNum,
-        customerName: "Walk-in",
+        customerName: selectedCustomerData?.name || "Walk-in",
+        phone: selectedCustomerData?.phone || undefined,
         subtotal, discount: 0, tax, total,
         paymentMethod: "Cash",
         orderSource: "waiter",
@@ -903,6 +929,51 @@ const WaiterPanel = () => {
                       <X className="h-4 w-4 text-muted-foreground" />
                     </Button>
                   </div>
+                </div>
+
+                {/* Customer Association */}
+                <div className="bg-zinc-100/70 dark:bg-zinc-950/30 rounded-xl p-3 border border-zinc-200 dark:border-zinc-800/80 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Customer Association</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <Select value={selectedCustomerId || "walk-in"} onValueChange={(val) => setSelectedCustomerId(val === "walk-in" ? "" : val)}>
+                      <SelectTrigger className="flex-1 h-8 text-xs font-semibold rounded-lg bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
+                        <User className="h-3.5 w-3.5 mr-1.5 shrink-0 text-muted-foreground" />
+                        <SelectValue placeholder="Walk-in Customer" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="walk-in">Walk-in Customer</SelectItem>
+                        {customers.map((c) => (
+                          <SelectItem key={c.id} value={c.id}>
+                            {c.name} {c.phone ? `(${c.phone})` : ""}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Button variant="outline" size="icon" className="h-8 w-8 shrink-0 rounded-lg bg-white dark:bg-zinc-900" onClick={() => setShowCustomerAddDialog(true)} title="Add New Customer">
+                      <Plus className="h-3.5 w-3.5" />
+                    </Button>
+                    {selectedCustomerId && (
+                      <Button variant="outline" size="icon" className="h-8 w-8 shrink-0 rounded-lg bg-white dark:bg-zinc-900" onClick={() => setShowCustomerHistoryDialog(true)} title="View Customer History">
+                        <History className="h-3.5 w-3.5" />
+                      </Button>
+                    )}
+                  </div>
+                  {selectedCustomerData && (
+                    <div className="flex items-center gap-1.5 text-[10px] pt-0.5">
+                      <span className="text-muted-foreground truncate">{selectedCustomerData.phone || "No phone"} {selectedCustomerData.address ? `• ${selectedCustomerData.address}` : ""}</span>
+                      {selectedCustomerData.customerType === "corporate" && (
+                        <Badge variant="secondary" className="text-[9px] bg-info/10 text-info gap-0.5 shrink-0"><Building2 className="h-2.5 w-2.5" />Corp</Badge>
+                      )}
+                      {selectedCustomerData.customerType === "vip" && (
+                        <Badge variant="secondary" className="text-[9px] bg-warning/10 text-warning gap-0.5 shrink-0"><Crown className="h-2.5 w-2.5" />VIP</Badge>
+                      )}
+                      {selectedCustomerData.outstandingDue > 0 && (
+                        <Badge variant="secondary" className="text-[9px] bg-destructive/10 text-destructive shrink-0">Due: {currency} {selectedCustomerData.outstandingDue.toLocaleString()}</Badge>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {/* Seating Details */}
@@ -1301,6 +1372,45 @@ const WaiterPanel = () => {
                       <button onClick={() => setCartItems([])} className="text-[10px] text-muted-foreground hover:text-destructive flex items-center gap-1 transition-colors">
                         <Trash2 className="h-3 w-3" /> Clear
                       </button>
+                    )}
+                  </div>
+
+                  {/* Customer Association */}
+                  <div className="bg-zinc-100/70 dark:bg-zinc-950/30 rounded-xl p-2.5 border border-zinc-200 dark:border-zinc-800/80 space-y-1.5">
+                    <div className="flex items-center gap-1.5">
+                      <Select value={selectedCustomerId || "walk-in"} onValueChange={(val) => setSelectedCustomerId(val === "walk-in" ? "" : val)}>
+                        <SelectTrigger className="flex-1 h-8 text-xs font-semibold rounded-lg bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
+                          <User className="h-3.5 w-3.5 mr-1.5 shrink-0 text-muted-foreground" />
+                          <SelectValue placeholder="Walk-in Customer" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="walk-in">Walk-in Customer</SelectItem>
+                          {customers.map((c) => (
+                            <SelectItem key={c.id} value={c.id}>
+                              {c.name} {c.phone ? `(${c.phone})` : ""}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Button variant="outline" size="icon" className="h-8 w-8 shrink-0 rounded-lg bg-white dark:bg-zinc-900" onClick={() => setShowCustomerAddDialog(true)} title="Add New Customer">
+                        <Plus className="h-3.5 w-3.5" />
+                      </Button>
+                      {selectedCustomerId && (
+                        <Button variant="outline" size="icon" className="h-8 w-8 shrink-0 rounded-lg bg-white dark:bg-zinc-900" onClick={() => setShowCustomerHistoryDialog(true)} title="View Customer History">
+                          <History className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
+                    </div>
+                    {selectedCustomerData && (
+                      <div className="flex items-center gap-1.5 text-[10px]">
+                        <span className="text-muted-foreground truncate">{selectedCustomerData.phone || "No phone"}</span>
+                        {selectedCustomerData.customerType === "corporate" && (
+                          <Badge variant="secondary" className="text-[9px] bg-info/10 text-info gap-0.5 shrink-0"><Building2 className="h-2.5 w-2.5" />Corp</Badge>
+                        )}
+                        {selectedCustomerData.customerType === "vip" && (
+                          <Badge variant="secondary" className="text-[9px] bg-warning/10 text-warning gap-0.5 shrink-0"><Crown className="h-2.5 w-2.5" />VIP</Badge>
+                        )}
+                      </div>
                     )}
                   </div>
 
@@ -1947,6 +2057,161 @@ const WaiterPanel = () => {
             >
               <Check className="h-4 w-4" /> {guestsActionType === "start-sitting" ? "Start Sitting" : "Confirm Order"}
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Add New Customer Dialog ── */}
+      <Dialog open={showCustomerAddDialog} onOpenChange={setShowCustomerAddDialog}>
+        <DialogContent className="max-w-md rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <User className="h-5 w-5 text-primary" />
+              Add New Customer
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div>
+              <Label className="text-xs font-semibold">Customer Name *</Label>
+              <Input
+                value={newCustomerForm.name}
+                onChange={(e) => setNewCustomerForm(prev => ({ ...prev, name: e.target.value }))}
+                placeholder="Enter customer name"
+                className="mt-1 h-9 text-xs rounded-xl"
+              />
+            </div>
+            <div>
+              <Label className="text-xs font-semibold">Phone Number *</Label>
+              <Input
+                value={newCustomerForm.phone}
+                onChange={(e) => setNewCustomerForm(prev => ({ ...prev, phone: e.target.value }))}
+                placeholder="0300-1234567"
+                className="mt-1 h-9 text-xs rounded-xl"
+              />
+            </div>
+            <div>
+              <Label className="text-xs font-semibold">Email Address (Optional)</Label>
+              <Input
+                type="email"
+                value={newCustomerForm.email}
+                onChange={(e) => setNewCustomerForm(prev => ({ ...prev, email: e.target.value }))}
+                placeholder="customer@email.com"
+                className="mt-1 h-9 text-xs rounded-xl"
+              />
+            </div>
+            <div>
+              <Label className="text-xs font-semibold">Address (Optional)</Label>
+              <Input
+                value={newCustomerForm.address}
+                onChange={(e) => setNewCustomerForm(prev => ({ ...prev, address: e.target.value }))}
+                placeholder="Address..."
+                className="mt-1 h-9 text-xs rounded-xl"
+              />
+            </div>
+            <div>
+              <Label className="text-xs font-semibold">Customer Type</Label>
+              <Select
+                value={newCustomerForm.customerType}
+                onValueChange={(val) => setNewCustomerForm(prev => ({ ...prev, customerType: val }))}
+              >
+                <SelectTrigger className="mt-1 h-9 text-xs rounded-xl">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="walk-in">Standard / Walk-in</SelectItem>
+                  <SelectItem value="corporate">Corporate</SelectItem>
+                  <SelectItem value="vip">VIP</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setShowCustomerAddDialog(false)} className="rounded-xl">Cancel</Button>
+            <Button className="gradient-primary text-primary-foreground font-bold rounded-xl" onClick={handleAddCustomerSubmit} disabled={creatingCustomer}>
+              {creatingCustomer ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Plus className="h-4 w-4 mr-1" />}
+              Save Customer
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Customer History Dialog ── */}
+      <Dialog open={showCustomerHistoryDialog} onOpenChange={setShowCustomerHistoryDialog}>
+        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <History className="h-5 w-5 text-primary" />
+              Customer History
+            </DialogTitle>
+          </DialogHeader>
+          {customerHistory ? (
+            <div className="space-y-4">
+              <div className="flex items-center gap-3">
+                <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
+                  <User className="h-6 w-6 text-primary" />
+                </div>
+                <div>
+                  <p className="font-bold text-lg">{customerHistory.name}</p>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground">{customerHistory.phone || "No phone"}</span>
+                    {customerHistory.customerType === "corporate" && <Badge className="text-[9px] bg-info/10 text-info">Corporate</Badge>}
+                    {customerHistory.customerType === "vip" && <Badge className="text-[9px] bg-warning/10 text-warning">VIP</Badge>}
+                  </div>
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                <Card className="p-2.5 text-center rounded-xl">
+                  <p className="text-lg font-bold text-primary">{customerHistory.orderCount}</p>
+                  <p className="text-[10px] text-muted-foreground font-medium">Total Visits</p>
+                </Card>
+                <Card className="p-2.5 text-center rounded-xl">
+                  <p className="text-lg font-bold">{currency} {customerHistory.totalSpent.toLocaleString()}</p>
+                  <p className="text-[10px] text-muted-foreground font-medium">Total Spent</p>
+                </Card>
+                <Card className="p-2.5 text-center rounded-xl">
+                  <p className="text-lg font-bold">{currency} {customerHistory.avgBill.toLocaleString()}</p>
+                  <p className="text-[10px] text-muted-foreground font-medium">Avg Bill</p>
+                </Card>
+              </div>
+              {customerHistory.outstandingDue > 0 && (
+                <div className="bg-destructive/10 border border-destructive/20 rounded-xl p-2.5 flex justify-between items-center">
+                  <span className="text-sm font-medium text-destructive">Outstanding Due</span>
+                  <span className="font-bold text-destructive">{currency} {customerHistory.outstandingDue.toLocaleString()}</span>
+                </div>
+              )}
+              {customerHistory.topItems.length > 0 && (
+                <div>
+                  <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">Favorite Items</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {customerHistory.topItems.map(([name, qty]) => (
+                      <Badge key={name} variant="secondary" className="text-[10px] font-bold rounded-lg px-2 py-0.5">{name} ({qty}x)</Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {customerHistory.recentOrders.length > 0 && (
+                <div>
+                  <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">Recent Orders</p>
+                  <div className="space-y-1.5">
+                    {customerHistory.recentOrders.map((o) => (
+                      <div key={o.id} className="flex items-center justify-between text-xs bg-muted/50 rounded-xl px-3 py-2 border border-border/40">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold">{o.orderNumber}</span>
+                          <Badge variant="outline" className="text-[9px] font-bold">{o.type}</Badge>
+                          <span className="text-muted-foreground text-[11px]">{new Date(o.createdAt).toLocaleDateString()}</span>
+                        </div>
+                        <span className="font-bold text-primary">{currency} {Number(o.total).toLocaleString()}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground text-center py-8">No customer selected</p>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowCustomerHistoryDialog(false)} className="rounded-xl">Close</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
