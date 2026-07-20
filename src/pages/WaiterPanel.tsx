@@ -158,7 +158,7 @@ const ACTIVE_STATUSES = ["pending", "preparing", "ready"];
 // ─── Component ─────────────────────────────────────────────────────────────
 
 const WaiterPanel = () => {
-  const { settings } = useData();
+  const { settings, updateSettings } = useData();
   const { user } = useAuth();
   const currency = settings.currency || "Rs.";
 
@@ -241,6 +241,19 @@ const WaiterPanel = () => {
         setCats(catData);
         setGlobalMods(modData.filter((m) => m.status === "active"));
         setTaxRate(Number(apiSettings.taxRate) ?? 0);
+        updateSettings({
+          restaurantName: apiSettings.restaurantName || "",
+          phone: apiSettings.phone || "",
+          email: apiSettings.email || "",
+          currency: apiSettings.currency || "Rs.",
+          taxName: apiSettings.taxName || "GST",
+          taxRate: Number(apiSettings.taxRate ?? 16),
+          address: apiSettings.address || "",
+          receiptHeader: apiSettings.receiptHeader || "",
+          tableManagement: apiSettings.tableManagement,
+          onlineOrders: apiSettings.onlineOrders,
+          paymentMethods: apiSettings.paymentMethods,
+        });
       } catch {
         toast.error("Failed to load data");
       } finally {
@@ -1687,19 +1700,34 @@ const WaiterPanel = () => {
               <div className="space-y-3">
                 <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider pl-1">Choose Payment Account</label>
                 <div className="grid grid-cols-2 gap-2">
-                  {[
-                    { id: "Cash", label: "Cash", icon: Coins, color: "text-amber-500 border-amber-500/20 bg-amber-500/5" },
-                    { id: "Credit Card", label: "Card", icon: CreditCard, color: "text-blue-500 border-blue-500/20 bg-blue-500/5" },
-                    { id: "Account", label: "Account", icon: BookOpen, color: "text-indigo-500 border-indigo-500/20 bg-indigo-500/5" },
-                    { id: "JazzCash", label: "JazzCash", icon: Smartphone, color: "text-red-500 border-red-500/20 bg-red-500/5" },
-                    { id: "EasyPaisa", label: "EasyPaisa", icon: Wallet, color: "text-emerald-500 border-emerald-500/20 bg-emerald-500/5" }
-                  ].map((payOpt) => {
-                    const isSelected = settlePaymentMethod === payOpt.id;
-                    const IconComp = payOpt.icon;
+                  {(settings.paymentMethods ?? ["Cash", "Credit Card", "Account", "JazzCash", "EasyPaisa"]).map((payOpt) => {
+                    const isSelected = settlePaymentMethod === payOpt;
+                    
+                    const getOptIcon = () => {
+                      const name = payOpt.toLowerCase();
+                      if (name.includes("cash")) return Coins;
+                      if (name.includes("card") || name.includes("bank") || name.includes("hbl") || name.includes("visa") || name.includes("master")) return CreditCard;
+                      if (name.includes("account")) return BookOpen;
+                      if (name.includes("phone") || name.includes("mobile") || name.includes("jazz") || name.includes("paisa") || name.includes("easypaisa")) return Smartphone;
+                      return CreditCard;
+                    };
+                    
+                    const getOptColor = () => {
+                      const name = payOpt.toLowerCase();
+                      if (name.includes("cash")) return "text-amber-500 border-amber-500/20 bg-amber-500/5";
+                      if (name.includes("card") || name.includes("bank") || name.includes("hbl") || name.includes("visa") || name.includes("master")) return "text-blue-500 border-blue-500/20 bg-blue-500/5";
+                      if (name.includes("account")) return "text-indigo-500 border-indigo-500/20 bg-indigo-500/5";
+                      if (name.includes("jazz")) return "text-red-500 border-red-500/20 bg-red-500/5";
+                      if (name.includes("paisa") || name.includes("easypaisa")) return "text-emerald-500 border-emerald-500/20 bg-emerald-500/5";
+                      return "text-zinc-500 border-zinc-500/20 bg-zinc-500/5";
+                    };
+
+                    const IconComp = getOptIcon();
+                    const colorClass = getOptColor();
                     return (
                       <button
-                        key={payOpt.id}
-                        onClick={() => setSettlePaymentMethod(payOpt.id)}
+                        key={payOpt}
+                        onClick={() => setSettlePaymentMethod(payOpt)}
                         className={cn(
                           "flex items-center gap-2.5 p-3 rounded-xl border text-left transition-all hover:scale-[1.01] active:scale-[0.99]",
                           isSelected 
@@ -1707,10 +1735,10 @@ const WaiterPanel = () => {
                             : "border-zinc-200 dark:border-zinc-850 bg-zinc-50 dark:bg-zinc-900/20 text-muted-foreground hover:border-zinc-300 dark:hover:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-900/40"
                         )}
                       >
-                        <div className={cn("p-1.5 rounded-lg bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-900", isSelected ? "text-emerald-600 dark:text-emerald-400 border-emerald-500/20" : payOpt.color)}>
+                        <div className={cn("p-1.5 rounded-lg bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-900", isSelected ? "text-emerald-600 dark:text-emerald-400 border-emerald-500/20" : colorClass)}>
                           <IconComp className="h-3.5 w-3.5" />
                         </div>
-                        <span className="text-[11px] font-bold tracking-tight">{payOpt.label}</span>
+                        <span className="text-[11px] font-bold tracking-tight">{payOpt}</span>
                         {isSelected && <Check className="ml-auto h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 font-black" />}
                       </button>
                     );
@@ -1729,11 +1757,9 @@ const WaiterPanel = () => {
                     <Select value={splitMethod1} onValueChange={setSplitMethod1}>
                       <SelectTrigger className="rounded-xl bg-white dark:bg-zinc-950 border-zinc-250 dark:border-zinc-800 text-[11px] h-9 text-foreground"><SelectValue /></SelectTrigger>
                       <SelectContent className="bg-white dark:bg-zinc-950 border-zinc-250 dark:border-zinc-800 text-foreground text-[11px]">
-                        <SelectItem value="Cash">Cash</SelectItem>
-                        <SelectItem value="Credit Card">Card</SelectItem>
-                        <SelectItem value="Account">Account</SelectItem>
-                        <SelectItem value="JazzCash">JazzCash</SelectItem>
-                        <SelectItem value="EasyPaisa">EasyPaisa</SelectItem>
+                        {(settings.paymentMethods ?? ["Cash", "Credit Card", "Account", "JazzCash", "EasyPaisa"]).map(pm => (
+                          <SelectItem key={pm} value={pm}>{pm}</SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
@@ -1763,11 +1789,9 @@ const WaiterPanel = () => {
                     <Select value={splitMethod2} onValueChange={setSplitMethod2}>
                       <SelectTrigger className="rounded-xl bg-white dark:bg-zinc-950 border-zinc-250 dark:border-zinc-800 text-[11px] h-9 text-foreground"><SelectValue /></SelectTrigger>
                       <SelectContent className="bg-white dark:bg-zinc-950 border-zinc-250 dark:border-zinc-800 text-foreground text-[11px]">
-                        <SelectItem value="Cash">Cash</SelectItem>
-                        <SelectItem value="Credit Card">Card</SelectItem>
-                        <SelectItem value="Account">Account</SelectItem>
-                        <SelectItem value="JazzCash">JazzCash</SelectItem>
-                        <SelectItem value="EasyPaisa">EasyPaisa</SelectItem>
+                        {(settings.paymentMethods ?? ["Cash", "Credit Card", "Account", "JazzCash", "EasyPaisa"]).map(pm => (
+                          <SelectItem key={pm} value={pm}>{pm}</SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>

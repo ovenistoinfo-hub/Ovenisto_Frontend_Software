@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
+import { useData } from "@/contexts/DataContext";
 import { Settings as SettingsIcon, Plus, Pencil, Trash2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -180,6 +181,7 @@ const SettingsPage = () => {
 
   const pathSlug = location.pathname.split("/settings/")[1] || "";
   const initialTab = slugTabMap[pathSlug] || "general";
+  const { updateSettings } = useData();
 
   const [tab, setTab] = useState(initialTab);
   const [loadingSettings, setLoadingSettings] = useState(true);
@@ -189,6 +191,7 @@ const SettingsPage = () => {
     businessName: "", phone: "", email: "", currency: "Rs.",
     taxName: "GST", taxRate: "16", address: "", receiptHeader: "",
     tableManagement: true, onlineOrders: true, graceMinutes: 15,
+    paymentMethods: [] as string[],
   });
 
   useEffect(() => {
@@ -206,11 +209,25 @@ const SettingsPage = () => {
           tableManagement: data.tableManagement,
           onlineOrders: data.onlineOrders,
           graceMinutes: data.graceMinutes ?? 15,
+          paymentMethods: data.paymentMethods ?? ["Cash", "Credit Card", "Account", "JazzCash", "EasyPaisa"],
+        });
+        updateSettings({
+          restaurantName: data.restaurantName || "",
+          phone: data.phone || "",
+          email: data.email || "",
+          currency: data.currency || "Rs.",
+          taxName: data.taxName || "GST",
+          taxRate: Number(data.taxRate ?? 16),
+          address: data.address || "",
+          receiptHeader: data.receiptHeader || "",
+          tableManagement: data.tableManagement,
+          onlineOrders: data.onlineOrders,
+          paymentMethods: data.paymentMethods,
         });
       })
       .catch(() => toast.error("Failed to load settings"))
       .finally(() => setLoadingSettings(false));
-  }, []);
+  }, [updateSettings]);
 
   useEffect(() => {
     const slug = location.pathname.split("/settings/")[1] || "";
@@ -232,7 +249,7 @@ const SettingsPage = () => {
     if (isNaN(grace) || grace < 10 || grace > 30) { toast.error("Grace period must be between 10 to 30 minutes"); return; }
     setSaving(true);
     try {
-      await settingsService.updateSettings({
+      const res = await settingsService.updateSettings({
         restaurantName: general.businessName,
         phone: general.phone || null,
         email: general.email || null,
@@ -244,6 +261,20 @@ const SettingsPage = () => {
         tableManagement: general.tableManagement,
         onlineOrders: general.onlineOrders,
         graceMinutes: grace,
+        paymentMethods: general.paymentMethods,
+      });
+      updateSettings({
+        restaurantName: res.restaurantName || "",
+        phone: res.phone || "",
+        email: res.email || "",
+        currency: res.currency || "Rs.",
+        taxName: res.taxName || "GST",
+        taxRate: Number(res.taxRate ?? 16),
+        address: res.address || "",
+        receiptHeader: res.receiptHeader || "",
+        tableManagement: res.tableManagement,
+        onlineOrders: res.onlineOrders,
+        paymentMethods: res.paymentMethods,
       });
       toast.success("Settings saved successfully");
     } catch (err: any) {
@@ -294,7 +325,97 @@ const SettingsPage = () => {
           </div>
           <div><label className="text-sm font-medium">Address</label><Textarea value={general.address} onChange={e => setGeneral(p => ({...p, address: e.target.value}))} /></div>
           <div><label className="text-sm font-medium">Receipt Header</label><Textarea value={general.receiptHeader} onChange={e => setGeneral(p => ({...p, receiptHeader: e.target.value}))} /></div>
-          <div className="space-y-3">
+          
+          {/* Registered Payment Methods */}
+          <div className="border-t border-zinc-200 dark:border-zinc-800 pt-4 space-y-2">
+            <label className="text-sm font-semibold text-foreground flex items-center gap-1.5">
+              Registered Payment Methods
+            </label>
+            <p className="text-[11px] text-muted-foreground select-none">
+              Add, remove, or customize the payment accounts/methods shown during checkout.
+            </p>
+            
+            <div className="flex flex-wrap gap-2 py-2">
+              {general.paymentMethods?.map((pm, idx) => (
+                <Badge 
+                  key={idx} 
+                  variant="secondary" 
+                  className="h-8 pl-3 pr-2 text-xs font-semibold rounded-full bg-zinc-100 hover:bg-zinc-150 border border-zinc-200 dark:bg-zinc-900/60 dark:border-zinc-800/80 flex items-center gap-1.5 select-none"
+                >
+                  <span>{pm}</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setGeneral(p => ({
+                        ...p,
+                        paymentMethods: p.paymentMethods.filter((_, i) => i !== idx)
+                      }));
+                    }}
+                    className="text-muted-foreground hover:text-destructive hover:bg-zinc-200 dark:hover:bg-zinc-800 rounded-full p-0.5 transition-colors"
+                    title={`Remove ${pm}`}
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </button>
+                </Badge>
+              ))}
+              
+              {(!general.paymentMethods || general.paymentMethods.length === 0) && (
+                <p className="text-xs text-muted-foreground italic py-1">No payment methods configured. Add at least one.</p>
+              )}
+            </div>
+            
+            <div className="flex items-center gap-2 max-w-sm pt-1">
+              <Input
+                id="new-payment-method-input"
+                placeholder="e.g., Bank Transfer, HBL"
+                className="rounded-xl border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950/40 text-xs h-9"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    const val = (e.target as HTMLInputElement).value.trim();
+                    if (val) {
+                      if (general.paymentMethods.includes(val)) {
+                        toast.warning("Payment method already exists");
+                        return;
+                      }
+                      setGeneral(p => ({
+                        ...p,
+                        paymentMethods: [...p.paymentMethods, val]
+                      }));
+                      (e.target as HTMLInputElement).value = '';
+                    }
+                  }
+                }}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="rounded-xl h-9 px-3 shrink-0 flex items-center gap-1 border-zinc-200 dark:border-zinc-800 text-xs font-semibold hover:bg-zinc-50 dark:hover:bg-zinc-900/60"
+                onClick={() => {
+                  const el = document.getElementById("new-payment-method-input") as HTMLInputElement;
+                  const val = el?.value?.trim();
+                  if (val) {
+                    if (general.paymentMethods.includes(val)) {
+                      toast.warning("Payment method already exists");
+                      return;
+                    }
+                    setGeneral(p => ({
+                      ...p,
+                      paymentMethods: [...p.paymentMethods, val]
+                    }));
+                    el.value = '';
+                  } else {
+                    toast.error("Please enter a payment method name");
+                  }
+                }}
+              >
+                <Plus className="h-3.5 w-3.5" /> Add
+              </Button>
+            </div>
+          </div>
+
+          <div className="space-y-3 border-t border-zinc-200 dark:border-zinc-800 pt-4">
             <div className="flex items-center justify-between"><span className="text-sm">Enable Table Management</span><Switch checked={general.tableManagement} onCheckedChange={c => setGeneral(p => ({...p, tableManagement: c}))} /></div>
             <div className="flex items-center justify-between"><span className="text-sm">Enable Online Orders</span><Switch checked={general.onlineOrders} onCheckedChange={c => setGeneral(p => ({...p, onlineOrders: c}))} /></div>
           </div>

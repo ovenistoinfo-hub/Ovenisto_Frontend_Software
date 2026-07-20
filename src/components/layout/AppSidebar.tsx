@@ -45,9 +45,6 @@ const navSections = [
   { label: "Outlets", items: [{ title: "Outlets", url: "/outlets", icon: Store, module: "outlets" }]},
   { label: "Settings", items: [
     { title: "General Settings", url: "/settings", icon: Settings, module: "settings" },
-    { title: "Self Order", url: "/settings/self-order", icon: Link2, module: "settings" },
-    { title: "Website Order", url: "/settings/website-order", icon: Globe, module: "settings" },
-    { title: "Reservations", url: "/settings/reservations", icon: CalendarDays, module: "settings" },
     { title: "Warehouses", url: "/settings/warehouses", icon: Package, module: "settings" },
   ]},
   { label: "Item / Stock", items: [

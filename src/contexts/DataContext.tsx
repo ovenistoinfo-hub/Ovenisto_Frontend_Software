@@ -21,6 +21,7 @@ interface Settings {
   selfOrder: { enabled: boolean; showImages: boolean; showDescriptions: boolean; payAtCounter: boolean };
   website: { enabled: boolean; deliveryRadius: string; minOrder: string; deliveryCharges: string; prepTime: string; autoAccept: boolean };
   reservation: { enabled: boolean; slotDuration: string; maxAdvanceDays: string; autoConfirm: boolean };
+  paymentMethods?: string[];
 }
 
 const defaultSettings: Settings = {
@@ -32,6 +33,7 @@ const defaultSettings: Settings = {
   selfOrder: { enabled: false, showImages: true, showDescriptions: true, payAtCounter: true },
   website: { enabled: true, deliveryRadius: "10", minOrder: "500", deliveryCharges: "150", prepTime: "30", autoAccept: false },
   reservation: { enabled: false, slotDuration: "60", maxAdvanceDays: "14", autoConfirm: true },
+  paymentMethods: ["Cash", "Credit Card", "Account", "JazzCash", "EasyPaisa"],
 };
 
 // ── New interfaces ──

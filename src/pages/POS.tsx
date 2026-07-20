@@ -80,12 +80,13 @@ interface PaymentEntry {
 const orderTypes: OrderType[] = ["Dine In", "Take Away", "Delivery"];
 // tableNumbers kept as fallback; backend tables loaded at runtime
 
-const finalizeMethods = [
-  { id: "Cash", icon: Banknote, label: "Cash" },
-  { id: "Credit Card", icon: CreditCard, label: "Credit Card" },
-  { id: "JazzCash", icon: Smartphone, label: "JazzCash" },
-  { id: "EasyPaisa", icon: Smartphone, label: "EasyPaisa" },
-];
+const getPaymentIcon = (methodName: string) => {
+  const name = methodName.toLowerCase();
+  if (name.includes("cash")) return Banknote;
+  if (name.includes("card") || name.includes("bank") || name.includes("hbl") || name.includes("visa") || name.includes("master")) return CreditCard;
+  if (name.includes("phone") || name.includes("mobile") || name.includes("jazz") || name.includes("paisa") || name.includes("easypaisa")) return Smartphone;
+  return CreditCard;
+};
 
 const quickDenominations = [10, 20, 50, 100, 500, 1000];
 
@@ -102,7 +103,7 @@ const CANCEL_APPROVER_ROLES = ['Super Admin', 'Admin', 'Manager'];
 const CANCEL_RESPONSIBLE_ROLES = ['Cashier', 'Kitchen Staff', 'Kitchen Manager', 'Waiter'];
 
 const POS = () => {
-  const { orders: localOrdersData, customers: customersList, foodMenuItems: localFoodMenuItems, foodCategories: localFoodCategories, modifiers: localModifiers, kitchens: localKitchens, ingredients, addItem, updateItem: updateDataItem, shifts, settings, users, riders: deliveryRiders, deals } = useData();
+  const { orders: localOrdersData, customers: customersList, foodMenuItems: localFoodMenuItems, foodCategories: localFoodCategories, modifiers: localModifiers, kitchens: localKitchens, ingredients, addItem, updateItem: updateDataItem, shifts, settings, users, riders: deliveryRiders, deals, updateSettings } = useData();
   const { user } = useAuth();
   const location = useLocation();
 
@@ -221,7 +222,22 @@ const POS = () => {
     // approver/responsible-person pickers are fetched per-order (see the Cancel button
     // below), scoped to that specific order's outlet.
     userService.getStaffPicker(WAITER_ASSIGNMENT_ROLES).then(setApiStaff).catch(() => {});
-    settingsService.getSettings().then(s => setApiSettings({ ...s, taxRate: Number(s.taxRate) })).catch(() => {});
+    settingsService.getSettings().then(s => {
+      setApiSettings({ ...s, taxRate: Number(s.taxRate) });
+      updateSettings({
+        restaurantName: s.restaurantName || "",
+        phone: s.phone || "",
+        email: s.email || "",
+        currency: s.currency || "Rs.",
+        taxName: s.taxName || "GST",
+        taxRate: Number(s.taxRate ?? 16),
+        address: s.address || "",
+        receiptHeader: s.receiptHeader || "",
+        tableManagement: s.tableManagement,
+        onlineOrders: s.onlineOrders,
+        paymentMethods: s.paymentMethods,
+      });
+    }).catch(() => {});
     inventoryService.getIngredients({ status: 'active', lowStock: true }).then(data => setApiLowStockItems(data)).catch(() => {});
     reservationService.getAll({ upcoming: true }).then(data => setApiReservations(data)).catch(() => {});
   }, [loadApiOrders, loadMyPendingCancellations]);
@@ -1827,13 +1843,16 @@ const POS = () => {
             <div className="space-y-3">
               <p className="text-sm font-medium">Payment Method</p>
               <div className="grid grid-cols-2 gap-2">
-                {finalizeMethods.map(m => (
-                  <Button key={m.id} variant={finalizeMethod === m.id ? "default" : "outline"} size="sm"
-                    className={cn("text-xs h-9", finalizeMethod === m.id && "gradient-primary text-primary-foreground")}
-                    onClick={() => setFinalizeMethod(m.id)}>
-                    <m.icon className="h-3 w-3 mr-1" />{m.label}
-                  </Button>
-                ))}
+                {(effectiveSettings?.paymentMethods ?? ["Cash", "Credit Card", "Account", "JazzCash", "EasyPaisa"]).map(pm => {
+                  const IconComponent = getPaymentIcon(pm);
+                  return (
+                    <Button key={pm} variant={finalizeMethod === pm ? "default" : "outline"} size="sm"
+                      className={cn("text-xs h-9", finalizeMethod === pm && "gradient-primary text-primary-foreground")}
+                      onClick={() => setFinalizeMethod(pm)}>
+                      <IconComponent className="h-3 w-3 mr-1" />{pm}
+                    </Button>
+                  );
+                })}
               </div>
               <Separator />
               <div className="space-y-2">
@@ -2382,10 +2401,9 @@ const POS = () => {
                       onChange={e => setFutureAdvanceMethod(e.target.value)}
                       className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     >
-                      <option value="Cash">Cash</option>
-                      <option value="Credit Card">Credit Card</option>
-                      <option value="JazzCash">JazzCash</option>
-                      <option value="EasyPaisa">EasyPaisa</option>
+                      {(effectiveSettings?.paymentMethods ?? ["Cash", "Credit Card", "JazzCash", "EasyPaisa"]).map(pm => (
+                        <option key={pm} value={pm}>{pm}</option>
+                      ))}
                     </select>
                   </div>
                 </div>
