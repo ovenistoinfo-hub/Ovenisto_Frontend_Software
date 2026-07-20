@@ -200,8 +200,8 @@ const POS = () => {
   // button only locks for that specific order, not every order in the list.
   const loadMyPendingCancellations = useCallback(async () => {
     try {
-      const requests = await cancellationRequestService.listMine();
-      setMyPendingCancelOrderIds(new Set(requests.filter(r => r.status === "pending").map(r => r.orderId)));
+      const requests = await cancellationRequestService.list({ status: "pending" });
+      setMyPendingCancelOrderIds(new Set(requests.map(r => r.orderId)));
     } catch {
       // non-critical — worst case the button stays enabled and a duplicate request 400s
     }
@@ -256,21 +256,23 @@ const POS = () => {
   useEffect(() => {
     const socket = getSocket();
     const createdHandler = (payload: CancellationRequestRecord) => {
-      if (payload.requestedById !== user?.id || payload.status !== "pending") return;
+      if (payload.status !== "pending") return;
       setMyPendingCancelOrderIds(prev => new Set(prev).add(payload.orderId));
     };
     const updatedHandler = (payload: CancellationRequestRecord) => {
-      if (payload.requestedById !== user?.id || payload.status === "pending") return;
+      if (payload.status === "pending") return;
       setMyPendingCancelOrderIds(prev => {
         if (!prev.has(payload.orderId)) return prev;
         const next = new Set(prev);
         next.delete(payload.orderId);
         return next;
       });
-      if (payload.status === "approved") {
-        toast.success(`Order ${payload.order?.orderNumber ?? ""} cancellation approved by ${payload.reviewedBy?.name ?? "approver"}`);
-      } else {
-        toast.error(`Order ${payload.order?.orderNumber ?? ""} cancellation rejected${payload.reviewNote ? `: ${payload.reviewNote}` : ""}`);
+      if (payload.requestedById === user?.id) {
+        if (payload.status === "approved") {
+          toast.success(`Order ${payload.order?.orderNumber ?? ""} cancellation approved by ${payload.reviewedBy?.name ?? "approver"}`);
+        } else {
+          toast.error(`Order ${payload.order?.orderNumber ?? ""} cancellation rejected${payload.reviewNote ? `: ${payload.reviewNote}` : ""}`);
+        }
       }
     };
     socket.on("cancellationRequest:created", createdHandler);
@@ -854,6 +856,10 @@ const POS = () => {
   const isPaymentSufficient = totalPaid >= total;
 
   const loadRunningOrder = (orderId: string) => {
+    if (myPendingCancelOrderIds.has(orderId)) {
+      toast.error("This order has a pending cancellation request and cannot be modified.");
+      return;
+    }
     const order = allOrdersData.find((o) => o.id === orderId);
     if (!order) return;
     setCart(order.items.map((item) => ({ ...item, id: `${item.id}-${Date.now()}` })));
@@ -2145,7 +2151,9 @@ const POS = () => {
                         })()}
 
                         <div className="flex gap-1.5">
-                          <Button size="sm" variant="outline" className="h-7 text-xs border-warning/30 text-warning hover:bg-warning/5" onClick={() => { setModifyCancelAction("modify"); setModifyCancelReason(""); setShowModifyOrder(order.id); }}>
+                          <Button size="sm" variant="outline" className="h-7 text-xs border-warning/30 text-warning hover:bg-warning/5 disabled:opacity-60"
+                            disabled={myPendingCancelOrderIds.has(order.id)}
+                            onClick={() => { setModifyCancelAction("modify"); setModifyCancelReason(""); setShowModifyOrder(order.id); }}>
                             Modify
                           </Button>
                           <Button size="sm" variant="outline" className="h-7 text-xs border-destructive/30 text-destructive hover:bg-destructive/5 disabled:opacity-60"
