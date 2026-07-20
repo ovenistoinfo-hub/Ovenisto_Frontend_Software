@@ -766,7 +766,7 @@ const Warehouses = () => {
             <Card className="shadow-sm border-destructive/30 cursor-pointer hover:ring-1 hover:ring-destructive/50 transition-all" onClick={() => expiry.expiredCount > 0 && setExpiryView("expired")}>
               <CardContent className="pt-6">
                 <div className="flex items-center gap-2"><XCircle className="h-5 w-5 text-destructive" /><div className="text-3xl font-bold text-destructive">{isLoading ? "—" : expiry.expiredCount}</div></div>
-                <p className="text-sm text-muted-foreground mt-1">Expired Items</p>
+                <p className="text-sm text-muted-foreground mt-1">Expired Today</p>
               </CardContent>
             </Card>
             <Card className="shadow-sm border-orange-500/30 cursor-pointer hover:ring-1 hover:ring-orange-500/50 transition-all" onClick={() => expiry.nearExpiryCount > 0 && setExpiryView("near")}>
@@ -1361,7 +1361,7 @@ const Warehouses = () => {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               {expiryView === "expired"
-                ? <><XCircle className="h-5 w-5 text-destructive" /> Expired Items</>
+                ? <><XCircle className="h-5 w-5 text-destructive" /> Expired Today</>
                 : <><Clock className="h-5 w-5 text-orange-500" /> Near Expiry Items (within 7 days)</>}
             </DialogTitle>
           </DialogHeader>
