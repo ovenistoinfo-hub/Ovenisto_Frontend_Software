@@ -412,6 +412,54 @@ const WaiterPanel = () => {
     ? activeTableOrders[activeTableOrders.length - 1].createdAt
     : null;
 
+  const selectedCustomerData = useMemo(() => {
+    if (!selectedCustomerId) return null;
+    return customers.find((c) => c.id === selectedCustomerId) || null;
+  }, [selectedCustomerId, customers]);
+
+  const customerHistory = useMemo(() => {
+    if (!selectedCustomerData) return null;
+    const custOrders = orders.filter(o => o.customerName === selectedCustomerData.name || (selectedCustomerData.phone && o.phone === selectedCustomerData.phone));
+    const avgBill = custOrders.length > 0 ? Math.round(custOrders.reduce((s, o) => s + Number(o.total), 0) / custOrders.length) : 0;
+    const topItems: Record<string, number> = {};
+    custOrders.forEach(o => (o.items || []).forEach(i => { topItems[i.name] = (topItems[i.name] || 0) + i.qty; }));
+    const sortedTop = Object.entries(topItems).sort((a, b) => b[1] - a[1]).slice(0, 5);
+    return {
+      ...selectedCustomerData,
+      orderCount: custOrders.length,
+      totalSpent: selectedCustomerData.totalSpent || custOrders.reduce((s, o) => s + Number(o.total), 0),
+      avgBill,
+      topItems: sortedTop,
+      recentOrders: custOrders.slice(0, 5),
+    };
+  }, [selectedCustomerData, orders]);
+
+  const handleAddCustomerSubmit = async () => {
+    if (!newCustomerForm.name.trim() || !newCustomerForm.phone.trim()) {
+      toast.error("Customer name and phone are required");
+      return;
+    }
+    setCreatingCustomer(true);
+    try {
+      const created = await customerService.createCustomer({
+        name: newCustomerForm.name.trim(),
+        phone: newCustomerForm.phone.trim(),
+        email: newCustomerForm.email.trim() || undefined,
+        address: newCustomerForm.address.trim() || undefined,
+        customerType: newCustomerForm.customerType,
+      });
+      setCustomers((prev) => [...prev, created]);
+      setSelectedCustomerId(created.id);
+      toast.success(`Customer ${created.name} added successfully!`);
+      setShowCustomerAddDialog(false);
+      setNewCustomerForm({ name: "", phone: "", email: "", address: "", customerType: "walk-in" });
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to add customer");
+    } finally {
+      setCreatingCustomer(false);
+    }
+  };
+
   // ── Accept self-order ──
 
   const acceptSelfOrder = async (order: OrderRecord) => {
