@@ -2887,9 +2887,9 @@ const POS = () => {
                       <Select value={cancelRefundMethod} onValueChange={setCancelRefundMethod}>
                         <SelectTrigger className="mt-1 h-9 text-sm"><SelectValue /></SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="cash">Cash</SelectItem>
-                          <SelectItem value="card">Card</SelectItem>
-                          <SelectItem value="online">Online</SelectItem>
+                          {(effectiveSettings.paymentMethods ?? ["Cash", "Credit Card", "Account", "JazzCash", "EasyPaisa"]).map((pm) => (
+                            <SelectItem key={pm} value={pm.toLowerCase()}>{pm}</SelectItem>
+                          ))}
                           <SelectItem value="none">None</SelectItem>
                         </SelectContent>
                       </Select>
