@@ -1171,6 +1171,7 @@ const WaiterPanel = () => {
                       const status  = getTableStatus(tNum);
                       const cfg     = statusConfig[status];
                       const tOrders = getTableOrders(tNum);
+                      const isReservedToday = reservedTableNums.has(tNum) || t.status === "reserved";
                       
                       const oldest = tOrders.length > 0 
                         ? tOrders[tOrders.length - 1].createdAt 
@@ -1214,8 +1215,6 @@ const WaiterPanel = () => {
                       const centerTextClass = isOccupiedState 
                         ? "font-black text-xs text-primary tracking-tight leading-none text-center px-1" 
                         : "font-black text-lg text-foreground tracking-tight";
-
-                      const isReservedToday = reservedTableNums.has(tNum) || t.status === "reserved";
 
                       return (
                         <div key={t.id} className="p-1.5">
