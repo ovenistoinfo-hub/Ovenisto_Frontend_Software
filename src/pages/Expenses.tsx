@@ -20,12 +20,12 @@ import { PageHeader } from "@/components/ui/page-header";
 import { TablePagination } from "@/components/TablePagination";
 
 const categories = ["Utilities", "Rent", "Salary", "Maintenance", "Marketing", "Misc"];
-const methods = ["Cash", "Bank Transfer", "Online", "Card"];
 
 const Expenses = () => {
   const { settings } = useData();
   const { user } = useAuth();
   const currency = settings.currency || "Rs.";
+  const methods = settings.paymentMethods ?? ["Cash", "Credit Card", "Account", "JazzCash", "EasyPaisa"];
   const canManage = ['Super Admin', 'Admin', 'Manager', 'Accountant'].includes(user?.role ?? '');
 
   const queryClient = useQueryClient();
