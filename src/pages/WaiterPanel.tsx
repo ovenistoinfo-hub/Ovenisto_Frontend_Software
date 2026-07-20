@@ -183,6 +183,12 @@ const WaiterPanel = () => {
 
   // ── Customer Association ──
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>("");
+  const [tableCustomerMap, setTableCustomerMap] = useState<Record<string, string>>(() => {
+    try {
+      const saved = localStorage.getItem("ovenisto_table_customers");
+      return saved ? JSON.parse(saved) : {};
+    } catch { return {}; }
+  });
   const [showCustomerAddDialog, setShowCustomerAddDialog] = useState(false);
   const [showCustomerHistoryDialog, setShowCustomerHistoryDialog] = useState(false);
   const [creatingCustomer, setCreatingCustomer] = useState(false);
@@ -434,6 +440,50 @@ const WaiterPanel = () => {
     };
   }, [selectedCustomerData, orders]);
 
+  const handleSelectCustomerForTable = (customerId: string) => {
+    setSelectedCustomerId(customerId);
+    if (selectedTableNum !== null) {
+      const tNumStr = String(selectedTableNum);
+      setTableCustomerMap(prev => {
+        const updated = { ...prev, [tNumStr]: customerId };
+        if (!customerId) delete updated[tNumStr];
+        localStorage.setItem("ovenisto_table_customers", JSON.stringify(updated));
+        return updated;
+      });
+    }
+  };
+
+  useEffect(() => {
+    if (selectedTableNum === null) {
+      setSelectedCustomerId("");
+      return;
+    }
+    const tNumStr = String(selectedTableNum);
+    if (tableCustomerMap[tNumStr]) {
+      setSelectedCustomerId(tableCustomerMap[tNumStr]);
+    } else {
+      const orderWithCust = activeTableOrders.find(o => (o as any).customerId || (o.customerName && o.customerName !== "Walk-in"));
+      if (orderWithCust) {
+        const custId = (orderWithCust as any).customerId;
+        const matched = custId 
+          ? customers.find(c => c.id === custId)
+          : customers.find(c => c.name === orderWithCust.customerName || (orderWithCust.phone && c.phone === orderWithCust.phone));
+        if (matched) {
+          setSelectedCustomerId(matched.id);
+          setTableCustomerMap(prev => {
+            const updated = { ...prev, [tNumStr]: matched.id };
+            localStorage.setItem("ovenisto_table_customers", JSON.stringify(updated));
+            return updated;
+          });
+        } else {
+          setSelectedCustomerId("");
+        }
+      } else {
+        setSelectedCustomerId("");
+      }
+    }
+  }, [selectedTableNum, tableCustomerMap, activeTableOrders, customers]);
+
   const formatPhoneNumber = (val: string): string => {
     const digitsOnly = val.replace(/\D/g, "").slice(0, 11);
     if (digitsOnly.length > 4) {
@@ -462,7 +512,7 @@ const WaiterPanel = () => {
         customerType: newCustomerForm.customerType,
       });
       setCustomers((prev) => [...prev, created]);
-      setSelectedCustomerId(created.id);
+      handleSelectCustomerForTable(created.id);
       toast.success(`Customer ${created.name} added successfully!`);
       setShowCustomerAddDialog(false);
       setNewCustomerForm({ name: "", phone: "", email: "", address: "", customerType: "walk-in" });
@@ -671,6 +721,15 @@ const WaiterPanel = () => {
       await tableService.updateTable(selectedTable.id, { status: "available", currentOrderId: null });
       setTables(prev => prev.map(t => t.id === selectedTable.id ? { ...t, status: "available", currentOrderId: null } : t));
       setBillReqSet((p) => { const n = new Set(p); n.delete(selectedTableNum); return n; });
+      if (selectedTableNum !== null) {
+        const tNumStr = String(selectedTableNum);
+        setTableCustomerMap(prev => {
+          const updated = { ...prev };
+          delete updated[tNumStr];
+          localStorage.setItem("ovenisto_table_customers", JSON.stringify(updated));
+          return updated;
+        });
+      }
       toast.success(`Table ${selectedTable.number} session ended`);
       setSelectedTableId(null);
       setCartItems([]);
@@ -700,6 +759,15 @@ const WaiterPanel = () => {
         await loadOrders();
       }
       setBillReqSet((p) => { const n = new Set(p); n.delete(selectedTableNum); return n; });
+      if (selectedTableNum !== null) {
+        const tNumStr = String(selectedTableNum);
+        setTableCustomerMap(prev => {
+          const updated = { ...prev };
+          delete updated[tNumStr];
+          localStorage.setItem("ovenisto_table_customers", JSON.stringify(updated));
+          return updated;
+        });
+      }
       toast.success(`Table ${selectedTable.number} settled via ${paymentMethod}`);
       setShowBillDialog(false);
       setShowPayBillDialog(false);
@@ -739,6 +807,19 @@ const WaiterPanel = () => {
           return n;
         });
       }
+      if (selectedTableNum !== null) {
+        const fromStr = String(selectedTableNum);
+        const toStr = String(targetTable.number);
+        setTableCustomerMap(prev => {
+          const updated = { ...prev };
+          if (updated[fromStr]) {
+            updated[toStr] = updated[fromStr];
+            delete updated[fromStr];
+          }
+          localStorage.setItem("ovenisto_table_customers", JSON.stringify(updated));
+          return updated;
+        });
+      }
       toast.success(`Moved sitting session to Table ${targetTable.number}`);
       setSelectedTableId(targetTable.id);
       setShowMoveDialog(false);
@@ -754,6 +835,13 @@ const WaiterPanel = () => {
     const subtotal = activeTableOrders.reduce((s, o) => s + Number(o.subtotal), 0);
     const taxValue = Math.round(subtotal * (taxRate / 100));
     const total    = subtotal + taxValue;
+
+    const custName = selectedCustomerData?.name 
+      || activeTableOrders.find(o => o.customerName && o.customerName !== "Walk-in")?.customerName 
+      || "Walk-in";
+    const custPhone = selectedCustomerData?.phone 
+      || activeTableOrders.find(o => o.phone)?.phone 
+      || "";
 
     const win = window.open("", "_blank");
     if (!win) return;
@@ -807,7 +895,7 @@ const WaiterPanel = () => {
             <strong>Date:</strong> ${new Date().toLocaleDateString()}<br/>
             <strong>Time:</strong> ${new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}<br/>
             <strong>Server:</strong> ${user?.name || "Unknown"} (${user?.role || "Waiter"})<br/>
-            <strong>Customer:</strong> ${selectedCustomerData?.name || activeTableOrders[0]?.customerName || "Walk-in"}${selectedCustomerData?.phone || activeTableOrders[0]?.phone ? `<br/><strong>Phone:</strong> ${selectedCustomerData?.phone || activeTableOrders[0]?.phone}` : ''}
+            <strong>Customer:</strong> ${custName}${custPhone ? `<br/><strong>Phone:</strong> ${custPhone}` : ''}
           </div>
           
           <table style="width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 11px; text-align: left;">
@@ -999,7 +1087,7 @@ const WaiterPanel = () => {
                     <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Customer Association</span>
                   </div>
                   <div className="flex items-center gap-1.5">
-                    <Select value={selectedCustomerId || "walk-in"} onValueChange={(val) => setSelectedCustomerId(val === "walk-in" ? "" : val)}>
+                    <Select value={selectedCustomerId || "walk-in"} onValueChange={(val) => handleSelectCustomerForTable(val === "walk-in" ? "" : val)}>
                       <SelectTrigger className="flex-1 h-8 text-xs font-semibold rounded-lg bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
                         <User className="h-3.5 w-3.5 mr-1.5 shrink-0 text-muted-foreground" />
                         <SelectValue placeholder="Walk-in Customer" />
@@ -1437,45 +1525,6 @@ const WaiterPanel = () => {
                     )}
                   </div>
 
-                  {/* Customer Association */}
-                  <div className="bg-zinc-100/70 dark:bg-zinc-950/30 rounded-xl p-2.5 border border-zinc-200 dark:border-zinc-800/80 space-y-1.5">
-                    <div className="flex items-center gap-1.5">
-                      <Select value={selectedCustomerId || "walk-in"} onValueChange={(val) => setSelectedCustomerId(val === "walk-in" ? "" : val)}>
-                        <SelectTrigger className="flex-1 h-8 text-xs font-semibold rounded-lg bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
-                          <User className="h-3.5 w-3.5 mr-1.5 shrink-0 text-muted-foreground" />
-                          <SelectValue placeholder="Walk-in Customer" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="walk-in">Walk-in Customer</SelectItem>
-                          {customers.map((c) => (
-                            <SelectItem key={c.id} value={c.id}>
-                              {c.name} {c.phone ? `(${c.phone})` : ""}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <Button variant="outline" size="icon" className="h-8 w-8 shrink-0 rounded-lg bg-white dark:bg-zinc-900" onClick={() => setShowCustomerAddDialog(true)} title="Add New Customer">
-                        <Plus className="h-3.5 w-3.5" />
-                      </Button>
-                      {selectedCustomerId && (
-                        <Button variant="outline" size="icon" className="h-8 w-8 shrink-0 rounded-lg bg-white dark:bg-zinc-900" onClick={() => setShowCustomerHistoryDialog(true)} title="View Customer History">
-                          <History className="h-3.5 w-3.5" />
-                        </Button>
-                      )}
-                    </div>
-                    {selectedCustomerData && (
-                      <div className="flex items-center gap-1.5 text-[10px]">
-                        <span className="text-muted-foreground truncate">{selectedCustomerData.phone || "No phone"}</span>
-                        {selectedCustomerData.customerType === "corporate" && (
-                          <Badge variant="secondary" className="text-[9px] bg-info/10 text-info gap-0.5 shrink-0"><Building2 className="h-2.5 w-2.5" />Corp</Badge>
-                        )}
-                        {selectedCustomerData.customerType === "vip" && (
-                          <Badge variant="secondary" className="text-[9px] bg-warning/10 text-warning gap-0.5 shrink-0"><Crown className="h-2.5 w-2.5" />VIP</Badge>
-                        )}
-                      </div>
-                    )}
-                  </div>
-
                   {/* Cart Item rows */}
                   <div className="space-y-1.5 max-h-[360px] overflow-y-auto pr-0.5">
                     {cartItems.map((item) => (
@@ -1791,6 +1840,12 @@ const WaiterPanel = () => {
               <div className="text-right">Server: <strong className="text-foreground">{user?.name || "Waiter"}</strong></div>
               <div>Date: <strong className="text-foreground">{new Date().toLocaleDateString()}</strong></div>
               <div className="text-right">Time: <strong className="text-foreground">{new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</strong></div>
+              <div className="col-span-2 border-t border-zinc-200 dark:border-zinc-800/80 pt-1.5 flex justify-between items-center text-foreground font-semibold">
+                <span>Customer: <strong>{selectedCustomerData?.name || activeTableOrders.find(o => o.customerName && o.customerName !== "Walk-in")?.customerName || "Walk-in"}</strong></span>
+                {(selectedCustomerData?.phone || activeTableOrders.find(o => o.phone)?.phone) && (
+                  <span className="text-muted-foreground font-medium">({selectedCustomerData?.phone || activeTableOrders.find(o => o.phone)?.phone})</span>
+                )}
+              </div>
             </div>
 
             <Separator className="bg-zinc-200 dark:bg-zinc-850" />
