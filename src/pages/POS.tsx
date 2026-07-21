@@ -103,7 +103,7 @@ const CANCEL_APPROVER_ROLES = ['Super Admin', 'Admin', 'Manager'];
 const CANCEL_RESPONSIBLE_ROLES = ['Cashier', 'Kitchen Staff', 'Kitchen Manager', 'Waiter'];
 
 const POS = () => {
-  const { orders: localOrdersData, customers: customersList, foodMenuItems: localFoodMenuItems, foodCategories: localFoodCategories, modifiers: localModifiers, kitchens: localKitchens, ingredients, addItem, updateItem: updateDataItem, shifts, settings, users, riders: deliveryRiders, deals, updateSettings } = useData();
+  const { orders: localOrdersData, customers: customersList, foodMenuItems: localFoodMenuItems, foodCategories: localFoodCategories, modifiers: localModifiers, kitchens: localKitchens, ingredients, addItem, updateItem: updateDataItem, shifts, settings, riders: deliveryRiders, deals, updateSettings } = useData();
   const { user } = useAuth();
   const location = useLocation();
 
@@ -608,10 +608,8 @@ const POS = () => {
   );
 
   const activeStaff = useMemo(() => {
-    if (apiStaff.length > 0) return apiStaff;
-    const STAFF_ROLES = ['Waiter', 'Floor Manager', 'Cashier', 'Manager', 'Admin'];
-    return users.filter(u => u.status === "active" && STAFF_ROLES.includes(u.role));
-  }, [apiStaff, users]);
+    return apiStaff || [];
+  }, [apiStaff]);
 
   // Today's reservations for POS view (from API)
   const todayStr = new Date().toISOString().split("T")[0];
