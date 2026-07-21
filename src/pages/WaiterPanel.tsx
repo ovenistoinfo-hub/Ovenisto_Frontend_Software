@@ -191,6 +191,11 @@ const WaiterPanel = () => {
   });
   const [showCustomerAddDialog, setShowCustomerAddDialog] = useState(false);
   const [showCustomerHistoryDialog, setShowCustomerHistoryDialog] = useState(false);
+
+  // ── Reservations Dialogs ──
+  const [showTodayReservationsDialog, setShowTodayReservationsDialog] = useState(false);
+  const [selectedReservationToVerify, setSelectedReservationToVerify] = useState<Reservation | null>(null);
+
   const [creatingCustomer, setCreatingCustomer] = useState(false);
   const [newCustomerForm, setNewCustomerForm] = useState({
     name: "",
@@ -973,11 +978,21 @@ const WaiterPanel = () => {
   };
 
   const handleTableClick = (t: TableRecord) => {
+    const tNum = Number(t.number);
+    const matchingRes = reservations.find(r =>
+      (r.tableNumber === String(tNum) || r.tableId === t.id) &&
+      r.status !== "cancelled" && r.status !== "noShow" && r.status !== "completed"
+    );
+
     setSelectedTableId(t.id);
     setCartItems([]);
     resetExpansion();
     setMenuCategory("All");
     setIsOrderingMode(false);
+
+    if (matchingRes) {
+      setSelectedReservationToVerify(matchingRes);
+    }
   };
 
   if (loading) {
@@ -1016,7 +1031,12 @@ const WaiterPanel = () => {
                 return (
                   <Card
                     key={key}
-                    onClick={() => setStatusFilter(prev => prev === key ? "all" : (key as any))}
+                    onClick={() => {
+                      if (key === "reservations") {
+                        setShowTodayReservationsDialog(true);
+                      }
+                      setStatusFilter(prev => prev === key ? "all" : (key as any));
+                    }}
                     className={cn(
                       "border bg-white dark:bg-zinc-900/40 rounded-xl shadow-xs cursor-pointer transition-all duration-200 hover:scale-[1.02] select-none",
                       isActive ? `ring-2 ring-primary ${border}` : "border-zinc-200 dark:border-zinc-800/80 hover:border-zinc-300 dark:hover:border-zinc-700"
@@ -2385,6 +2405,159 @@ const WaiterPanel = () => {
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowCustomerHistoryDialog(false)} className="rounded-xl">Close</Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Today Reservations Details Dialog ── */}
+      <Dialog open={showTodayReservationsDialog} onOpenChange={setShowTodayReservationsDialog}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-amber-500 font-bold">
+              <BookOpen className="h-5 w-5" />
+              Today's Reservations ({reservations.length})
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 pt-2">
+            {reservations.length > 0 ? (
+              reservations.map((r) => (
+                <div key={r.id} className="p-3.5 rounded-xl border border-amber-500/20 bg-amber-500/5 dark:bg-amber-950/20 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 transition-all hover:border-amber-500/40">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-foreground text-sm">{r.customerName}</span>
+                      {r.customerPhone && (
+                        <span className="text-xs text-muted-foreground font-medium flex items-center gap-1">
+                          <Phone className="h-3 w-3" /> {r.customerPhone}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
+                      <span className="font-bold text-amber-500">
+                        Table {r.tableNumber || "Unassigned"}
+                      </span>
+                      <span>• {r.guestCount} Pax</span>
+                      <span>• Time: <strong className="text-foreground">{r.time}</strong></span>
+                      <Badge variant="outline" className="text-[10px] uppercase font-bold border-amber-500/30 text-amber-500">
+                        {r.status}
+                      </Badge>
+                    </div>
+                    {r.specialRequests && (
+                      <p className="text-xs italic text-muted-foreground bg-background/50 p-1.5 rounded-lg border border-border/40 mt-1">
+                        "{r.specialRequests}"
+                      </p>
+                    )}
+                  </div>
+                  {r.tableNumber && (
+                    <Button
+                      size="sm"
+                      className="bg-amber-500 hover:bg-amber-600 text-black font-bold text-xs shrink-0 rounded-xl"
+                      onClick={() => {
+                        const t = tables.find(tbl => String(tbl.number) === String(r.tableNumber));
+                        setShowTodayReservationsDialog(false);
+                        if (t) {
+                          handleTableClick(t);
+                          setSelectedReservationToVerify(r);
+                        }
+                      }}
+                    >
+                      Seat at Table {r.tableNumber}
+                    </Button>
+                  )}
+                </div>
+              ))
+            ) : (
+              <div className="text-center py-8 text-muted-foreground">
+                <BookOpen className="h-8 w-8 mx-auto opacity-30 mb-2" />
+                <p className="text-sm font-medium">No reservations scheduled for today</p>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowTodayReservationsDialog(false)} className="rounded-xl">
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Reserved Table Customer Verification Modal ── */}
+      <Dialog open={!!selectedReservationToVerify} onOpenChange={() => setSelectedReservationToVerify(null)}>
+        <DialogContent className="max-w-md rounded-2xl border-amber-500/40">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-amber-500 font-bold">
+              <CalendarCheck className="h-5 w-5" />
+              Confirm Table Reservation Customer
+            </DialogTitle>
+          </DialogHeader>
+          {selectedReservationToVerify && (
+            <div className="space-y-4 pt-1">
+              <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 text-center space-y-1">
+                <span className="text-xs font-black uppercase text-amber-500 tracking-wider">Reserved Table</span>
+                <p className="text-3xl font-black text-foreground">Table #{selectedReservationToVerify.tableNumber || "Unassigned"}</p>
+              </div>
+
+              <div className="space-y-2.5 bg-muted/40 p-3.5 rounded-xl border border-border">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground font-medium">Customer Name:</span>
+                  <span className="font-bold text-foreground">{selectedReservationToVerify.customerName}</span>
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground font-medium">Phone Number:</span>
+                  <span className="font-bold text-foreground">{selectedReservationToVerify.customerPhone || "N/A"}</span>
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground font-medium">Scheduled Time:</span>
+                  <span className="font-bold text-amber-500">{selectedReservationToVerify.time}</span>
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground font-medium">Guest Count:</span>
+                  <span className="font-bold text-foreground">{selectedReservationToVerify.guestCount} Pax</span>
+                </div>
+                {selectedReservationToVerify.specialRequests && (
+                  <div className="text-xs pt-1 border-t border-border mt-2">
+                    <span className="text-muted-foreground font-medium">Special Requests: </span>
+                    <span className="italic text-foreground">{selectedReservationToVerify.specialRequests}</span>
+                  </div>
+                )}
+              </div>
+
+              <p className="text-xs text-center text-muted-foreground">
+                Please confirm with the customer that their details match the reservation.
+              </p>
+
+              <div className="flex items-center gap-2 pt-2">
+                <Button
+                  variant="outline"
+                  onClick={() => setSelectedReservationToVerify(null)}
+                  className="w-1/2 rounded-xl"
+                >
+                  Close
+                </Button>
+                <Button
+                  className="w-1/2 bg-amber-500 hover:bg-amber-600 text-black font-bold rounded-xl"
+                  onClick={async () => {
+                    const resId = selectedReservationToVerify.id;
+                    setSelectedReservationToVerify(null);
+                    if (resId) {
+                      try {
+                        await reservationService.update(resId, { status: "seated" });
+                        toast.success(`Customer seated! Reservation marked as seated.`);
+                        await loadOrders();
+                      } catch {
+                        // fallback
+                      }
+                    }
+                    if (selectedTable) {
+                      setGuestsCount(selectedReservationToVerify.guestCount || selectedTable.capacity);
+                      setGuestsActionType("start-sitting");
+                      setShowGuestsDialog(true);
+                    }
+                  }}
+                >
+                  Seat Customer
+                </Button>
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>
