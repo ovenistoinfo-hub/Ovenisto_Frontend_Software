@@ -321,16 +321,21 @@ const WaiterPanel = () => {
 
   // ── Derived ──
 
-  const getTableStatus = (tableNum: number): TableStatus => {
-    if (billReqSet.has(tableNum)) return "bill-requested";
-    const t = tables.find((tbl) => Number(tbl.number) === tableNum);
-    if (t && t.status === "bill-requested") return "bill-requested";
+  const isOrderUnpaid = (o: any) =>
+    o.status !== "completed" && (!o.paymentMethod || o.paymentMethod === "Pending" || o.paymentMethod === "Unpaid");
 
+  const getTableStatus = (tableNum: number): TableStatus => {
     const activeOrders = orders.filter((o) => o.tableNumber === tableNum && ACTIVE_STATUSES.includes(o.status));
+    const hasUnpaidOnTable = activeOrders.some(isOrderUnpaid);
+
+    if (billReqSet.has(tableNum) && (activeOrders.length === 0 || hasUnpaidOnTable)) return "bill-requested";
+    const t = tables.find((tbl) => Number(tbl.number) === tableNum);
+    if (t && t.status === "bill-requested" && (activeOrders.length === 0 || hasUnpaidOnTable)) return "bill-requested";
+
     if (activeOrders.length > 0) {
-      // If food is ready (prepared/served to customers), mark table as bill-requested
+      // If food is ready AND there is an unpaid order, mark table as bill-requested
       const allReady = activeOrders.every((o) => o.status === "ready");
-      if (allReady) return "bill-requested";
+      if (allReady && hasUnpaidOnTable) return "bill-requested";
       return "occupied";
     }
 
@@ -367,9 +372,6 @@ const WaiterPanel = () => {
     }
     return false;
   }) : [];
-
-  const isOrderUnpaid = (o: any) =>
-    o.status !== "completed" && (!o.paymentMethod || o.paymentMethod === "Pending" || o.paymentMethod === "Unpaid");
 
   const unpaidOrders = activeTableOrders.filter(isOrderUnpaid);
   const hasUnpaid = unpaidOrders.length > 0;
