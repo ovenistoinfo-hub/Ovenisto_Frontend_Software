@@ -980,46 +980,50 @@ const WaiterPanel = () => {
   return (
     <div className="space-y-6">
       {/* Page Header & Stats Cards Row */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-        <PageHeader
-          icon={<UtensilsCrossed className="h-5 w-5" />}
-          title="Waiter Panel"
-          subtitle="Manage tables and take orders"
-        />
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 w-full">
+        <div className="shrink-0">
+          <PageHeader
+            icon={<UtensilsCrossed className="h-5 w-5" />}
+            title="Waiter Panel"
+            subtitle="Manage tables and take orders"
+          />
+        </div>
         {isOrderingMode ? (
           <Button variant="outline" onClick={() => { setIsOrderingMode(false); setCartItems([]); }} className="border-zinc-800 bg-zinc-950/40 hover:bg-zinc-900 rounded-xl font-bold gap-2 shrink-0">
             <ArrowLeft className="h-4 w-4" /> Back to Floor Plan
           </Button>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 flex-1 max-w-3xl">
-            {[
-              { key: "available",    count: stats.available,        label: "Available",          color: "text-emerald-500", bg: "bg-emerald-500/10", border: "border-emerald-500/30", Icon: CircleDot },
-              { key: "occupied",     count: stats.occupied,         label: "Occupied",           color: "text-orange-500",  bg: "bg-orange-500/10",  border: "border-orange-500/30",  Icon: Users },
-              { key: "bill",         count: stats.bill,             label: "Bill Req.",          color: "text-red-500",     bg: "bg-red-500/10",     border: "border-red-500/30",     Icon: Receipt },
-              { key: "reservations", count: todayReservationsCount, label: "Today Reservations", color: "text-amber-500",   bg: "bg-amber-500/10",   border: "border-amber-500/30",   Icon: BookOpen },
-            ].map(({ key, count, label, color, bg, border, Icon }) => {
-              const isActive = statusFilter === key;
-              return (
-                <Card
-                  key={key}
-                  onClick={() => setStatusFilter(prev => prev === key ? "all" : (key as any))}
-                  className={cn(
-                    "border bg-white dark:bg-zinc-900/40 rounded-xl shadow-xs cursor-pointer transition-all duration-200 hover:scale-[1.02] select-none",
-                    isActive ? `ring-2 ring-primary ${border}` : "border-zinc-200 dark:border-zinc-800/80 hover:border-zinc-300 dark:hover:border-zinc-700"
-                  )}
-                >
-                  <CardContent className="p-3 flex items-center gap-2.5">
-                    <div className={cn("h-8 w-8 rounded-lg flex items-center justify-center shrink-0", bg)}>
-                      <Icon className={cn("h-4 w-4", color)} />
-                    </div>
-                    <div className="min-w-0">
-                      <p className={cn("text-xl font-black tracking-tight leading-none", color)}>{count}</p>
-                      <p className="text-[11px] text-muted-foreground font-semibold truncate mt-0.5">{label}</p>
-                    </div>
-                  </CardContent>
-                </Card>
-              );
-            })}
+          <div className="flex justify-center flex-1 max-w-4xl">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 w-full">
+              {[
+                { key: "available",    count: stats.available,        label: "Available",          color: "text-emerald-500", bg: "bg-emerald-500/10", border: "border-emerald-500/30", Icon: CircleDot },
+                { key: "occupied",     count: stats.occupied,         label: "Occupied",           color: "text-orange-500",  bg: "bg-orange-500/10",  border: "border-orange-500/30",  Icon: Users },
+                { key: "bill",         count: stats.bill,             label: "Bill Req.",          color: "text-red-500",     bg: "bg-red-500/10",     border: "border-red-500/30",     Icon: Receipt },
+                { key: "reservations", count: todayReservationsCount, label: "Today Reservations", color: "text-amber-500",   bg: "bg-amber-500/10",   border: "border-amber-500/30",   Icon: BookOpen },
+              ].map(({ key, count, label, color, bg, border, Icon }) => {
+                const isActive = statusFilter === key;
+                return (
+                  <Card
+                    key={key}
+                    onClick={() => setStatusFilter(prev => prev === key ? "all" : (key as any))}
+                    className={cn(
+                      "border bg-white dark:bg-zinc-900/40 rounded-xl shadow-xs cursor-pointer transition-all duration-200 hover:scale-[1.02] select-none",
+                      isActive ? `ring-2 ring-primary ${border}` : "border-zinc-200 dark:border-zinc-800/80 hover:border-zinc-300 dark:hover:border-zinc-700"
+                    )}
+                  >
+                    <CardContent className="p-3 flex items-center gap-2.5">
+                      <div className={cn("h-8 w-8 rounded-lg flex items-center justify-center shrink-0", bg)}>
+                        <Icon className={cn("h-4 w-4", color)} />
+                      </div>
+                      <div className="min-w-0">
+                        <p className={cn("text-xl font-black tracking-tight leading-none", color)}>{count}</p>
+                        <p className="text-[11px] text-muted-foreground font-semibold truncate mt-0.5">{label}</p>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
           </div>
         )}
       </div>
