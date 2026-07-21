@@ -1294,11 +1294,14 @@ const WaiterPanel = () => {
                       </div>
                     )}
 
-                    {isSessionPaid && (
-                      <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 rounded-xl p-3 text-center text-xs font-extrabold flex items-center justify-center gap-1.5 select-none animate-pulse mb-2">
-                        <Check className="h-4 w-4" /> Billing Paid — Awaiting End Sitting
-                      </div>
-                    )}
+                    {isSessionPaid && (() => {
+                      const hasUnservedFood = activeTableOrders.some(o => o.status === "pending" || o.status === "preparing");
+                      return (
+                        <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 rounded-xl p-3 text-center text-xs font-extrabold flex items-center justify-center gap-1.5 select-none animate-pulse mb-2">
+                          <Check className="h-4 w-4" /> {hasUnservedFood ? "Billing Paid" : "Billing Paid — Awaiting End Sitting"}
+                        </div>
+                      );
+                    })()}
 
                     {/* Actions Grid */}
                     <div className="grid grid-cols-2 gap-2">
