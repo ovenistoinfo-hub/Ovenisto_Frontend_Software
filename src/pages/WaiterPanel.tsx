@@ -720,13 +720,19 @@ const WaiterPanel = () => {
 
   const endSitting = async () => {
     if (!selectedTable || selectedTableNum === null) return;
-    const hasUnpaidOrders = activeTableOrders.some(o => o.status !== "completed");
-    if (hasUnpaidOrders) {
+    if (hasUnpaid) {
       toast.warning("Please settle all active orders before ending the sitting session.");
       return;
     }
     setEndingSitting(true);
     try {
+      const uncompletedPaidOrders = activeTableOrders.filter(o => o.status !== "completed" && !isOrderUnpaid(o));
+      if (uncompletedPaidOrders.length > 0) {
+        await Promise.all(
+          uncompletedPaidOrders.map(o => orderService.updateOrderStatus(o.id, "completed").catch(() => {}))
+        );
+      }
+
       await tableService.updateTable(selectedTable.id, { status: "available", currentOrderId: null });
       setTables(prev => prev.map(t => t.id === selectedTable.id ? { ...t, status: "available", currentOrderId: null } : t));
       setBillReqSet((p) => { const n = new Set(p); n.delete(selectedTableNum); return n; });
@@ -742,6 +748,7 @@ const WaiterPanel = () => {
       toast.success(`Table ${selectedTable.number} session ended`);
       setSelectedTableId(null);
       setCartItems([]);
+      await loadOrders();
     } catch {
       toast.error("Failed to end session");
     } finally {
@@ -753,7 +760,7 @@ const WaiterPanel = () => {
     if (!selectedTable || selectedTableNum === null) return;
     setSettlingBillingState(true);
     try {
-      const unpaidOrders = activeTableOrders.filter(o => o.status !== "completed");
+      const unpaidOrders = activeTableOrders.filter(isOrderUnpaid);
       if (unpaidOrders.length > 0) {
         await Promise.all(
           unpaidOrders.map((o) =>
