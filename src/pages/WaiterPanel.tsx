@@ -1433,17 +1433,15 @@ const WaiterPanel = () => {
 
                       const isOccupiedState = status === "occupied" || status === "bill-requested";
                       const elapsedStr = isOccupiedState && oldest ? getElapsed(oldest) : "";
-                      const centerText = isOccupiedState ? (elapsedStr || t.number) : t.number;
-                      const centerTextClass = isOccupiedState 
-                        ? "font-black text-xs text-primary tracking-tight leading-none text-center px-1" 
-                        : "font-black text-lg text-foreground tracking-tight";
+                      const centerText = isOccupiedState ? (elapsedStr || "") : "";
+                      const centerTextClass = "font-black text-xs text-primary tracking-tight leading-none text-center px-1";
 
                       return (
-                        <div key={t.id} className="p-1.5">
+                        <div key={t.id} className="p-1">
                           <Card
                             onClick={() => handleTableClick(t)}
                             className={cn(
-                              "shadow-md bg-white dark:bg-zinc-900/40 border rounded-2xl flex flex-col justify-between p-3.5 h-52 w-full cursor-pointer transition-all duration-300 relative hover:scale-[1.02]",
+                              "shadow-md bg-white dark:bg-zinc-900/40 border rounded-2xl flex flex-col justify-between p-3 h-[148px] w-full cursor-pointer transition-all duration-300 relative hover:scale-[1.02]",
                               cardStatusClass,
                               selectedTableId === t.id && "ring-2 ring-primary ring-offset-2 dark:ring-offset-zinc-950 shadow-lg"
                             )}
