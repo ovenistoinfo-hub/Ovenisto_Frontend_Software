@@ -51,8 +51,12 @@ function addDays(d: Date, days: number): Date {
   return r;
 }
 
-// ──────────────────────────────────────�const Shifts = () => {
-  const { shifts, orders, staffSchedules, shiftTemplates, leaveRequests, leaveBalances, users = [], settings, addItem, updateItem, removeItem } = useData();
+// ────────────────────────────────────────────
+// Main Component
+// ────────────────────────────────────────────
+
+const Shifts = () => {
+  const { shifts, orders, staffSchedules, shiftTemplates, leaveRequests, leaveBalances, users, settings, addItem, updateItem, removeItem } = useData();
   const { user } = useAuth();
   const currency = settings.currency || "Rs.";
   const [loading, setLoading] = useState(true);
@@ -142,7 +146,7 @@ function addDays(d: Date, days: number): Date {
 
   const handleAddSchedule = () => {
     if (!newSchedEmployee) return;
-    const emp = (users || []).find(u => u.id === newSchedEmployee);
+    const emp = users.find(u => u.id === newSchedEmployee);
     if (!emp) return;
     if (weekSchedules.find(s => s.employeeId === emp.id)) { toast.error("Employee already has schedule for this week"); return; }
     const defaultShifts = DAY_LABELS.map((_, i) => ({ day: i, templateId: "st-off", templateName: "Day Off", startTime: "", endTime: "" }));
@@ -162,7 +166,7 @@ function addDays(d: Date, days: number): Date {
   // ── Leave functions ──
   const handleLeaveSubmit = () => {
     if (!leaveForm.employeeId || !leaveForm.startDate || !leaveForm.endDate || !leaveForm.reason) { toast.error("All fields are required"); return; }
-    const emp = (users || []).find(u => u.id === leaveForm.employeeId);
+    const emp = users.find(u => u.id === leaveForm.employeeId);
     const start = new Date(leaveForm.startDate);
     const end = new Date(leaveForm.endDate);
     const totalDays = Math.max(1, Math.ceil((end.getTime() - start.getTime()) / 86400000) + 1);
@@ -429,7 +433,7 @@ function addDays(d: Date, days: number): Date {
               <div className="h-10 w-10 rounded-lg flex items-center justify-center bg-destructive/10"><X className="h-5 w-5 text-destructive" /></div>
             </CardContent></Card>
             <Card className="shadow-sm"><CardContent className="p-4 flex items-center justify-between">
-              <div><p className="text-xs text-muted-foreground">Total Employees</p><p className="text-2xl font-bold">{(users || []).length}</p></div>
+              <div><p className="text-xs text-muted-foreground">Total Employees</p><p className="text-2xl font-bold">{users.length}</p></div>
               <div className="h-10 w-10 rounded-lg flex items-center justify-center bg-primary/10"><Users className="h-5 w-5 text-primary" /></div>
             </CardContent></Card>
           </div>
@@ -569,7 +573,7 @@ function addDays(d: Date, days: number): Date {
             <Select value={newSchedEmployee} onValueChange={setNewSchedEmployee}>
               <SelectTrigger><SelectValue placeholder="Choose employee" /></SelectTrigger>
               <SelectContent>
-                {(users || []).filter(u => !weekSchedules.find(s => s.employeeId === u.id)).map(u => (
+                {users.filter(u => !weekSchedules.find(s => s.employeeId === u.id)).map(u => (
                   <SelectItem key={u.id} value={u.id}>{u.name} ({u.role})</SelectItem>
                 ))}
               </SelectContent>
@@ -585,15 +589,9 @@ function addDays(d: Date, days: number): Date {
           <div><Label>Employee</Label>
             <Select value={leaveForm.employeeId} onValueChange={v => setLeaveForm(p => ({ ...p, employeeId: v }))}>
               <SelectTrigger><SelectValue placeholder="Select employee" /></SelectTrigger>
-              <SelectContent>{(users || []).map(u => <SelectItem key={u.id} value={u.id}>{u.name} ({u.role})</SelectItem>)}</SelectContent>
+              <SelectContent>{users.map(u => <SelectItem key={u.id} value={u.id}>{u.name} ({u.role})</SelectItem>)}</SelectContent>
             </Select>
           </div>
-          <div><Label>Leave Type</Label>
-            <Select value={leaveForm.leaveType} onValueChange={(v: LeaveRequest["leaveType"]) => setLeaveForm(p => ({ ...p, leaveType: v }))}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="casual">Casual Leave</SelectItem>
-                <SelectItem value="sick">Sick Leave</SelectItem>
           <div><Label>Leave Type</Label>
             <Select value={leaveForm.leaveType} onValueChange={(v: LeaveRequest["leaveType"]) => setLeaveForm(p => ({ ...p, leaveType: v }))}>
               <SelectTrigger><SelectValue /></SelectTrigger>

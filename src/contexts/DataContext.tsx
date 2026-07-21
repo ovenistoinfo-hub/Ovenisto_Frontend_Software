@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useCallback, useEffect, use
 import type { Order, OrderStatus } from "@/data/mock-data";
 
 const STORAGE_KEY = "ovenisto_data";
-const STORAGE_VERSION = "v4"; // bump this to force-clear old mock data
+const STORAGE_VERSION = "v2"; // bump this to force-clear old mock data
 
 // ── Existing interfaces ──
 
@@ -49,90 +49,107 @@ export interface Deal {
   id: string;
   name: string;
   description: string;
-  price: number;
-  discountPercentage: number;
-  available: boolean;
-  image: string;
-  optionGroups: DealOptionGroup[];
+  type: "percentage" | "combo" | "buyXgetY" | "timeBased" | "optionCombo";
+  discountPercent?: number;
+  applicableItems?: string[];
+  applicableCategories?: string[];
+  comboItems?: { itemId: string; qty: number }[];
+  comboPrice?: number;
+  buyQty?: number;
+  getQty?: number;
+  buyItemId?: string;
+  getItemId?: string;
+  startTime?: string;
+  endTime?: string;
+  timeDiscountPercent?: number;
+  optionGroups?: DealOptionGroup[];
+  dealPrice?: number;
+  validFrom: string;
+  validTo: string;
+  isActive: boolean;
+  createdAt: string;
 }
 
 export interface DeliveryRider {
   id: string;
   name: string;
   phone: string;
-  vehicle: string;
-  status: "available" | "busy" | "offline";
+  isAvailable: boolean;
   activeDeliveries: number;
-  completedToday: number;
-  avatar: string;
 }
 
 export interface DeliveryAssignment {
   id: string;
   orderId: string;
-  orderNumber: string;
-  customerName: string;
-  customerPhone: string;
-  address: string;
-  total: number;
   riderId: string;
   riderName: string;
-  status: "assigned" | "picked_up" | "delivered" | "failed";
+  status: "pending" | "dispatched" | "delivered" | "returned";
   assignedAt: string;
   deliveredAt?: string;
+  estimatedTime: number;
+  customerAddress: string;
+  customerPhone: string;
+  notes?: string;
 }
 
 export interface LoyaltySettings {
-  enabled: boolean;
-  pointsPerRupee: number; // e.g. 0.05 = 5 pts per 100 Rs
-  rupeesPerPoint: number; // e.g. 1 pt = 1 Rs discount
-  minPointsToRedeem: number;
+  pointsPerAmount: number;
+  amountPerPoint: number;
+  signupBonus: number;
+  birthdayBonus: number;
+  tiers: { name: string; minPoints: number; multiplier: number }[];
 }
 
 export interface LoyaltyMember {
   id: string;
+  customerId: string;
   customerName: string;
   phone: string;
-  points: number;
-  tier: "Bronze" | "Silver" | "Gold" | "Platinum";
-  totalSpent: number;
+  totalPoints: number;
+  availablePoints: number;
+  tier: string;
   joinedDate: string;
 }
 
 export interface LoyaltyReward {
   id: string;
   name: string;
-  pointsCost: number;
-  discountValue: number;
-  description: string;
-  available: boolean;
+  pointsRequired: number;
+  type: "freeItem" | "percentDiscount" | "fixedDiscount";
+  value: string;
+  isActive: boolean;
 }
 
 export interface LoyaltyTransaction {
   id: string;
   memberId: string;
-  type: "earned" | "redeemed";
+  type: "earn" | "redeem";
   points: number;
-  orderId?: string;
   description: string;
+  orderId?: string;
   date: string;
 }
 
 export interface StockTakeItem {
   ingredientId: string;
   ingredientName: string;
-  systemStock: number;
-  actualStock: number;
-  difference: number;
   unit: string;
+  systemQty: number;
+  countedQty: number | null;
+  variance: number;
+  varianceValue: number;
 }
 
 export interface StockTake {
   id: string;
+  reference: string;
   date: string;
-  performedBy: string;
+  status: "active" | "completed";
+  countedBy: string;
   items: StockTakeItem[];
+  totalVarianceValue: number;
   notes?: string;
+  completedAt?: string;
 }
 
 export interface Shift {
@@ -144,6 +161,7 @@ export interface Shift {
   closedAt?: string;
   openingCash: number;
   closingCash?: number;
+  status: "open" | "closed";
   totalSales: number;
   totalCashSales: number;
   totalCardSales: number;
@@ -151,50 +169,53 @@ export interface Shift {
   orderCount: number;
   cancelledOrders: number;
   totalExpenses: number;
-  expectedCash?: number;
+  expectedCash: number;
   cashDifference?: number;
   notes?: string;
-  status: "open" | "closed";
 }
 
 export interface Coupon {
   id: string;
   code: string;
-  discountType: "percentage" | "fixed";
-  discountValue: number;
-  minOrderValue: number;
+  type: "percentage" | "fixed";
+  value: number;
+  minOrderAmount: number;
   maxDiscount?: number;
-  validFrom: string;
-  validUntil: string;
   usageLimit: number;
   usedCount: number;
-  status: "active" | "expired" | "disabled";
+  validFrom: string;
+  validTo: string;
+  isActive: boolean;
+  applicableTo: "all" | "dineIn" | "delivery" | "takeAway" | "online";
+  createdAt: string;
 }
 
 export interface Reservation {
   id: string;
   customerName: string;
   customerPhone: string;
-  customerEmail?: string;
   date: string;
   time: string;
   guestCount: number;
-  tableNumber?: number;
-  status: "confirmed" | "seated" | "completed" | "cancelled" | "noShow";
+  tableNumber?: string;
+  status: "pending" | "confirmed" | "seated" | "completed" | "cancelled" | "noShow";
   specialRequests?: string;
   createdAt: string;
+  source: "phone" | "walkin" | "online";
 }
 
 export interface RestaurantTable {
   id: string;
-  number: number;
+  number: string;
   capacity: number;
-  shape: "square" | "circle" | "rectangle";
   floor: string;
-  status: "available" | "occupied" | "reserved" | "maintenance" | "bill-requested";
+  shape: "square" | "round" | "rectangle";
+  status: "available" | "occupied" | "reserved" | "maintenance";
   currentOrderId?: string;
-  reservedFor?: string;
+  reservationId?: string;
 }
+
+// ── Shift Scheduling & Leave Management ──
 
 export interface ShiftTemplate {
   id: string;
@@ -204,6 +225,11 @@ export interface ShiftTemplate {
   color: string;
 }
 
+export interface StaffScheduleEntry {
+  day: number; // 0=Mon, 6=Sun
+  templateId: string;
+  templateName: string;
+  startTime: string;
   endTime: string;
 }
 
@@ -510,42 +536,7 @@ function loadStore(): DataStore {
         localStorage.removeItem(STORAGE_KEY);
         return getDefaults();
       }
-      const defaults = getDefaults();
-      return {
-        ...defaults,
-        ...parsed,
-        users: Array.isArray(parsed.users) ? parsed.users : [],
-        orders: Array.isArray(parsed.orders) ? parsed.orders : [],
-        customers: Array.isArray(parsed.customers) ? parsed.customers : [],
-        suppliers: Array.isArray(parsed.suppliers) ? parsed.suppliers : [],
-        purchases: Array.isArray(parsed.purchases) ? parsed.purchases : [],
-        expenses: Array.isArray(parsed.expenses) ? parsed.expenses : [],
-        ingredients: Array.isArray(parsed.ingredients) ? parsed.ingredients : [],
-        foodMenuItems: Array.isArray(parsed.foodMenuItems) ? parsed.foodMenuItems : [],
-        foodCategories: Array.isArray(parsed.foodCategories) ? parsed.foodCategories : [],
-        modifiers: Array.isArray(parsed.modifiers) ? parsed.modifiers : [],
-        outlets: Array.isArray(parsed.outlets) ? parsed.outlets : [],
-        attendance: Array.isArray(parsed.attendance) ? parsed.attendance : [],
-        kitchens: Array.isArray(parsed.kitchens) ? parsed.kitchens : [],
-        wasteRecords: Array.isArray(parsed.wasteRecords) ? parsed.wasteRecords : [],
-        transfers: Array.isArray(parsed.transfers) ? parsed.transfers : [],
-        stockAdjustments: Array.isArray(parsed.stockAdjustments) ? parsed.stockAdjustments : [],
-        productions: Array.isArray(parsed.productions) ? parsed.productions : [],
-        deals: Array.isArray(parsed.deals) ? parsed.deals : [],
-        riders: Array.isArray(parsed.riders) ? parsed.riders : [],
-        deliveryAssignments: Array.isArray(parsed.deliveryAssignments) ? parsed.deliveryAssignments : [],
-        loyaltyMembers: Array.isArray(parsed.loyaltyMembers) ? parsed.loyaltyMembers : [],
-        loyaltyRewards: Array.isArray(parsed.loyaltyRewards) ? parsed.loyaltyRewards : [],
-        loyaltyTransactions: Array.isArray(parsed.loyaltyTransactions) ? parsed.loyaltyTransactions : [],
-        stockTakes: Array.isArray(parsed.stockTakes) ? parsed.stockTakes : [],
-        shifts: Array.isArray(parsed.shifts) ? parsed.shifts : [],
-        coupons: Array.isArray(parsed.coupons) ? parsed.coupons : [],
-        reservations: Array.isArray(parsed.reservations) ? parsed.reservations : [],
-        tables: Array.isArray(parsed.tables) ? parsed.tables : [],
-        staffSchedules: Array.isArray(parsed.staffSchedules) ? parsed.staffSchedules : [],
-        leaveRequests: Array.isArray(parsed.leaveRequests) ? parsed.leaveRequests : [],
-        leaveBalances: Array.isArray(parsed.leaveBalances) ? parsed.leaveBalances : [],
-      };
+      return { ...getDefaults(), ...parsed };
     }
   } catch { /* ignore */ }
   return getDefaults();

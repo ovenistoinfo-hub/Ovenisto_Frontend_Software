@@ -18,7 +18,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 const pieColors = ["hsl(var(--primary))", "hsl(var(--accent))", "hsl(var(--info))", "hsl(var(--gold))", "hsl(var(--success))", "hsl(var(--warning))"];
 
 const Reports = () => {
-  const { orders, expenses, suppliers, purchases, wasteRecords, users = [], settings } = useData();
+  const { orders, expenses, suppliers, purchases, wasteRecords, users, settings } = useData();
   const currency = settings.currency || "Rs.";
   const [dateFrom, setDateFrom] = useState<Date | undefined>(new Date(2026, 2, 1));
   const [dateTo, setDateTo] = useState<Date | undefined>(new Date(2026, 2, 8));
@@ -70,7 +70,7 @@ const Reports = () => {
   const expenseByCategory = Object.entries(filteredExpenses.reduce((acc, e) => { acc[e.category] = (acc[e.category] || 0) + e.amount; return acc; }, {} as Record<string, number>)).map(([name, value]) => ({ name, value }));
 
   const supplierSpending = suppliers.map(s => ({ name: s.name.substring(0, 12), amount: s.totalPurchases }));
-  const staffOrders = (users || []).filter(u => u.role === "Cashier" || u.role === "Waiter").map(u => {
+  const staffOrders = users.filter(u => u.role === "Cashier" || u.role === "Waiter").map(u => {
     const staffOrd = filteredOrders.filter(o => o.staff === u.name);
     return { name: u.name.split(" ")[0], orders: staffOrd.length, revenue: staffOrd.reduce((s, o) => s + o.total, 0) };
   });
