@@ -350,6 +350,7 @@ const POS = () => {
 
   // Table & Delivery
   const [tableNumber, setTableNumber] = useState<number | null>(null);
+  const [dineInGuests, setDineInGuests] = useState<number>(2);
   const [backendTables, setBackendTables] = useState<TableRecord[]>([]);
   const [deliveryAddress, setDeliveryAddress] = useState("");
   const [deliveryPhone, setDeliveryPhone] = useState("");
@@ -1001,6 +1002,16 @@ const POS = () => {
           const created = await orderService.createOrder(orderPayload);
           finalOrderNumber = created.orderNumber;
           setApiOrders(prev => [normalizeApiOrder(created), ...prev]);
+          if (orderType === "Dine In" && tableNumber) {
+            const targetTable = backendTables.find((t) => Number(t.number) === tableNumber);
+            if (targetTable) {
+              const guests = dineInGuests || targetTable.capacity || 2;
+              tableService.updateTable(targetTable.id, {
+                status: "occupied",
+                currentOrderId: `${Date.now()}:${guests}`
+              }).catch(() => {});
+            }
+          }
           if (orderType === "Delivery" && selectedRiderId) {
             deliveryService.assignRider({ orderId: created.id, riderId: selectedRiderId, estimatedTime: 30 })
               .catch(() => {});
@@ -1405,32 +1416,55 @@ const POS = () => {
             <Button variant={isUrgent ? "default" : "outline"} size="sm" onClick={() => setIsUrgent(!isUrgent)} className={cn("text-[10px] h-6 sm:h-7 rounded-lg font-semibold transition-all px-2", isUrgent ? "bg-destructive text-destructive-foreground hover:bg-destructive/90" : "border-destructive/30 text-destructive hover:bg-destructive/5")}>
               <Zap className="h-3 w-3 mr-0.5" />{isUrgent ? "URGENT" : "Urgent"}
             </Button>
-            {/* Dine In: Table Dropdown */}
+            {/* Dine In: Table Dropdown & Guests count */}
             {orderType === "Dine In" && (
-              <Select value={tableNumber ? String(tableNumber) : ""} onValueChange={(v) => setTableNumber(Number(v))}>
-                <SelectTrigger className={cn("w-24 h-6 sm:h-7 text-[10px] sm:text-xs rounded-lg", tableNumber ? "border-primary text-primary font-semibold" : "")}>
-                  <SelectValue placeholder="Table #" />
-                </SelectTrigger>
-                <SelectContent>
-                  {backendTables.length > 0
-                    ? backendTables.map((t) => (
-                        <SelectItem key={t.id} value={String(Number(t.number))} disabled={t.status === "occupied" || t.status === "bill-requested"}>
-                          {t.status === "available" && "🟢 "}
-                          {t.status === "occupied" && "🔴 "}
-                          {t.status === "bill-requested" && "🧾 "}
-                          {t.status === "reserved" && "🟡 "}
-                          {t.status === "maintenance" && "🔧 "}
-                          Table {t.number}
-                          {t.floor ? ` (${t.floor})` : ""}
-                          {t.status && ` · ${t.status === 'bill-requested' ? 'Bill Req' : t.status.charAt(0).toUpperCase() + t.status.slice(1)}`}
-                        </SelectItem>
-                      ))
-                    : Array.from({ length: 12 }, (_, i) => i + 1).map((t) => (
-                        <SelectItem key={t} value={String(t)}>Table {t}</SelectItem>
-                      ))
-                  }
-                </SelectContent>
-              </Select>
+              <div className="flex items-center gap-1">
+                <Select value={tableNumber ? String(tableNumber) : ""} onValueChange={(v) => {
+                  const num = Number(v);
+                  setTableNumber(num);
+                  const tObj = backendTables.find(t => Number(t.number) === num);
+                  if (tObj) setDineInGuests(tObj.capacity || 2);
+                }}>
+                  <SelectTrigger className={cn("w-24 h-6 sm:h-7 text-[10px] sm:text-xs rounded-lg", tableNumber ? "border-primary text-primary font-semibold" : "")}>
+                    <SelectValue placeholder="Table #" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {backendTables.length > 0
+                      ? backendTables.map((t) => (
+                          <SelectItem key={t.id} value={String(Number(t.number))} disabled={t.status === "occupied" || t.status === "bill-requested"}>
+                            {t.status === "available" && "🟢 "}
+                            {t.status === "occupied" && "🔴 "}
+                            {t.status === "bill-requested" && "🧾 "}
+                            {t.status === "reserved" && "🟡 "}
+                            {t.status === "maintenance" && "🔧 "}
+                            Table {t.number}
+                            {t.floor ? ` (${t.floor})` : ""}
+                            {t.status && ` · ${t.status === 'bill-requested' ? 'Bill Req' : t.status.charAt(0).toUpperCase() + t.status.slice(1)}`}
+                          </SelectItem>
+                        ))
+                      : Array.from({ length: 12 }, (_, i) => i + 1).map((t) => (
+                          <SelectItem key={t} value={String(t)}>Table {t}</SelectItem>
+                        ))
+                    }
+                  </SelectContent>
+                </Select>
+
+                {tableNumber !== null && (
+                  <div className="flex items-center gap-1 bg-muted/40 border border-border/60 rounded-lg px-1.5 h-6 sm:h-7 text-[10px] sm:text-xs">
+                    <Users className="h-3 w-3 text-muted-foreground shrink-0" />
+                    <input
+                      type="number"
+                      min={1}
+                      max={50}
+                      value={dineInGuests}
+                      onChange={(e) => setDineInGuests(Math.max(1, Number(e.target.value)))}
+                      className="w-7 bg-transparent text-center font-bold outline-none"
+                      title="Guests / Persons Count"
+                    />
+                    <span className="text-[10px] text-muted-foreground font-semibold">Pax</span>
+                  </div>
+                )}
+              </div>
             )}
             {loadedOrderId && (
               <Badge variant="secondary" className={cn("text-[10px]", paymentOnlyMode ? "bg-warning/15 text-warning border-warning/30" : "bg-info/10 text-info")}>

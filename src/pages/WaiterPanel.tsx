@@ -368,11 +368,13 @@ const WaiterPanel = () => {
     return false;
   }) : [];
 
-  const hasUnpaid = activeTableOrders.some(o => o.status !== "completed");
-  const hasCompleted = activeTableOrders.some(o => o.status === "completed");
-  const isSessionPaid = activeTableOrders.length > 0 && !hasUnpaid && hasCompleted;
+  const isOrderUnpaid = (o: any) =>
+    o.status !== "completed" && (!o.paymentMethod || o.paymentMethod === "Pending" || o.paymentMethod === "Unpaid");
 
-  const unpaidOrders = activeTableOrders.filter(o => o.status !== "completed");
+  const unpaidOrders = activeTableOrders.filter(isOrderUnpaid);
+  const hasUnpaid = unpaidOrders.length > 0;
+  const isSessionPaid = activeTableOrders.length > 0 && !hasUnpaid;
+
   const hasPendingOrPreparing = unpaidOrders.some(o => o.status === "pending" || o.status === "preparing");
   const hasReady = unpaidOrders.some(o => o.status === "ready");
   const canPayBill = hasUnpaid && !hasPendingOrPreparing && hasReady;
@@ -670,7 +672,7 @@ const WaiterPanel = () => {
         customerName: selectedCustomerData?.name || "Walk-in",
         phone: selectedCustomerData?.phone || undefined,
         subtotal, discount: 0, tax, total,
-        paymentMethod: "Cash",
+        paymentMethod: "Pending",
         orderSource: "waiter",
         items: cartItems.map((i) => ({
           menuItemId: i.menuItemId || null,
