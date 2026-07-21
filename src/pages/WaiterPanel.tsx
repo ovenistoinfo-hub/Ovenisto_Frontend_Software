@@ -202,6 +202,7 @@ const WaiterPanel = () => {
 
   // ── Local UI state ──
   const [statusFilter, setStatusFilter] = useState<"all" | "available" | "occupied" | "bill" | "reservations">("all");
+  const [floorFilter,  setFloorFilter]  = useState<string>("all");
   const [billReqSet,    setBillReqSet]    = useState<Set<number>>(new Set());
   const [acceptingId,   setAcceptingId]   = useState<string | null>(null);
   const [selectedTableId, setSelectedTableId] = useState<string | null>(null);
@@ -396,17 +397,23 @@ const WaiterPanel = () => {
     bill:      tables.filter((t) => getTableStatus(Number(t.number)) === "bill-requested").length,
   };
 
+  const floorsList = useMemo(() => {
+    return Array.from(new Set(tables.map((t) => t.floor || "Main Hall").filter(Boolean)));
+  }, [tables]);
+
   const filteredTables = useMemo(() => {
     return tables.filter((t) => {
       const tNum = Number(t.number);
       const st = getTableStatus(tNum);
+      const fl = t.floor || "Main Hall";
+      if (floorFilter !== "all" && fl !== floorFilter) return false;
       if (statusFilter === "available") return st === "available";
       if (statusFilter === "occupied") return st === "occupied";
       if (statusFilter === "bill") return st === "bill-requested";
       if (statusFilter === "reservations") return reservedTableNums.has(tNum) || t.status === "reserved";
       return true;
     });
-  }, [tables, statusFilter, reservedTableNums, billReqSet, orders]);
+  }, [tables, statusFilter, floorFilter, reservedTableNums, billReqSet, orders]);
 
   const categoryNames = ["All", ...cats.map((c) => c.name)];
   const filteredMenu   = menuItems.filter(
@@ -1377,6 +1384,38 @@ const WaiterPanel = () => {
                   })}
                 </div>
 
+                {/* Floor Filter Bar */}
+                {floorsList.length > 0 && (
+                  <div className="flex items-center gap-1.5 overflow-x-auto pb-1 px-1 select-none">
+                    <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider mr-1 shrink-0">Floor:</span>
+                    <button
+                      onClick={() => setFloorFilter("all")}
+                      className={cn(
+                        "px-3 py-1 rounded-full text-xs font-bold transition-all shrink-0 border",
+                        floorFilter === "all"
+                          ? "bg-primary text-primary-foreground border-primary shadow-xs"
+                          : "bg-white dark:bg-zinc-900/40 border-zinc-200 dark:border-zinc-800 text-muted-foreground hover:text-foreground"
+                      )}
+                    >
+                      All Floors
+                    </button>
+                    {floorsList.map((fl) => (
+                      <button
+                        key={fl}
+                        onClick={() => setFloorFilter(fl)}
+                        className={cn(
+                          "px-3 py-1 rounded-full text-xs font-bold transition-all shrink-0 border",
+                          floorFilter === fl
+                            ? "bg-primary text-primary-foreground border-primary shadow-xs"
+                            : "bg-white dark:bg-zinc-900/40 border-zinc-200 dark:border-zinc-800 text-muted-foreground hover:text-foreground"
+                        )}
+                      >
+                        {fl}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
                 {/* Table Grid */}
                 {filteredTables.length === 0 ? (
                   <Card className="rounded-xl border-dashed">
@@ -1387,7 +1426,7 @@ const WaiterPanel = () => {
                     </CardContent>
                   </Card>
                 ) : (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-4 pt-1">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-3.5 pt-1">
                     {filteredTables.map((t) => {
                       const tNum    = Number(t.number);
                       const status  = getTableStatus(tNum);
@@ -1441,7 +1480,7 @@ const WaiterPanel = () => {
                           <Card
                             onClick={() => handleTableClick(t)}
                             className={cn(
-                              "shadow-md bg-white dark:bg-zinc-900/40 border rounded-2xl flex flex-col justify-between p-3 h-[148px] w-full cursor-pointer transition-all duration-300 relative hover:scale-[1.02]",
+                              "shadow-md bg-white dark:bg-zinc-900/40 border rounded-2xl flex flex-col justify-between p-3 h-[152px] w-full cursor-pointer transition-all duration-300 relative hover:scale-[1.02]",
                               cardStatusClass,
                               selectedTableId === t.id && "ring-2 ring-primary ring-offset-2 dark:ring-offset-zinc-950 shadow-lg"
                             )}
@@ -1486,13 +1525,13 @@ const WaiterPanel = () => {
                             </div>
 
                             {/* Bottom Bar: Area Name and Customer Count */}
-                            <div className="flex items-center justify-between w-full mt-1 shrink-0 select-none">
-                              <span className="text-xs text-muted-foreground font-extrabold tracking-wide truncate max-w-[110px]">
+                            <div className="flex items-center justify-between w-full mt-1 shrink-0 select-none gap-1">
+                              <span className="text-xs text-muted-foreground font-extrabold tracking-wide truncate flex-1 min-w-0 pr-1" title={t.floor || "Main Hall"}>
                                 {t.floor || "Main Hall"}
                               </span>
-                              <div className="flex items-center gap-1.5">
-                                <div className="flex items-center gap-1.5 text-xs font-black text-foreground bg-zinc-100 dark:bg-zinc-800/90 px-2.5 py-1 rounded-full border border-zinc-200 dark:border-zinc-700/80 shadow-xs">
-                                  <Users className="h-3.5 w-3.5 text-muted-foreground" />
+                              <div className="flex items-center gap-1 shrink-0">
+                                <div className="flex items-center gap-1 text-[11px] font-black text-foreground bg-zinc-100 dark:bg-zinc-800/90 px-2 py-0.5 rounded-full border border-zinc-200 dark:border-zinc-700/80 shadow-xs">
+                                  <Users className="h-3 w-3 text-muted-foreground shrink-0" />
                                   <span>{isOccupiedState ? getGuestsCount(t) : t.capacity}</span>
                                 </div>
                               </div>

@@ -321,52 +321,58 @@ const TableLayout = () => {
           const isMaint = t.status === "maintenance";
           
           const statusDotColor =
-            t.status === "available" ? "bg-success shadow-[0_0_8px_rgba(34,197,94,0.5)]" :
-            t.status === "occupied" ? "bg-destructive shadow-[0_0_8px_rgba(239,68,68,0.5)]" :
-            t.status === "bill-requested" ? "bg-destructive shadow-[0_0_8px_rgba(239,68,68,0.5)]" :
-            t.status === "reserved" ? "bg-warning shadow-[0_0_8px_rgba(234,179,8,0.5)]" :
-            "bg-muted-foreground";
+            t.status === "available" ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)]" :
+            t.status === "occupied" ? "bg-orange-500 shadow-[0_0_8px_rgba(249,115,22,0.6)]" :
+            t.status === "bill-requested" ? "bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.8)]" :
+            "bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.6)]";
 
           const statusBorderClass =
-            t.status === "available" ? "border-success/35" :
-            t.status === "occupied" ? "border-destructive/35" :
-            t.status === "bill-requested" ? "border-destructive/60" :
-            t.status === "reserved" ? "border-warning/35" :
-            "border-muted";
+            t.status === "available" ? "border-emerald-500/50" :
+            t.status === "occupied" ? "border-orange-500/50" :
+            t.status === "bill-requested" ? "border-red-500/80" :
+            "border-amber-500/50";
+
+          const cardStatusClass =
+            t.status === "bill-requested"
+              ? "border-red-500/80 bg-red-950/20 shadow-[0_0_12px_rgba(239,68,68,0.25)] animate-pulse border-2 ring-1 ring-red-500/40"
+              : t.status === "occupied"
+              ? "border-orange-500/50 bg-orange-950/10 hover:border-orange-400 dark:bg-orange-950/20"
+              : t.status === "reserved"
+              ? "border-amber-500/50 bg-amber-950/10 hover:border-amber-400 dark:bg-amber-950/20"
+              : "border-emerald-500/50 bg-emerald-950/10 hover:border-emerald-400 dark:bg-emerald-950/20";
 
           const chairBgClass =
-            t.status === "available" ? "bg-success/50" :
-            t.status === "occupied" ? "bg-destructive/50" :
-            t.status === "bill-requested" ? "bg-destructive animate-pulse" :
-            t.status === "reserved" ? "bg-warning/50" :
-            "bg-muted-foreground/50";
+            t.status === "available" ? "bg-emerald-500/60" :
+            t.status === "occupied" ? "bg-orange-500/60" :
+            t.status === "bill-requested" ? "bg-red-500 animate-pulse" :
+            "bg-amber-500/60";
 
           return (
             <div key={t.id} className="p-1">
               <Card
                 onClick={() => openEdit(t)}
                 className={cn(
-                  "shadow-md bg-zinc-900/40 border border-zinc-800/80 rounded-2xl flex flex-col justify-between p-4 h-48 w-full cursor-pointer hover:border-zinc-700 hover:-translate-y-1 hover:shadow-lg hover:shadow-zinc-950/20 transition-all duration-300 relative overflow-hidden",
-                  t.status === "bill-requested" && "animate-pulse border-destructive/30",
+                  "shadow-md bg-white dark:bg-zinc-900/40 border rounded-2xl flex flex-col justify-between p-3 h-[152px] w-full cursor-pointer transition-all duration-300 relative hover:scale-[1.02]",
+                  cardStatusClass,
                   isMaint && "opacity-50 cursor-not-allowed"
                 )}
               >
                 {/* Top Bar: Table Label & Pulse Status */}
                 <div className="flex items-center justify-between w-full select-none shrink-0 relative">
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-2">
                     <span className={cn(
-                      "h-1.5 w-1.5 rounded-full",
+                      "h-2.5 w-2.5 rounded-full",
                       t.status === "bill-requested" && "animate-ping",
                       statusDotColor
                     )} />
-                    <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60">Table {t.number}</span>
+                    <span className="text-sm font-black uppercase tracking-wider text-foreground">Table {t.number}</span>
                   </div>
                   {/* QR Code Action */}
                   {!isSuperAdmin && (
                     <Button
                       variant="outline"
                       size="icon"
-                      className="h-6 w-6 rounded bg-zinc-950/40 border-zinc-800 hover:bg-zinc-800 hover:border-zinc-700 shadow-sm transition-all duration-200 z-20"
+                      className="h-6 w-6 rounded bg-zinc-950/40 border-zinc-800 hover:bg-zinc-800 hover:border-zinc-700 shadow-xs transition-all duration-200 z-20"
                       onClick={(e) => {
                         e.stopPropagation();
                         setSelectedQrTable(t);
@@ -378,47 +384,34 @@ const TableLayout = () => {
                 </div>
 
                 {/* Middle Area: Graphical Table Blueprint Diagram */}
-                <div className="flex-grow flex items-center justify-center relative my-2 w-full select-none">
+                <div className="flex-grow flex items-center justify-center relative my-1 w-full select-none">
                   {t.shape === "round" && (
-                    <div className={cn("h-16 w-16 rounded-full border-2 flex items-center justify-center relative bg-zinc-950/30", statusBorderClass)}>
-                      <span className="font-extrabold text-base text-foreground tracking-tight">{t.number}</span>
+                    <div className={cn("h-16 w-16 rounded-full border-2 flex items-center justify-center relative bg-zinc-50 dark:bg-zinc-950/40", statusBorderClass)}>
                       {renderMiniChairs("round", t.capacity, chairBgClass)}
                     </div>
                   )}
                   {t.shape === "square" && (
-                    <div className={cn("h-14 w-14 rounded-xl border-2 flex items-center justify-center relative bg-zinc-950/30", statusBorderClass)}>
-                      <span className="font-extrabold text-base text-foreground tracking-tight">{t.number}</span>
+                    <div className={cn("h-14 w-14 rounded-xl border-2 flex items-center justify-center relative bg-zinc-50 dark:bg-zinc-950/40", statusBorderClass)}>
                       {renderMiniChairs("square", t.capacity, chairBgClass)}
                     </div>
                   )}
                   {t.shape === "rectangle" && (
-                    <div className={cn("h-12 w-20 rounded-xl border-2 flex items-center justify-center relative bg-zinc-950/30", statusBorderClass)}>
-                      <span className="font-extrabold text-base text-foreground tracking-tight">{t.number}</span>
+                    <div className={cn("h-12 w-20 rounded-xl border-2 flex items-center justify-center relative bg-zinc-50 dark:bg-zinc-950/40", statusBorderClass)}>
                       {renderMiniChairs("rectangle", t.capacity, chairBgClass)}
                     </div>
                   )}
                 </div>
 
-                {/* Bottom Bar: Capacity and Status Label */}
-                <div className="flex items-center justify-between w-full mt-1 shrink-0 select-none">
-                  <span className="text-[10px] text-muted-foreground/50 font-semibold tracking-wide">
-                    {t.floor || "Floor"}
+                {/* Bottom Bar: Area Name and Capacity */}
+                <div className="flex items-center justify-between w-full mt-1 shrink-0 select-none gap-1">
+                  <span className="text-xs text-muted-foreground font-extrabold tracking-wide truncate flex-1 min-w-0 pr-1" title={t.floor || "Main Hall"}>
+                    {t.floor || "Main Hall"}
                   </span>
-                  <div className="flex items-center gap-1.5">
-                    <div className="flex items-center gap-1 text-[11px] text-muted-foreground font-bold bg-zinc-950/40 px-2 py-0.5 rounded-full border border-zinc-800/85">
-                      <Users className="h-3 w-3 text-muted-foreground/60" />
+                  <div className="flex items-center gap-1 shrink-0">
+                    <div className="flex items-center gap-1 text-[11px] font-black text-foreground bg-zinc-100 dark:bg-zinc-800/90 px-2 py-0.5 rounded-full border border-zinc-200 dark:border-zinc-700/80 shadow-xs">
+                      <Users className="h-3 w-3 text-muted-foreground shrink-0" />
                       <span>{t.capacity}</span>
                     </div>
-                    <Badge variant="secondary" className={cn(
-                      "text-[10px] px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider leading-none border-none",
-                      t.status === "available" && "bg-success/10 text-success hover:bg-success/10",
-                      t.status === "occupied" && "bg-destructive/10 text-destructive hover:bg-destructive/10",
-                      t.status === "bill-requested" && "bg-destructive/20 text-destructive hover:bg-destructive/20 animate-pulse",
-                      t.status === "reserved" && "bg-warning/10 text-warning hover:bg-warning/10",
-                      t.status === "maintenance" && "bg-muted text-muted-foreground hover:bg-muted",
-                    )}>
-                      {t.status === "bill-requested" ? "Bill Req" : t.status === "available" ? "Free" : t.status}
-                    </Badge>
                   </div>
                 </div>
               </Card>
