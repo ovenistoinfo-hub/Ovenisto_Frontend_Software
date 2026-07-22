@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useData } from "@/contexts/DataContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { customerService } from "@/services/customer.service";
+import { orderService } from "@/services/order.service";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -33,6 +34,38 @@ const Customers = () => {
     queryFn: () => customerService.getCustomers({ search: search || undefined, limit: 1000 }),
   });
   const customers = resp?.data ?? [];
+
+  const { data: allOrdersResp } = useQuery({
+    queryKey: ["all-orders-for-customers-page"],
+    queryFn: () => orderService.getOrders({ limit: 1000 }),
+  });
+  const allOrders = allOrdersResp?.data ?? [];
+
+  const customerStatsMap = useMemo(() => {
+    const map: Record<string, { totalOrders: number; totalSpent: number; outstandingDue: number }> = {};
+    for (const o of allOrders) {
+      if (!o.customerName || o.customerName === "Walk-in") continue;
+      const nameKey = o.customerName.toLowerCase().trim();
+      const phoneClean = o.phone ? o.phone.replace(/\D/g, "") : "";
+      
+      if (!map[nameKey]) {
+        map[nameKey] = { totalOrders: 0, totalSpent: 0, outstandingDue: 0 };
+      }
+      if (phoneClean && phoneClean.length === 11 && phoneClean !== "00000000000" && !map[phoneClean]) {
+        map[phoneClean] = map[nameKey];
+      }
+
+      map[nameKey].totalOrders += 1;
+      if (o.status !== "cancelled") {
+        map[nameKey].totalSpent += Number(o.total || 0);
+      }
+      if (o.status !== "cancelled" && (!o.paymentMethod || o.paymentMethod === "Pending" || o.paymentMethod === "Unpaid")) {
+        map[nameKey].outstandingDue += Number(o.total || 0);
+      }
+    }
+    return map;
+  }, [allOrders]);
+
   const paged = paginate(customers, page);
 
   const formatPhoneNumber = (val: string): string => {
@@ -127,23 +160,32 @@ const Customers = () => {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {paged.map((c, i) => (
-                      <TableRow key={c.id} className="hover:bg-muted/30 transition-colors">
-                        <TableCell>{(page - 1) * 10 + i + 1}</TableCell>
-                        <TableCell className="font-medium">{c.name}</TableCell>
-                        <TableCell>{c.phone}</TableCell>
-                        <TableCell className="text-muted-foreground">{c.email}</TableCell>
-                        <TableCell>{c.totalOrders}</TableCell>
-                        <TableCell>{currency} {c.totalSpent.toLocaleString()}</TableCell>
-                        <TableCell className={c.outstandingDue > 0 ? "text-destructive font-medium" : "text-success"}>{currency} {c.outstandingDue.toLocaleString()}</TableCell>
-                        <TableCell>
-                          <div className="flex gap-1">
-                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => navigate(`/customers/${c.id}`)}><Eye className="h-3 w-3" /></Button>
-                            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => setDeleteId(c.id)}><Trash2 className="h-3 w-3" /></Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                    {paged.map((c, i) => {
+                      const nameKey = c.name.toLowerCase().trim();
+                      const phoneClean = c.phone ? c.phone.replace(/\D/g, "") : "";
+                      const stat = customerStatsMap[nameKey] || (phoneClean ? customerStatsMap[phoneClean] : null);
+                      const totalOrdersCount = stat ? stat.totalOrders : c.totalOrders;
+                      const totalSpentVal = stat ? stat.totalSpent : c.totalSpent;
+                      const outstandingDueVal = stat ? stat.outstandingDue : c.outstandingDue;
+
+                      return (
+                        <TableRow key={c.id} className="hover:bg-muted/30 transition-colors">
+                          <TableCell>{(page - 1) * 10 + i + 1}</TableCell>
+                          <TableCell className="font-medium">{c.name}</TableCell>
+                          <TableCell>{c.phone}</TableCell>
+                          <TableCell className="text-muted-foreground">{c.email}</TableCell>
+                          <TableCell>{totalOrdersCount}</TableCell>
+                          <TableCell>{currency} {totalSpentVal.toLocaleString()}</TableCell>
+                          <TableCell className={outstandingDueVal > 0 ? "text-destructive font-medium" : "text-success"}>{currency} {outstandingDueVal.toLocaleString()}</TableCell>
+                          <TableCell>
+                            <div className="flex gap-1">
+                              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => navigate(`/customers/${c.id}`)}><Eye className="h-3 w-3" /></Button>
+                              <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => setDeleteId(c.id)}><Trash2 className="h-3 w-3" /></Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
                   </TableBody>
                 </Table>
               </div>

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useData } from "@/contexts/DataContext";
@@ -41,13 +41,26 @@ const CustomerDetail = () => {
   });
 
   const { data: ordersResp } = useQuery({
-    queryKey: ["orders", { customerSearch: customer?.name }],
-    queryFn: () => orderService.getOrders({ search: customer?.name, limit: 100 }),
+    queryKey: ["orders-for-customer-detail", id],
+    queryFn: () => orderService.getOrders({ limit: 1000 }),
     enabled: !!customer?.name,
   });
-  const customerOrders: OrderRecord[] = (ordersResp?.data ?? []).filter(
-    (o) => o.customerName === customer?.name
-  );
+
+  const customerOrders: OrderRecord[] = useMemo(() => {
+    if (!customer || !ordersResp?.data) return [];
+    const nameLower = customer.name.toLowerCase().trim();
+    const cleanPhone = customer.phone ? customer.phone.replace(/\D/g, "") : "";
+    const isDummyPhone = cleanPhone === "00000000000" || cleanPhone === "11111111111" || cleanPhone === "12345678901";
+
+    return ordersResp.data.filter((o) => {
+      const orderNameLower = (o.customerName || "").toLowerCase().trim();
+      const orderPhoneClean = o.phone ? o.phone.replace(/\D/g, "") : "";
+
+      const matchName = orderNameLower === nameLower;
+      const matchPhone = !isDummyPhone && cleanPhone.length === 11 && orderPhoneClean === cleanPhone;
+      return matchName || matchPhone;
+    });
+  }, [customer, ordersResp?.data]);
 
   const openEdit = () => {
     if (!customer) return;
@@ -87,7 +100,19 @@ const CustomerDetail = () => {
     </div>
   );
 
-  const avgOrder = customerOrders.length > 0 ? Math.round(customer.totalSpent / customerOrders.length) : 0;
+  const totalOrdersCount = customerOrders.length > 0 ? customerOrders.length : Number(customer.totalOrders || 0);
+  const totalSpentVal = customerOrders.length > 0
+    ? customerOrders.reduce((sum, o) => sum + (o.status !== "cancelled" ? Number(o.total || 0) : 0), 0)
+    : Number(customer.totalSpent || 0);
+  const avgOrderVal = totalOrdersCount > 0 ? Math.round(totalSpentVal / totalOrdersCount) : 0;
+  const outstandingDueVal = customerOrders.length > 0
+    ? customerOrders
+        .filter(o => o.status !== "cancelled" && (!o.paymentMethod || o.paymentMethod === "Pending" || o.paymentMethod === "Unpaid"))
+        .reduce((sum, o) => sum + Number(o.total || 0), 0)
+    : Number(customer.outstandingDue || 0);
+  const lastOrderDate = customerOrders.length > 0
+    ? (customerOrders[0].createdAt ? new Date(customerOrders[0].createdAt).toLocaleDateString() : customerOrders[0].date || "—")
+    : (customer.lastOrder || "—");
 
   return (
     <div className="space-y-6">
@@ -112,16 +137,16 @@ const CustomerDetail = () => {
             <div><span className="text-muted-foreground block">Phone</span><span className="font-medium">{customer.phone ?? "—"}</span></div>
             <div><span className="text-muted-foreground block">Email</span><span className="font-medium">{customer.email ?? "—"}</span></div>
             <div><span className="text-muted-foreground block">Address</span><span className="font-medium">{customer.address ?? "—"}</span></div>
-            <div><span className="text-muted-foreground block">Last Order</span><span className="font-medium">{customer.lastOrder ?? "—"}</span></div>
+            <div><span className="text-muted-foreground block">Last Order</span><span className="font-medium">{lastOrderDate}</span></div>
           </div>
         </CardContent>
       </Card>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card className="shadow-sm"><CardContent className="p-5"><div className="flex items-center gap-4"><div className="h-11 w-11 rounded-xl bg-info/10 flex items-center justify-center shrink-0"><ShoppingCart className="h-5 w-5 text-info" /></div><div><p className="text-sm text-muted-foreground">Total Orders</p><p className="text-2xl font-bold tracking-tight">{customer.totalOrders}</p></div></div></CardContent></Card>
-        <Card className="shadow-sm"><CardContent className="p-5"><div className="flex items-center gap-4"><div className="h-11 w-11 rounded-xl bg-success/10 flex items-center justify-center shrink-0"><DollarSign className="h-5 w-5 text-success" /></div><div><p className="text-sm text-muted-foreground">Total Spent</p><p className="text-2xl font-bold tracking-tight">{currency} {customer.totalSpent.toLocaleString()}</p></div></div></CardContent></Card>
-        <Card className="shadow-sm"><CardContent className="p-5"><div className="flex items-center gap-4"><div className="h-11 w-11 rounded-xl bg-primary/10 flex items-center justify-center shrink-0"><TrendingUp className="h-5 w-5 text-primary" /></div><div><p className="text-sm text-muted-foreground">Avg Order</p><p className="text-2xl font-bold tracking-tight">{currency} {avgOrder.toLocaleString()}</p></div></div></CardContent></Card>
-        <Card className={`shadow-sm ${customer.outstandingDue > 0 ? "border-destructive/30" : "border-success/30"}`}><CardContent className="p-5"><div className="flex items-center gap-4"><div className={`h-11 w-11 rounded-xl flex items-center justify-center shrink-0 ${customer.outstandingDue > 0 ? "bg-destructive/10" : "bg-success/10"}`}><CreditCard className={`h-5 w-5 ${customer.outstandingDue > 0 ? "text-destructive" : "text-success"}`} /></div><div><p className="text-sm text-muted-foreground">Outstanding Due</p><p className={`text-2xl font-bold tracking-tight ${customer.outstandingDue > 0 ? "text-destructive" : "text-success"}`}>{currency} {customer.outstandingDue.toLocaleString()}</p></div></div></CardContent></Card>
+        <Card className="shadow-sm"><CardContent className="p-5"><div className="flex items-center gap-4"><div className="h-11 w-11 rounded-xl bg-info/10 flex items-center justify-center shrink-0"><ShoppingCart className="h-5 w-5 text-info" /></div><div><p className="text-sm text-muted-foreground">Total Orders</p><p className="text-2xl font-bold tracking-tight">{totalOrdersCount}</p></div></div></CardContent></Card>
+        <Card className="shadow-sm"><CardContent className="p-5"><div className="flex items-center gap-4"><div className="h-11 w-11 rounded-xl bg-success/10 flex items-center justify-center shrink-0"><DollarSign className="h-5 w-5 text-success" /></div><div><p className="text-sm text-muted-foreground">Total Spent</p><p className="text-2xl font-bold tracking-tight">{currency} {totalSpentVal.toLocaleString()}</p></div></div></CardContent></Card>
+        <Card className="shadow-sm"><CardContent className="p-5"><div className="flex items-center gap-4"><div className="h-11 w-11 rounded-xl bg-primary/10 flex items-center justify-center shrink-0"><TrendingUp className="h-5 w-5 text-primary" /></div><div><p className="text-sm text-muted-foreground">Avg Order</p><p className="text-2xl font-bold tracking-tight">{currency} {avgOrderVal.toLocaleString()}</p></div></div></CardContent></Card>
+        <Card className={`shadow-sm ${outstandingDueVal > 0 ? "border-destructive/30" : "border-success/30"}`}><CardContent className="p-5"><div className="flex items-center gap-4"><div className={`h-11 w-11 rounded-xl flex items-center justify-center shrink-0 ${outstandingDueVal > 0 ? "bg-destructive/10" : "bg-success/10"}`}><CreditCard className={`h-5 w-5 ${outstandingDueVal > 0 ? "text-destructive" : "text-success"}`} /></div><div><p className="text-sm text-muted-foreground">Outstanding Due</p><p className={`text-2xl font-bold tracking-tight ${outstandingDueVal > 0 ? "text-destructive" : "text-success"}`}>{currency} {outstandingDueVal.toLocaleString()}</p></div></div></CardContent></Card>
       </div>
 
       <Card className="shadow-sm">

@@ -14,6 +14,7 @@ import { reservationService, type Reservation as ReservationRecord } from "@/ser
 import { useVisiblePolling } from "@/hooks/use-visible-polling";
 import { useOrderEvents } from "@/hooks/use-order-events";
 import { useTableEvents } from "@/hooks/use-table-events";
+import { useReservationEvents } from "@/hooks/use-reservation-events";
 import { getSocket } from "@/lib/socket";
 import { Search, Plus, Minus, X, ShoppingCart, FileText, Printer, ArrowLeft, Trash2, User, Users, MapPin, Phone, Flame, Check, CreditCard, Banknote, Smartphone, RotateCcw, Download, ClipboardList, AlertTriangle, UtensilsCrossed, CalendarClock, Calendar, Timer, ChefHat, Tag, Zap, History, Monitor, BookOpen, StickyNote, Eye, Building2, Crown, CircleAlert, Bell, DollarSign, Package, Ban } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -242,9 +243,14 @@ const POS = () => {
     reservationService.getAll({ upcoming: true }).then(data => setApiReservations(data)).catch(() => {});
   }, [loadApiOrders, loadMyPendingCancellations]);
 
-  // Refresh orders on real-time push (instant), plus a 60s visibility-gated safety
+  const loadApiReservations = useCallback(() => {
+    reservationService.getAll({ upcoming: true }).then(data => setApiReservations(data)).catch(() => {});
+  }, []);
+
+  // Refresh orders and reservations on real-time push (instant), plus a 60s visibility-gated safety
   // poll so a backgrounded tab stops querying and lets the DB idle (saves CU-hrs).
   useOrderEvents(loadApiOrders);
+  useReservationEvents(loadApiReservations);
   useVisiblePolling(loadApiOrders, 60000);
 
   // Let the staff member who requested a cancellation know the outcome as soon as

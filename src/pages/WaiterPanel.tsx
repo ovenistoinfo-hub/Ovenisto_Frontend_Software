@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
@@ -22,6 +22,7 @@ import { orderService, type OrderRecord } from "@/services/order.service";
 import { useVisiblePolling } from "@/hooks/use-visible-polling";
 import { useOrderEvents } from "@/hooks/use-order-events";
 import { useTableEvents } from "@/hooks/use-table-events";
+import { useReservationEvents } from "@/hooks/use-reservation-events";
 import { menuService, type MenuItemRecord, type CategoryRecord, type ModifierRecord, type MenuItemVariant } from "@/services/menu.service";
 import { tableService, type TableRecord } from "@/services/table.service";
 import { reservationService, type Reservation } from "@/services/reservation.service";
@@ -194,7 +195,6 @@ const WaiterPanel = () => {
 
   // ── Reservations Dialogs ──
   const [showTodayReservationsDialog, setShowTodayReservationsDialog] = useState(false);
-  const [selectedReservationToVerify, setSelectedReservationToVerify] = useState<Reservation | null>(null);
 
   const [creatingCustomer, setCreatingCustomer] = useState(false);
   const [newCustomerForm, setNewCustomerForm] = useState({
@@ -206,6 +206,7 @@ const WaiterPanel = () => {
   });
 
   // ── Local UI state ──
+  const [selectedReservationForSitting, setSelectedReservationForSitting] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<"all" | "available" | "occupied" | "bill" | "reservations">("all");
   const [floorFilter,  setFloorFilter]  = useState<string>("all");
   const [billReqSet,    setBillReqSet]    = useState<Set<number>>(new Set());
@@ -319,6 +320,7 @@ const WaiterPanel = () => {
   // waiter's tablet stops querying when backgrounded (lets the Neon compute idle).
   useOrderEvents(loadOrders);
   useTableEvents(loadTables);
+  useReservationEvents(loadReservations);
   useVisiblePolling(loadOrders, 60000);
   useVisiblePolling(loadTables, 60000);
   useVisiblePolling(loadReservations, 60000);
@@ -326,8 +328,18 @@ const WaiterPanel = () => {
 
   // ── Derived ──
 
-  const isOrderUnpaid = (o: any) =>
-    o.status !== "completed" && (!o.paymentMethod || o.paymentMethod === "Pending" || o.paymentMethod === "Unpaid");
+  const isOrderUnpaid = (o: any) => {
+    if (o.status === "completed") return false;
+    if (!o.paymentMethod || o.paymentMethod === "Pending" || o.paymentMethod === "Unpaid") return true;
+
+    const total = Number(o.total || 0);
+    const advance = Number(o.advancePayment || 0);
+    const netDue = total - advance;
+    if (advance > 0 && netDue > 0.01 && o.paymentStatus !== "fully_paid") {
+      return true;
+    }
+    return false;
+  };
 
   const getTableStatus = (tableNum: number): TableStatus => {
     const activeOrders = orders.filter((o) => o.tableNumber === tableNum && ACTIVE_STATUSES.includes(o.status));
@@ -383,22 +395,26 @@ const WaiterPanel = () => {
   const isSessionPaid = activeTableOrders.length > 0 && !hasUnpaid;
 
   const hasPendingOrPreparing = unpaidOrders.some(o => o.status === "pending" || o.status === "preparing");
-  const hasReady = unpaidOrders.some(o => o.status === "ready");
-  const canPayBill = hasUnpaid && !hasPendingOrPreparing && hasReady;
+  const hasReady = unpaidOrders.some(o => o.status === "ready" || o.status === "served");
+  const canPayBill = hasUnpaid && !hasPendingOrPreparing && (hasReady || activeTableOrders.every(o => o.status === "ready" || o.status === "served"));
+
+  const confirmedReservations = useMemo(() => {
+    return reservations.filter(r => r.status !== "pending" && r.status !== "cancelled" && r.status !== "noShow");
+  }, [reservations]);
 
   const reservedTableNums = useMemo(() => {
     const set = new Set<number>();
-    for (const r of reservations) {
-      if (r.tableNumber && !isNaN(Number(r.tableNumber)) && r.status !== "cancelled" && r.status !== "noShow") {
+    for (const r of confirmedReservations) {
+      if (r.status === "confirmed" && r.tableNumber && !isNaN(Number(r.tableNumber))) {
         set.add(Number(r.tableNumber));
       }
     }
     return set;
-  }, [reservations]);
+  }, [confirmedReservations]);
 
   const todayReservationsCount = useMemo(() => {
-    return reservations.filter(r => r.status !== "cancelled" && r.status !== "noShow").length;
-  }, [reservations]);
+    return confirmedReservations.length;
+  }, [confirmedReservations]);
 
   const stats = {
     available: tables.filter((t) => getTableStatus(Number(t.number)) === "available").length,
@@ -438,6 +454,27 @@ const WaiterPanel = () => {
     if (!selectedCustomerId) return null;
     return customers.find((c) => c.id === selectedCustomerId) || null;
   }, [selectedCustomerId, customers]);
+
+  const activeReservationForTable = useMemo(() => {
+    if (selectedTableNum === null && !selectedTable) return null;
+    const custName = selectedCustomerData?.name || activeTableOrders.find(o => o.customerName && o.customerName !== "Walk-in")?.customerName;
+    const custPhone = selectedCustomerData?.phone || activeTableOrders.find(o => o.phone)?.phone;
+
+    return reservations.find(r =>
+      ((selectedTableNum !== null && String(r.tableNumber) === String(selectedTableNum)) ||
+       (selectedTable && r.tableId === selectedTable.id) ||
+       (custName && r.customerName.toLowerCase().trim() === custName.toLowerCase().trim()) ||
+       (custPhone && r.customerPhone && r.customerPhone.replace(/\D/g, "") === custPhone.replace(/\D/g, ""))) &&
+      r.status !== "cancelled" && r.status !== "completed"
+    );
+  }, [reservations, selectedTableNum, selectedTable, selectedCustomerData, activeTableOrders]);
+
+  const currentAdvancePayment = useMemo(() => {
+    if (activeReservationForTable?.advancePaid && Number(activeReservationForTable.advancePaid) > 0) {
+      return Number(activeReservationForTable.advancePaid);
+    }
+    return activeTableOrders.reduce((sum, o) => sum + (o.advancePayment ? Number(o.advancePayment) : 0), 0);
+  }, [activeReservationForTable, activeTableOrders]);
 
   const customerHistory = useMemo(() => {
     if (!selectedCustomerData) return null;
@@ -659,11 +696,38 @@ const WaiterPanel = () => {
 
   const confirmGuestsCount = async () => {
     setShowGuestsDialog(false);
+    const targetResId = selectedReservationForSitting || activeReservationForTable?.id;
+    const targetRes = reservations.find(r => r.id === targetResId) || activeReservationForTable;
+
+    if (targetRes && targetRes.preOrderItems && targetRes.preOrderItems.length > 0 && targetRes.status !== "completed") {
+      try {
+        const createdOrder = await reservationService.convertToOrder(targetRes.id);
+        toast.success(`Pre-order food sent to kitchen! Active Order #${createdOrder.orderNumber}`);
+        await loadOrders();
+        await loadReservations();
+        await loadTables();
+        setSelectedReservationForSitting(null);
+        return;
+      } catch (err) {
+        console.error("Error converting pre-order items to order", err);
+      }
+    }
+
+    if (selectedReservationForSitting) {
+      try {
+        await reservationService.update(selectedReservationForSitting, { status: "seated" });
+        toast.success("Reservation linked & marked as seated!");
+        await loadReservations();
+      } catch (err) {
+        console.error("Failed linking reservation", err);
+      }
+    }
     if (guestsActionType === "start-sitting") {
       await startSitting(guestsCount);
     } else if (guestsActionType === "place-order") {
       await placeOrder(guestsCount);
     }
+    setSelectedReservationForSitting(null);
   };
 
   const placeOrder = async (guestsInput?: number | null) => {
@@ -679,6 +743,7 @@ const WaiterPanel = () => {
         customerName: selectedCustomerData?.name || "Walk-in",
         phone: selectedCustomerData?.phone || undefined,
         subtotal, discount: 0, tax, total,
+        advancePayment: currentAdvancePayment > 0 ? currentAdvancePayment : undefined,
         paymentMethod: "Pending",
         orderSource: "waiter",
         items: cartItems.map((i) => ({
@@ -712,6 +777,22 @@ const WaiterPanel = () => {
     setStartingSitting(true);
     try {
       const guests = guestsInput || selectedTable.capacity;
+      const targetResId = selectedReservationForSitting || activeReservationForTable?.id;
+      const targetRes = reservations.find(r => r.id === targetResId) || activeReservationForTable;
+
+      if (targetRes && targetRes.preOrderItems && targetRes.preOrderItems.length > 0 && targetRes.status !== "completed") {
+        try {
+          const createdOrder = await reservationService.convertToOrder(targetRes.id);
+          toast.success(`Pre-order food sent to kitchen! Active Order #${createdOrder.orderNumber}`);
+          await loadOrders();
+          await loadReservations();
+          await loadTables();
+          return;
+        } catch (err) {
+          console.error("Error converting reservation pre-order to active order", err);
+        }
+      }
+
       const updated = await tableService.updateTable(selectedTable.id, { 
         status: "occupied", 
         currentOrderId: `${Date.now()}:${guests}` 
@@ -740,6 +821,10 @@ const WaiterPanel = () => {
         );
       }
 
+      if (activeReservationForTable && activeReservationForTable.status !== "completed") {
+        await reservationService.update(activeReservationForTable.id, { status: "completed" }).catch(() => {});
+      }
+
       await tableService.updateTable(selectedTable.id, { status: "available", currentOrderId: null });
       setTables(prev => prev.map(t => t.id === selectedTable.id ? { ...t, status: "available", currentOrderId: null } : t));
       setBillReqSet((p) => { const n = new Set(p); n.delete(selectedTableNum); return n; });
@@ -756,6 +841,7 @@ const WaiterPanel = () => {
       setSelectedTableId(null);
       setCartItems([]);
       await loadOrders();
+      await loadReservations();
     } catch {
       toast.error("Failed to end session");
     } finally {
@@ -767,6 +853,9 @@ const WaiterPanel = () => {
     if (!selectedTable || selectedTableNum === null) return;
     setSettlingBillingState(true);
     try {
+      if (activeReservationForTable && activeReservationForTable.status !== "completed") {
+        await reservationService.update(activeReservationForTable.id, { status: "completed" }).catch(() => {});
+      }
       const unpaidOrders = activeTableOrders.filter(isOrderUnpaid);
       if (unpaidOrders.length > 0) {
         await Promise.all(
@@ -780,6 +869,7 @@ const WaiterPanel = () => {
           )
         );
         await loadOrders();
+        await loadReservations();
       }
       setBillReqSet((p) => { const n = new Set(p); n.delete(selectedTableNum); return n; });
       if (selectedTableNum !== null) {
@@ -947,10 +1037,21 @@ const WaiterPanel = () => {
               <span>${currency} ${taxValue.toLocaleString()}</span>
             </div>
             <div class="divider"></div>
-            <div style="display: flex; justify-content: space-between; font-weight: bold; font-size: 12px;">
+            <div style="display: flex; justify-content: space-between; font-weight: bold; font-size: 11px;">
               <span>Grand Total</span>
               <span>${currency} ${total.toLocaleString()}</span>
             </div>
+            ${currentAdvancePayment > 0 ? `
+              <div style="display: flex; justify-content: space-between; font-weight: bold; color: #059669; margin-top: 3px;">
+                <span>Advance Paid Credit</span>
+                <span>- ${currency} ${currentAdvancePayment.toLocaleString()}</span>
+              </div>
+              <div class="divider"></div>
+              <div style="display: flex; justify-content: space-between; font-weight: bold; font-size: 12px;">
+                <span>Net Payable</span>
+                <span>${currency} ${Math.max(0, total - currentAdvancePayment).toLocaleString()}</span>
+              </div>
+            ` : ''}
           </div>
           
           <div class="divider"></div>
@@ -978,21 +1079,11 @@ const WaiterPanel = () => {
   };
 
   const handleTableClick = (t: TableRecord) => {
-    const tNum = Number(t.number);
-    const matchingRes = reservations.find(r =>
-      (r.tableNumber === String(tNum) || r.tableId === t.id) &&
-      r.status !== "cancelled" && r.status !== "noShow" && r.status !== "completed"
-    );
-
     setSelectedTableId(t.id);
     setCartItems([]);
     resetExpansion();
     setMenuCategory("All");
     setIsOrderingMode(false);
-
-    if (matchingRes) {
-      setSelectedReservationToVerify(matchingRes);
-    }
   };
 
   if (loading) {
@@ -1034,6 +1125,7 @@ const WaiterPanel = () => {
                     onClick={() => {
                       if (key === "reservations") {
                         setShowTodayReservationsDialog(true);
+                        return;
                       }
                       setStatusFilter(prev => prev === key ? "all" : (key as any));
                     }}
@@ -1220,13 +1312,6 @@ const WaiterPanel = () => {
                         )}
                         Start Sitting
                       </Button>
-                      <Button 
-                        onClick={() => setIsOrderingMode(true)} 
-                        variant="outline" 
-                        className="font-bold border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950/30 hover:bg-zinc-100 dark:hover:bg-zinc-900/60 rounded-xl h-11 w-full flex items-center justify-center gap-2 transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
-                      >
-                        <ShoppingCart className="h-4 w-4" /> Place Order
-                      </Button>
                     </div>
                   </div>
                 ) : (
@@ -1316,6 +1401,21 @@ const WaiterPanel = () => {
                       </div>
                     )}
 
+                    {currentAdvancePayment > 0 && !isSessionPaid && (() => {
+                      const grandTotal = activeTableOrders.reduce((s, o) => s + Number(o.total), 0);
+                      const netDue = Math.max(0, grandTotal - currentAdvancePayment);
+                      return (
+                        <div className="bg-amber-500/10 border border-amber-500/20 text-amber-500 rounded-xl p-3 text-center text-xs font-bold flex flex-col items-center justify-center gap-1 select-none mb-2">
+                          <div className="flex items-center gap-1.5 font-extrabold">
+                            <CreditCard className="h-4 w-4" /> Advance Paid: {currency} {currentAdvancePayment.toLocaleString()}
+                          </div>
+                          <span className="text-[11px] font-medium text-amber-400/90">
+                            Remaining Due: {currency} {netDue.toLocaleString()} (Pay bill when food ready)
+                          </span>
+                        </div>
+                      );
+                    })()}
+
                     {isSessionPaid && (() => {
                       const hasUnservedFood = activeTableOrders.some(o => o.status === "pending" || o.status === "preparing");
                       return (
@@ -1392,25 +1492,39 @@ const WaiterPanel = () => {
               </div>
 
               {/* Financial Summary */}
-              {tableStatus !== "available" && activeTableOrders.length > 0 && (
-                <div className="border-t border-zinc-800 pt-4 space-y-2 select-none mt-auto">
-                  <div className="flex justify-between text-xs text-muted-foreground">
-                    <span>Price</span>
-                    <span>{currency} {activeTableOrders.reduce((s, o) => s + Number(o.subtotal), 0).toLocaleString()}</span>
+              {tableStatus !== "available" && activeTableOrders.length > 0 && (() => {
+                const subtotalSum = activeTableOrders.reduce((s, o) => s + Number(o.subtotal), 0);
+                const taxSum = activeTableOrders.reduce((s, o) => s + Number(o.tax), 0);
+                const totalSum = activeTableOrders.reduce((s, o) => s + Number(o.total), 0);
+                const advanceSum = activeTableOrders.reduce((s, o) => s + Number(o.advancePayment || 0), 0);
+                const netPayable = Math.max(0, totalSum - advanceSum);
+
+                return (
+                  <div className="border-t border-zinc-800 pt-4 space-y-2 select-none mt-auto">
+                    <div className="flex justify-between text-xs text-muted-foreground">
+                      <span>Price</span>
+                      <span>{currency} {subtotalSum.toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between text-xs text-muted-foreground">
+                      <span>Tax ({taxRate}%)</span>
+                      <span>{currency} {taxSum.toLocaleString()}</span>
+                    </div>
+                    {advanceSum > 0 && (
+                      <div className="flex justify-between text-xs text-emerald-400 font-semibold">
+                        <span>Advance Paid Credit</span>
+                        <span>- {currency} {advanceSum.toLocaleString()}</span>
+                      </div>
+                    )}
+                    <Separator className="bg-zinc-800 my-1" />
+                    <div className="flex justify-between text-sm font-extrabold text-foreground">
+                      <span>{advanceSum > 0 ? "Net Amount Due" : "Grand Total"}</span>
+                      <span className="text-primary">
+                        {currency} {netPayable.toLocaleString()}
+                      </span>
+                    </div>
                   </div>
-                  <div className="flex justify-between text-xs text-muted-foreground">
-                    <span>Tax ({taxRate}%)</span>
-                    <span>{currency} {activeTableOrders.reduce((s, o) => s + Number(o.tax), 0).toLocaleString()}</span>
-                  </div>
-                  <Separator className="bg-zinc-800 my-1" />
-                  <div className="flex justify-between text-sm font-extrabold text-foreground">
-                    <span>Grand Total</span>
-                    <span className="text-primary">
-                      {currency} {activeTableOrders.reduce((s, o) => s + Number(o.total), 0).toLocaleString()}
-                    </span>
-                  </div>
-                </div>
-              )}
+                );
+              })()}
             </div>
           )}
         </div>
@@ -1497,15 +1611,13 @@ const WaiterPanel = () => {
                           ? "border-red-500/80 bg-red-950/20 shadow-[0_0_12px_rgba(239,68,68,0.25)] animate-pulse border-2 ring-1 ring-red-500/40"
                           : status === "occupied"
                           ? "border-orange-500/50 bg-orange-950/10 hover:border-orange-400 dark:bg-orange-950/20"
-                          : isReservedToday
-                          ? "border-amber-500/50 bg-amber-950/10 hover:border-amber-400 dark:bg-amber-950/20"
                           : "border-emerald-500/50 bg-emerald-950/10 hover:border-emerald-400 dark:bg-emerald-950/20";
 
                       const chairBgClass =
                         status === "available" ? "bg-emerald-500/60" :
                         status === "occupied" ? "bg-orange-500/60" :
                         status === "bill-requested" ? "bg-red-500 animate-pulse" :
-                        "bg-amber-500/60";
+                        "bg-emerald-500/60";
 
                       const isOccupiedState = status === "occupied" || status === "bill-requested";
                       const elapsedStr = isOccupiedState && oldest ? getElapsed(oldest) : "";
@@ -1532,11 +1644,6 @@ const WaiterPanel = () => {
                                 )} />
                                 <span className="text-sm font-black uppercase tracking-wider text-foreground">Table {t.number}</span>
                               </div>
-                              {isReservedToday && (
-                                <Badge variant="secondary" className="bg-amber-500/20 text-amber-500 text-[10px] font-black px-2 py-0.5 border border-amber-500/30 rounded-full">
-                                  Reserved
-                                </Badge>
-                              )}
                             </div>
 
                             {/* Middle Area: Graphical Table Blueprint Diagram */}
@@ -1969,8 +2076,25 @@ const WaiterPanel = () => {
               <Separator className="bg-zinc-200 dark:bg-zinc-800 my-1" />
               <div className="flex justify-between font-extrabold text-sm text-foreground">
                 <span>Grand Total</span>
-                <span className="text-primary">{currency} {activeTableOrders.reduce((s, o) => s + Number(o.total), 0).toLocaleString()}</span>
+                <span className={currentAdvancePayment > 0 ? "text-foreground font-bold" : "text-primary"}>
+                  {currency} {activeTableOrders.reduce((s, o) => s + Number(o.total), 0).toLocaleString()}
+                </span>
               </div>
+              {currentAdvancePayment > 0 && (
+                <>
+                  <div className="flex justify-between items-center text-xs font-bold text-emerald-600 dark:text-emerald-400 pt-1">
+                    <span>Advance Paid Credit</span>
+                    <span>- {currency} {currentAdvancePayment.toLocaleString()}</span>
+                  </div>
+                  <Separator className="bg-zinc-200 dark:bg-zinc-800 my-1" />
+                  <div className="flex justify-between font-extrabold text-sm text-foreground">
+                    <span>Net Payable</span>
+                    <span className="text-primary font-black text-base">
+                      {currency} {Math.max(0, activeTableOrders.reduce((s, o) => s + Number(o.total), 0) - currentAdvancePayment).toLocaleString()}
+                    </span>
+                  </div>
+                </>
+              )}
             </div>
 
             {isSessionPaid && (
@@ -2003,6 +2127,7 @@ const WaiterPanel = () => {
             <DialogTitle className="text-center text-lg font-bold flex items-center justify-center gap-2 text-foreground">
               <CreditCard className="h-5 w-5 text-emerald-500" /> Settle Billing
             </DialogTitle>
+            <DialogDescription className="sr-only">Choose payment method and settle billing for active table session</DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 py-2 text-xs select-none">
@@ -2016,13 +2141,27 @@ const WaiterPanel = () => {
                 <span>GST Tax ({taxRate}%)</span>
                 <span className="font-semibold text-foreground">{currency} {activeTableOrders.reduce((s, o) => s + Number(o.tax), 0).toLocaleString()}</span>
               </div>
-              <Separator className="bg-zinc-200 dark:bg-zinc-800/50 my-1" />
-              <div className="flex justify-between items-center font-extrabold text-sm text-foreground">
-                <span className="text-muted-foreground font-semibold">Total Amount Due</span>
-                <span className="text-primary text-base font-extrabold">
+              <div className="flex justify-between items-center font-bold text-sm text-foreground">
+                <span>Grand Total</span>
+                <span className={currentAdvancePayment > 0 ? "text-foreground font-bold" : "text-primary"}>
                   {currency} {activeTableOrders.reduce((s, o) => s + Number(o.total), 0).toLocaleString()}
                 </span>
               </div>
+              {currentAdvancePayment > 0 && (
+                <>
+                  <div className="flex justify-between items-center text-emerald-600 dark:text-emerald-400 font-bold text-xs">
+                    <span>Advance Paid Credit</span>
+                    <span>- {currency} {currentAdvancePayment.toLocaleString()}</span>
+                  </div>
+                  <Separator className="bg-zinc-200 dark:bg-zinc-800/50 my-1" />
+                  <div className="flex justify-between items-center font-extrabold text-sm text-foreground">
+                    <span className="text-muted-foreground font-semibold">Net Amount Due</span>
+                    <span className="text-primary text-base font-extrabold">
+                      {currency} {Math.max(0, activeTableOrders.reduce((s, o) => s + Number(o.total), 0) - currentAdvancePayment).toLocaleString()}
+                    </span>
+                  </div>
+                </>
+              )}
             </div>
 
             {/* Split / Single Tabs */}
@@ -2204,6 +2343,7 @@ const WaiterPanel = () => {
             <DialogTitle className="text-center text-lg font-bold flex items-center justify-center gap-2">
               <Users className="h-5 w-5 text-primary" /> Guests Count
             </DialogTitle>
+            <DialogDescription className="sr-only">Select guest count and optionally link reservation</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4 text-center">
             <p className="text-xs text-muted-foreground select-none">
@@ -2233,6 +2373,114 @@ const WaiterPanel = () => {
                 <Plus className="h-4 w-4" />
               </Button>
             </div>
+
+            {confirmedReservations.filter(r => r.status !== "completed" && r.status !== "cancelled" && r.status !== "seated").length > 0 && (
+              <div className="text-left space-y-2 pt-3 border-t border-border/80">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs font-bold text-amber-500 flex items-center gap-1.5">
+                    <BookOpen className="h-4 w-4" /> Link Today's Booking / Reservation
+                  </Label>
+                  {selectedReservationForSitting && (
+                    <Badge variant="outline" className="text-[10px] bg-amber-500/10 text-amber-500 border-amber-500/30 font-bold px-2 py-0.5">
+                      ✓ Linked
+                    </Badge>
+                  )}
+                </div>
+                <p className="text-[11px] text-muted-foreground leading-tight">
+                  Link a booking to auto-import customer, advance deposit, and pre-ordered food items directly into kitchen & billing.
+                </p>
+                <Select
+                  value={selectedReservationForSitting || "none"}
+                  onValueChange={(val) => {
+                    setSelectedReservationForSitting(val === "none" ? null : val);
+                    if (val !== "none") {
+                      const resObj = confirmedReservations.find(r => r.id === val);
+                      if (resObj) {
+                        if (resObj.guestCount) setGuestsCount(resObj.guestCount);
+                        const matchedCust = customers.find(c => c.name.toLowerCase() === resObj.customerName.toLowerCase() || (resObj.customerPhone && c.phone === resObj.customerPhone));
+                        if (matchedCust && selectedTableNum !== null) {
+                          handleSelectCustomerForTable(matchedCust.id);
+                        }
+                      }
+                    }
+                  }}
+                >
+                  <SelectTrigger className="h-10 text-xs rounded-xl border-amber-500/40 bg-amber-500/10 text-foreground font-semibold">
+                    <SelectValue placeholder="Walk-in Customer (No reservation)" />
+                  </SelectTrigger>
+                  <SelectContent className="max-w-[360px]">
+                    <SelectItem value="none" className="font-semibold text-xs py-2">
+                      🚶 Walk-in Customer (No reservation)
+                    </SelectItem>
+                    {confirmedReservations.filter(r => r.status !== "completed" && r.status !== "cancelled" && r.status !== "seated").map((r) => {
+                      const preOrderCount = r.preOrderItems ? r.preOrderItems.length : 0;
+                      return (
+                        <SelectItem key={r.id} value={r.id} className="py-2.5 cursor-pointer">
+                          <div className="flex flex-col gap-1 w-full text-left">
+                            <div className="font-bold text-xs flex items-center justify-between gap-2">
+                              <span className="font-extrabold text-foreground">👤 {r.customerName}</span>
+                              {r.customerPhone && (
+                                <span className="text-[10px] text-muted-foreground font-normal">
+                                  {r.customerPhone}
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-1.5 text-[10px] font-semibold flex-wrap">
+                              <span className="bg-amber-500/15 text-amber-700 dark:text-amber-300 px-1.5 py-0.5 rounded font-bold">
+                                ⏰ {r.time}
+                              </span>
+                              {r.tableNumber && (
+                                <span className="bg-muted text-muted-foreground px-1.5 py-0.5 rounded">
+                                  Table {r.tableNumber}
+                                </span>
+                              )}
+                              {r.advancePaid ? (
+                                <span className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 px-1.5 py-0.5 rounded font-bold">
+                                  Adv PKR {r.advancePaid}
+                                </span>
+                              ) : null}
+                              {preOrderCount > 0 ? (
+                                <span className="bg-blue-500/15 text-blue-700 dark:text-blue-300 px-1.5 py-0.5 rounded font-bold">
+                                  {preOrderCount} Pre-orders
+                                </span>
+                              ) : null}
+                            </div>
+                          </div>
+                        </SelectItem>
+                      );
+                    })}
+                  </SelectContent>
+                </Select>
+
+                {(() => {
+                  const selRes = confirmedReservations.find(r => r.id === selectedReservationForSitting);
+                  if (!selRes) return null;
+                  const preOrderCount = selRes.preOrderItems ? selRes.preOrderItems.length : 0;
+                  return (
+                    <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs space-y-1.5 mt-2">
+                      <div className="flex items-center justify-between font-extrabold text-foreground">
+                        <span>Linked: {selRes.customerName}</span>
+                        <span className="text-amber-600 dark:text-amber-400 font-extrabold">⏰ {selRes.time}</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-[11px] font-medium flex-wrap">
+                        {selRes.advancePaid ? (
+                          <span className="text-emerald-700 dark:text-emerald-400 font-bold bg-emerald-500/10 px-2 py-0.5 rounded-md border border-emerald-500/20">
+                            ✓ Deposit Paid: PKR {selRes.advancePaid}
+                          </span>
+                        ) : null}
+                        {preOrderCount > 0 ? (
+                          <span className="text-blue-700 dark:text-blue-400 font-bold bg-blue-500/10 px-2 py-0.5 rounded-md border border-blue-500/20">
+                            ✓ {preOrderCount} Food items pre-ordered & ready to send to kitchen
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground">No pre-ordered food items</span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
           </div>
           <DialogFooter className="flex gap-2">
             <Button
@@ -2414,12 +2662,12 @@ const WaiterPanel = () => {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-amber-500 font-bold">
               <BookOpen className="h-5 w-5" />
-              Today's Reservations ({reservations.length})
+              Today's Reservations ({confirmedReservations.length})
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-3 pt-2">
-            {reservations.length > 0 ? (
-              reservations.map((r) => (
+            {confirmedReservations.length > 0 ? (
+              confirmedReservations.map((r) => (
                 <div key={r.id} className="p-3.5 rounded-xl border border-amber-500/20 bg-amber-500/5 dark:bg-amber-950/20 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 transition-all hover:border-amber-500/40">
                   <div className="space-y-1">
                     <div className="flex items-center gap-2">
@@ -2436,9 +2684,7 @@ const WaiterPanel = () => {
                       </span>
                       <span>• {r.guestCount} Pax</span>
                       <span>• Time: <strong className="text-foreground">{r.time}</strong></span>
-                      <Badge variant="outline" className="text-[10px] uppercase font-bold border-amber-500/30 text-amber-500">
-                        {r.status}
-                      </Badge>
+                      {r.advancePaid ? <span className="text-emerald-500 font-bold">• Adv PKR {r.advancePaid}</span> : null}
                     </div>
                     {r.specialRequests && (
                       <p className="text-xs italic text-muted-foreground bg-background/50 p-1.5 rounded-lg border border-border/40 mt-1">
@@ -2446,24 +2692,16 @@ const WaiterPanel = () => {
                       </p>
                     )}
                   </div>
-                  {r.tableNumber && (
-                    <Button
-                      size="sm"
-                      className="bg-amber-500 hover:bg-amber-600 text-black font-bold text-xs shrink-0 rounded-xl"
-                      onClick={() => {
-                        const t = tables.find(tbl => String(tbl.number) === String(r.tableNumber));
-                        setShowTodayReservationsDialog(false);
-                        if (t) {
-                          handleTableClick(t);
-                          setSelectedReservationToVerify(r);
-                        }
-                      }}
-                    >
-                      Seat at Table {r.tableNumber}
-                    </Button>
-                  )}
+                  <Badge variant="outline" className={cn(
+                    "text-xs font-extrabold shrink-0 uppercase px-3 py-1.5 rounded-xl border",
+                    r.status === "completed" && "bg-emerald-500/10 text-emerald-500 border-emerald-500/30",
+                    r.status === "seated" && "bg-blue-500/10 text-blue-500 border-blue-500/30",
+                    (r.status === "confirmed" || r.status === "pending") && "bg-amber-500/10 text-amber-500 border-amber-500/30"
+                  )}>
+                    {r.status === "completed" ? "✔ Completed" : r.status === "seated" ? "🪑 Seated" : "⌛ Scheduled (Not Arrived)"}
+                  </Badge>
                 </div>
-              ))
+                ))
             ) : (
               <div className="text-center py-8 text-muted-foreground">
                 <BookOpen className="h-8 w-8 mx-auto opacity-30 mb-2" />
@@ -2476,88 +2714,6 @@ const WaiterPanel = () => {
               Close
             </Button>
           </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* ── Reserved Table Customer Verification Modal ── */}
-      <Dialog open={!!selectedReservationToVerify} onOpenChange={() => setSelectedReservationToVerify(null)}>
-        <DialogContent className="max-w-md rounded-2xl border-amber-500/40">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-amber-500 font-bold">
-              <CalendarCheck className="h-5 w-5" />
-              Confirm Table Reservation Customer
-            </DialogTitle>
-          </DialogHeader>
-          {selectedReservationToVerify && (
-            <div className="space-y-4 pt-1">
-              <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 text-center space-y-1">
-                <span className="text-xs font-black uppercase text-amber-500 tracking-wider">Reserved Table</span>
-                <p className="text-3xl font-black text-foreground">Table #{selectedReservationToVerify.tableNumber || "Unassigned"}</p>
-              </div>
-
-              <div className="space-y-2.5 bg-muted/40 p-3.5 rounded-xl border border-border">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground font-medium">Customer Name:</span>
-                  <span className="font-bold text-foreground">{selectedReservationToVerify.customerName}</span>
-                </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground font-medium">Phone Number:</span>
-                  <span className="font-bold text-foreground">{selectedReservationToVerify.customerPhone || "N/A"}</span>
-                </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground font-medium">Scheduled Time:</span>
-                  <span className="font-bold text-amber-500">{selectedReservationToVerify.time}</span>
-                </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground font-medium">Guest Count:</span>
-                  <span className="font-bold text-foreground">{selectedReservationToVerify.guestCount} Pax</span>
-                </div>
-                {selectedReservationToVerify.specialRequests && (
-                  <div className="text-xs pt-1 border-t border-border mt-2">
-                    <span className="text-muted-foreground font-medium">Special Requests: </span>
-                    <span className="italic text-foreground">{selectedReservationToVerify.specialRequests}</span>
-                  </div>
-                )}
-              </div>
-
-              <p className="text-xs text-center text-muted-foreground">
-                Please confirm with the customer that their details match the reservation.
-              </p>
-
-              <div className="flex items-center gap-2 pt-2">
-                <Button
-                  variant="outline"
-                  onClick={() => setSelectedReservationToVerify(null)}
-                  className="w-1/2 rounded-xl"
-                >
-                  Close
-                </Button>
-                <Button
-                  className="w-1/2 bg-amber-500 hover:bg-amber-600 text-black font-bold rounded-xl"
-                  onClick={async () => {
-                    const resId = selectedReservationToVerify.id;
-                    setSelectedReservationToVerify(null);
-                    if (resId) {
-                      try {
-                        await reservationService.update(resId, { status: "seated" });
-                        toast.success(`Customer seated! Reservation marked as seated.`);
-                        await loadOrders();
-                      } catch {
-                        // fallback
-                      }
-                    }
-                    if (selectedTable) {
-                      setGuestsCount(selectedReservationToVerify.guestCount || selectedTable.capacity);
-                      setGuestsActionType("start-sitting");
-                      setShowGuestsDialog(true);
-                    }
-                  }}
-                >
-                  Seat Customer
-                </Button>
-              </div>
-            </div>
-          )}
         </DialogContent>
       </Dialog>
     </div>

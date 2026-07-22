@@ -24,6 +24,8 @@ function invalidateCacheForEvents(eventsList: string[]): void {
       api.clearCache("/purchase-requests");
     } else if (evt.startsWith("purchase:")) {
       api.clearCache("/purchases");
+    } else if (evt.startsWith("reservation:")) {
+      api.clearCache("/reservations");
     }
   });
 }
