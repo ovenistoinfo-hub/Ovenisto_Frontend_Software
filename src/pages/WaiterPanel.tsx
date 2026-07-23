@@ -2719,6 +2719,7 @@ const WaiterPanel = () => {
                           <Utensils className="h-3 w-3" /> Table {r.tableNumber || "Unassigned"}
                         </span>
                         <span>• {r.guestCount} Pax</span>
+                        <span>• Date: <strong className="text-foreground">{r.date}</strong></span>
                         <span>• Time: <strong className="text-foreground">{r.time}</strong></span>
                         {r.advancePaid ? <span className="text-emerald-500 font-bold">• Adv PKR {r.advancePaid}</span> : null}
                       </div>
@@ -2741,34 +2742,14 @@ const WaiterPanel = () => {
                         </Badge>
                       )}
                       {effStatus === "not_arrived" && (
-                        <div className="flex items-center gap-2">
-                          <Badge variant="outline" className="text-xs font-extrabold px-3 py-1.5 rounded-xl border bg-rose-500/15 text-rose-500 border-rose-500/30">
-                            <AlertCircle className="h-3 w-3 mr-1 inline" /> Not Arrived
-                          </Badge>
-                          <Button
-                            size="sm"
-                            variant="destructive"
-                            className="h-8 text-xs font-bold rounded-xl gap-1 shadow-xs"
-                            onClick={() => handleCancelReservation(r.id)}
-                          >
-                            <XCircle className="h-3.5 w-3.5" /> Cancel
-                          </Button>
-                        </div>
+                        <Badge variant="outline" className="text-xs font-extrabold px-3 py-1.5 rounded-xl border bg-rose-500/15 text-rose-500 border-rose-500/30">
+                          <AlertCircle className="h-3 w-3 mr-1 inline" /> Not Arrived
+                        </Badge>
                       )}
                       {effStatus === "confirmed" && (
-                        <div className="flex items-center gap-2">
-                          <Badge variant="outline" className="text-xs font-bold px-3 py-1.5 rounded-xl border bg-blue-500/10 text-blue-500 border-blue-500/30">
-                            <Clock className="h-3 w-3 mr-1 inline" /> Confirmed
-                          </Badge>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="h-8 text-xs text-destructive hover:bg-destructive/10 border-destructive/30 rounded-xl gap-1"
-                            onClick={() => handleCancelReservation(r.id)}
-                          >
-                            <XCircle className="h-3.5 w-3.5" /> Cancel
-                          </Button>
-                        </div>
+                        <Badge variant="outline" className="text-xs font-bold px-3 py-1.5 rounded-xl border bg-blue-500/10 text-blue-500 border-blue-500/30">
+                          <Clock className="h-3 w-3 mr-1 inline" /> Confirmed
+                        </Badge>
                       )}
                     </div>
                   </div>
