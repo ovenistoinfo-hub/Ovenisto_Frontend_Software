@@ -237,10 +237,10 @@ const WaiterPanel = () => {
   const [settlingBillingState, setSettlingBillingState] = useState(false);
   const [movingTable, setMovingTable] = useState(false);
 
-  // Guests Count inputs
   const [showGuestsDialog, setShowGuestsDialog] = useState(false);
   const [guestsCount, setGuestsCount] = useState(4);
   const [guestsActionType, setGuestsActionType] = useState<"start-sitting" | "place-order" | null>(null);
+  const [isSubmittingGuestsCount, setIsSubmittingGuestsCount] = useState(false);
 
   // ── Load data ──
 
@@ -729,43 +729,26 @@ const WaiterPanel = () => {
   };
 
   const confirmGuestsCount = async () => {
-    setShowGuestsDialog(false);
-    const targetResId = selectedReservationForSitting || activeReservationForTable?.id;
-    const targetRes = reservations.find(r => r.id === targetResId) || activeReservationForTable;
-
-    if (targetRes && targetRes.preOrderItems && targetRes.preOrderItems.length > 0 && targetRes.status !== "completed") {
-      try {
-        const createdOrder = await reservationService.convertToOrder(targetRes.id);
-        toast.success(`Pre-order food sent to kitchen! Active Order #${createdOrder.orderNumber}`);
-        await loadOrders();
-        await loadReservations();
-        await loadTables();
-        setSelectedReservationForSitting(null);
-        return;
-      } catch (err) {
-        console.error("Error converting pre-order items to order", err);
+    if (isSubmittingGuestsCount || startingSitting || placingOrder) return;
+    setIsSubmittingGuestsCount(true);
+    try {
+      if (guestsActionType === "start-sitting") {
+        await startSitting(guestsCount);
+      } else if (guestsActionType === "place-order") {
+        await placeOrder(guestsCount);
       }
+      setSelectedReservationForSitting(null);
+      setShowGuestsDialog(false);
+    } catch (err) {
+      console.error("Error in confirmGuestsCount", err);
+      toast.error("Failed to complete action");
+    } finally {
+      setIsSubmittingGuestsCount(false);
     }
-
-    if (selectedReservationForSitting) {
-      try {
-        await reservationService.update(selectedReservationForSitting, { status: "seated" });
-        toast.success("Reservation linked & marked as seated!");
-        await loadReservations();
-      } catch (err) {
-        console.error("Failed linking reservation", err);
-      }
-    }
-    if (guestsActionType === "start-sitting") {
-      await startSitting(guestsCount);
-    } else if (guestsActionType === "place-order") {
-      await placeOrder(guestsCount);
-    }
-    setSelectedReservationForSitting(null);
   };
 
   const placeOrder = async (guestsInput?: number | null) => {
-    if (cartItems.length === 0 || selectedTableNum === null) return;
+    if (cartItems.length === 0 || selectedTableNum === null || placingOrder) return;
     setPlacingOrder(true);
     const subtotal = cartTotal;
     const tax      = Math.round(subtotal * (taxRate / 100));
@@ -807,23 +790,33 @@ const WaiterPanel = () => {
   };
 
   const startSitting = async (guestsInput: number) => {
-    if (!selectedTable) return;
+    if (!selectedTable || startingSitting) return;
     setStartingSitting(true);
     try {
       const guests = guestsInput || selectedTable.capacity;
       const targetResId = selectedReservationForSitting || activeReservationForTable?.id;
       const targetRes = reservations.find(r => r.id === targetResId) || activeReservationForTable;
 
-      if (targetRes && targetRes.preOrderItems && targetRes.preOrderItems.length > 0 && targetRes.status !== "completed") {
-        try {
-          const createdOrder = await reservationService.convertToOrder(targetRes.id);
-          toast.success(`Pre-order food sent to kitchen! Active Order #${createdOrder.orderNumber}`);
-          await loadOrders();
-          await loadReservations();
-          await loadTables();
-          return;
-        } catch (err) {
-          console.error("Error converting reservation pre-order to active order", err);
+      if (targetRes) {
+        if (targetRes.status !== "seated" && targetRes.status !== "completed") {
+          try {
+            await reservationService.update(targetRes.id, { status: "seated" });
+          } catch (err) {
+            console.error("Failed linking reservation status to seated", err);
+          }
+        }
+
+        if (targetRes.preOrderItems && targetRes.preOrderItems.length > 0 && targetRes.status !== "completed" && !targetRes.orderId) {
+          try {
+            const createdOrder = await reservationService.convertToOrder(targetRes.id);
+            toast.success(`Pre-order food sent to kitchen! Active Order #${createdOrder.orderNumber}`);
+            await loadOrders();
+            await loadReservations();
+            await loadTables();
+            return;
+          } catch (err) {
+            console.error("Error converting reservation pre-order to active order", err);
+          }
         }
       }
 
@@ -833,6 +826,8 @@ const WaiterPanel = () => {
       });
       setTables(prev => prev.map(t => t.id === selectedTable.id ? updated : t));
       toast.success(`Table ${selectedTable.number} session started`);
+      await loadTables();
+      await loadReservations();
     } catch {
       toast.error("Failed to start session");
     } finally {
@@ -2563,9 +2558,18 @@ const WaiterPanel = () => {
             </Button>
             <Button
               onClick={confirmGuestsCount}
-              className="gradient-primary text-primary-foreground font-bold rounded-xl flex-1 flex items-center justify-center gap-1.5 shadow-md transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
+              disabled={isSubmittingGuestsCount || startingSitting || placingOrder}
+              className="gradient-primary text-primary-foreground font-bold rounded-xl flex-1 flex items-center justify-center gap-1.5 shadow-md transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <Check className="h-4 w-4" /> {guestsActionType === "start-sitting" ? "Start Sitting" : "Confirm Order"}
+              {(isSubmittingGuestsCount || startingSitting || placingOrder) ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" /> Starting...
+                </>
+              ) : (
+                <>
+                  <Check className="h-4 w-4" /> {guestsActionType === "start-sitting" ? "Start Sitting" : "Confirm Order"}
+                </>
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
