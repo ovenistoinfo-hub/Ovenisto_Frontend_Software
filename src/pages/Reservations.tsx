@@ -356,11 +356,14 @@ const Reservations = () => {
     });
   };
 
-  const getEffectiveStatus = (r: { date: string; time: string; status: string; order?: any }) => {
+  const getEffectiveStatus = (r: { date: string; time: string; status: string; order?: any; orderId?: string }) => {
     if (r.status === "completed" || r.order?.status === "completed") {
       return "completed";
     }
-    if (r.status === "seated" || r.status === "cancelled" || r.status === "noShow") {
+    if (r.status === "seated" || r.order?.status === "seated" || r.orderId || r.order) {
+      return "seated";
+    }
+    if (r.status === "cancelled" || r.status === "noShow") {
       return r.status;
     }
     const now = new Date();
