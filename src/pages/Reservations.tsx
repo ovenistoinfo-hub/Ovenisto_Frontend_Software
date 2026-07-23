@@ -356,8 +356,11 @@ const Reservations = () => {
     });
   };
 
-  const getEffectiveStatus = (r: { date: string; time: string; status: string }) => {
-    if (r.status === "seated" || r.status === "completed" || r.status === "cancelled" || r.status === "noShow") {
+  const getEffectiveStatus = (r: { date: string; time: string; status: string; order?: any }) => {
+    if (r.status === "completed" || r.order?.status === "completed") {
+      return "completed";
+    }
+    if (r.status === "seated" || r.status === "cancelled" || r.status === "noShow") {
       return r.status;
     }
     const now = new Date();
@@ -763,32 +766,15 @@ const Reservations = () => {
                           </>
                         )}
                         {(effStatus === "not_arrived" || r.status === "confirmed") && r.status !== "seated" && r.status !== "completed" && r.status !== "cancelled" && (
-                          <>
-                            {(r.orderType === "Dine In" || !r.orderType) && (
-                              <Button
-                                size="sm"
-                                className="h-7 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-semibold shadow-sm px-2.5 rounded-lg gap-1"
-                                onClick={() => changeStatus(r.id, "seated")}
-                                disabled={updateMutation.isPending}
-                              >
-                                <Utensils className="h-3 w-3" /> Seat
-                              </Button>
-                            )}
-                            <Button
-                              size="sm"
-                              variant="destructive"
-                              className="h-7 text-xs font-semibold shadow-sm px-2.5 rounded-lg gap-1"
-                              onClick={() => changeStatus(r.id, "cancelled")}
-                              disabled={updateMutation.isPending}
-                            >
-                              <XCircle className="h-3 w-3" /> Cancel
-                            </Button>
-                          </>
-                        )}
-                        {r.orderId && (
-                          <Badge className="bg-primary/20 text-primary border-primary/30 text-[10px]">
-                            Order Created
-                          </Badge>
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            className="h-7 text-xs font-semibold shadow-sm px-2.5 rounded-lg gap-1"
+                            onClick={() => changeStatus(r.id, "cancelled")}
+                            disabled={updateMutation.isPending}
+                          >
+                            <XCircle className="h-3 w-3" /> Cancel
+                          </Button>
                         )}
                         <Button variant="ghost" size="icon" className="h-7 w-7 rounded-lg" onClick={() => openEdit(r)}><Pencil className="h-3.5 w-3.5" /></Button>
                         <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive rounded-lg" onClick={() => setDeleteId(r.id)}><Trash2 className="h-3.5 w-3.5" /></Button>
