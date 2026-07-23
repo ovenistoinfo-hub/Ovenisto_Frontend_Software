@@ -2439,43 +2439,52 @@ const WaiterPanel = () => {
                     }
                   }}
                 >
-                  <SelectTrigger className="h-10 text-xs rounded-xl border-amber-500/40 bg-amber-500/10 text-foreground font-semibold">
+                  <SelectTrigger className="h-11 text-xs rounded-xl border-amber-500/30 bg-amber-500/5 hover:bg-amber-500/10 text-foreground font-semibold transition-all shadow-2xs">
                     <SelectValue placeholder="Walk-in Customer (No reservation)" />
                   </SelectTrigger>
-                  <SelectContent className="max-w-[360px]">
-                    <SelectItem value="none" className="font-semibold text-xs py-2">
-                      🚶 Walk-in Customer (No reservation)
+                  <SelectContent className="max-w-[380px] p-1.5 rounded-2xl border-border bg-popover shadow-xl overflow-hidden">
+                    <SelectItem value="none" className="font-semibold text-xs py-2.5 px-3 rounded-xl cursor-pointer hover:bg-accent focus:bg-accent transition-colors flex items-center gap-2 mb-1">
+                      <span className="flex items-center gap-2 text-foreground font-medium">
+                        <User className="h-4 w-4 text-muted-foreground" />
+                        Walk-in Customer (No reservation)
+                      </span>
                     </SelectItem>
                     {confirmedReservations.filter(r => r.status !== "completed" && r.status !== "cancelled" && r.status !== "seated").map((r) => {
                       const preOrderCount = r.preOrderItems ? r.preOrderItems.length : 0;
                       return (
-                        <SelectItem key={r.id} value={r.id} className="py-2.5 cursor-pointer">
-                          <div className="flex flex-col gap-1 w-full text-left">
+                        <SelectItem
+                          key={r.id}
+                          value={r.id}
+                          className="py-2.5 px-3 rounded-xl cursor-pointer my-1 transition-all hover:bg-amber-500/15 focus:bg-amber-500/15 border border-transparent hover:border-amber-500/30 data-[state=checked]:bg-amber-500/20 data-[state=checked]:border-amber-500/40"
+                        >
+                          <div className="flex flex-col gap-1.5 w-full text-left">
                             <div className="font-bold text-xs flex items-center justify-between gap-2">
-                              <span className="font-extrabold text-foreground">👤 {r.customerName}</span>
+                              <span className="font-extrabold text-foreground flex items-center gap-1.5">
+                                <User className="h-3.5 w-3.5 text-primary" /> {r.customerName}
+                              </span>
                               {r.customerPhone && (
-                                <span className="text-[10px] text-muted-foreground font-normal">
+                                <span className="text-[10px] text-muted-foreground font-mono">
                                   {r.customerPhone}
                                 </span>
                               )}
                             </div>
                             <div className="flex items-center gap-1.5 text-[10px] font-semibold flex-wrap">
-                              <span className="bg-amber-500/15 text-amber-700 dark:text-amber-300 px-1.5 py-0.5 rounded font-bold">
-                                ⏰ {r.time}
+                              <span className="bg-amber-500/10 text-amber-500 border border-amber-500/20 px-2 py-0.5 rounded-md font-bold flex items-center gap-1">
+                                <Clock className="h-3 w-3" /> {r.time}
                               </span>
                               {r.tableNumber && (
-                                <span className="bg-muted text-muted-foreground px-1.5 py-0.5 rounded">
+                                <span className="bg-muted text-muted-foreground border border-border/40 px-2 py-0.5 rounded-md font-medium">
                                   Table {r.tableNumber}
                                 </span>
                               )}
                               {r.advancePaid ? (
-                                <span className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 px-1.5 py-0.5 rounded font-bold">
-                                  Adv PKR {r.advancePaid}
+                                <span className="bg-emerald-500/10 text-emerald-500 border border-emerald-500/30 px-2 py-0.5 rounded-md font-bold flex items-center gap-1">
+                                  <Check className="h-3 w-3" /> Adv PKR {r.advancePaid}
                                 </span>
                               ) : null}
                               {preOrderCount > 0 ? (
-                                <span className="bg-blue-500/15 text-blue-700 dark:text-blue-300 px-1.5 py-0.5 rounded font-bold">
-                                  {preOrderCount} Pre-orders
+                                <span className="bg-primary/10 text-primary border border-primary/20 px-2 py-0.5 rounded-md font-bold flex items-center gap-1">
+                                  <Utensils className="h-3 w-3" /> {preOrderCount} Pre-orders
                                 </span>
                               ) : null}
                             </div>
@@ -2491,20 +2500,24 @@ const WaiterPanel = () => {
                   if (!selRes) return null;
                   const preOrderCount = selRes.preOrderItems ? selRes.preOrderItems.length : 0;
                   return (
-                    <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs space-y-1.5 mt-2">
+                    <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs space-y-2 mt-2 shadow-2xs">
                       <div className="flex items-center justify-between font-extrabold text-foreground">
-                        <span>Linked: {selRes.customerName}</span>
-                        <span className="text-amber-600 dark:text-amber-400 font-extrabold">⏰ {selRes.time}</span>
+                        <span className="flex items-center gap-1.5">
+                          <User className="h-4 w-4 text-amber-500" /> Linked: {selRes.customerName}
+                        </span>
+                        <span className="text-amber-500 font-extrabold flex items-center gap-1">
+                          <Clock className="h-3.5 w-3.5" /> {selRes.time}
+                        </span>
                       </div>
                       <div className="flex items-center gap-2 text-[11px] font-medium flex-wrap">
                         {selRes.advancePaid ? (
-                          <span className="text-emerald-700 dark:text-emerald-400 font-bold bg-emerald-500/10 px-2 py-0.5 rounded-md border border-emerald-500/20">
-                            ✓ Deposit Paid: PKR {selRes.advancePaid}
+                          <span className="text-emerald-500 font-bold bg-emerald-500/10 px-2 py-0.5 rounded-md border border-emerald-500/20 flex items-center gap-1">
+                            <Check className="h-3 w-3" /> Deposit Paid: PKR {selRes.advancePaid}
                           </span>
                         ) : null}
                         {preOrderCount > 0 ? (
-                          <span className="text-blue-700 dark:text-blue-400 font-bold bg-blue-500/10 px-2 py-0.5 rounded-md border border-blue-500/20">
-                            ✓ {preOrderCount} Food items pre-ordered & ready to send to kitchen
+                          <span className="text-primary font-bold bg-primary/10 px-2 py-0.5 rounded-md border border-primary/20 flex items-center gap-1">
+                            <Utensils className="h-3 w-3" /> {preOrderCount} Food items pre-ordered & ready to send to kitchen
                           </span>
                         ) : (
                           <span className="text-muted-foreground">No pre-ordered food items</span>
