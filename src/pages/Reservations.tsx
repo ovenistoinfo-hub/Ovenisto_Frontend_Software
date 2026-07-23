@@ -1,7 +1,7 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import {
   CalendarCheck, Plus, Pencil, Trash2, User, Phone, Users, CheckCircle2,
-  Utensils, CreditCard, Banknote, Smartphone, ShoppingBag, ArrowRight,
+  Utensils, CreditCard, Banknote, Smartphone, ShoppingBag, ArrowRight, Truck, XCircle,
   Search, AlertCircle, Clock, MapPin, Check, DollarSign, ListFilter, Sparkles, ChevronRight, X, Zap
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -356,6 +356,20 @@ const Reservations = () => {
     });
   };
 
+  const getEffectiveStatus = (r: { date: string; time: string; status: string }) => {
+    if (r.status === "seated" || r.status === "completed" || r.status === "cancelled" || r.status === "noShow") {
+      return r.status;
+    }
+    const now = new Date();
+    const todayStr = now.toISOString().split("T")[0];
+    const currentHHMM = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+
+    if (r.date < todayStr || (r.date === todayStr && currentHHMM >= r.time)) {
+      return "not_arrived";
+    }
+    return r.status;
+  };
+
   const handleSave = async () => {
     if (!form.customerName?.trim()) { toast.error("Customer name required"); return; }
     if (!form.date) { toast.error("Date required"); return; }
@@ -611,11 +625,18 @@ const Reservations = () => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filtered.map(r => (
+                {filtered.map(r => {
+                  const effStatus = getEffectiveStatus(r);
+                  return (
                   <TableRow key={r.id} className="hover:bg-muted/30 transition-colors">
                     <TableCell>
-                      <Badge variant="outline" className={cn("capitalize font-semibold text-[11px]", r.bookingType === "future_order" ? "bg-info/10 text-info border-info/30" : "bg-primary/10 text-primary border-primary/30")}>
-                        {r.bookingType === "future_order" ? `🍕 Pre-Order (${r.orderType})` : `🪑 Table Booking`}
+                      <Badge variant="outline" className={cn(
+                        "capitalize font-semibold text-[11px] flex items-center gap-1.5 w-fit rounded-lg px-2.5 py-0.5",
+                        r.orderType === "Delivery" ? "bg-amber-500/10 text-amber-500 border-amber-500/30" :
+                        r.orderType === "Take Away" ? "bg-info/10 text-info border-info/30" : "bg-primary/10 text-primary border-primary/30"
+                      )}>
+                        {r.orderType === "Delivery" ? <Truck className="h-3 w-3" /> : r.orderType === "Take Away" ? <ShoppingBag className="h-3 w-3" /> : <Utensils className="h-3 w-3" />}
+                        {r.orderType || (r.bookingType === "future_order" ? "Take Away" : "Dine In")}
                       </Badge>
                     </TableCell>
 
@@ -635,9 +656,9 @@ const Reservations = () => {
                     </TableCell>
 
                     <TableCell>
-                      {r.bookingType === "table_reservation" ? (
+                      {r.bookingType === "table_reservation" || r.orderType === "Dine In" ? (
                         <span className="text-xs font-semibold text-foreground">
-                          {r.tableNumber ? `Table ${r.tableNumber}` : "No Table"} · {r.guestCount} Guests
+                          {r.tableNumber ? `Table ${r.tableNumber}` : "Unassigned"} · {r.guestCount} Guests
                         </span>
                       ) : (
                         <div className="text-xs">
@@ -650,8 +671,8 @@ const Reservations = () => {
                     <TableCell>
                       {(r.advancePaid || 0) > 0 ? (
                         <div className="space-y-0.5">
-                          <Badge className="bg-success/15 text-success border-success/30 text-xs font-bold">
-                            ✔ PKR {r.advancePaid.toLocaleString()}
+                          <Badge className="bg-emerald-500/15 text-emerald-500 border-emerald-500/30 text-xs font-bold flex items-center gap-1 w-fit">
+                            <Check className="h-3 w-3" /> PKR {r.advancePaid.toLocaleString()}
                           </Badge>
                           <p className="text-[10px] text-muted-foreground">via {r.paymentMethod || "Cash"}</p>
                         </div>
@@ -674,9 +695,48 @@ const Reservations = () => {
                     </TableCell>
 
                     <TableCell>
-                      <Badge variant="secondary" className={cn("capitalize border text-xs font-semibold", statusColors[r.status])}>
-                        {r.status}
-                      </Badge>
+                      {(() => {
+                        if (effStatus === "not_arrived") {
+                          return (
+                            <Badge variant="outline" className="capitalize border text-xs font-bold bg-rose-500/15 text-rose-500 border-rose-500/30 flex items-center gap-1 w-fit">
+                              <AlertCircle className="h-3 w-3" /> Not Arrived
+                            </Badge>
+                          );
+                        }
+                        if (effStatus === "confirmed") {
+                          return (
+                            <Badge variant="outline" className="capitalize border text-xs font-semibold bg-blue-500/10 text-blue-500 border-blue-500/30 flex items-center gap-1 w-fit">
+                              <CheckCircle2 className="h-3 w-3" /> Confirmed
+                            </Badge>
+                          );
+                        }
+                        if (effStatus === "seated") {
+                          return (
+                            <Badge variant="outline" className="capitalize border text-xs font-semibold bg-emerald-500/10 text-emerald-500 border-emerald-500/30 flex items-center gap-1 w-fit">
+                              <Utensils className="h-3 w-3" /> Seated
+                            </Badge>
+                          );
+                        }
+                        if (effStatus === "completed") {
+                          return (
+                            <Badge variant="outline" className="capitalize border text-xs font-semibold bg-muted text-muted-foreground border-border flex items-center gap-1 w-fit">
+                              <Check className="h-3 w-3" /> Completed
+                            </Badge>
+                          );
+                        }
+                        if (effStatus === "cancelled") {
+                          return (
+                            <Badge variant="outline" className="capitalize border text-xs font-semibold bg-destructive/10 text-destructive border-destructive/20 flex items-center gap-1 w-fit">
+                              <XCircle className="h-3 w-3" /> Cancelled
+                            </Badge>
+                          );
+                        }
+                        return (
+                          <Badge variant="secondary" className={cn("capitalize border text-xs font-semibold flex items-center gap-1 w-fit", statusColors[r.status])}>
+                            <Clock className="h-3 w-3" /> {r.status}
+                          </Badge>
+                        );
+                      })()}
                     </TableCell>
 
                     <TableCell className="text-right">
@@ -685,7 +745,7 @@ const Reservations = () => {
                           <>
                             <Button
                               size="sm"
-                              className="h-7 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-semibold shadow-sm px-2.5"
+                              className="h-7 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-semibold shadow-sm px-2.5 rounded-lg"
                               onClick={() => changeStatus(r.id, "confirmed")}
                               disabled={updateMutation.isPending}
                             >
@@ -694,11 +754,34 @@ const Reservations = () => {
                             <Button
                               size="sm"
                               variant="ghost"
-                              className="h-7 text-xs text-destructive hover:bg-destructive/10 px-2.5"
+                              className="h-7 text-xs text-destructive hover:bg-destructive/10 px-2.5 rounded-lg"
                               onClick={() => changeStatus(r.id, "cancelled")}
                               disabled={updateMutation.isPending}
                             >
                               <X className="h-3 w-3 mr-1" /> Decline
+                            </Button>
+                          </>
+                        )}
+                        {(effStatus === "not_arrived" || r.status === "confirmed") && r.status !== "seated" && r.status !== "completed" && r.status !== "cancelled" && (
+                          <>
+                            {(r.orderType === "Dine In" || !r.orderType) && (
+                              <Button
+                                size="sm"
+                                className="h-7 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-semibold shadow-sm px-2.5 rounded-lg gap-1"
+                                onClick={() => changeStatus(r.id, "seated")}
+                                disabled={updateMutation.isPending}
+                              >
+                                <Utensils className="h-3 w-3" /> Seat
+                              </Button>
+                            )}
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              className="h-7 text-xs font-semibold shadow-sm px-2.5 rounded-lg gap-1"
+                              onClick={() => changeStatus(r.id, "cancelled")}
+                              disabled={updateMutation.isPending}
+                            >
+                              <XCircle className="h-3 w-3" /> Cancel
                             </Button>
                           </>
                         )}
@@ -707,12 +790,13 @@ const Reservations = () => {
                             Order Created
                           </Badge>
                         )}
-                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(r)}><Pencil className="h-3.5 w-3.5" /></Button>
-                        <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => setDeleteId(r.id)}><Trash2 className="h-3.5 w-3.5" /></Button>
+                        <Button variant="ghost" size="icon" className="h-7 w-7 rounded-lg" onClick={() => openEdit(r)}><Pencil className="h-3.5 w-3.5" /></Button>
+                        <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive rounded-lg" onClick={() => setDeleteId(r.id)}><Trash2 className="h-3.5 w-3.5" /></Button>
                       </div>
                     </TableCell>
                   </TableRow>
-                ))}
+                );
+                })}
                 {filtered.length === 0 && (
                   <TableRow>
                     <TableCell colSpan={8} className="text-center py-12 text-muted-foreground">
@@ -747,26 +831,26 @@ const Reservations = () => {
               <Button
                 type="button"
                 variant={form.orderType === "Dine In" ? "default" : "ghost"}
-                className={cn("w-full text-xs font-semibold rounded-lg", form.orderType === "Dine In" && "gradient-primary text-primary-foreground shadow")}
+                className={cn("w-full text-xs font-semibold rounded-lg flex items-center justify-center gap-1.5", form.orderType === "Dine In" && "gradient-primary text-primary-foreground shadow")}
                 onClick={() => setForm(p => ({ ...p, bookingType: "table_reservation", orderType: "Dine In" }))}
               >
-                🪑 Dine In
+                <Utensils className="h-3.5 w-3.5" /> Dine In
               </Button>
               <Button
                 type="button"
                 variant={form.orderType === "Take Away" ? "default" : "ghost"}
-                className={cn("w-full text-xs font-semibold rounded-lg", form.orderType === "Take Away" && "gradient-primary text-primary-foreground shadow")}
+                className={cn("w-full text-xs font-semibold rounded-lg flex items-center justify-center gap-1.5", form.orderType === "Take Away" && "gradient-primary text-primary-foreground shadow")}
                 onClick={() => setForm(p => ({ ...p, bookingType: "future_order", orderType: "Take Away", tableId: undefined, tableNumber: undefined }))}
               >
-                🛍️ Take Away
+                <ShoppingBag className="h-3.5 w-3.5" /> Take Away
               </Button>
               <Button
                 type="button"
                 variant={form.orderType === "Delivery" ? "default" : "ghost"}
-                className={cn("w-full text-xs font-semibold rounded-lg", form.orderType === "Delivery" && "gradient-primary text-primary-foreground shadow")}
+                className={cn("w-full text-xs font-semibold rounded-lg flex items-center justify-center gap-1.5", form.orderType === "Delivery" && "gradient-primary text-primary-foreground shadow")}
                 onClick={() => setForm(p => ({ ...p, bookingType: "future_order", orderType: "Delivery", tableId: undefined, tableNumber: undefined }))}
               >
-                🚚 Delivery
+                <Truck className="h-3.5 w-3.5" /> Delivery
               </Button>
             </div>
 

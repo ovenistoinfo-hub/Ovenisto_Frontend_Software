@@ -16,7 +16,7 @@ import { useOrderEvents } from "@/hooks/use-order-events";
 import { useTableEvents } from "@/hooks/use-table-events";
 import { useReservationEvents } from "@/hooks/use-reservation-events";
 import { getSocket } from "@/lib/socket";
-import { Search, Plus, Minus, X, ShoppingCart, FileText, Printer, ArrowLeft, Trash2, User, Users, MapPin, Phone, Flame, Check, CreditCard, Banknote, Smartphone, RotateCcw, Download, ClipboardList, AlertTriangle, UtensilsCrossed, CalendarClock, Calendar, Timer, ChefHat, Tag, Zap, History, Monitor, BookOpen, StickyNote, Eye, Building2, Crown, CircleAlert, Bell, DollarSign, Package, Ban } from "lucide-react";
+import { Search, Plus, Minus, X, ShoppingCart, FileText, Printer, ArrowLeft, Trash2, User, Users, MapPin, Phone, Flame, Check, CreditCard, Banknote, Smartphone, RotateCcw, Download, ClipboardList, AlertTriangle, UtensilsCrossed, CalendarClock, Calendar, Timer, ChefHat, Tag, Zap, History, Monitor, BookOpen, StickyNote, Eye, Building2, Crown, CircleAlert, Bell, DollarSign, Package, Ban, Truck, ShoppingBag, Utensils, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -2597,37 +2597,37 @@ const POS = () => {
                 type="button"
                 onClick={() => setPosReservationTab("dine_in")}
                 className={cn(
-                  "py-1.5 rounded-lg transition-all text-center",
+                  "py-1.5 rounded-lg transition-all text-center flex items-center justify-center gap-1",
                   posReservationTab === "dine_in"
                     ? "bg-background text-foreground shadow-xs font-extrabold"
                     : "text-muted-foreground hover:text-foreground"
                 )}
               >
-                🪑 Dine In ({todayReservations.filter(r => (!r.orderType || r.orderType === "Dine In") && r.bookingType !== "future_order").length})
+                <Utensils className="h-3.5 w-3.5" /> Dine In ({todayReservations.filter(r => (!r.orderType || r.orderType === "Dine In") && r.bookingType !== "future_order").length})
               </button>
               <button
                 type="button"
                 onClick={() => setPosReservationTab("take_away")}
                 className={cn(
-                  "py-1.5 rounded-lg transition-all text-center",
+                  "py-1.5 rounded-lg transition-all text-center flex items-center justify-center gap-1",
                   posReservationTab === "take_away"
                     ? "bg-background text-foreground shadow-xs font-extrabold"
                     : "text-muted-foreground hover:text-foreground"
                 )}
               >
-                🛍️ Take Away ({todayReservations.filter(r => r.orderType === "Take Away" || (r.bookingType === "future_order" && r.orderType === "Take Away")).length})
+                <ShoppingBag className="h-3.5 w-3.5" /> Take Away ({todayReservations.filter(r => r.orderType === "Take Away" || (r.bookingType === "future_order" && r.orderType === "Take Away")).length})
               </button>
               <button
                 type="button"
                 onClick={() => setPosReservationTab("delivery")}
                 className={cn(
-                  "py-1.5 rounded-lg transition-all text-center",
+                  "py-1.5 rounded-lg transition-all text-center flex items-center justify-center gap-1",
                   posReservationTab === "delivery"
                     ? "bg-background text-foreground shadow-xs font-extrabold"
                     : "text-muted-foreground hover:text-foreground"
                 )}
               >
-                🚚 Delivery ({todayReservations.filter(r => r.orderType === "Delivery" || (r.bookingType === "future_order" && r.orderType === "Delivery")).length})
+                <Truck className="h-3.5 w-3.5" /> Delivery ({todayReservations.filter(r => r.orderType === "Delivery" || (r.bookingType === "future_order" && r.orderType === "Delivery")).length})
               </button>
             </div>
           </div>
@@ -2704,7 +2704,7 @@ const POS = () => {
                     {preOrderCount > 0 && (
                       <div className="bg-primary/5 border border-primary/20 rounded-xl p-2.5 my-2 space-y-1">
                         <div className="flex items-center justify-between font-bold text-foreground">
-                          <span>🍕 Pre-Order ({preOrderCount} items)</span>
+                          <span className="flex items-center gap-1"><Utensils className="h-3.5 w-3.5 text-primary" /> Pre-Order Food ({preOrderCount} items)</span>
                           <span className="text-primary">{effectiveSettings.currency} {foodSubtotal.toLocaleString()}</span>
                         </div>
                         <div className="text-[11px] text-muted-foreground space-y-0.5 max-h-24 overflow-y-auto">
@@ -2721,7 +2721,7 @@ const POS = () => {
                     {/* Advance Deposit Badge */}
                     {res.advancePaid && Number(res.advancePaid) > 0 ? (
                       <div className="flex items-center justify-between bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 p-2 rounded-lg font-bold text-xs my-2">
-                        <span>✓ Advance Deposit Paid</span>
+                        <span className="flex items-center gap-1"><Check className="h-3.5 w-3.5" /> Advance Deposit Paid</span>
                         <span>{effectiveSettings.currency} {Number(res.advancePaid).toLocaleString()}</span>
                       </div>
                     ) : null}

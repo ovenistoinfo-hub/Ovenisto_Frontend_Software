@@ -13,7 +13,8 @@ import {
   Plus, Minus, X, ShoppingCart, UtensilsCrossed, Clock, Users,
   Receipt, CircleDot, ChevronDown, ChevronUp, Bell, Check, Loader2, Trash2,
   Play, Power, Eye, CreditCard, Percent, CornerUpRight, Printer, ArrowLeft, Search,
-  Coins, Wallet, Smartphone, BookOpen, User, History, Building2, Crown, Phone, MapPin, Calendar, DollarSign, CalendarCheck
+  Coins, Wallet, Smartphone, BookOpen, User, History, Building2, Crown, Phone, MapPin, Calendar, DollarSign, CalendarCheck,
+  AlertCircle, XCircle, CheckCircle2, Utensils
 } from "lucide-react";
 import { toast } from "sonner";
 import { useData } from "@/contexts/DataContext";
@@ -257,12 +258,36 @@ const WaiterPanel = () => {
     } catch { /* silent polling */ }
   }, []);
 
+  const getEffectiveStatus = (r: { date: string; time: string; status: string }) => {
+    if (r.status === "seated" || r.status === "completed" || r.status === "cancelled" || r.status === "noShow") {
+      return r.status;
+    }
+    const now = new Date();
+    const todayStr = now.toISOString().split("T")[0];
+    const currentHHMM = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+
+    if (r.date < todayStr || (r.date === todayStr && currentHHMM >= r.time)) {
+      return "not_arrived";
+    }
+    return r.status;
+  };
+
+  const handleCancelReservation = async (id: string) => {
+    try {
+      await reservationService.update(id, { status: "cancelled" });
+      toast.success("Reservation cancelled");
+      loadReservations();
+    } catch {
+      toast.error("Failed to cancel reservation");
+    }
+  };
+
   const loadReservations = useCallback(async () => {
     try {
       const pkt = new Date(Date.now() + 5 * 60 * 60 * 1000);
       const todayStr = pkt.toISOString().split("T")[0];
       const data = await reservationService.getAll({ date: todayStr });
-      setReservations(data.filter(r => (!r.orderType || r.orderType === "Dine In") && r.bookingType !== "future_order"));
+      setReservations(data.filter(r => r.date === todayStr && (!r.orderType || r.orderType === "Dine In") && r.bookingType !== "future_order"));
     } catch { /* silent polling */ }
   }, []);
 
@@ -399,7 +424,16 @@ const WaiterPanel = () => {
   const canPayBill = hasUnpaid && !hasPendingOrPreparing && (hasReady || activeTableOrders.every(o => o.status === "ready" || o.status === "served"));
 
   const confirmedReservations = useMemo(() => {
-    return reservations.filter(r => r.status !== "pending" && r.status !== "cancelled" && r.status !== "noShow" && (!r.orderType || r.orderType === "Dine In") && r.bookingType !== "future_order");
+    const pkt = new Date(Date.now() + 5 * 60 * 60 * 1000);
+    const todayStr = pkt.toISOString().split("T")[0];
+    return reservations.filter(r =>
+      r.date === todayStr &&
+      r.status !== "pending" &&
+      r.status !== "cancelled" &&
+      r.status !== "noShow" &&
+      (!r.orderType || r.orderType === "Dine In") &&
+      r.bookingType !== "future_order"
+    );
   }, [reservations]);
 
   const reservedTableNums = useMemo(() => {
@@ -2667,41 +2701,79 @@ const WaiterPanel = () => {
           </DialogHeader>
           <div className="space-y-3 pt-2">
             {confirmedReservations.length > 0 ? (
-              confirmedReservations.map((r) => (
-                <div key={r.id} className="p-3.5 rounded-xl border border-amber-500/20 bg-amber-500/5 dark:bg-amber-950/20 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 transition-all hover:border-amber-500/40">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span className="font-bold text-foreground text-sm">{r.customerName}</span>
-                      {r.customerPhone && (
-                        <span className="text-xs text-muted-foreground font-medium flex items-center gap-1">
-                          <Phone className="h-3 w-3" /> {r.customerPhone}
+              confirmedReservations.map((r) => {
+                const effStatus = getEffectiveStatus(r);
+                return (
+                  <div key={r.id} className="p-3.5 rounded-xl border border-amber-500/20 bg-amber-500/5 dark:bg-amber-950/20 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 transition-all hover:border-amber-500/40">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-foreground text-sm">{r.customerName}</span>
+                        {r.customerPhone && (
+                          <span className="text-xs text-muted-foreground font-medium flex items-center gap-1">
+                            <Phone className="h-3 w-3" /> {r.customerPhone}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
+                        <span className="font-bold text-amber-500 flex items-center gap-1">
+                          <Utensils className="h-3 w-3" /> Table {r.tableNumber || "Unassigned"}
                         </span>
+                        <span>• {r.guestCount} Pax</span>
+                        <span>• Time: <strong className="text-foreground">{r.time}</strong></span>
+                        {r.advancePaid ? <span className="text-emerald-500 font-bold">• Adv PKR {r.advancePaid}</span> : null}
+                      </div>
+                      {r.specialRequests && (
+                        <p className="text-xs italic text-muted-foreground bg-background/50 p-1.5 rounded-lg border border-border/40 mt-1">
+                          "{r.specialRequests}"
+                        </p>
                       )}
                     </div>
-                    <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
-                      <span className="font-bold text-amber-500">
-                        Table {r.tableNumber || "Unassigned"}
-                      </span>
-                      <span>• {r.guestCount} Pax</span>
-                      <span>• Time: <strong className="text-foreground">{r.time}</strong></span>
-                      {r.advancePaid ? <span className="text-emerald-500 font-bold">• Adv PKR {r.advancePaid}</span> : null}
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      {effStatus === "completed" && (
+                        <Badge variant="outline" className="text-xs font-bold px-3 py-1.5 rounded-xl border bg-muted text-muted-foreground">
+                          <Check className="h-3 w-3 mr-1 inline" /> Completed
+                        </Badge>
+                      )}
+                      {effStatus === "seated" && (
+                        <Badge variant="outline" className="text-xs font-bold px-3 py-1.5 rounded-xl border bg-emerald-500/10 text-emerald-500 border-emerald-500/30">
+                          <Utensils className="h-3 w-3 mr-1 inline" /> Seated
+                        </Badge>
+                      )}
+                      {effStatus === "not_arrived" && (
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline" className="text-xs font-extrabold px-3 py-1.5 rounded-xl border bg-rose-500/15 text-rose-500 border-rose-500/30">
+                            <AlertCircle className="h-3 w-3 mr-1 inline" /> Not Arrived
+                          </Badge>
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            className="h-8 text-xs font-bold rounded-xl gap-1 shadow-xs"
+                            onClick={() => handleCancelReservation(r.id)}
+                          >
+                            <XCircle className="h-3.5 w-3.5" /> Cancel
+                          </Button>
+                        </div>
+                      )}
+                      {effStatus === "confirmed" && (
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline" className="text-xs font-bold px-3 py-1.5 rounded-xl border bg-blue-500/10 text-blue-500 border-blue-500/30">
+                            <Clock className="h-3 w-3 mr-1 inline" /> Confirmed
+                          </Badge>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-8 text-xs text-destructive hover:bg-destructive/10 border-destructive/30 rounded-xl gap-1"
+                            onClick={() => handleCancelReservation(r.id)}
+                          >
+                            <XCircle className="h-3.5 w-3.5" /> Cancel
+                          </Button>
+                        </div>
+                      )}
                     </div>
-                    {r.specialRequests && (
-                      <p className="text-xs italic text-muted-foreground bg-background/50 p-1.5 rounded-lg border border-border/40 mt-1">
-                        "{r.specialRequests}"
-                      </p>
-                    )}
                   </div>
-                  <Badge variant="outline" className={cn(
-                    "text-xs font-extrabold shrink-0 uppercase px-3 py-1.5 rounded-xl border",
-                    r.status === "completed" && "bg-emerald-500/10 text-emerald-500 border-emerald-500/30",
-                    r.status === "seated" && "bg-blue-500/10 text-blue-500 border-blue-500/30",
-                    (r.status === "confirmed" || r.status === "pending") && "bg-amber-500/10 text-amber-500 border-amber-500/30"
-                  )}>
-                    {r.status === "completed" ? "✔ Completed" : r.status === "seated" ? "🪑 Seated" : "⌛ Scheduled (Not Arrived)"}
-                  </Badge>
-                </div>
-                ))
+                );
+              })
             ) : (
               <div className="text-center py-8 text-muted-foreground">
                 <BookOpen className="h-8 w-8 mx-auto opacity-30 mb-2" />
