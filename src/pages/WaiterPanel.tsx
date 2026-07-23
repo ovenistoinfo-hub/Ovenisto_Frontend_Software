@@ -2440,7 +2440,30 @@ const WaiterPanel = () => {
                   }}
                 >
                   <SelectTrigger className="h-11 text-xs rounded-xl border-amber-500/30 bg-amber-500/5 hover:bg-amber-500/10 text-foreground font-semibold transition-all shadow-2xs">
-                    <SelectValue placeholder="Walk-in Customer (No reservation)" />
+                    <SelectValue placeholder="Walk-in Customer (No reservation)">
+                      {selectedReservationForSitting && selectedReservationForSitting !== "none" ? (() => {
+                        const selRes = confirmedReservations.find(r => r.id === selectedReservationForSitting);
+                        if (!selRes) return (
+                          <span className="flex items-center gap-2 text-foreground font-medium">
+                            <User className="h-4 w-4 text-muted-foreground shrink-0" />
+                            Walk-in Customer (No reservation)
+                          </span>
+                        );
+                        return (
+                          <span className="flex items-center gap-2 font-bold text-foreground truncate">
+                            <User className="h-4 w-4 text-amber-500 shrink-0" />
+                            <span>{selRes.customerName}</span>
+                            <span className="text-amber-500 font-mono">({selRes.time})</span>
+                            {selRes.tableNumber && <span className="text-muted-foreground font-normal">• Table {selRes.tableNumber}</span>}
+                          </span>
+                        );
+                      })() : (
+                        <span className="flex items-center gap-2 text-foreground font-medium">
+                          <User className="h-4 w-4 text-muted-foreground shrink-0" />
+                          Walk-in Customer (No reservation)
+                        </span>
+                      )}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent className="max-w-[380px] p-1.5 rounded-2xl border-border bg-popover shadow-xl overflow-hidden">
                     <SelectItem value="none" className="font-semibold text-xs py-2.5 px-3 rounded-xl cursor-pointer flex items-center gap-2 mb-1">
@@ -2455,6 +2478,7 @@ const WaiterPanel = () => {
                         <SelectItem
                           key={r.id}
                           value={r.id}
+                          textValue={`${r.customerName} (${r.time})`}
                           className="py-2.5 px-3 rounded-xl cursor-pointer my-1 border border-transparent hover:border-amber-500/30"
                         >
                           <div className="flex flex-col gap-1.5 w-full text-left">
