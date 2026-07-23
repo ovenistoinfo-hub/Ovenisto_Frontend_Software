@@ -13,7 +13,7 @@ import {
   Plus, Minus, X, ShoppingCart, UtensilsCrossed, Clock, Users,
   Receipt, CircleDot, ChevronDown, ChevronUp, Bell, Check, Loader2, Trash2,
   Play, Power, Eye, CreditCard, Percent, CornerUpRight, Printer, ArrowLeft, Search,
-  Coins, Wallet, Smartphone, BookOpen, User, History, Building2, Crown, Phone, MapPin, Calendar, DollarSign, CalendarCheck,
+  Coins, Wallet, Smartphone, BookOpen, User, History, Building2, Crown, Phone, MapPin, Calendar, Timer, DollarSign, CalendarCheck,
   AlertCircle, XCircle, CheckCircle2, Utensils
 } from "lucide-react";
 import { toast } from "sonner";
@@ -2699,66 +2699,126 @@ const WaiterPanel = () => {
               Today's Reservations ({confirmedReservations.length})
             </DialogTitle>
           </DialogHeader>
-          <div className="space-y-3 pt-2">
+          <div className="space-y-4 pt-2">
             {confirmedReservations.length > 0 ? (
               confirmedReservations.map((r) => {
                 const effStatus = getEffectiveStatus(r);
+                const preOrderCount = r.preOrderItems ? r.preOrderItems.length : 0;
+                const foodSubtotal = r.subtotal || (r.preOrderItems ? r.preOrderItems.reduce((s: number, i: any) => s + Number(i.price) * Number(i.qty), 0) : 0);
+
                 return (
-                  <div key={r.id} className="p-3.5 rounded-xl border border-amber-500/20 bg-amber-500/5 dark:bg-amber-950/20 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 transition-all hover:border-amber-500/40">
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold text-foreground text-sm">{r.customerName}</span>
+                  <div
+                    key={r.id}
+                    className="p-5 border border-border/80 rounded-2xl bg-card space-y-3.5 shadow-xs transition-all duration-200 hover:shadow-md"
+                  >
+                    {/* Header line: Customer Name & Phone, Status Badge */}
+                    <div className="flex items-start justify-between gap-2 border-b border-border/40 pb-3">
+                      <div>
+                        <h3 className="font-extrabold text-base text-foreground flex items-center gap-2">
+                          <User className="h-4 w-4 text-primary" />
+                          {r.customerName}
+                        </h3>
                         {r.customerPhone && (
-                          <span className="text-xs text-muted-foreground font-medium flex items-center gap-1">
+                          <p className="text-xs text-muted-foreground flex items-center gap-1.5 mt-1 font-medium">
                             <Phone className="h-3 w-3" /> {r.customerPhone}
-                          </span>
+                          </p>
                         )}
                       </div>
-                      <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
-                        <span className="font-bold text-amber-500 flex items-center gap-1">
-                          <Utensils className="h-3 w-3" /> Table {r.tableNumber || "Unassigned"}
-                        </span>
-                        <span>• {r.guestCount} Pax</span>
-                        <span>• Date: <strong className="text-foreground">{r.date}</strong></span>
-                        <span>• Time: <strong className="text-foreground">{r.time}</strong></span>
-                        {r.advancePaid ? <span className="text-emerald-500 font-bold">• Adv PKR {r.advancePaid}</span> : null}
+                      <div className="shrink-0">
+                        {effStatus === "completed" && (
+                          <Badge variant="outline" className="text-xs font-extrabold px-3 py-1 rounded-xl border bg-muted text-muted-foreground flex items-center gap-1">
+                            <Check className="h-3.5 w-3.5" /> Completed
+                          </Badge>
+                        )}
+                        {effStatus === "seated" && (
+                          <Badge variant="outline" className="text-xs font-extrabold px-3 py-1 rounded-xl border bg-emerald-500/10 text-emerald-500 border-emerald-500/30 flex items-center gap-1">
+                            <Utensils className="h-3.5 w-3.5" /> Seated
+                          </Badge>
+                        )}
+                        {effStatus === "not_arrived" && (
+                          <Badge variant="outline" className="text-xs font-extrabold px-3 py-1 rounded-xl border bg-rose-500/15 text-rose-500 border-rose-500/30 flex items-center gap-1">
+                            <AlertCircle className="h-3.5 w-3.5" /> Not Arrived
+                          </Badge>
+                        )}
+                        {effStatus === "confirmed" && (
+                          <Badge variant="outline" className="text-xs font-extrabold px-3 py-1 rounded-xl border bg-blue-500/10 text-blue-500 border-blue-500/30 flex items-center gap-1">
+                            <Clock className="h-3.5 w-3.5" /> Confirmed
+                          </Badge>
+                        )}
                       </div>
-                      {r.specialRequests && (
-                        <p className="text-xs italic text-muted-foreground bg-background/50 p-1.5 rounded-lg border border-border/40 mt-1">
-                          "{r.specialRequests}"
-                        </p>
-                      )}
                     </div>
 
-                    <div className="flex items-center gap-2 shrink-0">
-                      {effStatus === "completed" && (
-                        <Badge variant="outline" className="text-xs font-bold px-3 py-1.5 rounded-xl border bg-muted text-muted-foreground">
-                          <Check className="h-3 w-3 mr-1 inline" /> Completed
-                        </Badge>
-                      )}
-                      {effStatus === "seated" && (
-                        <Badge variant="outline" className="text-xs font-bold px-3 py-1.5 rounded-xl border bg-emerald-500/10 text-emerald-500 border-emerald-500/30">
-                          <Utensils className="h-3 w-3 mr-1 inline" /> Seated
-                        </Badge>
-                      )}
-                      {effStatus === "not_arrived" && (
-                        <Badge variant="outline" className="text-xs font-extrabold px-3 py-1.5 rounded-xl border bg-rose-500/15 text-rose-500 border-rose-500/30">
-                          <AlertCircle className="h-3 w-3 mr-1 inline" /> Not Arrived
-                        </Badge>
-                      )}
-                      {effStatus === "confirmed" && (
-                        <Badge variant="outline" className="text-xs font-bold px-3 py-1.5 rounded-xl border bg-blue-500/10 text-blue-500 border-blue-500/30">
-                          <Clock className="h-3 w-3 mr-1 inline" /> Confirmed
-                        </Badge>
-                      )}
+                    {/* Info Pills Grid: Date, Time */}
+                    <div className="grid grid-cols-2 gap-2.5 text-xs">
+                      <div className="bg-muted/50 p-2.5 rounded-xl border border-border/40 flex items-center gap-2.5">
+                        <Calendar className="h-4 w-4 text-primary shrink-0" />
+                        <div>
+                          <span className="text-[10px] text-muted-foreground block font-semibold uppercase">Date</span>
+                          <span className="font-bold text-foreground">{r.date}</span>
+                        </div>
+                      </div>
+                      <div className="bg-muted/50 p-2.5 rounded-xl border border-border/40 flex items-center gap-2.5">
+                        <Timer className="h-4 w-4 text-primary shrink-0" />
+                        <div>
+                          <span className="text-[10px] text-muted-foreground block font-semibold uppercase">Time</span>
+                          <span className="font-bold text-foreground">{r.time}</span>
+                        </div>
+                      </div>
                     </div>
+
+                    {/* Table & Pax Row */}
+                    <div className="bg-muted/50 p-3 rounded-xl border border-border/40 flex items-center justify-between text-xs font-semibold">
+                      <span className="flex items-center gap-1.5 text-foreground">
+                        <Utensils className="h-4 w-4 text-amber-500" />
+                        Table: <strong className="text-amber-500 font-extrabold">{r.tableNumber ? `Table ${r.tableNumber}` : "Unassigned"}</strong>
+                      </span>
+                      <span className="flex items-center gap-1.5 text-muted-foreground">
+                        <Users className="h-3.5 w-3.5" /> {r.guestCount} Pax
+                      </span>
+                    </div>
+
+                    {/* Pre-Order Food Items Summary (if any) */}
+                    {preOrderCount > 0 && (
+                      <div className="bg-primary/5 border border-primary/20 rounded-2xl p-3.5 space-y-2">
+                        <div className="flex items-center justify-between font-bold text-xs">
+                          <span className="flex items-center gap-1.5 text-foreground">
+                            <Utensils className="h-4 w-4 text-primary" /> Pre-Order Food ({preOrderCount} items)
+                          </span>
+                          <span className="text-primary font-extrabold text-sm">PKR {foodSubtotal.toLocaleString()}</span>
+                        </div>
+                        <div className="text-xs text-muted-foreground space-y-1 max-h-32 overflow-y-auto divide-y divide-border/30 pt-1">
+                          {r.preOrderItems?.map((item: any, idx: number) => (
+                            <div key={idx} className="flex justify-between pt-1 font-medium">
+                              <span>{item.qty}x {item.name}</span>
+                              <span className="font-mono font-bold text-foreground">PKR {(item.price * item.qty).toLocaleString()}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Advance Deposit Badge */}
+                    {r.advancePaid && Number(r.advancePaid) > 0 ? (
+                      <div className="flex items-center justify-between bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 p-3 rounded-xl font-bold text-xs">
+                        <span className="flex items-center gap-1.5">
+                          <Check className="h-4 w-4 text-emerald-500" /> Advance Deposit Paid
+                        </span>
+                        <span className="font-extrabold text-sm">PKR {Number(r.advancePaid).toLocaleString()}</span>
+                      </div>
+                    ) : null}
+
+                    {r.specialRequests && (
+                      <p className="text-xs italic text-muted-foreground bg-muted/50 p-2.5 rounded-xl border border-border/40">
+                        "{r.specialRequests}"
+                      </p>
+                    )}
                   </div>
                 );
               })
             ) : (
-              <div className="text-center py-8 text-muted-foreground">
-                <BookOpen className="h-8 w-8 mx-auto opacity-30 mb-2" />
-                <p className="text-sm font-medium">No reservations scheduled for today</p>
+              <div className="text-center py-12 text-muted-foreground">
+                <BookOpen className="h-10 w-10 mx-auto opacity-30 mb-2 text-primary" />
+                <p className="text-base font-bold text-foreground">No reservations scheduled for today</p>
               </div>
             )}
           </div>
