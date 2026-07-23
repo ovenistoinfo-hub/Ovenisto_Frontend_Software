@@ -2443,7 +2443,7 @@ const WaiterPanel = () => {
                     <SelectValue placeholder="Walk-in Customer (No reservation)" />
                   </SelectTrigger>
                   <SelectContent className="max-w-[380px] p-1.5 rounded-2xl border-border bg-popover shadow-xl overflow-hidden">
-                    <SelectItem value="none" className="font-semibold text-xs py-2.5 px-3 rounded-xl cursor-pointer hover:bg-accent focus:bg-accent transition-colors flex items-center gap-2 mb-1">
+                    <SelectItem value="none" className="font-semibold text-xs py-2.5 px-3 rounded-xl cursor-pointer flex items-center gap-2 mb-1">
                       <span className="flex items-center gap-2 text-foreground font-medium">
                         <User className="h-4 w-4 text-muted-foreground" />
                         Walk-in Customer (No reservation)
@@ -2455,7 +2455,7 @@ const WaiterPanel = () => {
                         <SelectItem
                           key={r.id}
                           value={r.id}
-                          className="py-2.5 px-3 rounded-xl cursor-pointer my-1 transition-all hover:bg-amber-500/15 focus:bg-amber-500/15 border border-transparent hover:border-amber-500/30 data-[state=checked]:bg-amber-500/20 data-[state=checked]:border-amber-500/40"
+                          className="py-2.5 px-3 rounded-xl cursor-pointer my-1 border border-transparent hover:border-amber-500/30"
                         >
                           <div className="flex flex-col gap-1.5 w-full text-left">
                             <div className="font-bold text-xs flex items-center justify-between gap-2">
