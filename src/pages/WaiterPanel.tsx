@@ -262,7 +262,7 @@ const WaiterPanel = () => {
       const pkt = new Date(Date.now() + 5 * 60 * 60 * 1000);
       const todayStr = pkt.toISOString().split("T")[0];
       const data = await reservationService.getAll({ date: todayStr });
-      setReservations(data);
+      setReservations(data.filter(r => (!r.orderType || r.orderType === "Dine In") && r.bookingType !== "future_order"));
     } catch { /* silent polling */ }
   }, []);
 
@@ -284,7 +284,7 @@ const WaiterPanel = () => {
           menuService.getCategories("active"),
           menuService.getModifiers(),
           settingsService.getSettings(),
-          reservationService.getAll({ date: todayStr }).catch(() => []),
+          reservationService.getAll({ date: todayStr }).then(data => data.filter(r => (!r.orderType || r.orderType === "Dine In") && r.bookingType !== "future_order")).catch(() => []),
           customerService.getCustomers({ limit: 500 }).catch(() => ({ data: [] })),
         ]);
         setTables(tableData);
@@ -399,7 +399,7 @@ const WaiterPanel = () => {
   const canPayBill = hasUnpaid && !hasPendingOrPreparing && (hasReady || activeTableOrders.every(o => o.status === "ready" || o.status === "served"));
 
   const confirmedReservations = useMemo(() => {
-    return reservations.filter(r => r.status !== "pending" && r.status !== "cancelled" && r.status !== "noShow");
+    return reservations.filter(r => r.status !== "pending" && r.status !== "cancelled" && r.status !== "noShow" && (!r.orderType || r.orderType === "Dine In") && r.bookingType !== "future_order");
   }, [reservations]);
 
   const reservedTableNums = useMemo(() => {

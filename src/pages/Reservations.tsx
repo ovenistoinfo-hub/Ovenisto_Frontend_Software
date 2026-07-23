@@ -361,6 +361,17 @@ const Reservations = () => {
     if (!form.date) { toast.error("Date required"); return; }
     if (!form.time) { toast.error("Time required"); return; }
 
+    if (form.orderType === "Take Away" || form.orderType === "Delivery") {
+      if (!form.preOrderItems || form.preOrderItems.length === 0) {
+        toast.error(`Food menu items are required for ${form.orderType} reservations. Click 'Add Food Items' below.`);
+        return;
+      }
+    }
+    if (form.orderType === "Delivery" && !form.deliveryAddress?.trim()) {
+      toast.error("Delivery address is required for Delivery reservations");
+      return;
+    }
+
     const now = new Date();
     const todayStr = now.toISOString().split("T")[0];
     const currentHHMM = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
@@ -500,14 +511,9 @@ const Reservations = () => {
           title="Reservations & Future Sales"
           subtitle="Table bookings, advance pre-orders, and deposit management"
           actions={!isSuperAdmin ? (
-            <div className="flex gap-2 flex-wrap">
-              <Button className="gradient-primary text-primary-foreground shadow-md" onClick={() => openAdd("table_reservation")}>
-                <Plus className="h-4 w-4 mr-2" />New Table Reservation
-              </Button>
-              <Button variant="outline" className="border-primary/40 hover:bg-primary/10 font-semibold" onClick={() => openAdd("future_order")}>
-                <Sparkles className="h-4 w-4 mr-2 text-primary" />New Pre-Order (Future Sale)
-              </Button>
-            </div>
+            <Button className="gradient-primary text-primary-foreground shadow-md font-bold" onClick={() => openAdd("table_reservation")}>
+              <Plus className="h-4 w-4 mr-2" />New Reservation
+            </Button>
           ) : undefined}
         />
         <OutletFilterSelect outletId={selectedOutletId} setOutletId={setOutletId} outlets={outlets} isSuperAdmin={isSuperAdmin} />
@@ -736,23 +742,31 @@ const Reservations = () => {
           </CardHeader>
           <CardContent className="space-y-4 pt-4">
 
-            {/* Booking Type Switcher */}
-            <div className="grid grid-cols-2 gap-2 p-1 bg-muted/60 rounded-xl">
+            {/* Booking / Fulfillment Type Switcher (3 Parts: Dine In, Take Away, Delivery) */}
+            <div className="grid grid-cols-3 gap-2 p-1 bg-muted/60 rounded-xl">
               <Button
                 type="button"
-                variant={form.bookingType === "table_reservation" ? "default" : "ghost"}
-                className={cn("w-full text-xs font-semibold rounded-lg", form.bookingType === "table_reservation" && "gradient-primary text-primary-foreground shadow")}
+                variant={form.orderType === "Dine In" ? "default" : "ghost"}
+                className={cn("w-full text-xs font-semibold rounded-lg", form.orderType === "Dine In" && "gradient-primary text-primary-foreground shadow")}
                 onClick={() => setForm(p => ({ ...p, bookingType: "table_reservation", orderType: "Dine In" }))}
               >
-                🪑 Table Reservation (Dine-In)
+                🪑 Dine In
               </Button>
               <Button
                 type="button"
-                variant={form.bookingType === "future_order" ? "default" : "ghost"}
-                className={cn("w-full text-xs font-semibold rounded-lg", form.bookingType === "future_order" && "gradient-primary text-primary-foreground shadow")}
-                onClick={() => setForm(p => ({ ...p, bookingType: "future_order" }))}
+                variant={form.orderType === "Take Away" ? "default" : "ghost"}
+                className={cn("w-full text-xs font-semibold rounded-lg", form.orderType === "Take Away" && "gradient-primary text-primary-foreground shadow")}
+                onClick={() => setForm(p => ({ ...p, bookingType: "future_order", orderType: "Take Away", tableId: undefined, tableNumber: undefined }))}
               >
-                🍕 Future Sale / Pre-Order Food
+                🛍️ Take Away
+              </Button>
+              <Button
+                type="button"
+                variant={form.orderType === "Delivery" ? "default" : "ghost"}
+                className={cn("w-full text-xs font-semibold rounded-lg", form.orderType === "Delivery" && "gradient-primary text-primary-foreground shadow")}
+                onClick={() => setForm(p => ({ ...p, bookingType: "future_order", orderType: "Delivery", tableId: undefined, tableNumber: undefined }))}
+              >
+                🚚 Delivery
               </Button>
             </div>
 
@@ -813,7 +827,7 @@ const Reservations = () => {
               )}
             </div>
 
-            {/* Date, Time & Order Type / Guests */}
+            {/* Date, Time & Guests / Requirement info */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
                 <Label className="text-xs font-semibold">Date *</Label>
@@ -835,7 +849,7 @@ const Reservations = () => {
                 />
               </div>
 
-              {form.bookingType === "table_reservation" ? (
+              {form.orderType === "Dine In" ? (
                 <div>
                   <Label className="text-xs font-semibold">Guests (Pax)</Label>
                   <Input
@@ -848,15 +862,10 @@ const Reservations = () => {
                 </div>
               ) : (
                 <div>
-                  <Label className="text-xs font-semibold">Order Fulfillment Type</Label>
-                  <Select value={form.orderType || "Dine In"} onValueChange={(v: any) => setForm(p => ({ ...p, orderType: v }))}>
-                    <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Dine In">Dine-In</SelectItem>
-                      <SelectItem value="Take Away">Take Away</SelectItem>
-                      <SelectItem value="Delivery">Delivery</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <Label className="text-xs font-semibold">Pre-Order Requirement</Label>
+                  <div className="mt-1 h-9 flex items-center px-3 rounded-md bg-amber-500/10 border border-amber-500/30 text-amber-600 dark:text-amber-400 font-bold text-xs">
+                    Food Menu Mandatory
+                  </div>
                 </div>
               )}
             </div>

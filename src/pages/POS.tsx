@@ -460,6 +460,7 @@ const POS = () => {
 
   // Reservation List
   const [showReservations, setShowReservations] = useState(false);
+  const [posReservationTab, setPosReservationTab] = useState<"dine_in" | "take_away" | "delivery">("dine_in");
 
   // Customer History
   const [showCustomerHistory, setShowCustomerHistory] = useState(false);
@@ -1119,6 +1120,52 @@ const POS = () => {
 
     setShowFutureSale(false);
     toast.success(`Future order ${order.orderNumber} loaded \u2014 Advance paid: Rs.${order.advancePayment || 0}`);
+  };
+
+  const loadReservationToPOSCart = (res: ReservationRecord) => {
+    if (res.preOrderItems && res.preOrderItems.length > 0) {
+      const mappedItems: CartItem[] = res.preOrderItems.map((item, idx) => ({
+        id: `res-${res.id}-${idx}-${Date.now()}`,
+        menuItemId: item.menuItemId,
+        variantId: item.variantId || null,
+        name: item.name,
+        price: Number(item.price),
+        qty: Number(item.qty),
+        discount: 0,
+        modifiers: [],
+      }));
+      setCart(mappedItems);
+    } else {
+      setCart([]);
+    }
+
+    const targetType: OrderType = res.orderType === "Delivery" ? "Delivery" : res.orderType === "Take Away" ? "Take Away" : "Dine In";
+    setOrderType(targetType);
+
+    if (res.customerName) {
+      const matchedCust = effectiveCustomers.find(c =>
+        c.name.toLowerCase().trim() === res.customerName.toLowerCase().trim() ||
+        (res.customerPhone && c.phone && c.phone.replace(/\D/g, "") === res.customerPhone.replace(/\D/g, ""))
+      );
+      if (matchedCust) {
+        setSelectedCustomer(matchedCust.id);
+      }
+    }
+    if (res.orderType === "Delivery") {
+      if (res.deliveryAddress) setDeliveryAddress(res.deliveryAddress);
+      if (res.customerPhone) setDeliveryPhone(res.customerPhone);
+    }
+
+    if (res.advancePaid && Number(res.advancePaid) > 0) {
+      setLoadedAdvancePayment(Number(res.advancePaid));
+      setLoadedAdvanceMethod(res.paymentMethod || "Cash");
+    } else {
+      setLoadedAdvancePayment(0);
+      setLoadedAdvanceMethod("");
+    }
+
+    setShowReservations(false);
+    toast.success(`Loaded ${res.orderType || "Reservation"} for ${res.customerName} into POS cart!`);
   };
 
   const formatPhoneNumber = (val: string): string => {
@@ -2532,46 +2579,167 @@ const POS = () => {
         </SheetContent>
       </Sheet>
 
-      {/* Reservation List Sheet (View-Only) */}
+      {/* Reservation List Sheet (3 Parts: Dine In, Take Away, Delivery) */}
       <Sheet open={showReservations} onOpenChange={setShowReservations}>
-        <SheetContent side="right" className="w-full sm:w-[400px] lg:w-[480px] p-0">
-          <div className="p-4 border-b bg-card">
-            <h2 className="font-bold text-lg flex items-center gap-2"><BookOpen className="h-5 w-5 text-info" />Reservations</h2>
-            <p className="text-xs text-muted-foreground">{todayReservations.length} upcoming reservations (view only)</p>
-          </div>
-          <div className="p-4 space-y-2.5 overflow-y-auto max-h-[calc(100vh-80px)]">
-            {todayReservations.length === 0 ? (
-              <div className="text-center py-12 text-muted-foreground">
-                <BookOpen className="h-12 w-12 mx-auto mb-3 opacity-30" />
-                <p className="font-medium">No Upcoming Reservations</p>
-                <p className="text-xs mt-1">Reservations will appear here</p>
-              </div>
-            ) : todayReservations.map(res => (
-              <Card key={res.id} className={cn("p-3 text-xs border-l-4", res.status === "confirmed" ? "border-l-success" : res.status === "seated" ? "border-l-primary" : "border-l-warning")}>
-                <div className="flex justify-between items-start mb-2">
-                  <div>
-                    <span className="font-bold text-sm">{res.customerName}</span>
-                    <span className="text-muted-foreground ml-2">{res.customerPhone}</span>
-                  </div>
-                  <Badge variant="secondary" className={cn("text-[9px]",
-                    res.status === "confirmed" ? "bg-success/10 text-success" :
-                    res.status === "seated" ? "bg-primary/10 text-primary" :
-                    res.status === "completed" ? "bg-muted text-muted-foreground" : "bg-warning/10 text-warning"
-                  )}>{res.status}</Badge>
-                </div>
-                <div className="grid grid-cols-3 gap-2 text-muted-foreground">
-                  <div className="flex items-center gap-1"><Calendar className="h-3 w-3" />{res.date}</div>
-                  <div className="flex items-center gap-1"><Timer className="h-3 w-3" />{res.time}</div>
-                  <div className="flex items-center gap-1"><User className="h-3 w-3" />{res.guestCount} guests</div>
-                </div>
-                {res.tableNumber && <p className="mt-1.5 text-muted-foreground">Table: <span className="font-medium text-foreground">{res.tableNumber}</span></p>}
-                {res.specialRequests && (
-                  <div className="bg-warning/5 border border-warning/20 rounded px-2 py-1 mt-1.5 text-foreground">
-                    <span className="text-[10px] font-semibold text-warning uppercase">Note: </span>{res.specialRequests}
-                  </div>
+        <SheetContent side="right" className="w-full sm:w-[420px] lg:w-[500px] p-0 flex flex-col">
+          <div className="p-4 border-b bg-card space-y-3">
+            <div className="flex items-center justify-between">
+              <h2 className="font-bold text-lg flex items-center gap-2">
+                <BookOpen className="h-5 w-5 text-info" />Reservations & Pre-Orders
+              </h2>
+              <Badge variant="outline" className="text-xs font-semibold">
+                {todayReservations.length} total
+              </Badge>
+            </div>
+            {/* 3-Tab Header */}
+            <div className="grid grid-cols-3 gap-1 p-1 bg-muted rounded-xl text-xs font-bold">
+              <button
+                type="button"
+                onClick={() => setPosReservationTab("dine_in")}
+                className={cn(
+                  "py-1.5 rounded-lg transition-all text-center",
+                  posReservationTab === "dine_in"
+                    ? "bg-background text-foreground shadow-xs font-extrabold"
+                    : "text-muted-foreground hover:text-foreground"
                 )}
-              </Card>
-            ))}
+              >
+                🪑 Dine In ({todayReservations.filter(r => (!r.orderType || r.orderType === "Dine In") && r.bookingType !== "future_order").length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setPosReservationTab("take_away")}
+                className={cn(
+                  "py-1.5 rounded-lg transition-all text-center",
+                  posReservationTab === "take_away"
+                    ? "bg-background text-foreground shadow-xs font-extrabold"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                🛍️ Take Away ({todayReservations.filter(r => r.orderType === "Take Away" || (r.bookingType === "future_order" && r.orderType === "Take Away")).length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setPosReservationTab("delivery")}
+                className={cn(
+                  "py-1.5 rounded-lg transition-all text-center",
+                  posReservationTab === "delivery"
+                    ? "bg-background text-foreground shadow-xs font-extrabold"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                🚚 Delivery ({todayReservations.filter(r => r.orderType === "Delivery" || (r.bookingType === "future_order" && r.orderType === "Delivery")).length})
+              </button>
+            </div>
+          </div>
+
+          <div className="p-4 space-y-3 overflow-y-auto flex-1">
+            {(() => {
+              const currentList = todayReservations.filter(res => {
+                if (posReservationTab === "dine_in") {
+                  return (!res.orderType || res.orderType === "Dine In") && res.bookingType !== "future_order";
+                }
+                if (posReservationTab === "take_away") {
+                  return res.orderType === "Take Away" || (res.bookingType === "future_order" && res.orderType === "Take Away");
+                }
+                if (posReservationTab === "delivery") {
+                  return res.orderType === "Delivery" || (res.bookingType === "future_order" && res.orderType === "Delivery");
+                }
+                return true;
+              });
+
+              if (currentList.length === 0) {
+                return (
+                  <div className="text-center py-16 text-muted-foreground">
+                    <BookOpen className="h-10 w-10 mx-auto mb-2 opacity-30" />
+                    <p className="font-semibold text-sm">No {posReservationTab.replace("_", " ")} reservations found</p>
+                    <p className="text-xs mt-1">Booked reservations will appear here</p>
+                  </div>
+                );
+              }
+
+              return currentList.map(res => {
+                const preOrderCount = res.preOrderItems ? res.preOrderItems.length : 0;
+                const foodSubtotal = res.subtotal || (res.preOrderItems ? res.preOrderItems.reduce((s, i) => s + Number(i.price) * Number(i.qty), 0) : 0);
+
+                return (
+                  <Card
+                    key={res.id}
+                    className={cn(
+                      "p-3.5 text-xs border-l-4 transition-all hover:shadow-md",
+                      res.status === "confirmed" ? "border-l-success" : res.status === "seated" ? "border-l-primary" : "border-l-warning"
+                    )}
+                  >
+                    <div className="flex justify-between items-start mb-2">
+                      <div>
+                        <span className="font-bold text-sm text-foreground">{res.customerName}</span>
+                        {res.customerPhone && <span className="text-muted-foreground text-xs ml-2">({res.customerPhone})</span>}
+                      </div>
+                      <Badge variant="secondary" className={cn("text-[10px] font-bold capitalize",
+                        res.status === "confirmed" ? "bg-success/10 text-success" :
+                        res.status === "seated" ? "bg-primary/10 text-primary" :
+                        res.status === "completed" ? "bg-muted text-muted-foreground" : "bg-warning/10 text-warning"
+                      )}>{res.status}</Badge>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 text-muted-foreground mb-2">
+                      <div className="flex items-center gap-1"><Calendar className="h-3 w-3 text-primary" /><span className="font-semibold text-foreground">{res.date}</span></div>
+                      <div className="flex items-center gap-1"><Timer className="h-3 w-3 text-primary" /><span className="font-semibold text-foreground">{res.time}</span></div>
+                    </div>
+
+                    {posReservationTab === "dine_in" && (
+                      <div className="flex items-center justify-between text-muted-foreground pt-1 border-t border-border/50">
+                        <span>Table: <strong className="text-foreground">{res.tableNumber ? `Table ${res.tableNumber}` : "Unassigned"}</strong></span>
+                        <span>Guests: <strong className="text-foreground">{res.guestCount} Pax</strong></span>
+                      </div>
+                    )}
+
+                    {posReservationTab === "delivery" && res.deliveryAddress && (
+                      <div className="bg-muted/50 p-2 rounded-lg text-[11px] text-muted-foreground mb-2">
+                        <span className="font-bold text-foreground block"><MapPin className="h-3 w-3 inline mr-1 text-primary" />Delivery Address:</span>
+                        {res.deliveryAddress}
+                      </div>
+                    )}
+
+                    {/* Pre-Order Food Items Summary */}
+                    {preOrderCount > 0 && (
+                      <div className="bg-primary/5 border border-primary/20 rounded-xl p-2.5 my-2 space-y-1">
+                        <div className="flex items-center justify-between font-bold text-foreground">
+                          <span>🍕 Pre-Order ({preOrderCount} items)</span>
+                          <span className="text-primary">{effectiveSettings.currency} {foodSubtotal.toLocaleString()}</span>
+                        </div>
+                        <div className="text-[11px] text-muted-foreground space-y-0.5 max-h-24 overflow-y-auto">
+                          {res.preOrderItems?.map((item, idx) => (
+                            <div key={idx} className="flex justify-between">
+                              <span>{item.qty}x {item.name}</span>
+                              <span className="font-mono">{effectiveSettings.currency} {(item.price * item.qty).toLocaleString()}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Advance Deposit Badge */}
+                    {res.advancePaid && Number(res.advancePaid) > 0 ? (
+                      <div className="flex items-center justify-between bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 p-2 rounded-lg font-bold text-xs my-2">
+                        <span>✓ Advance Deposit Paid</span>
+                        <span>{effectiveSettings.currency} {Number(res.advancePaid).toLocaleString()}</span>
+                      </div>
+                    ) : null}
+
+                    {/* Action Button for Take Away & Delivery */}
+                    {(posReservationTab === "take_away" || posReservationTab === "delivery") && (
+                      <Button
+                        type="button"
+                        onClick={() => loadReservationToPOSCart(res)}
+                        className="w-full mt-2 gradient-primary text-primary-foreground font-bold rounded-xl flex items-center justify-center gap-1.5 shadow-md hover:scale-[1.01] active:scale-[0.99] transition-all"
+                      >
+                        <ShoppingCart className="h-4 w-4" /> Load Order into POS Cart
+                      </Button>
+                    )}
+                  </Card>
+                );
+              });
+            })()}
           </div>
         </SheetContent>
       </Sheet>
