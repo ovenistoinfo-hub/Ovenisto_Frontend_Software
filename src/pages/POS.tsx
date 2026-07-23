@@ -2582,7 +2582,7 @@ const POS = () => {
 
       {/* Reservation List Sheet (3 Parts: Dine In, Take Away, Delivery) */}
       <Sheet open={showReservations} onOpenChange={setShowReservations}>
-        <SheetContent side="right" className="w-full sm:w-[650px] md:w-[750px] lg:w-[850px] xl:w-[900px] p-0 flex flex-col">
+        <SheetContent side="right" className="w-full sm:max-w-none sm:w-[600px] md:w-[700px] lg:w-[800px] xl:w-[850px] p-0 flex flex-col">
           <div className="p-5 border-b bg-card space-y-4 shadow-2xs">
             <div className="flex items-center justify-between">
               <h2 className="font-bold text-xl flex items-center gap-2.5 text-foreground">
