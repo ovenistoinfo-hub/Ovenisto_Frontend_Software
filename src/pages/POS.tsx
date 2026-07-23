@@ -2581,58 +2581,60 @@ const POS = () => {
 
       {/* Reservation List Sheet (3 Parts: Dine In, Take Away, Delivery) */}
       <Sheet open={showReservations} onOpenChange={setShowReservations}>
-        <SheetContent side="right" className="w-full sm:w-[420px] lg:w-[500px] p-0 flex flex-col">
-          <div className="p-4 border-b bg-card space-y-3">
+        <SheetContent side="right" className="w-full sm:w-[540px] md:w-[600px] lg:w-[660px] p-0 flex flex-col">
+          <div className="p-5 border-b bg-card space-y-4 shadow-2xs">
             <div className="flex items-center justify-between">
-              <h2 className="font-bold text-lg flex items-center gap-2">
-                <BookOpen className="h-5 w-5 text-info" />Reservations & Pre-Orders
+              <h2 className="font-bold text-xl flex items-center gap-2.5 text-foreground">
+                <BookOpen className="h-6 w-6 text-primary" />
+                Reservations & Pre-Orders
               </h2>
-              <Badge variant="outline" className="text-xs font-semibold">
-                {todayReservations.length} total
+              <Badge variant="outline" className="text-xs font-bold px-3 py-1 rounded-xl bg-primary/10 text-primary border-primary/30">
+                {todayReservations.length} Total
               </Badge>
             </div>
+
             {/* 3-Tab Header */}
-            <div className="grid grid-cols-3 gap-1 p-1 bg-muted rounded-xl text-xs font-bold">
+            <div className="grid grid-cols-3 gap-1.5 p-1.5 bg-muted/80 rounded-2xl text-xs font-bold">
               <button
                 type="button"
                 onClick={() => setPosReservationTab("dine_in")}
                 className={cn(
-                  "py-1.5 rounded-lg transition-all text-center flex items-center justify-center gap-1",
+                  "py-2.5 px-2 rounded-xl transition-all text-center flex items-center justify-center gap-1.5 font-bold",
                   posReservationTab === "dine_in"
-                    ? "bg-background text-foreground shadow-xs font-extrabold"
-                    : "text-muted-foreground hover:text-foreground"
+                    ? "bg-background text-foreground shadow-xs font-extrabold ring-1 ring-border"
+                    : "text-muted-foreground hover:text-foreground hover:bg-background/50"
                 )}
               >
-                <Utensils className="h-3.5 w-3.5" /> Dine In ({todayReservations.filter(r => (!r.orderType || r.orderType === "Dine In") && r.bookingType !== "future_order").length})
+                <Utensils className="h-4 w-4 text-primary" /> Dine In ({todayReservations.filter(r => (!r.orderType || r.orderType === "Dine In") && r.bookingType !== "future_order").length})
               </button>
               <button
                 type="button"
                 onClick={() => setPosReservationTab("take_away")}
                 className={cn(
-                  "py-1.5 rounded-lg transition-all text-center flex items-center justify-center gap-1",
+                  "py-2.5 px-2 rounded-xl transition-all text-center flex items-center justify-center gap-1.5 font-bold",
                   posReservationTab === "take_away"
-                    ? "bg-background text-foreground shadow-xs font-extrabold"
-                    : "text-muted-foreground hover:text-foreground"
+                    ? "bg-background text-foreground shadow-xs font-extrabold ring-1 ring-border"
+                    : "text-muted-foreground hover:text-foreground hover:bg-background/50"
                 )}
               >
-                <ShoppingBag className="h-3.5 w-3.5" /> Take Away ({todayReservations.filter(r => r.orderType === "Take Away" || (r.bookingType === "future_order" && r.orderType === "Take Away")).length})
+                <ShoppingBag className="h-4 w-4 text-info" /> Take Away ({todayReservations.filter(r => r.orderType === "Take Away" || (r.bookingType === "future_order" && r.orderType === "Take Away")).length})
               </button>
               <button
                 type="button"
                 onClick={() => setPosReservationTab("delivery")}
                 className={cn(
-                  "py-1.5 rounded-lg transition-all text-center flex items-center justify-center gap-1",
+                  "py-2.5 px-2 rounded-xl transition-all text-center flex items-center justify-center gap-1.5 font-bold",
                   posReservationTab === "delivery"
-                    ? "bg-background text-foreground shadow-xs font-extrabold"
-                    : "text-muted-foreground hover:text-foreground"
+                    ? "bg-background text-foreground shadow-xs font-extrabold ring-1 ring-border"
+                    : "text-muted-foreground hover:text-foreground hover:bg-background/50"
                 )}
               >
-                <Truck className="h-3.5 w-3.5" /> Delivery ({todayReservations.filter(r => r.orderType === "Delivery" || (r.bookingType === "future_order" && r.orderType === "Delivery")).length})
+                <Truck className="h-4 w-4 text-amber-500" /> Delivery ({todayReservations.filter(r => r.orderType === "Delivery" || (r.bookingType === "future_order" && r.orderType === "Delivery")).length})
               </button>
             </div>
           </div>
 
-          <div className="p-4 space-y-3 overflow-y-auto flex-1">
+          <div className="p-5 space-y-4 overflow-y-auto flex-1 bg-background/40">
             {(() => {
               const currentList = todayReservations.filter(res => {
                 if (posReservationTab === "dine_in") {
@@ -2649,9 +2651,9 @@ const POS = () => {
 
               if (currentList.length === 0) {
                 return (
-                  <div className="text-center py-16 text-muted-foreground">
-                    <BookOpen className="h-10 w-10 mx-auto mb-2 opacity-30" />
-                    <p className="font-semibold text-sm">No {posReservationTab.replace("_", " ")} reservations found</p>
+                  <div className="text-center py-20 text-muted-foreground">
+                    <BookOpen className="h-12 w-12 mx-auto mb-3 opacity-30 text-primary" />
+                    <p className="font-bold text-base text-foreground">No {posReservationTab.replace("_", " ")} reservations found</p>
                     <p className="text-xs mt-1">Booked reservations will appear here</p>
                   </div>
                 );
@@ -2665,53 +2667,87 @@ const POS = () => {
                   <Card
                     key={res.id}
                     className={cn(
-                      "p-3.5 text-xs border-l-4 transition-all hover:shadow-md",
-                      res.status === "confirmed" ? "border-l-success" : res.status === "seated" ? "border-l-primary" : "border-l-warning"
+                      "p-5 border rounded-2xl transition-all duration-200 hover:shadow-lg space-y-3.5 bg-card",
+                      res.status === "confirmed" ? "border-l-4 border-l-info border-border/80" :
+                      res.status === "seated" ? "border-l-4 border-l-emerald-500 border-border/80" : "border-l-4 border-l-warning border-border/80"
                     )}
                   >
-                    <div className="flex justify-between items-start mb-2">
+                    {/* Header line: Customer Name & Phone, Status Badge */}
+                    <div className="flex items-start justify-between gap-2 border-b border-border/40 pb-3">
                       <div>
-                        <span className="font-bold text-sm text-foreground">{res.customerName}</span>
-                        {res.customerPhone && <span className="text-muted-foreground text-xs ml-2">({res.customerPhone})</span>}
+                        <h3 className="font-extrabold text-base text-foreground flex items-center gap-2">
+                          <User className="h-4 w-4 text-primary" />
+                          {res.customerName}
+                        </h3>
+                        {res.customerPhone && (
+                          <p className="text-xs text-muted-foreground flex items-center gap-1.5 mt-1 font-medium">
+                            <Phone className="h-3 w-3" /> {res.customerPhone}
+                          </p>
+                        )}
                       </div>
-                      <Badge variant="secondary" className={cn("text-[10px] font-bold capitalize",
-                        res.status === "confirmed" ? "bg-success/10 text-success" :
-                        res.status === "seated" ? "bg-primary/10 text-primary" :
-                        res.status === "completed" ? "bg-muted text-muted-foreground" : "bg-warning/10 text-warning"
-                      )}>{res.status}</Badge>
+                      <Badge variant="outline" className={cn("text-xs font-extrabold capitalize px-3 py-1 rounded-xl border flex items-center gap-1 shrink-0",
+                        res.status === "confirmed" ? "bg-info/10 text-info border-info/30" :
+                        res.status === "seated" ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/30" :
+                        res.status === "completed" ? "bg-muted text-muted-foreground border-border" : "bg-warning/10 text-warning border-warning/30"
+                      )}>
+                        {res.status === "confirmed" ? <CheckCircle2 className="h-3.5 w-3.5" /> : res.status === "seated" ? <Utensils className="h-3.5 w-3.5" /> : <Clock className="h-3.5 w-3.5" />}
+                        {res.status}
+                      </Badge>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-2 text-muted-foreground mb-2">
-                      <div className="flex items-center gap-1"><Calendar className="h-3 w-3 text-primary" /><span className="font-semibold text-foreground">{res.date}</span></div>
-                      <div className="flex items-center gap-1"><Timer className="h-3 w-3 text-primary" /><span className="font-semibold text-foreground">{res.time}</span></div>
+                    {/* Info Pills Grid: Date, Time */}
+                    <div className="grid grid-cols-2 gap-2.5 text-xs">
+                      <div className="bg-muted/50 p-2.5 rounded-xl border border-border/40 flex items-center gap-2.5">
+                        <Calendar className="h-4 w-4 text-primary shrink-0" />
+                        <div>
+                          <span className="text-[10px] text-muted-foreground block font-semibold uppercase">Date</span>
+                          <span className="font-bold text-foreground">{res.date}</span>
+                        </div>
+                      </div>
+                      <div className="bg-muted/50 p-2.5 rounded-xl border border-border/40 flex items-center gap-2.5">
+                        <Timer className="h-4 w-4 text-primary shrink-0" />
+                        <div>
+                          <span className="text-[10px] text-muted-foreground block font-semibold uppercase">Time</span>
+                          <span className="font-bold text-foreground">{res.time}</span>
+                        </div>
+                      </div>
                     </div>
 
                     {posReservationTab === "dine_in" && (
-                      <div className="flex items-center justify-between text-muted-foreground pt-1 border-t border-border/50">
-                        <span>Table: <strong className="text-foreground">{res.tableNumber ? `Table ${res.tableNumber}` : "Unassigned"}</strong></span>
-                        <span>Guests: <strong className="text-foreground">{res.guestCount} Pax</strong></span>
+                      <div className="bg-muted/50 p-3 rounded-xl border border-border/40 flex items-center justify-between text-xs font-semibold">
+                        <span className="flex items-center gap-1.5 text-foreground">
+                          <Utensils className="h-4 w-4 text-amber-500" />
+                          Table: <strong className="text-amber-500 font-extrabold">{res.tableNumber ? `Table ${res.tableNumber}` : "Unassigned"}</strong>
+                        </span>
+                        <span className="flex items-center gap-1.5 text-muted-foreground">
+                          <Users className="h-3.5 w-3.5" /> {res.guestCount} Pax
+                        </span>
                       </div>
                     )}
 
                     {posReservationTab === "delivery" && res.deliveryAddress && (
-                      <div className="bg-muted/50 p-2 rounded-lg text-[11px] text-muted-foreground mb-2">
-                        <span className="font-bold text-foreground block"><MapPin className="h-3 w-3 inline mr-1 text-primary" />Delivery Address:</span>
-                        {res.deliveryAddress}
+                      <div className="bg-muted/50 p-3 rounded-xl border border-border/40 text-xs text-muted-foreground space-y-1">
+                        <span className="font-bold text-foreground flex items-center gap-1.5">
+                          <MapPin className="h-3.5 w-3.5 text-primary" /> Delivery Address:
+                        </span>
+                        <p className="text-foreground pl-5 font-medium">{res.deliveryAddress}</p>
                       </div>
                     )}
 
                     {/* Pre-Order Food Items Summary */}
                     {preOrderCount > 0 && (
-                      <div className="bg-primary/5 border border-primary/20 rounded-xl p-2.5 my-2 space-y-1">
-                        <div className="flex items-center justify-between font-bold text-foreground">
-                          <span className="flex items-center gap-1"><Utensils className="h-3.5 w-3.5 text-primary" /> Pre-Order Food ({preOrderCount} items)</span>
-                          <span className="text-primary">{effectiveSettings.currency} {foodSubtotal.toLocaleString()}</span>
+                      <div className="bg-primary/5 border border-primary/20 rounded-2xl p-3.5 space-y-2">
+                        <div className="flex items-center justify-between font-bold text-xs">
+                          <span className="flex items-center gap-1.5 text-foreground">
+                            <Utensils className="h-4 w-4 text-primary" /> Pre-Order Food ({preOrderCount} items)
+                          </span>
+                          <span className="text-primary font-extrabold text-sm">{effectiveSettings.currency} {foodSubtotal.toLocaleString()}</span>
                         </div>
-                        <div className="text-[11px] text-muted-foreground space-y-0.5 max-h-24 overflow-y-auto">
+                        <div className="text-xs text-muted-foreground space-y-1 max-h-32 overflow-y-auto divide-y divide-border/30 pt-1">
                           {res.preOrderItems?.map((item, idx) => (
-                            <div key={idx} className="flex justify-between">
+                            <div key={idx} className="flex justify-between pt-1 font-medium">
                               <span>{item.qty}x {item.name}</span>
-                              <span className="font-mono">{effectiveSettings.currency} {(item.price * item.qty).toLocaleString()}</span>
+                              <span className="font-mono font-bold text-foreground">{effectiveSettings.currency} {(item.price * item.qty).toLocaleString()}</span>
                             </div>
                           ))}
                         </div>
@@ -2720,9 +2756,11 @@ const POS = () => {
 
                     {/* Advance Deposit Badge */}
                     {res.advancePaid && Number(res.advancePaid) > 0 ? (
-                      <div className="flex items-center justify-between bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 p-2 rounded-lg font-bold text-xs my-2">
-                        <span className="flex items-center gap-1"><Check className="h-3.5 w-3.5" /> Advance Deposit Paid</span>
-                        <span>{effectiveSettings.currency} {Number(res.advancePaid).toLocaleString()}</span>
+                      <div className="flex items-center justify-between bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 p-3 rounded-xl font-bold text-xs">
+                        <span className="flex items-center gap-1.5">
+                          <Check className="h-4 w-4 text-emerald-500" /> Advance Deposit Paid
+                        </span>
+                        <span className="font-extrabold text-sm">{effectiveSettings.currency} {Number(res.advancePaid).toLocaleString()}</span>
                       </div>
                     ) : null}
 
@@ -2731,7 +2769,7 @@ const POS = () => {
                       <Button
                         type="button"
                         onClick={() => loadReservationToPOSCart(res)}
-                        className="w-full mt-2 gradient-primary text-primary-foreground font-bold rounded-xl flex items-center justify-center gap-1.5 shadow-md hover:scale-[1.01] active:scale-[0.99] transition-all"
+                        className="w-full h-11 text-xs sm:text-sm gradient-primary text-primary-foreground font-extrabold rounded-xl flex items-center justify-center gap-2 shadow-md hover:scale-[1.01] active:scale-[0.99] transition-all"
                       >
                         <ShoppingCart className="h-4 w-4" /> Load Order into POS Cart
                       </Button>
