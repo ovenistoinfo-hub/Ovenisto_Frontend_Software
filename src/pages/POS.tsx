@@ -437,6 +437,7 @@ const POS = () => {
   const [futureAdvanceMethod, setFutureAdvanceMethod] = useState<string>("Cash");
   const [loadedAdvancePayment, setLoadedAdvancePayment] = useState<number>(0);
   const [loadedAdvanceMethod, setLoadedAdvanceMethod] = useState<string>("");
+  const [loadedReservationId, setLoadedReservationId] = useState<string | null>(null);
 
   // Cash Register
   const [activeShift, setActiveShift] = useState<ShiftRecord | null>(null);
@@ -876,12 +877,13 @@ const POS = () => {
   const subtotal = itemsSubtotal - orderDiscount;
   const tax = Math.round(subtotal * taxRate);
   const total = subtotal + tax;
+  const netPayable = Math.max(0, total - loadedAdvancePayment);
 
   const totalPaid = paymentEntries.reduce((s, e) => s + e.amount, 0);
-  const totalDue = total - totalPaid;
-  const finalizeChange = givenAmount > 0 ? Math.max(0, givenAmount - (totalDue > 0 ? totalDue : total)) : 0;
+  const totalDue = Math.max(0, netPayable - totalPaid);
+  const finalizeChange = givenAmount > 0 ? Math.max(0, givenAmount - (totalDue > 0 ? totalDue : netPayable)) : 0;
 
-  const isPaymentSufficient = totalPaid >= total;
+  const isPaymentSufficient = (totalPaid + loadedAdvancePayment) >= total;
 
   const loadRunningOrder = (orderId: string) => {
     if (myPendingCancelOrderIds.has(orderId)) {
@@ -913,6 +915,7 @@ const POS = () => {
     setSelectedCustomer("");
     setLoadedAdvancePayment(0);
     setLoadedAdvanceMethod("");
+    setLoadedReservationId(null);
     setIsUrgent(false);
     setPaymentOnlyMode(false);
     orderStartTime.current = Date.now();
@@ -969,7 +972,7 @@ const POS = () => {
   const removePaymentEntry = (id: string) => setPaymentEntries(prev => prev.filter(e => e.id !== id));
 
   const handleFinalizeSubmit = async () => {
-    if (totalPaid < total) {
+    if (totalPaid < netPayable) {
       if (!selectedCustomer || selectedCustomer === "") {
         toast.error("Payment incomplete. Select a customer for credit or pay full amount.");
         return;
@@ -982,7 +985,7 @@ const POS = () => {
       ? paymentEntries.map(e => `${e.method}: Rs.${e.amount}`).join(", ")
       : finalizeMethod;
     if (loadedAdvancePayment > 0) {
-      payMethodStr = `Advance (${loadedAdvanceMethod}): Rs.${loadedAdvancePayment}, ${payMethodStr}`;
+      payMethodStr = `Advance (${loadedAdvanceMethod}): Rs.${loadedAdvancePayment}${paymentEntries.length > 0 || finalizeMethod ? `, Net (${payMethodStr}): Rs.${totalPaid || netPayable}` : ""}`;
     }
 
     let finalOrderNumber = "";
@@ -1012,6 +1015,7 @@ const POS = () => {
             modifiers: c.modifiers || [], cookingTime: c.cookingTime || null, notes: c.notes || null,
           })),
           subtotal: itemsSubtotal, discount: orderDiscount, tax, total,
+          advancePayment: loadedAdvancePayment || undefined,
           paymentMethod: payMethodStr,
           staffName: selectedStaff,
           tableNumber: orderType === "Dine In" ? tableNumber || null : null,
@@ -1029,6 +1033,10 @@ const POS = () => {
           const created = await orderService.createOrder(orderPayload);
           finalOrderNumber = created.orderNumber;
           setApiOrders(prev => [normalizeApiOrder(created), ...prev]);
+          if (loadedReservationId) {
+            reservationService.update(loadedReservationId, { status: "completed", orderId: created.id }).catch(() => {});
+            setLoadedReservationId(null);
+          }
           if (orderType === "Dine In" && tableNumber) {
             const targetTable = backendTables.find((t) => Number(t.number) === tableNumber);
             if (targetTable) {
@@ -1043,7 +1051,7 @@ const POS = () => {
             deliveryService.assignRider({ orderId: created.id, riderId: selectedRiderId, estimatedTime: 30 })
               .catch(() => {});
           }
-          toast.success(`Order ${finalOrderNumber} placed! Total: Rs. ${total.toLocaleString()}`);
+          toast.success(`Order ${finalOrderNumber} placed! Net Payable: Rs. ${netPayable.toLocaleString()}`);
         }
       }
     } catch (err: any) {
@@ -1145,6 +1153,7 @@ const POS = () => {
   };
 
   const loadReservationToPOSCart = (res: ReservationRecord) => {
+    setLoadedReservationId(res.id);
     if (res.preOrderItems && res.preOrderItems.length > 0) {
       const mappedItems: CartItem[] = res.preOrderItems.map((item, idx) => ({
         id: `res-${res.id}-${idx}-${Date.now()}`,
@@ -1908,7 +1917,15 @@ const POS = () => {
                 <p>Type: <strong>{orderType}</strong>{tableNumber ? ` — Table ${tableNumber}` : ""}</p>
                 <p>Customer: <strong>{selectedCustomerData?.name || "Walk-in"}</strong></p>
                 <p>Items: <strong>{cart.length}</strong></p>
-                <p className="text-lg font-bold text-primary">Total: Rs. {total.toLocaleString()}</p>
+                {loadedAdvancePayment > 0 ? (
+                  <div className="bg-muted/60 p-3 rounded-xl border border-border/60 space-y-1.5 text-xs text-foreground mt-2">
+                    <div className="flex justify-between"><span>Gross Order Total:</span><span className="font-mono font-bold">Rs. {total.toLocaleString()}</span></div>
+                    <div className="flex justify-between text-emerald-600 dark:text-emerald-400 font-semibold"><span>Advance Deposit Paid ({loadedAdvanceMethod}):</span><span className="font-mono">- Rs. {loadedAdvancePayment.toLocaleString()}</span></div>
+                    <div className="flex justify-between font-extrabold text-sm pt-1.5 border-t border-border text-primary"><span>Net Payable:</span><span className="font-mono">Rs. {netPayable.toLocaleString()}</span></div>
+                  </div>
+                ) : (
+                  <p className="text-lg font-bold text-primary">Total: Rs. {total.toLocaleString()}</p>
+                )}
               </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -1958,7 +1975,14 @@ const POS = () => {
                 {orderDiscount > 0 && <div className="flex justify-between"><span className="text-muted-foreground">Discount</span><span className="text-destructive">-Rs. {orderDiscount.toLocaleString()}</span></div>}
                 <div className="flex justify-between"><span className="text-muted-foreground">Tax</span><span>Rs. {tax.toLocaleString()}</span></div>
                 <Separator />
-                <div className="flex justify-between font-bold text-lg"><span>Total</span><span className="text-primary">Rs. {total.toLocaleString()}</span></div>
+                <div className="flex justify-between font-bold text-base"><span>Gross Total</span><span>Rs. {total.toLocaleString()}</span></div>
+                {loadedAdvancePayment > 0 && (
+                  <>
+                    <div className="flex justify-between text-emerald-600 dark:text-emerald-400 text-xs font-semibold"><span>Advance Deposit ({loadedAdvanceMethod})</span><span>- Rs. {loadedAdvancePayment.toLocaleString()}</span></div>
+                    <Separator />
+                    <div className="flex justify-between font-extrabold text-lg text-primary"><span>Net Payable</span><span>Rs. {netPayable.toLocaleString()}</span></div>
+                  </>
+                )}
               </div>
             </div>
 
@@ -1987,7 +2011,7 @@ const POS = () => {
                   ))}
                 </div>
                 <Button className="w-full" size="sm" onClick={addPaymentEntry}>Add Payment Entry</Button>
-                <Button variant="outline" className="w-full text-xs" size="sm" onClick={() => { setGivenAmount(total); setPaymentEntries([]); }}>
+                <Button variant="outline" className="w-full text-xs" size="sm" onClick={() => { setGivenAmount(netPayable); setPaymentEntries([]); }}>
                   Exact Amount
                 </Button>
               </div>
@@ -2013,10 +2037,14 @@ const POS = () => {
               )}
               <Separator />
               <div className="space-y-1 text-sm">
-                <div className="flex justify-between"><span>Total Due</span><span className="font-bold">Rs. {total.toLocaleString()}</span></div>
-                <div className="flex justify-between"><span>Total Paid</span><span className={cn("font-bold", totalPaid >= total ? "text-success" : "text-destructive")}>Rs. {totalPaid.toLocaleString()}</span></div>
-                {totalPaid > total && <div className="flex justify-between text-success"><span>Change</span><span className="font-bold">Rs. {(totalPaid - total).toLocaleString()}</span></div>}
-                {totalPaid < total && <div className="flex justify-between text-destructive"><span>Remaining</span><span className="font-bold">Rs. {(total - totalPaid).toLocaleString()}</span></div>}
+                <div className="flex justify-between"><span>Gross Total</span><span className="font-bold">Rs. {total.toLocaleString()}</span></div>
+                {loadedAdvancePayment > 0 && (
+                  <div className="flex justify-between text-emerald-600 dark:text-emerald-400 font-semibold text-xs"><span>Advance Deposit</span><span className="font-bold">- Rs. {loadedAdvancePayment.toLocaleString()}</span></div>
+                )}
+                <div className="flex justify-between"><span>Net Payable</span><span className="font-extrabold text-primary">Rs. {netPayable.toLocaleString()}</span></div>
+                <div className="flex justify-between"><span>Total Collected</span><span className={cn("font-bold", totalPaid >= netPayable ? "text-success" : "text-destructive")}>Rs. {totalPaid.toLocaleString()}</span></div>
+                {totalPaid > netPayable && <div className="flex justify-between text-success"><span>Change</span><span className="font-bold">Rs. {(totalPaid - netPayable).toLocaleString()}</span></div>}
+                {totalPaid < netPayable && <div className="flex justify-between text-destructive"><span>Remaining Due</span><span className="font-bold">Rs. {(netPayable - totalPaid).toLocaleString()}</span></div>}
               </div>
               {finalizeChange > 0 && givenAmount > 0 && (
                 <div className="bg-success/10 text-success p-2 rounded text-center text-sm font-bold">
@@ -2028,8 +2056,8 @@ const POS = () => {
                 <Checkbox checked={sendSMS} onCheckedChange={(c) => setSendSMS(!!c)} />
                 <Label className="text-xs">Send SMS to customer</Label>
               </div>
-              {!isPaymentSufficient && totalPaid < total && (
-                <p className="text-xs text-warning">⚠ Payment is less than total. Customer credit will be recorded.</p>
+              {!isPaymentSufficient && totalPaid < netPayable && (
+                <p className="text-xs text-warning">⚠ Payment is less than net payable. Customer credit will be recorded.</p>
               )}
             </div>
           </div>
@@ -2065,9 +2093,17 @@ const POS = () => {
             </Table>
             <div className="space-y-1 text-xs">
               <div className="flex justify-between"><span>Subtotal</span><span>Rs. {subtotal.toLocaleString()}</span></div>
+              {orderDiscount > 0 && <div className="flex justify-between"><span>Discount</span><span className="text-destructive">-Rs. {orderDiscount.toLocaleString()}</span></div>}
               <div className="flex justify-between"><span>Tax</span><span>Rs. {tax.toLocaleString()}</span></div>
               <Separator />
-              <div className="flex justify-between font-bold text-base"><span>Total</span><span className="text-primary">Rs. {total.toLocaleString()}</span></div>
+              <div className="flex justify-between font-bold text-sm"><span>Gross Total</span><span>Rs. {total.toLocaleString()}</span></div>
+              {loadedAdvancePayment > 0 && (
+                <>
+                  <div className="flex justify-between text-emerald-600 dark:text-emerald-400 font-semibold"><span>Advance Deposit ({loadedAdvanceMethod})</span><span>- Rs. {loadedAdvancePayment.toLocaleString()}</span></div>
+                  <Separator />
+                  <div className="flex justify-between font-extrabold text-base"><span>Net Payable / Balance</span><span className="text-primary">Rs. {netPayable.toLocaleString()}</span></div>
+                </>
+              )}
             </div>
           </div>
           <DialogFooter>
@@ -2077,7 +2113,7 @@ const POS = () => {
               orderType, tableNumber: tableNumber || undefined, customer: selectedCustomerData?.name || "Walk-in",
               phone: selectedCustomerData?.phone || "", staff: selectedStaff, paymentMethod: finalizeMethod,
               items: cart.map(c => ({ name: c.name, qty: c.qty, price: c.price, discount: c.discount })),
-              subtotal, discount: orderDiscount, tax, total,
+              subtotal, discount: orderDiscount, tax, total, advancePayment: loadedAdvancePayment || undefined,
             })}><Download className="h-4 w-4 mr-1" />PDF</Button>
             <Button className="gradient-primary text-primary-foreground" onClick={() => window.print()}><Printer className="h-4 w-4 mr-1" />Print</Button>
           </DialogFooter>
@@ -2916,7 +2952,14 @@ const POS = () => {
               {orderDiscount > 0 && <div className="flex justify-between"><span>Discount</span><span className="text-destructive">-{effectiveSettings.currency} {orderDiscount.toLocaleString()}</span></div>}
               <div className="flex justify-between"><span>Tax ({Math.round(taxRate * 100)}%)</span><span>{effectiveSettings.currency} {tax.toLocaleString()}</span></div>
               <Separator />
-              <div className="flex justify-between font-bold text-base"><span>Estimated Total</span><span className="text-primary">{effectiveSettings.currency} {total.toLocaleString()}</span></div>
+              <div className="flex justify-between font-bold text-sm"><span>Gross Estimated Total</span><span>{effectiveSettings.currency} {total.toLocaleString()}</span></div>
+              {loadedAdvancePayment > 0 && (
+                <>
+                  <div className="flex justify-between text-emerald-600 dark:text-emerald-400 font-semibold"><span>Advance Deposit ({loadedAdvanceMethod})</span><span>-{effectiveSettings.currency} {loadedAdvancePayment.toLocaleString()}</span></div>
+                  <Separator />
+                  <div className="flex justify-between font-extrabold text-base"><span>Net Estimated Payable</span><span className="text-primary">{effectiveSettings.currency} {netPayable.toLocaleString()}</span></div>
+                </>
+              )}
             </div>
             <p className="text-[10px] text-muted-foreground text-center italic mt-2">This is a quotation only. Prices may vary. Valid for 24 hours.</p>
           </div>

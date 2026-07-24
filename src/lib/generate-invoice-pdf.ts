@@ -23,6 +23,7 @@ interface InvoiceData {
   discount: number;
   tax: number;
   total: number;
+  advancePayment?: number;
 }
 
 export function generateInvoicePDF(data: InvoiceData) {
@@ -115,11 +116,32 @@ export function generateInvoicePDF(data: InvoiceData) {
   doc.line(4, y, w - 4, y);
   y += 4;
 
-  doc.setFontSize(10);
-  doc.setFont("helvetica", "bold");
-  doc.text("TOTAL", 4, y);
-  doc.text(`Rs. ${data.total.toLocaleString()}`, w - 4, y, { align: "right" });
-  y += 6;
+  if (data.advancePayment && data.advancePayment > 0) {
+    const netPayable = Math.max(0, data.total - data.advancePayment);
+    doc.setFontSize(8);
+    doc.setFont("helvetica", "bold");
+    doc.text("GROSS TOTAL", 4, y);
+    doc.text(`Rs. ${data.total.toLocaleString()}`, w - 4, y, { align: "right" });
+    y += 4;
+
+    doc.setFontSize(7);
+    doc.setFont("helvetica", "normal");
+    doc.text("Advance Paid", 4, y);
+    doc.text(`-Rs. ${data.advancePayment.toLocaleString()}`, w - 4, y, { align: "right" });
+    y += 4;
+
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "bold");
+    doc.text("NET PAYABLE", 4, y);
+    doc.text(`Rs. ${netPayable.toLocaleString()}`, w - 4, y, { align: "right" });
+    y += 6;
+  } else {
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "bold");
+    doc.text("TOTAL", 4, y);
+    doc.text(`Rs. ${data.total.toLocaleString()}`, w - 4, y, { align: "right" });
+    y += 6;
+  }
 
   // Footer
   doc.setFontSize(7);
