@@ -23,6 +23,7 @@ import { reservationService, type Reservation, type CreateReservationInput, type
 import { tableService } from "@/services/table.service";
 import { customerService, type CustomerRecord } from "@/services/customer.service";
 import { menuService, type MenuItemRecord, type CategoryRecord } from "@/services/menu.service";
+import { orderService } from "@/services/order.service";
 import { toast } from "sonner";
 import { useOutletFilter } from "@/hooks/useOutletFilter";
 import { OutletFilterSelect } from "@/components/OutletFilterSelect";
@@ -117,6 +118,13 @@ const Reservations = () => {
     queryKey: ["tables", selectedOutletId],
     queryFn: () => tableService.getTables(),
   });
+
+  const { data: ordersRes } = useQuery({
+    queryKey: ["orders-list-for-reservations", selectedOutletId],
+    queryFn: () => orderService.getOrders({ limit: 300 }),
+    refetchInterval: 10000,
+  });
+  const orders = useMemo(() => ordersRes?.data ?? [], [ordersRes]);
 
   const { data: customersData } = useQuery({
     queryKey: ["customers-list"],
@@ -356,15 +364,26 @@ const Reservations = () => {
     });
   };
 
-  const getEffectiveStatus = (r: { date: string; time: string; status: string; order?: any; orderId?: string }) => {
+  const getEffectiveStatus = (r: { date: string; time: string; status: string; order?: any; orderId?: string | null }) => {
     if (r.status === "completed" || r.order?.status === "completed") {
       return "completed";
     }
-    if (r.status === "seated" || r.order?.status === "seated" || r.orderId || r.order) {
+    if (r.orderId && orders.some(o => o.id === r.orderId && o.status === "completed")) {
+      return "completed";
+    }
+    if (r.status === "seated" || r.order?.status === "seated") {
       return "seated";
     }
     if (r.status === "cancelled" || r.status === "noShow") {
       return r.status;
+    }
+    if (r.orderId) {
+      const linkedOrder = orders.find(o => o.id === r.orderId);
+      if (linkedOrder) {
+        if (linkedOrder.status === "completed") return "completed";
+        return "seated";
+      }
+      if (r.status === "seated") return "seated";
     }
     const now = new Date();
     const todayStr = now.toISOString().split("T")[0];

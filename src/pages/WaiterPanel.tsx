@@ -258,10 +258,11 @@ const WaiterPanel = () => {
     } catch { /* silent polling */ }
   }, []);
 
-  const getEffectiveStatus = (r: { date: string; time: string; status: string }) => {
-    if (r.status === "seated" || r.status === "completed" || r.status === "cancelled" || r.status === "noShow") {
-      return r.status;
-    }
+  const getEffectiveStatus = (r: { date: string; time: string; status: string; orderId?: string | null }) => {
+    if (r.status === "completed") return "completed";
+    if (r.orderId && orders.some(o => o.id === r.orderId && o.status === "completed")) return "completed";
+    if (r.status === "seated" || r.orderId) return "seated";
+    if (r.status === "cancelled" || r.status === "noShow") return r.status;
     const now = new Date();
     const todayStr = now.toISOString().split("T")[0];
     const currentHHMM = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
@@ -426,15 +427,15 @@ const WaiterPanel = () => {
   const confirmedReservations = useMemo(() => {
     const pkt = new Date(Date.now() + 5 * 60 * 60 * 1000);
     const todayStr = pkt.toISOString().split("T")[0];
-    return reservations.filter(r =>
-      r.date === todayStr &&
-      r.status !== "pending" &&
-      r.status !== "cancelled" &&
-      r.status !== "noShow" &&
-      (!r.orderType || r.orderType === "Dine In") &&
-      r.bookingType !== "future_order"
-    );
-  }, [reservations]);
+    return reservations.filter(r => {
+      if (r.date !== todayStr) return false;
+      if (r.status === "pending" || r.status === "cancelled" || r.status === "noShow" || r.status === "completed") return false;
+      if (getEffectiveStatus(r) === "completed") return false;
+      if (r.orderType && r.orderType !== "Dine In") return false;
+      if (r.bookingType === "future_order") return false;
+      return true;
+    });
+  }, [reservations, orders]);
 
   const reservedTableNums = useMemo(() => {
     const set = new Set<number>();
