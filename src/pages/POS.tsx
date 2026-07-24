@@ -1296,13 +1296,6 @@ const POS = () => {
           <div className="h-5 w-px bg-border/60 shrink-0 hidden sm:block mx-0.5" />
 
           {/* Group 2: Scheduling & secondary */}
-          <Button variant="outline" size="sm" className="h-8 text-xs rounded-lg gap-1 shrink-0 px-2" onClick={() => setShowFutureSale(true)}>
-            <CalendarClock className="h-3.5 w-3.5" />
-            <span className="hidden lg:inline">Future Sale</span>
-            {futureOrders.length > 0 && (
-              <Badge className="h-5 px-1 text-[10px] bg-info text-info-foreground">{futureOrders.length}</Badge>
-            )}
-          </Button>
           <Button variant="outline" size="sm" className="h-8 text-xs rounded-lg gap-1 shrink-0 px-2" onClick={() => setShowReservations(true)}>
             <BookOpen className="h-3.5 w-3.5" />
             <span className="hidden lg:inline">Reservations</span>
@@ -1679,12 +1672,9 @@ const POS = () => {
 
             <div className="space-y-1.5 pt-1">
               {/* Secondary Actions Row */}
-              <div className="grid grid-cols-3 sm:grid-cols-5 gap-1">
+              <div className="grid grid-cols-4 gap-1">
                 <Button variant="outline" className="text-destructive border-destructive/30 text-[10px] h-8 rounded-lg hover:bg-destructive/5" onClick={cancelOrder}><Trash2 className="h-3 w-3 mr-0.5" />Cancel</Button>
                 <Button variant="outline" className="text-accent border-accent/30 text-[10px] h-8 rounded-lg hover:bg-accent/5" onClick={saveDraft}><FileText className="h-3 w-3 mr-0.5" />Draft</Button>
-                <Button variant="outline" className="text-info border-info/30 text-[10px] h-8 rounded-lg hover:bg-info/5 font-semibold" onClick={() => { if (cart.length === 0) { toast.error("Add items first"); return; } setShowCreateFutureSale(true); }}>
-                  <CalendarClock className="h-3 w-3 mr-0.5" />Future
-                </Button>
                 <Button variant="outline" className="text-info border-info/30 text-[10px] h-8 rounded-lg hover:bg-info/5" onClick={() => cart.length > 0 && setShowQuotation(true)}><FileText className="h-3 w-3 mr-0.5" />Quote</Button>
                 <Button variant="outline" className="text-info border-info/30 text-[10px] h-8 rounded-lg hover:bg-info/5" onClick={() => cart.length > 0 && setShowInvoice(true)}><Printer className="h-3 w-3 mr-0.5" />Invoice</Button>
               </div>
