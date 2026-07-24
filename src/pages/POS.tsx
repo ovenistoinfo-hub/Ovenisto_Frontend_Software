@@ -1291,13 +1291,6 @@ const POS = () => {
               <Badge className="h-5 px-1 text-[10px] gradient-primary text-primary-foreground">{activeOrdersCount}</Badge>
             )}
           </Button>
-          <Button variant="outline" size="sm" className="h-8 text-xs rounded-lg gap-1 shrink-0 px-2.5 font-medium" onClick={() => setShowKitchenNotifications(true)}>
-            <Bell className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">Kitchen</span>
-            {kitchenNotifications.length > 0 && (
-              <Badge className="h-5 px-1 text-[10px] bg-success text-success-foreground animate-pulse">{kitchenNotifications.length}</Badge>
-            )}
-          </Button>
 
           {/* Divider */}
           <div className="h-5 w-px bg-border/60 shrink-0 hidden sm:block mx-0.5" />
@@ -1329,12 +1322,6 @@ const POS = () => {
               <Badge className="h-5 px-1 text-[10px] bg-destructive text-destructive-foreground">{lowStockItems.length}</Badge>
             </Button>
           )}
-
-          {/* Combo filter tag */}
-          <Badge variant="secondary" onClick={() => handleTagClick("Combo")}
-            className={cn("text-[10px] cursor-pointer transition-all border px-2.5 py-1 rounded-full font-semibold shrink-0 hidden md:inline-flex bg-warning/10 text-warning border-warning/20 ml-0.5", activeTag === "Combo" && "ring-2 ring-primary ring-offset-1 shadow-sm")}>
-            Combo
-          </Badge>
         </div>
         {/* Mobile: toggle between menu & cart */}
         <div className="flex items-center gap-1 xl:hidden ml-1 shrink-0">

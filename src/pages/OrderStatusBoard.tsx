@@ -4,7 +4,7 @@ import type { OrderStatus } from "@/data/mock-data";
 import {
   ArrowLeft, RefreshCw, Bell, Clock, BarChart3, TrendingUp, ShoppingBag,
   AlertCircle, ChefHat, CheckCircle2, XCircle, Timer, UtensilsCrossed,
-  ShoppingCart, Truck, Globe, CreditCard, Banknote, Receipt,
+  ShoppingCart, Truck, Globe, CreditCard, Banknote, Receipt, Check,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -153,7 +153,18 @@ const OrderStatusBoard = () => {
     } catch { return null; }
   };
 
-  // ── Load to POS for payment ──
+  const handleStatusUpdate = async (orderId: string, newStatus: string) => {
+    try {
+      await orderService.updateOrderStatus(orderId, newStatus);
+      setAllOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: newStatus } : o));
+      if (selectedOrder && selectedOrder.id === orderId) {
+        setSelectedOrder(prev => prev ? { ...prev, status: newStatus } : null);
+      }
+      toast.success(`Order status updated to ${newStatus}`);
+    } catch {
+      toast.error("Failed to update order status");
+    }
+  };
 
   const handleLoadToPOS = (order: any) => {
     navigate("/pos", { state: { loadOrderId: order.id, paymentOnly: true } });
@@ -346,6 +357,35 @@ const OrderStatusBoard = () => {
                           </div>
                         );
                       })()}
+
+                      {/* Quick Status Action Buttons */}
+                      {order.status === "pending" && (
+                        <Button
+                          size="sm"
+                          onClick={(e) => { e.stopPropagation(); handleStatusUpdate(order.id, "preparing"); }}
+                          className="w-full mt-2 h-7 text-xs bg-warning hover:bg-warning/90 text-warning-foreground font-bold shadow-xs flex items-center justify-center gap-1 rounded-lg"
+                        >
+                          <ChefHat className="h-3.5 w-3.5" /> Start Preparing
+                        </Button>
+                      )}
+                      {order.status === "preparing" && (
+                        <Button
+                          size="sm"
+                          onClick={(e) => { e.stopPropagation(); handleStatusUpdate(order.id, "ready"); }}
+                          className="w-full mt-2 h-7 text-xs bg-accent hover:bg-accent/90 text-accent-foreground font-bold shadow-xs flex items-center justify-center gap-1 rounded-lg"
+                        >
+                          <CheckCircle2 className="h-3.5 w-3.5" /> Mark Ready
+                        </Button>
+                      )}
+                      {order.status === "ready" && (
+                        <Button
+                          size="sm"
+                          onClick={(e) => { e.stopPropagation(); handleStatusUpdate(order.id, "completed"); }}
+                          className="w-full mt-2 h-7 text-xs bg-success hover:bg-success/90 text-success-foreground font-bold shadow-xs flex items-center justify-center gap-1 rounded-lg"
+                        >
+                          <Check className="h-3.5 w-3.5" /> Mark Completed
+                        </Button>
+                      )}
                     </div>
                   </CardContent>
                 </Card>
@@ -488,8 +528,39 @@ const OrderStatusBoard = () => {
                   </div>
                 </div>
 
-                <DialogFooter className="flex-col sm:flex-row gap-2 pt-2">
+                <DialogFooter className="flex-col sm:flex-row gap-2 pt-2 flex-wrap justify-end">
                   <Button variant="outline" className="w-full sm:w-auto" onClick={() => setSelectedOrder(null)}>Close</Button>
+
+                  {selectedOrder.status === "pending" && (
+                    <Button
+                      className="w-full sm:w-auto bg-warning hover:bg-warning/90 text-warning-foreground font-bold shadow-md"
+                      onClick={() => handleStatusUpdate(selectedOrder.id, "preparing")}
+                    >
+                      <ChefHat className="h-4 w-4 mr-1.5" />
+                      Start Preparing
+                    </Button>
+                  )}
+
+                  {selectedOrder.status === "preparing" && (
+                    <Button
+                      className="w-full sm:w-auto bg-accent hover:bg-accent/90 text-accent-foreground font-bold shadow-md"
+                      onClick={() => handleStatusUpdate(selectedOrder.id, "ready")}
+                    >
+                      <CheckCircle2 className="h-4 w-4 mr-1.5" />
+                      Mark Ready
+                    </Button>
+                  )}
+
+                  {selectedOrder.status === "ready" && (
+                    <Button
+                      className="w-full sm:w-auto bg-success hover:bg-success/90 text-success-foreground font-bold shadow-md"
+                      onClick={() => handleStatusUpdate(selectedOrder.id, "completed")}
+                    >
+                      <Check className="h-4 w-4 mr-1.5" />
+                      Mark Completed
+                    </Button>
+                  )}
+
                   {showLoadToPOS && (
                     <Button
                       className="w-full sm:w-auto gradient-primary text-primary-foreground shadow-md"

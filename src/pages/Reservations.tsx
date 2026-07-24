@@ -431,7 +431,7 @@ const Reservations = () => {
     });
   };
 
-  const getEffectiveStatus = (r: { date: string; time: string; status: string; order?: any; orderId?: string | null }) => {
+  const getEffectiveStatus = (r: { date: string; time: string; status: string; orderType?: string; bookingType?: string; order?: any; orderId?: string | null }) => {
     if (r.status === "completed" || r.order?.status === "completed") {
       return "completed";
     }
@@ -456,7 +456,16 @@ const Reservations = () => {
     const todayStr = now.toISOString().split("T")[0];
     const currentHHMM = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
 
-    if (r.date < todayStr || (r.date === todayStr && currentHHMM >= r.time)) {
+    const isTimePassed = r.date < todayStr || (r.date === todayStr && currentHHMM >= r.time);
+
+    if (isTimePassed) {
+      const orderType = r.orderType || (r.bookingType === "future_order" ? "Take Away" : "Dine In");
+      if (orderType === "Delivery") {
+        return r.status === "pending" ? "pending" : "dispatch_due";
+      }
+      if (orderType === "Take Away") {
+        return r.status === "pending" ? "pending" : "pickup_due";
+      }
       return "not_arrived";
     }
     return r.status;
@@ -841,6 +850,20 @@ const Reservations = () => {
 
                     <TableCell>
                       {(() => {
+                        if (effStatus === "dispatch_due") {
+                          return (
+                            <Badge variant="outline" className="capitalize border text-xs font-bold bg-amber-500/15 text-amber-500 border-amber-500/30 flex items-center gap-1 w-fit">
+                              <Truck className="h-3 w-3" /> Dispatch Due
+                            </Badge>
+                          );
+                        }
+                        if (effStatus === "pickup_due") {
+                          return (
+                            <Badge variant="outline" className="capitalize border text-xs font-bold bg-amber-500/15 text-amber-500 border-amber-500/30 flex items-center gap-1 w-fit">
+                              <ShoppingBag className="h-3 w-3" /> Pickup Due
+                            </Badge>
+                          );
+                        }
                         if (effStatus === "not_arrived") {
                           return (
                             <Badge variant="outline" className="capitalize border text-xs font-bold bg-rose-500/15 text-rose-500 border-rose-500/30 flex items-center gap-1 w-fit">
@@ -907,7 +930,7 @@ const Reservations = () => {
                             </Button>
                           </>
                         )}
-                        {(effStatus === "not_arrived" || r.status === "confirmed") && r.status !== "seated" && r.status !== "completed" && r.status !== "cancelled" && (
+                        {(effStatus === "not_arrived" || r.status === "confirmed" || effStatus === "dispatch_due" || effStatus === "pickup_due") && r.status !== "seated" && r.status !== "completed" && r.status !== "cancelled" && (
                           <Button
                             size="sm"
                             variant="destructive"
