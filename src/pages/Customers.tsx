@@ -33,7 +33,28 @@ const Customers = () => {
     queryKey: ["customers", { search }],
     queryFn: () => customerService.getCustomers({ search: search || undefined, limit: 1000 }),
   });
-  const customers = resp?.data ?? [];
+  const rawCustomers = resp?.data ?? [];
+
+  const customers = useMemo(() => {
+    const map = new Map<string, (typeof rawCustomers)[0]>();
+    for (const c of rawCustomers) {
+      const cleanPhone = c.phone ? c.phone.replace(/\D/g, "") : "";
+      const isDummy = !cleanPhone || cleanPhone === "00000000000" || cleanPhone === "11111111111" || cleanPhone === "12345678901";
+      const key = (!isDummy && cleanPhone.length >= 7)
+        ? `phone:${cleanPhone}`
+        : `name:${c.name.toLowerCase().trim()}`;
+
+      if (!map.has(key)) {
+        map.set(key, { ...c });
+      } else {
+        const existing = map.get(key)!;
+        if (!existing.email && c.email) existing.email = c.email;
+        if (!existing.address && c.address) existing.address = c.address;
+        if (!existing.phone && c.phone) existing.phone = c.phone;
+      }
+    }
+    return Array.from(map.values());
+  }, [rawCustomers]);
 
   const { data: allOrdersResp } = useQuery({
     queryKey: ["all-orders-for-customers-page"],

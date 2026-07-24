@@ -1175,9 +1175,6 @@ const Reservations = () => {
                 </DialogDescription>
               </div>
             </div>
-            <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full text-muted-foreground hover:text-foreground" onClick={() => setShowMenuPicker(false)}>
-              <X className="h-4 w-4" />
-            </Button>
           </div>
 
           {/* Search & Category Pills Bar */}
