@@ -638,7 +638,12 @@ const POS = () => {
 
   const todayReservations = useMemo(() =>
     apiReservations
-      .filter(r => r.date === todayStr && r.status !== "cancelled")
+      .filter(r =>
+        r.date === todayStr &&
+        r.status !== "pending" &&
+        r.status !== "cancelled" &&
+        r.status !== "noShow"
+      )
       .sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time)),
     [apiReservations, todayStr]
   );
