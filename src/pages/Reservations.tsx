@@ -2,7 +2,7 @@ import { useState, useMemo, useRef, useEffect } from "react";
 import {
   CalendarCheck, Plus, Pencil, Trash2, User, Phone, Users, CheckCircle2,
   Utensils, CreditCard, Banknote, Smartphone, ShoppingBag, ArrowRight, Truck, XCircle,
-  Search, AlertCircle, Clock, MapPin, Check, DollarSign, ListFilter, Sparkles, ChevronRight, X, Zap
+  Search, AlertCircle, Clock, MapPin, Check, DollarSign, ListFilter, Sparkles, ChevronRight, X, Zap, Minus, ChefHat
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
@@ -337,6 +337,34 @@ const Reservations = () => {
       };
     });
     toast.success(`Added ${itemName}`);
+  };
+
+  const handleDecreasePreOrderItem = (menuItemId: string, variantId?: string) => {
+    setForm(prev => {
+      const currentItems = prev.preOrderItems || [];
+      const existingIdx = currentItems.findIndex(i => i.menuItemId === menuItemId && i.variantId === (variantId || undefined));
+      if (existingIdx === -1) return prev;
+
+      const updated = currentItems.map((ci, idx) => {
+        if (idx === existingIdx) {
+          const newQty = ci.qty - 1;
+          return newQty > 0 ? { ...ci, qty: newQty } : null;
+        }
+        return ci;
+      }).filter(Boolean) as PreOrderItem[];
+
+      const subtotal = updated.reduce((sum, i) => sum + (i.price * i.qty), 0);
+      const tax = Math.round(subtotal * 0.16);
+      const totalAmount = subtotal + tax;
+
+      return {
+        ...prev,
+        preOrderItems: updated,
+        subtotal,
+        tax,
+        totalAmount,
+      };
+    });
   };
 
   const handleUpdateItemQty = (index: number, delta: number) => {
@@ -1126,87 +1154,280 @@ const Reservations = () => {
         </Card>
       )}
 
-      {/* Menu Item Picker Modal for Pre-Orders */}
+      {/* Menu Item Picker Modal for Pre-Orders (POS Style) */}
       <Dialog open={showMenuPicker} onOpenChange={setShowMenuPicker}>
-        <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
-          <DialogHeader>
-            <DialogTitle className="text-base flex items-center gap-2">
-              <Utensils className="h-4 w-4 text-primary" /> Select Food Menu Items for Pre-Order
-            </DialogTitle>
-            <DialogDescription className="text-xs">
-              Browse categories or search food items to add them to this advance pre-order.
-            </DialogDescription>
-          </DialogHeader>
+        <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col p-0 overflow-hidden bg-background border border-border/80 shadow-2xl rounded-2xl">
+          {/* Header */}
+          <div className="p-4 sm:p-5 border-b border-border/60 bg-card/60 backdrop-blur-md flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-xl bg-primary/10 text-primary border border-primary/20">
+                <ChefHat className="h-6 w-6" />
+              </div>
+              <div>
+                <DialogTitle className="text-lg font-black tracking-tight text-foreground flex items-center gap-2">
+                  Food Menu Catalog
+                  <Badge variant="outline" className="text-[10px] font-extrabold bg-primary/10 text-primary border-primary/20 px-2 py-0.5">
+                    POS Catalog
+                  </Badge>
+                </DialogTitle>
+                <DialogDescription className="text-xs text-muted-foreground mt-0.5">
+                  Browse food categories or search items to attach to advance pre-orders.
+                </DialogDescription>
+              </div>
+            </div>
+            <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full text-muted-foreground hover:text-foreground" onClick={() => setShowMenuPicker(false)}>
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
 
-          {/* Search & Category Pills */}
-          <div className="space-y-2 py-2">
+          {/* Search & Category Pills Bar */}
+          <div className="px-4 sm:px-5 py-3 border-b border-border/60 bg-muted/20 space-y-2.5">
+            {/* Search Input */}
             <div className="relative">
-              <Search className="h-4 w-4 absolute left-3 top-2.5 text-muted-foreground" />
+              <Search className="h-4 w-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
               <Input
-                placeholder="Search menu items..."
+                placeholder="Search food items by name..."
                 value={menuSearch}
                 onChange={e => setMenuSearch(e.target.value)}
-                className="pl-9 text-xs"
+                className="pl-10 pr-9 h-10 text-xs rounded-xl bg-background border-border/80 focus:border-primary/40 transition-colors shadow-xs"
               />
+              {menuSearch && (
+                <button onClick={() => setMenuSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
             </div>
 
-            <div className="flex gap-1 overflow-x-auto pb-1 no-scrollbar">
-              <Button
-                size="sm"
-                variant={selectedCatId === "all" ? "default" : "outline"}
-                className={cn("text-xs h-7 rounded-full", selectedCatId === "all" && "gradient-primary")}
+            {/* Category Pills */}
+            <div className="flex gap-1.5 overflow-x-auto pb-1 no-scrollbar scroll-smooth">
+              <button
+                type="button"
                 onClick={() => setSelectedCatId("all")}
+                className={cn(
+                  "px-3.5 py-1.5 text-xs rounded-full font-bold whitespace-nowrap transition-all border shrink-0",
+                  selectedCatId === "all"
+                    ? "bg-primary text-primary-foreground border-primary shadow-sm"
+                    : "bg-background text-muted-foreground hover:text-foreground border-border/80 hover:bg-muted/50"
+                )}
               >
-                All Items
-              </Button>
-              {categories.map(cat => (
-                <Button
-                  key={cat.id}
-                  size="sm"
-                  variant={selectedCatId === cat.id ? "default" : "outline"}
-                  className={cn("text-xs h-7 rounded-full whitespace-nowrap", selectedCatId === cat.id && "gradient-primary")}
-                  onClick={() => setSelectedCatId(cat.id)}
-                >
-                  {cat.name}
-                </Button>
-              ))}
+                All Items ({menuItems.length})
+              </button>
+              {categories.map(cat => {
+                const count = menuItems.filter(i => i.categoryId === cat.id).length;
+                return (
+                  <button
+                    key={cat.id}
+                    type="button"
+                    onClick={() => setSelectedCatId(cat.id)}
+                    className={cn(
+                      "px-3.5 py-1.5 text-xs rounded-full font-bold whitespace-nowrap transition-all border shrink-0 flex items-center gap-1.5",
+                      selectedCatId === cat.id
+                        ? "bg-primary text-primary-foreground border-primary shadow-sm"
+                        : "bg-background text-muted-foreground hover:text-foreground border-border/80 hover:bg-muted/50"
+                    )}
+                  >
+                    {cat.name}
+                    <span className={cn("text-[10px] px-1.5 py-0.2 rounded-full font-black", selectedCatId === cat.id ? "bg-primary-foreground/20 text-primary-foreground" : "bg-muted text-muted-foreground")}>
+                      {count}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           </div>
 
-          {/* Menu Items Grid */}
-          <div className="flex-1 overflow-y-auto grid grid-cols-1 sm:grid-cols-2 gap-2 pr-1 min-h-[300px]">
-            {filteredMenuItems.map(item => (
-              <div key={item.id} className="p-3 border border-border/80 rounded-xl bg-card hover:border-primary/50 transition-colors flex flex-col justify-between">
-                <div>
-                  <div className="flex justify-between items-start">
-                    <p className="font-semibold text-xs text-foreground">{item.name}</p>
-                    <span className="font-mono text-xs font-bold text-primary">PKR {Number(item.price).toLocaleString()}</span>
-                  </div>
-                  {item.category && <p className="text-[10px] text-muted-foreground">{item.category.name}</p>}
-                </div>
-
-                <div className="pt-2 flex justify-end gap-1 flex-wrap">
-                  {item.variants && item.variants.length > 0 ? (
-                    item.variants.map(v => (
-                      <Button key={v.id} size="sm" variant="outline" className="h-6 text-[10px] px-2" onClick={() => handleAddPreOrderItem(item, v.id)}>
-                        + {v.name} (PKR {Number(v.price).toLocaleString()})
-                      </Button>
-                    ))
-                  ) : (
-                    <Button size="sm" className="h-6 text-[10px] gradient-primary text-primary-foreground px-2" onClick={() => handleAddPreOrderItem(item)}>
-                      + Add Item
-                    </Button>
-                  )}
-                </div>
+          {/* Menu Items Grid (POS Food Tile Cards) */}
+          <div className="flex-1 overflow-y-auto p-4 sm:p-5 bg-background/50">
+            {filteredMenuItems.length === 0 ? (
+              <div className="text-center py-16 text-muted-foreground">
+                <Search className="h-10 w-10 mx-auto opacity-20 mb-2 text-primary" />
+                <p className="font-bold text-sm text-foreground">No menu items found</p>
+                <p className="text-xs mt-1">Try adjusting your search query or category filter</p>
               </div>
-            ))}
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3.5">
+                {filteredMenuItems.map(item => {
+                  // Total selected quantity for this food item across all variants or single item
+                  const preOrders = form.preOrderItems || [];
+                  const totalSelectedQty = preOrders
+                    .filter(i => i.menuItemId === item.id)
+                    .reduce((sum, i) => sum + i.qty, 0);
+
+                  const singleItemQty = preOrders.find(i => i.menuItemId === item.id && !i.variantId)?.qty || 0;
+
+                  return (
+                    <div
+                      key={item.id}
+                      className={cn(
+                        "group bg-card rounded-2xl border p-2.5 transition-all duration-300 flex flex-col justify-between relative overflow-hidden",
+                        totalSelectedQty > 0
+                          ? "border-primary ring-2 ring-primary/20 shadow-md bg-primary/[0.02]"
+                          : "border-border/80 hover:border-primary/50 hover:shadow-lg hover:-translate-y-0.5"
+                      )}
+                    >
+                      <div>
+                        {/* Food Image Tile / Letter Placeholder */}
+                        <div className="aspect-[4/3] rounded-xl overflow-hidden mb-2 relative bg-muted/40 border border-border/40">
+                          {item.image ? (
+                            <img
+                              src={item.image}
+                              alt={item.name}
+                              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                            />
+                          ) : (
+                            <div className="w-full h-full gradient-primary flex items-center justify-center rounded-xl shadow-inner">
+                              <span className="text-primary-foreground text-2xl font-black tracking-tight">
+                                {item.name.charAt(0).toUpperCase()}
+                              </span>
+                            </div>
+                          )}
+
+                          {/* Category Tag (Top Left) */}
+                          <Badge className="absolute top-2 left-2 text-[9px] font-bold bg-background/85 backdrop-blur-md text-foreground border-none shadow-xs px-2 py-0.5">
+                            {item.category?.name || "Menu"}
+                          </Badge>
+
+                          {/* Selected Quantity Counter Badge (Top Right) */}
+                          {totalSelectedQty > 0 && (
+                            <Badge className="absolute top-2 right-2 text-[10px] font-black bg-primary text-primary-foreground shadow-md px-2 py-0.5 rounded-full border border-primary-foreground/20">
+                              {totalSelectedQty} in pre-order
+                            </Badge>
+                          )}
+                        </div>
+
+                        {/* Title & Base Price */}
+                        <div className="space-y-0.5">
+                          <h4 className="font-bold text-xs sm:text-sm text-foreground line-clamp-1 group-hover:text-primary transition-colors">
+                            {item.name}
+                          </h4>
+                          <p className="text-xs font-black text-primary font-mono">
+                            PKR {Number(item.price).toLocaleString()}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Action Buttons Section */}
+                      <div className="pt-3 space-y-1.5">
+                        {item.variants && item.variants.length > 0 ? (
+                          <div className="space-y-1">
+                            <span className="text-[10px] font-bold text-muted-foreground block uppercase tracking-wider">
+                              Select Size / Variant:
+                            </span>
+                            <div className="grid grid-cols-1 gap-1">
+                              {item.variants.map(v => {
+                                const varQty = preOrders.find(i => i.menuItemId === item.id && i.variantId === v.id)?.qty || 0;
+                                return (
+                                  <div key={v.id} className="flex items-center justify-between gap-1 text-[11px]">
+                                    {varQty === 0 ? (
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="outline"
+                                        className="w-full h-7 text-[10px] font-bold justify-between px-2 rounded-lg border-border/80 hover:border-primary/40 hover:bg-primary/5"
+                                        onClick={() => handleAddPreOrderItem(item, v.id)}
+                                      >
+                                        <span>+ {v.name}</span>
+                                        <span className="font-mono text-primary font-extrabold">PKR {Number(v.price).toLocaleString()}</span>
+                                      </Button>
+                                    ) : (
+                                      <div className="flex items-center justify-between w-full bg-primary/10 border border-primary/30 rounded-lg p-0.5">
+                                        <Button
+                                          type="button"
+                                          variant="outline"
+                                          size="icon"
+                                          className="h-6 w-6 rounded-md border-primary/30 text-primary bg-background"
+                                          onClick={() => handleDecreasePreOrderItem(item.id, v.id)}
+                                        >
+                                          <Minus className="h-3 w-3" />
+                                        </Button>
+                                        <span className="font-extrabold text-xs text-primary px-1">
+                                          {v.name}: {varQty}
+                                        </span>
+                                        <Button
+                                          type="button"
+                                          variant="outline"
+                                          size="icon"
+                                          className="h-6 w-6 rounded-md border-primary/30 text-primary bg-background"
+                                          onClick={() => handleAddPreOrderItem(item, v.id)}
+                                        >
+                                          <Plus className="h-3 w-3" />
+                                        </Button>
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ) : (
+                          singleItemQty === 0 ? (
+                            <Button
+                              type="button"
+                              size="sm"
+                              className="w-full h-8 text-xs font-extrabold gradient-primary text-primary-foreground rounded-xl shadow-xs gap-1"
+                              onClick={() => handleAddPreOrderItem(item)}
+                            >
+                              <Plus className="h-3.5 w-3.5" /> Add to Order
+                            </Button>
+                          ) : (
+                            <div className="flex items-center justify-between bg-primary/10 border border-primary/30 rounded-xl p-1 w-full">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="icon"
+                                className="h-7 w-7 rounded-lg border-primary/30 text-primary bg-background shadow-xs"
+                                onClick={() => handleDecreasePreOrderItem(item.id)}
+                              >
+                                <Minus className="h-3.5 w-3.5" />
+                              </Button>
+                              <span className="font-extrabold text-sm text-primary px-2 font-mono">
+                                {singleItemQty}
+                              </span>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="icon"
+                                className="h-7 w-7 rounded-lg border-primary/30 text-primary bg-background shadow-xs"
+                                onClick={() => handleAddPreOrderItem(item)}
+                              >
+                                <Plus className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
+                          )
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
-          <DialogFooter className="pt-2 border-t">
-            <Button className="gradient-primary text-primary-foreground font-semibold" onClick={() => setShowMenuPicker(false)}>
-              Done Selecting ({form.preOrderItems?.length || 0} items)
+          {/* Sticky Bottom Bar with Order Summary & Action */}
+          <div className="p-4 border-t border-border/60 bg-card flex flex-col sm:flex-row items-center justify-between gap-3 shadow-lg">
+            <div className="flex items-center gap-3 w-full sm:w-auto">
+              <div className="p-2.5 bg-primary/10 rounded-2xl text-primary border border-primary/20">
+                <ShoppingBag className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground font-semibold">Pre-Order Food Selection</p>
+                <p className="text-sm font-black text-foreground">
+                  {form.preOrderItems?.reduce((sum, i) => sum + i.qty, 0) || 0} Total Items —{" "}
+                  <span className="text-primary font-mono font-black">
+                    PKR {(form.subtotal || 0).toLocaleString()}
+                  </span>
+                </p>
+              </div>
+            </div>
+
+            <Button
+              type="button"
+              className="gradient-primary text-primary-foreground font-extrabold shadow-md px-6 py-2.5 rounded-xl text-sm gap-1.5 w-full sm:w-auto"
+              onClick={() => setShowMenuPicker(false)}
+            >
+              <Check className="h-4 w-4" /> Done Selecting ({form.preOrderItems?.length || 0} items)
             </Button>
-          </DialogFooter>
+          </div>
         </DialogContent>
       </Dialog>
 
