@@ -620,6 +620,22 @@ const POS = () => {
 
   // Today's reservations for POS view (from API)
   const todayStr = new Date().toISOString().split("T")[0];
+
+  const getEffectiveStatus = useCallback((r: { date: string; time: string; status: string; orderId?: string | null }) => {
+    if (r.status === "completed") return "completed";
+    if (r.orderId && allOrdersData.some(o => o.id === r.orderId && o.status === "completed")) return "completed";
+    if (r.status === "seated" || r.orderId) return "seated";
+    if (r.status === "cancelled" || r.status === "noShow") return r.status;
+    const now = new Date();
+    const todayStrVal = now.toISOString().split("T")[0];
+    const currentHHMM = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+
+    if (r.date < todayStrVal || (r.date === todayStrVal && currentHHMM >= r.time)) {
+      return "not_arrived";
+    }
+    return r.status;
+  }, [allOrdersData]);
+
   const todayReservations = useMemo(() =>
     apiReservations
       .filter(r => r.date === todayStr && r.status !== "cancelled")
@@ -2661,6 +2677,7 @@ const POS = () => {
               }
 
               return currentList.map(res => {
+                const effStatus = getEffectiveStatus(res);
                 const preOrderCount = res.preOrderItems ? res.preOrderItems.length : 0;
                 const foodSubtotal = res.subtotal || (res.preOrderItems ? res.preOrderItems.reduce((s, i) => s + Number(i.price) * Number(i.qty), 0) : 0);
 
@@ -2669,8 +2686,10 @@ const POS = () => {
                     key={res.id}
                     className={cn(
                       "p-5 border rounded-2xl transition-all duration-200 hover:shadow-lg space-y-3.5 bg-card",
-                      res.status === "confirmed" ? "border-l-4 border-l-info border-border/80" :
-                      res.status === "seated" ? "border-l-4 border-l-emerald-500 border-border/80" : "border-l-4 border-l-warning border-border/80"
+                      effStatus === "not_arrived" ? "border-l-4 border-l-rose-500 border-border/80" :
+                      effStatus === "confirmed" ? "border-l-4 border-l-info border-border/80" :
+                      effStatus === "seated" ? "border-l-4 border-l-emerald-500 border-border/80" :
+                      effStatus === "completed" ? "border-l-4 border-l-muted border-border/80" : "border-l-4 border-l-warning border-border/80"
                     )}
                   >
                     {/* Header line: Customer Name & Phone, Status Badge */}
@@ -2687,12 +2706,16 @@ const POS = () => {
                         )}
                       </div>
                       <Badge variant="outline" className={cn("text-xs font-extrabold capitalize px-3 py-1 rounded-xl border flex items-center gap-1 shrink-0",
-                        res.status === "confirmed" ? "bg-info/10 text-info border-info/30" :
-                        res.status === "seated" ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/30" :
-                        res.status === "completed" ? "bg-muted text-muted-foreground border-border" : "bg-warning/10 text-warning border-warning/30"
+                        effStatus === "not_arrived" ? "bg-rose-500/15 text-rose-500 border-rose-500/30" :
+                        effStatus === "confirmed" ? "bg-info/10 text-info border-info/30" :
+                        effStatus === "seated" ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/30" :
+                        effStatus === "completed" ? "bg-muted text-muted-foreground border-border" : "bg-warning/10 text-warning border-warning/30"
                       )}>
-                        {res.status === "confirmed" ? <CheckCircle2 className="h-3.5 w-3.5" /> : res.status === "seated" ? <Utensils className="h-3.5 w-3.5" /> : <Clock className="h-3.5 w-3.5" />}
-                        {res.status}
+                        {effStatus === "not_arrived" ? <AlertCircle className="h-3.5 w-3.5" /> :
+                         effStatus === "confirmed" ? <CheckCircle2 className="h-3.5 w-3.5" /> :
+                         effStatus === "seated" ? <Utensils className="h-3.5 w-3.5" /> :
+                         effStatus === "completed" ? <Check className="h-3.5 w-3.5" /> : <Clock className="h-3.5 w-3.5" />}
+                        {effStatus === "not_arrived" ? "Not Arrived" : effStatus}
                       </Badge>
                     </div>
 
