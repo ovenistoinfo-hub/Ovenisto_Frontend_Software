@@ -410,6 +410,7 @@ const POS = () => {
 
   // Order Status
   const [showOrderStatus, setShowOrderStatus] = useState(false);
+  const [orderStatusTab, setOrderStatusTab] = useState<"all" | "pending" | "preparing" | "ready">("all");
 
   // Tick statusClock every second while Order Status sheet is open
   useEffect(() => {
@@ -2179,169 +2180,258 @@ const POS = () => {
 
       {/* Order Status Sheet */}
       <Sheet open={showOrderStatus} onOpenChange={setShowOrderStatus}>
-        <SheetContent side="right" className="w-full sm:w-[420px] lg:w-[520px] p-0">
-          <div className="p-4 border-b bg-card">
-            <h2 className="font-bold text-lg">Order Status</h2>
-            <p className="text-xs text-muted-foreground">Live order tracking — {activeOrdersCount} active orders</p>
-          </div>
-          <div className="p-4 space-y-4 overflow-y-auto max-h-[calc(100vh-80px)]">
-            <div className="grid grid-cols-3 gap-2">
-              <Card className="p-3 text-center border-l-4 border-l-warning">
-                <p className="text-2xl font-bold text-warning">{ordersByStatus.pending.length}</p>
-                <p className="text-xs text-muted-foreground">Pending</p>
-              </Card>
-              <Card className="p-3 text-center border-l-4 border-l-accent">
-                <p className="text-2xl font-bold text-accent">{ordersByStatus.preparing.length}</p>
-                <p className="text-xs text-muted-foreground">Preparing</p>
-              </Card>
-              <Card className="p-3 text-center border-l-4 border-l-success">
-                <p className="text-2xl font-bold text-success">{ordersByStatus.ready.length}</p>
-                <p className="text-xs text-muted-foreground">Ready</p>
-              </Card>
+        <SheetContent side="right" className="w-full sm:max-w-none sm:w-[600px] md:w-[700px] lg:w-[800px] xl:w-[850px] p-0 flex flex-col">
+          <div className="p-5 border-b bg-card space-y-4 shadow-2xs">
+            <div className="flex items-center justify-between">
+              <h2 className="font-bold text-xl flex items-center gap-2.5 text-foreground">
+                <ClipboardList className="h-6 w-6 text-primary" />
+                Live Order Status Tracking
+              </h2>
+              <Badge variant="outline" className="text-xs font-bold px-3 py-1 rounded-xl bg-primary/10 text-primary border-primary/30">
+                {activeOrdersCount} Active Orders
+              </Badge>
             </div>
 
-            {(["pending", "preparing", "ready"] as const).map(status => (
-              ordersByStatus[status].length > 0 && (
-                <div key={status}>
-                  <h3 className="text-sm font-semibold capitalize mb-2 flex items-center gap-2">
-                    <div className={cn("h-2 w-2 rounded-full", status === "pending" ? "bg-warning" : status === "preparing" ? "bg-accent" : "bg-success")} />
-                    {status} ({ordersByStatus[status].length})
-                  </h3>
-                  <div className="space-y-3">
-                    {ordersByStatus[status].map(order => (
-                      <Card key={order.id} className={cn(
-                        "p-4 text-xs border-l-4",
-                        status === "pending" ? "border-l-warning" : status === "preparing" ? "border-l-accent" : "border-l-success"
-                      )}>
-                        <div className="flex justify-between items-start mb-2">
-                          <div>
-                            <span className="font-bold text-sm">{order.orderNumber}</span>
-                            <span className="text-muted-foreground ml-2">{order.time}</span>
-                          </div>
-                          <Badge variant="secondary" className="text-[10px] shrink-0">{order.type}</Badge>
-                        </div>
+            {/* Clickable Status Filter Cards — All, Pending, Preparing, Ready */}
+            <div className="grid grid-cols-4 gap-2">
+              <button
+                type="button"
+                onClick={() => setOrderStatusTab("all")}
+                className={cn(
+                  "p-3 rounded-2xl border text-center transition-all cursor-pointer flex flex-col items-center justify-center gap-1.5 font-bold",
+                  orderStatusTab === "all"
+                    ? "bg-primary text-primary-foreground border-primary shadow-md font-extrabold ring-2 ring-primary/40 scale-[1.02]"
+                    : "bg-muted/40 border-border/70 text-muted-foreground hover:bg-muted hover:text-foreground"
+                )}
+              >
+                <div className="flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wider">
+                  <ClipboardList className="h-3.5 w-3.5" /> All
+                </div>
+                <span className="text-xl font-black">{activeOrdersCount}</span>
+              </button>
 
-                        <div className="flex items-center gap-2 mb-2 text-muted-foreground">
-                          <User className="h-3 w-3 shrink-0" />
-                          <span className="font-medium text-foreground">{order.customer}</span>
-                          <span>•</span>
-                          <span>{order.phone}</span>
-                        </div>
+              <button
+                type="button"
+                onClick={() => setOrderStatusTab("pending")}
+                className={cn(
+                  "p-3 rounded-2xl border text-center transition-all cursor-pointer flex flex-col items-center justify-center gap-1.5 font-bold",
+                  orderStatusTab === "pending"
+                    ? "bg-amber-500/20 border-amber-500 text-amber-600 dark:text-amber-400 font-extrabold ring-2 ring-amber-500/40 shadow-md scale-[1.02]"
+                    : "bg-muted/40 border-border/70 text-muted-foreground hover:bg-warning/10 hover:text-warning"
+                )}
+              >
+                <div className="flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wider text-amber-600 dark:text-amber-400">
+                  <Clock className="h-3.5 w-3.5" /> Pending
+                </div>
+                <span className="text-xl font-black text-amber-600 dark:text-amber-400">{ordersByStatus.pending.length}</span>
+              </button>
 
-                        {order.type === "Dine In" && order.tableNumber && (
-                          <div className="flex items-center gap-1.5 mb-2 text-muted-foreground">
-                            <UtensilsCrossed className="h-3 w-3 shrink-0" />
-                            <span>Table {order.tableNumber}</span>
-                          </div>
-                        )}
-                        {order.type === "Delivery" && order.deliveryAddress && (
-                          <div className="flex items-center gap-1.5 mb-2 text-muted-foreground">
-                            <MapPin className="h-3 w-3 shrink-0" />
-                            <span className="truncate">{order.deliveryAddress}</span>
-                            {order.rider && <Badge variant="outline" className="text-[9px] ml-auto shrink-0">{order.rider}</Badge>}
-                          </div>
-                        )}
+              <button
+                type="button"
+                onClick={() => setOrderStatusTab("preparing")}
+                className={cn(
+                  "p-3 rounded-2xl border text-center transition-all cursor-pointer flex flex-col items-center justify-center gap-1.5 font-bold",
+                  orderStatusTab === "preparing"
+                    ? "bg-info/20 border-info text-info font-extrabold ring-2 ring-info/40 shadow-md scale-[1.02]"
+                    : "bg-muted/40 border-border/70 text-muted-foreground hover:bg-info/10 hover:text-info"
+                )}
+              >
+                <div className="flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wider text-info">
+                  <ChefHat className="h-3.5 w-3.5" /> Preparing
+                </div>
+                <span className="text-xl font-black text-info">{ordersByStatus.preparing.length}</span>
+              </button>
 
-                        <div className="bg-muted/50 rounded-lg p-2 mb-2">
-                          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Items</p>
-                          {order.items.map((item, idx) => (
-                            <div key={idx} className="flex justify-between items-center py-0.5">
-                              <span className="text-foreground">
-                                {item.qty}x {item.name}
-                              </span>
-                              <span className="text-muted-foreground font-medium">Rs.{item.price * item.qty}</span>
+              <button
+                type="button"
+                onClick={() => setOrderStatusTab("ready")}
+                className={cn(
+                  "p-3 rounded-2xl border text-center transition-all cursor-pointer flex flex-col items-center justify-center gap-1.5 font-bold",
+                  orderStatusTab === "ready"
+                    ? "bg-emerald-500/20 border-emerald-500 text-emerald-600 dark:text-emerald-400 font-extrabold ring-2 ring-emerald-500/40 shadow-md scale-[1.02]"
+                    : "bg-muted/40 border-border/70 text-muted-foreground hover:bg-emerald-500/10 hover:text-emerald-500"
+                )}
+              >
+                <div className="flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+                  <CheckCircle2 className="h-3.5 w-3.5" /> Ready
+                </div>
+                <span className="text-xl font-black text-emerald-600 dark:text-emerald-400">{ordersByStatus.ready.length}</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="p-5 space-y-4 overflow-y-auto flex-1 bg-background/40">
+            {(() => {
+              const statusesToRender: Array<"pending" | "preparing" | "ready"> =
+                orderStatusTab === "all"
+                  ? ["pending", "preparing", "ready"]
+                  : [orderStatusTab];
+
+              const totalMatchingOrders = statusesToRender.reduce((sum, st) => sum + ordersByStatus[st].length, 0);
+
+              if (totalMatchingOrders === 0) {
+                return (
+                  <div className="text-center py-20 text-muted-foreground">
+                    <ClipboardList className="h-12 w-12 mx-auto mb-3 opacity-30 text-primary" />
+                    <p className="font-bold text-base text-foreground">
+                      No {orderStatusTab === "all" ? "active" : orderStatusTab} orders found
+                    </p>
+                    <p className="text-xs mt-1">Orders in this state will appear here</p>
+                  </div>
+                );
+              }
+
+              return statusesToRender.map(status => (
+                ordersByStatus[status].length > 0 && (
+                  <div key={status} className="space-y-3">
+                    {orderStatusTab === "all" && (
+                      <h3 className="text-sm font-extrabold capitalize flex items-center gap-2 text-foreground pt-1">
+                        <div className={cn("h-2.5 w-2.5 rounded-full", status === "pending" ? "bg-warning" : status === "preparing" ? "bg-info" : "bg-emerald-500")} />
+                        {status} Orders ({ordersByStatus[status].length})
+                      </h3>
+                    )}
+                    <div className="space-y-3">
+                      {ordersByStatus[status].map(order => (
+                        <Card key={order.id} className={cn(
+                          "p-4 text-xs border-l-4 rounded-2xl transition-all duration-200 hover:shadow-md bg-card space-y-3",
+                          status === "pending" ? "border-l-warning border-border/70" :
+                          status === "preparing" ? "border-l-info border-border/70" : "border-l-emerald-500 border-border/70"
+                        )}>
+                          <div className="flex justify-between items-start border-b border-border/40 pb-2.5">
+                            <div>
+                              <span className="font-extrabold text-base text-foreground">{order.orderNumber}</span>
+                              <span className="text-muted-foreground text-xs ml-2 font-medium">{order.time}</span>
                             </div>
-                          ))}
-                          <div className="border-t border-border mt-1.5 pt-1.5 flex justify-between font-bold text-foreground">
-                            <span>Total</span>
-                            <span>Rs.{order.total}</span>
+                            <Badge variant="outline" className={cn("text-xs font-extrabold capitalize px-2.5 py-0.5 rounded-xl border flex items-center gap-1",
+                              status === "pending" ? "bg-warning/15 text-warning border-warning/30" :
+                              status === "preparing" ? "bg-info/15 text-info border-info/30" : "bg-emerald-500/15 text-emerald-500 border-emerald-500/30"
+                            )}>
+                              {status === "pending" ? <Clock className="h-3 w-3" /> :
+                               status === "preparing" ? <ChefHat className="h-3 w-3" /> : <CheckCircle2 className="h-3 w-3" />}
+                              {status}
+                            </Badge>
                           </div>
-                        </div>
 
-                        <div className="flex items-center justify-between text-muted-foreground mb-2">
-                          <span>Payment: <span className="font-medium text-foreground">{order.paymentMethod}</span></span>
-                          <span>Staff: <span className="font-medium text-foreground">{order.staff}</span></span>
-                        </div>
+                          <div className="grid grid-cols-2 gap-2 text-xs">
+                            <div className="flex items-center gap-2 text-muted-foreground">
+                              <User className="h-3.5 w-3.5 shrink-0 text-primary" />
+                              <span className="font-bold text-foreground truncate">{order.customer}</span>
+                            </div>
+                            <div className="flex items-center justify-end gap-1.5 text-muted-foreground font-medium">
+                              <Phone className="h-3 w-3" />
+                              <span>{order.phone || "N/A"}</span>
+                            </div>
+                          </div>
 
-                        {(() => {
-                          if (status === "ready") return null;
-                          // Use actual cookingTime from items; fall back to 10 min default (same as KitchenPanel)
-                          const rawCookTime = Math.max(...order.items.map((i: any) => i.cookingTime || 0), 0);
-                          const cookTime = rawCookTime > 0 ? rawCookTime : 10;
+                          {order.type === "Dine In" && order.tableNumber && (
+                            <div className="bg-muted/50 p-2.5 rounded-xl border border-border/40 flex items-center justify-between font-semibold">
+                              <span className="flex items-center gap-1.5 text-foreground">
+                                <Utensils className="h-4 w-4 text-amber-500" />
+                                Table: <strong className="text-amber-500 font-extrabold">Table {order.tableNumber}</strong>
+                              </span>
+                              <Badge variant="secondary" className="text-[10px]">{order.type}</Badge>
+                            </div>
+                          )}
 
-                          if (status === "pending") {
+                          {order.type === "Delivery" && order.deliveryAddress && (
+                            <div className="bg-muted/50 p-2.5 rounded-xl border border-border/40 flex items-center justify-between text-muted-foreground">
+                              <div className="flex items-center gap-1.5 truncate">
+                                <MapPin className="h-3.5 w-3.5 text-primary shrink-0" />
+                                <span className="truncate text-foreground font-medium">{order.deliveryAddress}</span>
+                              </div>
+                              {order.rider && <Badge variant="outline" className="text-[10px] font-bold ml-2 shrink-0">{order.rider}</Badge>}
+                            </div>
+                          )}
+
+                          <div className="bg-muted/40 rounded-xl p-3 border border-border/40 space-y-1.5">
+                            <p className="text-[10px] font-extrabold text-muted-foreground uppercase tracking-wider">Order Items</p>
+                            {order.items.map((item, idx) => (
+                              <div key={idx} className="flex justify-between items-center text-xs">
+                                <span className="text-foreground font-medium">
+                                  {item.qty}x {item.name}
+                                </span>
+                                <span className="text-foreground font-bold font-mono">Rs.{item.price * item.qty}</span>
+                              </div>
+                            ))}
+                            <div className="border-t border-border/50 pt-1.5 mt-1 flex justify-between font-extrabold text-sm text-foreground">
+                              <span>Total</span>
+                              <span className="text-primary font-mono">Rs.{order.total}</span>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center justify-between text-xs text-muted-foreground font-medium px-1">
+                            <span>Payment: <strong className="text-foreground">{order.paymentMethod}</strong></span>
+                            <span>Staff: <strong className="text-foreground">{order.staff}</strong></span>
+                          </div>
+
+                          {(() => {
+                            if (status === "ready") return null;
+                            const rawCookTime = Math.max(...order.items.map((i: any) => i.cookingTime || 0), 0);
+                            const cookTime = rawCookTime > 0 ? rawCookTime : 10;
+
+                            if (status === "pending") {
+                              return (
+                                <div className="flex items-center gap-2 bg-amber-500/10 border border-amber-500/20 p-2 rounded-xl text-xs">
+                                  <Timer className="h-4 w-4 shrink-0 text-amber-500" />
+                                  <span className="font-bold text-amber-500">
+                                    Waiting for kitchen · {cookTime} min est.
+                                  </span>
+                                </div>
+                              );
+                            }
+
+                            const startMs = posPreparingAtMap.current[order.id]
+                              ?? ((order as any).updatedAt ? new Date((order as any).updatedAt).getTime() : null)
+                              ?? statusClock;
+                            const elapsedSec = Math.floor((statusClock - startMs) / 1000);
+                            const totalSec = cookTime * 60;
+                            const remainSec = Math.max(0, totalSec - elapsedSec);
+                            const isOverdue = elapsedSec > totalSec;
+                            const mm = String(Math.floor(remainSec / 60)).padStart(2, "0");
+                            const ss = String(remainSec % 60).padStart(2, "0");
+                            const overMin = Math.floor((elapsedSec - totalSec) / 60);
+                            const overSec = (elapsedSec - totalSec) % 60;
                             return (
-                              <div className="flex items-center gap-2 mb-2 text-[10px]">
-                                <Timer className="h-3 w-3 shrink-0 text-warning" />
-                                <span className="font-semibold text-warning">
-                                  Waiting · {cookTime} min est.
+                              <div className={cn("flex items-center gap-2 p-2 rounded-xl text-xs font-bold border",
+                                isOverdue ? "bg-rose-500/10 border-rose-500/30 text-rose-500" :
+                                remainSec <= 120 ? "bg-amber-500/10 border-amber-500/30 text-amber-500" : "bg-info/10 border-info/30 text-info"
+                              )}>
+                                <Timer className="h-4 w-4 shrink-0" />
+                                <span className="tabular-nums font-mono">
+                                  {isOverdue
+                                    ? `Overdue ${overMin}m ${overSec}s`
+                                    : `${mm}:${ss} remaining`}
                                 </span>
                               </div>
                             );
-                          }
+                          })()}
 
-                          // "preparing": posPreparingAtMap (set from this POS session when POS clicks Accept)
-                          //              → updatedAt from API (set when kitchen accepted)
-                          //              → fallback: assume just started
-                          const startMs = posPreparingAtMap.current[order.id]
-                            ?? ((order as any).updatedAt ? new Date((order as any).updatedAt).getTime() : null)
-                            ?? statusClock;
-                          const elapsedSec = Math.floor((statusClock - startMs) / 1000);
-                          const totalSec = cookTime * 60;
-                          const remainSec = Math.max(0, totalSec - elapsedSec);
-                          const isOverdue = elapsedSec > totalSec;
-                          const mm = String(Math.floor(remainSec / 60)).padStart(2, "0");
-                          const ss = String(remainSec % 60).padStart(2, "0");
-                          const overMin = Math.floor((elapsedSec - totalSec) / 60);
-                          const overSec = (elapsedSec - totalSec) % 60;
-                          return (
-                            <div className="flex items-center gap-2 mb-2 text-[10px]">
-                              <Timer className="h-3 w-3 shrink-0" />
-                              <span className={cn("font-semibold tabular-nums", isOverdue ? "text-destructive" : remainSec <= 120 ? "text-warning" : "text-accent")}>
-                                {isOverdue
-                                  ? `Overdue ${overMin}m ${overSec}s`
-                                  : `${mm}:${ss} remaining`}
-                              </span>
-                            </div>
-                          );
-                        })()}
-
-                        <div className="flex gap-1.5">
-                          <Button size="sm" variant="outline" className="h-7 text-xs border-warning/30 text-warning hover:bg-warning/5 disabled:opacity-60"
-                            disabled={myPendingCancelOrderIds.has(order.id)}
-                            onClick={() => { setModifyCancelAction("modify"); setModifyCancelReason(""); setShowModifyOrder(order.id); }}>
-                            Modify
-                          </Button>
-                          <Button size="sm" variant="outline" className="h-7 text-xs border-destructive/30 text-destructive hover:bg-destructive/5 disabled:opacity-60"
-                            disabled={myPendingCancelOrderIds.has(order.id)}
-                            onClick={() => {
-                              setModifyCancelAction("cancel"); setModifyCancelReason(""); setShowModifyOrder(order.id);
-                              // Scope both pickers to THIS order's branch — not the globally
-                              // selected outlet — so a Super Admin on "All Outlets" (or anyone)
-                              // can only route the request to / blame staff from that one branch.
-                              const orderOutletId = (order as any).outletId as string | null | undefined;
-                              setApiApprovers([]);
-                              setApiResponsibleStaff([]);
-                              userService.getStaffPicker(CANCEL_APPROVER_ROLES, orderOutletId).then(setApiApprovers).catch(() => {});
-                              userService.getStaffPicker(CANCEL_RESPONSIBLE_ROLES, orderOutletId).then(setApiResponsibleStaff).catch(() => {});
-                            }}>
-                            {myPendingCancelOrderIds.has(order.id) ? "Pending Approval" : "Cancel"}
-                          </Button>
-                        </div>
-                      </Card>
-                    ))}
+                          <div className="flex gap-2 pt-1">
+                            <Button size="sm" variant="outline" className="h-8 text-xs font-bold border-warning/40 text-warning hover:bg-warning/10 rounded-xl flex-1 disabled:opacity-60"
+                              disabled={myPendingCancelOrderIds.has(order.id)}
+                              onClick={() => { setModifyCancelAction("modify"); setModifyCancelReason(""); setShowModifyOrder(order.id); }}>
+                              Modify Order
+                            </Button>
+                            <Button size="sm" variant="outline" className="h-8 text-xs font-bold border-destructive/40 text-destructive hover:bg-destructive/10 rounded-xl flex-1 disabled:opacity-60"
+                              disabled={myPendingCancelOrderIds.has(order.id)}
+                              onClick={() => {
+                                setModifyCancelAction("cancel"); setModifyCancelReason(""); setShowModifyOrder(order.id);
+                                const orderOutletId = (order as any).outletId as string | null | undefined;
+                                setApiApprovers([]);
+                                setApiResponsibleStaff([]);
+                                userService.getStaffPicker(CANCEL_APPROVER_ROLES, orderOutletId).then(setApiApprovers).catch(() => {});
+                                userService.getStaffPicker(CANCEL_RESPONSIBLE_ROLES, orderOutletId).then(setApiResponsibleStaff).catch(() => {});
+                              }}>
+                              {myPendingCancelOrderIds.has(order.id) ? "Pending Approval" : "Cancel Order"}
+                            </Button>
+                          </div>
+                        </Card>
+                      ))}
+                    </div>
                   </div>
-                </div>
-              )
-            ))}
-
-            {activeOrdersCount === 0 && (
-              <div className="text-center py-12 text-muted-foreground">
-                <ClipboardList className="h-12 w-12 mx-auto mb-3 opacity-30" />
-                <p className="font-medium">No Active Orders</p>
-                <p className="text-xs mt-1">New orders will appear here automatically</p>
-              </div>
-            )}
+                )
+              ));
+            })()}
           </div>
         </SheetContent>
       </Sheet>
