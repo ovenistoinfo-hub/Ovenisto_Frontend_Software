@@ -85,8 +85,10 @@ const Reservations = () => {
       : ["Cash", "Credit Card", "Online Transfer", "JazzCash / EasyPaisa"];
   }, [settings?.paymentMethods]);
 
-  const [activeTab, setActiveTab] = useState<"all" | "table_reservation" | "future_order">("all");
-  const [dateFilter, setDateFilter] = useState("Today");
+  const [activeTab, setActiveTab] = useState<"all" | "Dine In" | "Take Away" | "Delivery">("all");
+  const [dateFilter, setDateFilter] = useState<"Today" | "Tomorrow" | "This Week" | "All" | "Custom">("Today");
+  const [startDate, setStartDate] = useState<string>(new Date().toISOString().split("T")[0]);
+  const [endDate, setEndDate] = useState<string>(new Date().toISOString().split("T")[0]);
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
@@ -229,32 +231,69 @@ const Reservations = () => {
   };
 
   // Filters & Calculations
-  const filtered = useMemo(() => {
-    return reservations.filter(r => {
-      if (activeTab === "table_reservation" && (r.bookingType && r.bookingType !== "table_reservation")) return false;
-      if (activeTab === "future_order" && r.bookingType !== "future_order") return false;
+  const dateFilteredReservations = useMemo(() => {
+    const now = new Date();
+    const currentDay = now.getDay();
+    const distanceToMonday = currentDay === 0 ? -6 : 1 - currentDay;
+    const monday = new Date(now);
+    monday.setDate(now.getDate() + distanceToMonday);
+    const weekStartStr = monday.toISOString().split("T")[0];
 
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6);
+    const weekEndStr = sunday.toISOString().split("T")[0];
+
+    return reservations.filter(r => {
       if (dateFilter === "Today") return r.date === today;
       if (dateFilter === "Tomorrow") return r.date === tomorrow;
-      if (dateFilter === "This Week") {
-        const d = new Date(r.date); const now = new Date();
-        const weekStart = new Date(now); weekStart.setDate(now.getDate() - now.getDay());
-        const weekEnd = new Date(weekStart); weekEnd.setDate(weekStart.getDate() + 7);
-        return d >= weekStart && d < weekEnd;
+      if (dateFilter === "This Week") return r.date >= weekStartStr && r.date <= weekEndStr;
+      if (dateFilter === "Custom") {
+        if (startDate && r.date < startDate) return false;
+        if (endDate && r.date > endDate) return false;
+        return true;
       }
+      return true; // "All"
+    });
+  }, [reservations, dateFilter, today, tomorrow, startDate, endDate]);
+
+  const filtered = useMemo(() => {
+    return dateFilteredReservations.filter(r => {
+      const orderType = r.orderType || (r.bookingType === "future_order" ? "Take Away" : "Dine In");
+      if (activeTab !== "all" && orderType !== activeTab) return false;
       return true;
     }).sort((a, b) => `${a.date}${a.time}`.localeCompare(`${b.date}${b.time}`));
-  }, [reservations, activeTab, dateFilter, today, tomorrow]);
+  }, [dateFilteredReservations, activeTab]);
 
-  const activeReservations = useMemo(() => {
-    return reservations.filter(r => r.status !== "pending" && r.status !== "cancelled" && r.status !== "noShow");
-  }, [reservations]);
+  const stats = useMemo(() => {
+    const activeSet = dateFilteredReservations.filter(r => r.status !== "cancelled" && r.status !== "noShow");
 
-  const todayCount = activeReservations.filter(r => r.date === today).length;
-  const upcomingCount = activeReservations.filter(r => r.date > today).length;
-  const preOrdersCount = activeReservations.filter(r => r.bookingType === "future_order").length;
-  const totalAdvanceCollected = activeReservations.reduce((acc, r) => acc + (r.advancePaid || 0), 0);
-  const pendingCount = reservations.filter(r => r.status === "pending").length;
+    let dineInCount = 0;
+    let dineInGuests = 0;
+    let takeAwayCount = 0;
+    let deliveryCount = 0;
+    let totalAdvanceCollected = 0;
+
+    for (const r of activeSet) {
+      const orderType = r.orderType || (r.bookingType === "future_order" ? "Take Away" : "Dine In");
+      if (orderType === "Dine In") {
+        dineInCount++;
+        dineInGuests += (r.guestCount || 0);
+      } else if (orderType === "Take Away") {
+        takeAwayCount++;
+      } else if (orderType === "Delivery") {
+        deliveryCount++;
+      }
+      totalAdvanceCollected += Number(r.advancePaid || 0);
+    }
+
+    return {
+      dineInCount,
+      dineInGuests,
+      takeAwayCount,
+      deliveryCount,
+      totalAdvanceCollected,
+    };
+  }, [dateFilteredReservations]);
 
   // Form Handlers
   const openAdd = (type: "table_reservation" | "future_order" = "table_reservation") => {
@@ -576,88 +615,141 @@ const Reservations = () => {
         <PageHeader
           icon={<CalendarCheck className="h-5 w-5 text-primary" />}
           title="Reservations & Future Sales"
-          subtitle="Table bookings, advance pre-orders, and deposit management"
+          subtitle="Manage Dine In, Take Away, Delivery pre-orders and advance deposits"
           actions={!isSuperAdmin ? (
             <Button className="gradient-primary text-primary-foreground shadow-md font-bold" onClick={() => openAdd("table_reservation")}>
-              <Plus className="h-4 w-4 mr-2" />New Reservation
+              <Plus className="h-4 w-4 mr-2" />New Booking / Pre-Order
             </Button>
           ) : undefined}
         />
         <OutletFilterSelect outletId={selectedOutletId} setOutletId={setOutletId} outlets={outlets} isSuperAdmin={isSuperAdmin} />
       </div>
 
+      {/* Top Level Date Filter Bar */}
+      <Card className="shadow-sm border-primary/20 bg-card/60 backdrop-blur">
+        <CardContent className="p-3 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-xs font-semibold text-muted-foreground mr-1 flex items-center gap-1">
+              <Clock className="h-3.5 w-3.5 text-primary" /> Date Filter:
+            </span>
+            {(["Today", "Tomorrow", "This Week", "All", "Custom"] as const).map(s => (
+              <Button
+                key={s}
+                variant={dateFilter === s ? "default" : "outline"}
+                size="sm"
+                onClick={() => setDateFilter(s)}
+                className={cn(
+                  "text-xs font-semibold rounded-lg transition-all",
+                  dateFilter === s ? "gradient-primary text-primary-foreground shadow-sm" : "hover:bg-accent"
+                )}
+              >
+                {s}
+              </Button>
+            ))}
+          </div>
+
+          {dateFilter === "Custom" && (
+            <div className="flex items-center gap-2 bg-muted/40 p-1.5 rounded-xl border border-primary/20 animate-in fade-in slide-in-from-top-1 duration-200">
+              <div className="flex items-center gap-1.5">
+                <Label className="text-[11px] font-semibold text-muted-foreground">From:</Label>
+                <Input
+                  type="date"
+                  value={startDate}
+                  onChange={e => setStartDate(e.target.value)}
+                  className="h-8 text-xs w-36 bg-background rounded-lg border-primary/30 [color-scheme:dark]"
+                />
+              </div>
+              <div className="flex items-center gap-1.5">
+                <Label className="text-[11px] font-semibold text-muted-foreground">To:</Label>
+                <Input
+                  type="date"
+                  value={endDate}
+                  onChange={e => setEndDate(e.target.value)}
+                  className="h-8 text-xs w-36 bg-background rounded-lg border-primary/30 [color-scheme:dark]"
+                />
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       {/* KPI Stats Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <Card className="shadow-sm border-primary/20 bg-card/60 backdrop-blur">
+        {/* Dine In Card */}
+        <Card className="shadow-sm border-primary/30 bg-card/60 backdrop-blur hover:border-primary/50 transition-all">
           <CardContent className="p-4 flex items-center justify-between">
             <div>
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Today's Total</p>
-              <p className="text-2xl font-bold mt-1">{todayCount}</p>
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Dine In</p>
+              <p className="text-2xl font-bold mt-1 text-primary">{stats.dineInCount}</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">{stats.dineInGuests} Guests (Pax)</p>
             </div>
-            <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center text-primary">
-              <CalendarCheck className="h-5 w-5" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="shadow-sm border-info/20 bg-card/60 backdrop-blur">
-          <CardContent className="p-4 flex items-center justify-between">
-            <div>
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Future Pre-Orders</p>
-              <p className="text-2xl font-bold mt-1 text-info">{preOrdersCount}</p>
-            </div>
-            <div className="h-10 w-10 rounded-full bg-info/10 flex items-center justify-center text-info">
+            <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center text-primary shrink-0">
               <Utensils className="h-5 w-5" />
             </div>
           </CardContent>
         </Card>
 
-        <Card className="shadow-sm border-success/20 bg-card/60 backdrop-blur">
+        {/* Take Away Card */}
+        <Card className="shadow-sm border-info/30 bg-card/60 backdrop-blur hover:border-info/50 transition-all">
           <CardContent className="p-4 flex items-center justify-between">
             <div>
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Advance Deposits</p>
-              <p className="text-2xl font-bold mt-1 text-success">PKR {totalAdvanceCollected.toLocaleString()}</p>
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Take Away</p>
+              <p className="text-2xl font-bold mt-1 text-info">{stats.takeAwayCount}</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">Pre-Order Pickups</p>
             </div>
-            <div className="h-10 w-10 rounded-full bg-success/10 flex items-center justify-center text-success">
-              <DollarSign className="h-5 w-5" />
+            <div className="h-10 w-10 rounded-full bg-info/10 flex items-center justify-center text-info shrink-0">
+              <ShoppingBag className="h-5 w-5" />
             </div>
           </CardContent>
         </Card>
 
-        <Card className="shadow-sm border-warning/20 bg-card/60 backdrop-blur">
+        {/* Delivery Card */}
+        <Card className="shadow-sm border-amber-500/30 bg-card/60 backdrop-blur hover:border-amber-500/50 transition-all">
           <CardContent className="p-4 flex items-center justify-between">
             <div>
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Upcoming Bookings</p>
-              <p className="text-2xl font-bold mt-1 text-warning">{upcomingCount}</p>
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Delivery</p>
+              <p className="text-2xl font-bold mt-1 text-amber-500">{stats.deliveryCount}</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">Scheduled Deliveries</p>
             </div>
-            <div className="h-10 w-10 rounded-full bg-warning/10 flex items-center justify-center text-warning">
-              <Clock className="h-5 w-5" />
+            <div className="h-10 w-10 rounded-full bg-amber-500/10 flex items-center justify-center text-amber-500 shrink-0">
+              <Truck className="h-5 w-5" />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Advance Deposits Card */}
+        <Card className="shadow-sm border-success/30 bg-card/60 backdrop-blur hover:border-success/50 transition-all">
+          <CardContent className="p-4 flex items-center justify-between">
+            <div>
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Advance Deposits</p>
+              <p className="text-2xl font-bold mt-1 text-success">PKR {stats.totalAdvanceCollected.toLocaleString()}</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">Total Collected</p>
+            </div>
+            <div className="h-10 w-10 rounded-full bg-success/10 flex items-center justify-center text-success shrink-0">
+              <DollarSign className="h-5 w-5" />
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* Tabs & Date Filters */}
+      {/* Category Filter Tabs */}
       <div className="flex flex-col sm:flex-row justify-between gap-3 items-start sm:items-center">
-        <Tabs value={activeTab} onValueChange={(v: any) => setActiveTab(v)} className="w-full sm:w-auto">
-          <TabsList className="bg-muted/60 p-1 rounded-xl">
-            <TabsTrigger value="all" className="rounded-lg text-xs font-semibold">All Records</TabsTrigger>
-            <TabsTrigger value="table_reservation" className="rounded-lg text-xs font-semibold flex items-center gap-1.5">
-              <Users className="h-3.5 w-3.5 text-primary" /> Table Bookings
+        <Tabs value={activeTab} onValueChange={(v: any) => setActiveTab(v)} className="w-full">
+          <TabsList className="bg-muted/60 p-1 rounded-xl flex-wrap h-auto">
+            <TabsTrigger value="all" className="rounded-lg text-xs font-semibold">
+              All Records ({dateFilteredReservations.length})
             </TabsTrigger>
-            <TabsTrigger value="future_order" className="rounded-lg text-xs font-semibold flex items-center gap-1.5">
-              <Utensils className="h-3.5 w-3.5 text-info" /> Future Pre-Orders
+            <TabsTrigger value="Dine In" className="rounded-lg text-xs font-semibold flex items-center gap-1.5">
+              <Utensils className="h-3.5 w-3.5 text-primary" /> Dine In
+            </TabsTrigger>
+            <TabsTrigger value="Take Away" className="rounded-lg text-xs font-semibold flex items-center gap-1.5">
+              <ShoppingBag className="h-3.5 w-3.5 text-info" /> Take Away
+            </TabsTrigger>
+            <TabsTrigger value="Delivery" className="rounded-lg text-xs font-semibold flex items-center gap-1.5">
+              <Truck className="h-3.5 w-3.5 text-amber-500" /> Delivery
             </TabsTrigger>
           </TabsList>
         </Tabs>
-
-        <div className="flex gap-1.5 flex-wrap">
-          {["Today", "Tomorrow", "This Week", "All"].map(s => (
-            <Button key={s} variant={dateFilter === s ? "default" : "outline"} size="sm"
-              onClick={() => setDateFilter(s)}
-              className={dateFilter === s ? "gradient-primary text-primary-foreground shadow" : "text-xs"}>{s}</Button>
-          ))}
-        </div>
       </div>
 
       {/* Main Records Table */}
@@ -837,8 +929,8 @@ const Reservations = () => {
                   <TableRow>
                     <TableCell colSpan={8} className="text-center py-12 text-muted-foreground">
                       <CalendarCheck className="h-8 w-8 mx-auto mb-2 opacity-40 text-primary" />
-                      <p className="font-semibold text-base">No reservations or pre-orders found</p>
-                      <p className="text-xs">Click "New Table Reservation" or "New Pre-Order" above to create one.</p>
+                      <p className="font-semibold text-base">No Dine In, Take Away, or Delivery records found</p>
+                      <p className="text-xs">Click "New Booking / Pre-Order" above to create one.</p>
                     </TableCell>
                   </TableRow>
                 )}

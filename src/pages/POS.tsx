@@ -478,8 +478,9 @@ const POS = () => {
   // Quotation
   const [showQuotation, setShowQuotation] = useState(false);
 
-  // Kitchen Notifications
+  // Kitchen Notifications / Display
   const [showKitchenNotifications, setShowKitchenNotifications] = useState(false);
+  const [posKitchenTab, setPosKitchenTab] = useState<"all" | "pending" | "preparing" | "ready">("all");
 
   // Order Modification/Cancellation Dialog
   const [showModifyOrder, setShowModifyOrder] = useState<string | null>(null);
@@ -3145,57 +3146,250 @@ const POS = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Kitchen Notifications Sheet */}
+      {/* Kitchen Display & Notifications Sheet */}
       <Sheet open={showKitchenNotifications} onOpenChange={setShowKitchenNotifications}>
-        <SheetContent side="right" className="w-full sm:w-[400px] lg:w-[480px] p-0">
-          <div className="p-4 border-b bg-success/5">
-            <h2 className="font-bold text-lg flex items-center gap-2">
-              <Bell className="h-5 w-5 text-success" />
-              Kitchen Notifications
-            </h2>
-            <p className="text-xs text-muted-foreground">{kitchenNotifications.length} order(s) ready from kitchen</p>
+        <SheetContent side="right" className="w-full sm:max-w-none sm:w-[600px] md:w-[700px] lg:w-[800px] xl:w-[850px] p-0 flex flex-col">
+          <div className="p-5 border-b bg-card space-y-4 shadow-2xs">
+            <div className="flex items-center justify-between">
+              <h2 className="font-bold text-xl flex items-center gap-2.5 text-foreground">
+                <ChefHat className="h-6 w-6 text-primary" />
+                Kitchen Display & Status
+              </h2>
+              <Badge variant="outline" className="text-xs font-bold px-3 py-1 rounded-xl bg-primary/10 text-primary border-primary/30">
+                {activeOrdersCount} Active Kitchen Orders
+              </Badge>
+            </div>
+
+            {/* Clickable Status Filter Cards — All, Pending, Preparing, Ready */}
+            <div className="grid grid-cols-4 gap-2">
+              <button
+                type="button"
+                onClick={() => setPosKitchenTab("all")}
+                className={cn(
+                  "p-3 rounded-2xl border text-center transition-all cursor-pointer flex flex-col items-center justify-center gap-1.5 font-bold",
+                  posKitchenTab === "all"
+                    ? "bg-primary text-primary-foreground border-primary shadow-md font-extrabold ring-2 ring-primary/40 scale-[1.02]"
+                    : "bg-muted/40 border-border/70 text-muted-foreground hover:bg-muted hover:text-foreground"
+                )}
+              >
+                <div className="flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wider">
+                  <Flame className="h-3.5 w-3.5" /> All
+                </div>
+                <span className="text-xl font-black">{activeOrdersCount}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setPosKitchenTab("pending")}
+                className={cn(
+                  "p-3 rounded-2xl border text-center transition-all cursor-pointer flex flex-col items-center justify-center gap-1.5 font-bold",
+                  posKitchenTab === "pending"
+                    ? "bg-amber-500/20 border-amber-500 text-amber-600 dark:text-amber-400 font-extrabold ring-2 ring-amber-500/40 shadow-md scale-[1.02]"
+                    : "bg-muted/40 border-border/70 text-muted-foreground hover:bg-warning/10 hover:text-warning"
+                )}
+              >
+                <div className="flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wider text-amber-600 dark:text-amber-400">
+                  <Clock className="h-3.5 w-3.5" /> Pending
+                </div>
+                <span className="text-xl font-black text-amber-600 dark:text-amber-400">{ordersByStatus.pending.length}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setPosKitchenTab("preparing")}
+                className={cn(
+                  "p-3 rounded-2xl border text-center transition-all cursor-pointer flex flex-col items-center justify-center gap-1.5 font-bold",
+                  posKitchenTab === "preparing"
+                    ? "bg-info/20 border-info text-info font-extrabold ring-2 ring-info/40 shadow-md scale-[1.02]"
+                    : "bg-muted/40 border-border/70 text-muted-foreground hover:bg-info/10 hover:text-info"
+                )}
+              >
+                <div className="flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wider text-info">
+                  <ChefHat className="h-3.5 w-3.5" /> Preparing
+                </div>
+                <span className="text-xl font-black text-info">{ordersByStatus.preparing.length}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setPosKitchenTab("ready")}
+                className={cn(
+                  "p-3 rounded-2xl border text-center transition-all cursor-pointer flex flex-col items-center justify-center gap-1.5 font-bold",
+                  posKitchenTab === "ready"
+                    ? "bg-emerald-500/20 border-emerald-500 text-emerald-600 dark:text-emerald-400 font-extrabold ring-2 ring-emerald-500/40 shadow-md scale-[1.02]"
+                    : "bg-muted/40 border-border/70 text-muted-foreground hover:bg-emerald-500/10 hover:text-emerald-500"
+                )}
+              >
+                <div className="flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+                  <CheckCircle2 className="h-3.5 w-3.5" /> Ready
+                </div>
+                <span className="text-xl font-black text-emerald-600 dark:text-emerald-400">{ordersByStatus.ready.length}</span>
+              </button>
+            </div>
           </div>
-          <div className="p-4 space-y-2.5 overflow-y-auto max-h-[calc(100vh-80px)]">
-            {kitchenNotifications.length === 0 ? (
-              <div className="text-center py-12 text-muted-foreground">
-                <ChefHat className="h-12 w-12 mx-auto mb-3 opacity-30" />
-                <p className="font-medium">No Kitchen Notifications</p>
-                <p className="text-xs mt-1">Alerts from the kitchen will appear here when orders are ready</p>
-              </div>
-            ) : kitchenNotifications.map(order => (
-              <Card key={order.id} className={cn(
-                "p-3 text-xs border-l-4 border-l-success",
-                order.isUrgent && "ring-2 ring-destructive/50 border-l-destructive"
-              )}>
-                <div className="flex justify-between items-start mb-2">
-                  <div className="flex items-center gap-2">
-                    <span className="font-bold text-sm">{order.orderNumber}</span>
-                    {order.isUrgent && <Badge className="bg-destructive text-destructive-foreground text-[9px]"><Zap className="h-2.5 w-2.5 mr-0.5" />URGENT</Badge>}
+
+          <div className="p-5 space-y-4 overflow-y-auto flex-1 bg-background/40">
+            {(() => {
+              const listToRender =
+                posKitchenTab === "all"
+                  ? activeOrders
+                  : ordersByStatus[posKitchenTab];
+
+              if (listToRender.length === 0) {
+                return (
+                  <div className="text-center py-20 text-muted-foreground">
+                    <ChefHat className="h-12 w-12 mx-auto mb-3 opacity-30 text-primary" />
+                    <p className="font-bold text-base text-foreground">
+                      No {posKitchenTab === "all" ? "active kitchen" : posKitchenTab} orders found
+                    </p>
+                    <p className="text-xs mt-1">Orders sent to kitchen will appear here</p>
                   </div>
-                  <Badge className="bg-success/10 text-success text-[9px]">Ready</Badge>
-                </div>
-                <div className="flex items-center gap-2 mb-2 text-muted-foreground">
-                  <User className="h-3 w-3" />
-                  <span className="font-medium text-foreground">{order.customer}</span>
-                  {order.type === "Dine In" && order.tableNumber && (
-                    <Badge variant="outline" className="text-[9px]">Table #{order.tableNumber}</Badge>
-                  )}
-                  <Badge variant="secondary" className="text-[9px]">{order.type}</Badge>
-                </div>
-                <div className="bg-muted/50 rounded-lg p-2 mb-2">
-                  {order.items.map((item, idx) => (
-                    <div key={idx} className="flex justify-between py-0.5">
-                      <span>{item.qty}x {item.name}</span>
+                );
+              }
+
+              return listToRender.map(order => (
+                <Card key={order.id} className={cn(
+                  "p-5 border rounded-2xl transition-all duration-200 hover:shadow-lg space-y-3.5 bg-card",
+                  order.status === "pending" ? "border-l-4 border-l-warning border-border/80" :
+                  order.status === "preparing" ? "border-l-4 border-l-info border-border/80" : "border-l-4 border-l-emerald-500 border-border/80",
+                  order.isUrgent && "ring-2 ring-destructive/50"
+                )}>
+                  <div className="flex justify-between items-start border-b border-border/40 pb-2.5">
+                    <div className="flex items-center gap-2">
+                      <span className="font-extrabold text-base text-foreground">{order.orderNumber}</span>
+                      <span className="text-muted-foreground text-xs font-medium">{order.time}</span>
+                      {order.isUrgent && (
+                        <Badge className="bg-destructive text-destructive-foreground text-[10px] font-bold">
+                          <Zap className="h-2.5 w-2.5 mr-0.5" /> URGENT
+                        </Badge>
+                      )}
                     </div>
-                  ))}
-                </div>
-                <div className="flex gap-1.5">
-                  <div className="flex items-center justify-center gap-1.5 text-xs text-green-500 font-bold bg-green-500/10 border border-green-500/20 py-1.5 rounded-lg w-full select-none">
-                    <Check className="h-3.5 w-3.5" /> Ready (Settle to Complete)
+                    <Badge variant="outline" className={cn("text-xs font-extrabold capitalize px-2.5 py-0.5 rounded-xl border flex items-center gap-1",
+                      order.status === "pending" ? "bg-warning/15 text-warning border-warning/30" :
+                      order.status === "preparing" ? "bg-info/15 text-info border-info/30" : "bg-emerald-500/15 text-emerald-500 border-emerald-500/30"
+                    )}>
+                      {order.status === "pending" ? <Clock className="h-3 w-3" /> :
+                       order.status === "preparing" ? <ChefHat className="h-3 w-3" /> : <CheckCircle2 className="h-3 w-3" />}
+                      {order.status}
+                    </Badge>
                   </div>
-                </div>
-              </Card>
-            ))}
+
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                      <User className="h-3.5 w-3.5 shrink-0 text-primary" />
+                      <span className="font-bold text-foreground truncate">{order.customer}</span>
+                    </div>
+                    <div className="flex items-center justify-end gap-1.5 text-muted-foreground font-medium">
+                      <Phone className="h-3 w-3" />
+                      <span>{order.phone || "N/A"}</span>
+                    </div>
+                  </div>
+
+                  {order.type === "Dine In" && order.tableNumber && (
+                    <div className="bg-muted/50 p-2.5 rounded-xl border border-border/40 flex items-center justify-between font-semibold text-xs">
+                      <span className="flex items-center gap-1.5 text-foreground">
+                        <Utensils className="h-4 w-4 text-amber-500" />
+                        Table: <strong className="text-amber-500 font-extrabold">Table {order.tableNumber}</strong>
+                      </span>
+                      <Badge variant="secondary" className="text-[10px]">{order.type}</Badge>
+                    </div>
+                  )}
+
+                  {order.type === "Delivery" && order.deliveryAddress && (
+                    <div className="bg-muted/50 p-2.5 rounded-xl border border-border/40 flex items-center justify-between text-xs text-muted-foreground">
+                      <div className="flex items-center gap-1.5 truncate">
+                        <MapPin className="h-3.5 w-3.5 text-primary shrink-0" />
+                        <span className="truncate text-foreground font-medium">{order.deliveryAddress}</span>
+                      </div>
+                      <Badge variant="secondary" className="text-[10px] shrink-0">{order.type}</Badge>
+                    </div>
+                  )}
+
+                  {/* Kitchen Food Items List */}
+                  <div className="bg-muted/40 rounded-xl p-3 border border-border/40 space-y-1.5">
+                    <p className="text-[10px] font-extrabold text-muted-foreground uppercase tracking-wider">Kitchen Items</p>
+                    {order.items.map((item, idx) => (
+                      <div key={idx} className="flex justify-between items-center text-xs">
+                        <span className="text-foreground font-medium">
+                          {item.qty}x {item.name}
+                        </span>
+                        <span className="text-foreground font-bold font-mono">Rs.{(item.price * item.qty).toLocaleString()}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Preparation Timer / Countdown */}
+                  {(() => {
+                    if (order.status === "ready") return null;
+                    const rawCookTime = Math.max(...order.items.map((i: any) => i.cookingTime || 0), 0);
+                    const cookTime = rawCookTime > 0 ? rawCookTime : 10;
+
+                    if (order.status === "pending") {
+                      return (
+                        <div className="flex items-center gap-2 bg-amber-500/10 border border-amber-500/20 p-2.5 rounded-xl text-xs">
+                          <Timer className="h-4 w-4 shrink-0 text-amber-500" />
+                          <span className="font-bold text-amber-500">
+                            Waiting for kitchen · {cookTime} min est.
+                          </span>
+                        </div>
+                      );
+                    }
+
+                    const startMs = posPreparingAtMap.current[order.id]
+                      ?? ((order as any).updatedAt ? new Date((order as any).updatedAt).getTime() : null)
+                      ?? statusClock;
+                    const elapsedSec = Math.floor((statusClock - startMs) / 1000);
+                    const totalSec = cookTime * 60;
+                    const remainSec = Math.max(0, totalSec - elapsedSec);
+                    const isOverdue = elapsedSec > totalSec;
+                    const mm = String(Math.floor(remainSec / 60)).padStart(2, "0");
+                    const ss = String(remainSec % 60).padStart(2, "0");
+                    const overMin = Math.floor((elapsedSec - totalSec) / 60);
+                    const overSec = (elapsedSec - totalSec) % 60;
+                    return (
+                      <div className={cn("flex items-center gap-2 p-2.5 rounded-xl text-xs font-bold border",
+                        isOverdue ? "bg-rose-500/10 border-rose-500/30 text-rose-500" :
+                        remainSec <= 120 ? "bg-amber-500/10 border-amber-500/30 text-amber-500" : "bg-info/10 border-info/30 text-info"
+                      )}>
+                        <Timer className="h-4 w-4 shrink-0" />
+                        <span className="tabular-nums font-mono">
+                          {isOverdue
+                            ? `Overdue ${overMin}m ${overSec}s`
+                            : `${mm}:${ss} remaining`}
+                        </span>
+                      </div>
+                    );
+                  })()}
+
+                  {/* Kitchen Action Buttons */}
+                  <div className="flex gap-2 pt-1">
+                    {order.status === "pending" && (
+                      <Button
+                        size="sm"
+                        onClick={() => handleOrderStatusUpdate(order.id, "preparing")}
+                        className="w-full h-9 text-xs font-bold bg-info hover:bg-info/90 text-info-foreground rounded-xl flex items-center justify-center gap-1.5 shadow-xs"
+                      >
+                        <ChefHat className="h-4 w-4" /> Start Preparing Order
+                      </Button>
+                    )}
+                    {order.status === "preparing" && (
+                      <Button
+                        size="sm"
+                        onClick={() => handleOrderStatusUpdate(order.id, "ready")}
+                        className="w-full h-9 text-xs font-bold bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl flex items-center justify-center gap-1.5 shadow-xs"
+                      >
+                        <CheckCircle2 className="h-4 w-4" /> Mark Order Ready
+                      </Button>
+                    )}
+                    {order.status === "ready" && (
+                      <div className="w-full flex items-center justify-center gap-1.5 text-xs text-emerald-500 font-bold bg-emerald-500/10 border border-emerald-500/20 py-2 rounded-xl">
+                        <CheckCircle2 className="h-4 w-4" /> Order Ready from Kitchen
+                      </div>
+                    )}
+                  </div>
+                </Card>
+              ));
+            })()}
           </div>
         </SheetContent>
       </Sheet>
