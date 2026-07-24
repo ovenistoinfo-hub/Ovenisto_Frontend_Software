@@ -638,14 +638,14 @@ const POS = () => {
 
   const todayReservations = useMemo(() =>
     apiReservations
-      .filter(r =>
-        r.date === todayStr &&
-        r.status !== "pending" &&
-        r.status !== "cancelled" &&
-        r.status !== "noShow"
-      )
+      .filter(r => {
+        if (r.date !== todayStr) return false;
+        if (r.status === "pending" || r.status === "cancelled" || r.status === "noShow" || r.status === "completed") return false;
+        if (getEffectiveStatus(r) === "completed") return false;
+        return true;
+      })
       .sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time)),
-    [apiReservations, todayStr]
+    [apiReservations, todayStr, getEffectiveStatus]
   );
 
   // Kitchen Notifications — orders marked "ready" by kitchen
