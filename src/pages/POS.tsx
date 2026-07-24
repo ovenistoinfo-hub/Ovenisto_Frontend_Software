@@ -91,12 +91,8 @@ const getPaymentIcon = (methodName: string) => {
 
 const quickDenominations = [10, 20, 50, 100, 500, 1000];
 
-// Roles that can populate the "Waiter" (serving staff) selector — deliberately broad,
-// unrelated to the cancellation-request pickers below.
-const WAITER_ASSIGNMENT_ROLES = [
-  'Super Admin', 'Admin', 'Manager', 'Cashier',
-  'Kitchen Staff', 'Kitchen Manager', 'Waiter', 'Floor Manager',
-];
+// Roles that can populate the "Waiter" (serving staff) selector — Waiters only.
+const WAITER_ASSIGNMENT_ROLES = ['Waiter', 'waiter'];
 // Cancellation-request "Send Approval Request To" — only managers/admins can approve.
 const CANCEL_APPROVER_ROLES = ['Super Admin', 'Admin', 'Manager'];
 // Cancellation-request "Responsible Person" — rank-and-file staff only, never a
@@ -222,7 +218,15 @@ const POS = () => {
     // powers the "Waiter" (serving staff) selector only — the cancellation-request
     // approver/responsible-person pickers are fetched per-order (see the Cancel button
     // below), scoped to that specific order's outlet.
-    userService.getStaffPicker(WAITER_ASSIGNMENT_ROLES).then(setApiStaff).catch(() => {});
+    userService.getStaffPicker(WAITER_ASSIGNMENT_ROLES).then(staffList => {
+      setApiStaff(staffList);
+      if (staffList.length > 0) {
+        setSelectedStaff(prev => {
+          const match = staffList.find(s => s.name === prev);
+          return match ? match.name : staffList[0].name;
+        });
+      }
+    }).catch(() => {});
     settingsService.getSettings().then(s => {
       setApiSettings({ ...s, taxRate: Number(s.taxRate) });
       updateSettings({
@@ -617,7 +621,9 @@ const POS = () => {
   );
 
   const activeStaff = useMemo(() => {
-    return apiStaff || [];
+    if (!apiStaff || apiStaff.length === 0) return [];
+    const waitersOnly = apiStaff.filter((s: any) => !s.role || s.role.toLowerCase() === "waiter");
+    return waitersOnly.length > 0 ? waitersOnly : apiStaff;
   }, [apiStaff]);
 
   // Today's reservations for POS view (from API)
