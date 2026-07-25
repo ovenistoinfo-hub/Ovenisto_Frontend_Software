@@ -123,6 +123,10 @@ const POS = () => {
   // touching every other order's (each order's request state is independent).
   const [myPendingCancelOrderIds, setMyPendingCancelOrderIds] = useState<Set<string>>(new Set());
 
+  // Prefer API settings; fall back to localStorage settings
+  const effectiveSettings = apiSettings ?? settings;
+  const taxRate = ((effectiveSettings?.taxRate ?? 16) as number) / 100;
+
   // Normalize an API OrderRecord to match the mock Order field names
   const normalizeApiOrder = useCallback((o: OrderRecord): any => ({
     ...o,
@@ -578,18 +582,151 @@ const POS = () => {
   }, []);
 
   const shiftSales = useMemo(() => {
-    if (!activeShift) return { total: 0, cash: 0, card: 0, online: 0, nonCash: 0, count: 0 };
+    const configuredMethods: string[] = (effectiveSettings as any)?.paymentMethods ?? ["Cash", "Credit Card", "Account", "JazzCash", "EasyPaisa"];
+
+    const createMethodMap = () => {
+      const map: Record<string, number> = {};
+      configuredMethods.forEach((m) => { map[m] = 0; });
+      return map;
+    };
+
+    if (!activeShift) return {
+      total: 0, cash: 0, card: 0, online: 0, nonCash: 0, count: 0,
+      byMethod: createMethodMap(),
+      pos: { total: 0, cash: 0, nonCash: 0, count: 0, byMethod: createMethodMap() },
+      waiter: { total: 0, cash: 0, nonCash: 0, count: 0, byMethod: createMethodMap(), orders: [] as any[], pendingOrders: [] as any[], pendingTotal: 0, pendingCount: 0 }
+    };
+
     const shiftOrders = allOrdersData.filter(o => {
       const orderDate = new Date(o.date);
       const shiftStart = new Date(activeShift.openedAt);
       return orderDate >= new Date(shiftStart.toISOString().split("T")[0]) && o.status !== "cancelled";
     });
-    const total = shiftOrders.reduce((s, o) => s + o.total, 0);
-    const cash = shiftOrders.filter(o => o.paymentMethod?.toLowerCase().includes("cash")).reduce((s, o) => s + o.total, 0);
-    const card = shiftOrders.filter(o => o.paymentMethod?.toLowerCase().includes("card")).reduce((s, o) => s + o.total, 0);
-    const online = shiftOrders.filter(o => o.paymentMethod?.toLowerCase().includes("online")).reduce((s, o) => s + o.total, 0);
-    return { total, cash, card, online, nonCash: card + online, count: shiftOrders.length };
-  }, [allOrdersData, activeShift]);
+
+    const parsePaymentSplits = (paymentMethodStr: string, orderTotal: number) => {
+      const pm = (paymentMethodStr || "Cash").trim();
+      const splits: { method: string; amount: number }[] = [];
+
+      if (pm.includes(":") && (pm.includes(",") || pm.includes("Rs") || /\d+/.test(pm))) {
+        const parts = pm.split(",");
+        parts.forEach((part) => {
+          const subParts = part.split(":");
+          if (subParts.length >= 2) {
+            const rawMethod = subParts[0].trim();
+            // Remove currency symbols (e.g. "Rs." or "Rs") before matching number
+            const cleanedValStr = subParts[1].replace(/Rs\.?/gi, "").trim();
+            const numMatch = cleanedValStr.match(/\d+(?:\.\d+)?/);
+            if (numMatch) {
+              const val = parseFloat(numMatch[0]);
+              if (!isNaN(val) && val > 0) {
+                splits.push({ method: rawMethod, amount: val });
+              }
+            }
+          }
+        });
+      }
+
+      if (splits.length === 0) {
+        splits.push({ method: pm, amount: orderTotal });
+      }
+
+      return splits;
+    };
+
+    const processGroup = (ordersList: any[]) => {
+      let total = 0;
+      let cash = 0;
+      let card = 0;
+      let online = 0;
+      const byMethod = createMethodMap();
+
+      ordersList.forEach(o => {
+        const orderAmt = Number(o.total || 0);
+        total += orderAmt;
+
+        const splits = parsePaymentSplits(o.paymentMethod, orderAmt);
+
+        splits.forEach(({ method, amount }) => {
+          const mLower = method.toLowerCase();
+
+          const isCash = mLower.includes("cash") && !mLower.includes("jazz") && !mLower.includes("easy") && !mLower.includes("online") && !mLower.includes("card") && !mLower.includes("mobile") && !mLower.includes("paisa");
+
+          if (isCash) {
+            cash += amount;
+          } else if (mLower.includes("card") || mLower.includes("bank")) {
+            card += amount;
+          } else {
+            online += amount;
+          }
+
+          let matched = false;
+          // 1. Try exact match first
+          for (const m of configuredMethods) {
+            if (m.toLowerCase() === mLower) {
+              byMethod[m] = (byMethod[m] || 0) + amount;
+              matched = true;
+              break;
+            }
+          }
+          // 2. Try partial match if exact match not found
+          if (!matched) {
+            for (const m of configuredMethods) {
+              const confLower = m.toLowerCase();
+              if (confLower === "cash" && !isCash) continue;
+              if (mLower.includes(confLower) || confLower.includes(mLower)) {
+                byMethod[m] = (byMethod[m] || 0) + amount;
+                matched = true;
+                break;
+              }
+            }
+          }
+          if (!matched) {
+            byMethod[method] = (byMethod[method] || 0) + amount;
+          }
+        });
+      });
+
+      return { total, cash, card, online, nonCash: Math.max(0, total - cash), count: ordersList.length, byMethod };
+    };
+
+    const isWaiterOrder = (o: any) => o.orderSource === "waiter" || (o.staff && o.staff.toLowerCase().includes("waiter"));
+    const isSettledOrder = (o: any) => {
+      const status = (o.status || "").toLowerCase();
+      const method = (o.paymentMethod || "").toLowerCase().trim();
+      if (status === "completed") return true;
+      if (method && method !== "pending" && method !== "unpaid") return true;
+      return false;
+    };
+
+    const allWaiterOrders = shiftOrders.filter(isWaiterOrder);
+    const waiterOrders = allWaiterOrders.filter(isSettledOrder);
+    const pendingWaiterOrders = allWaiterOrders.filter(o => !isSettledOrder(o));
+
+    const posOrders = shiftOrders.filter(o => !isWaiterOrder(o) && isSettledOrder(o));
+    const settledShiftOrders = shiftOrders.filter(isSettledOrder);
+
+    const posGroup = processGroup(posOrders);
+    const waiterGroup = processGroup(waiterOrders);
+    const overallGroup = processGroup(settledShiftOrders);
+
+    return {
+      total: overallGroup.total,
+      cash: overallGroup.cash,
+      card: overallGroup.card,
+      online: overallGroup.online,
+      nonCash: overallGroup.nonCash,
+      count: overallGroup.count,
+      byMethod: overallGroup.byMethod,
+      pos: posGroup,
+      waiter: {
+        ...waiterGroup,
+        orders: waiterOrders,
+        pendingOrders: pendingWaiterOrders,
+        pendingTotal: pendingWaiterOrders.reduce((s, o) => s + Number(o.total || 0), 0),
+        pendingCount: pendingWaiterOrders.length,
+      }
+    };
+  }, [allOrdersData, activeShift, effectiveSettings]);
 
   const activeOrders = useMemo(() => allOrdersData.filter(o => o.status !== "completed" && o.status !== "cancelled" && o.status !== "scheduled"), [allOrdersData]);
   const activeOrdersCount = activeOrders.length;
@@ -719,10 +856,6 @@ const POS = () => {
     };
     localStorage.setItem("ovenisto-pos-cart", JSON.stringify(customerDisplayData));
   }, [cart, orderType, tableNumber, selectedCustomer, orderDiscount]);
-
-  // Prefer API settings; fall back to localStorage settings
-  const effectiveSettings = apiSettings ?? settings;
-  const taxRate = ((effectiveSettings?.taxRate ?? 16) as number) / 100;
 
   const handleCancelOrder = useCallback(async (order: any) => {
     const finalReason = modifyCancelReason === "Other" ? modifyCancelCustomReason.trim() : modifyCancelReason;
@@ -1383,16 +1516,27 @@ const POS = () => {
               ) : (
               runningOrders.map((o) => (
                 <Card key={o.id} onClick={() => loadRunningOrder(o.id)} className={cn(
-                  "p-3 cursor-pointer hover:shadow-md transition-all text-xs border-l-[3px] rounded-lg hover:-translate-y-0.5",
-                  selectedRunningOrder === o.id ? "border-l-primary bg-primary/5 shadow-sm" : "border-l-transparent",
+                  "p-2.5 cursor-pointer hover:shadow-md transition-all text-xs border-l-[3px] rounded-xl hover:-translate-y-0.5 group",
+                  selectedRunningOrder === o.id ? "border-l-primary bg-primary/10 shadow-sm ring-1 ring-primary/30" : "border-l-transparent hover:bg-muted/40",
                   o.type === "Delivery" ? "border-l-info" : o.type === "Take Away" ? "border-l-accent" : ""
                 )}>
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold tracking-tight">{o.orderNumber}</span>
-                    <Badge variant="secondary" className="text-[9px] rounded-full">{o.type}</Badge>
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="font-bold tracking-tight text-foreground group-hover:text-primary transition-colors">{o.orderNumber}</span>
+                    <div className="flex items-center gap-1">
+                      <Badge variant="secondary" className="text-[9px] px-1.5 py-0 rounded-full font-medium">{o.type}</Badge>
+                      <Badge className={cn("text-[9px] px-1.5 py-0 rounded-full capitalize font-semibold",
+                        o.status === "preparing" ? "bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30" :
+                        o.status === "ready" ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30" :
+                        "bg-blue-500/15 text-blue-600 dark:text-blue-400 border border-blue-500/30"
+                      )}>
+                        {o.status}
+                      </Badge>
+                    </div>
                   </div>
-                  <p className="text-muted-foreground mt-1 truncate">{o.customer}</p>
-                  <p className="text-muted-foreground">{o.time}</p>
+                  <div className="flex items-center justify-between mt-1.5 text-[11px] text-muted-foreground">
+                    <span className="truncate max-w-[110px] font-medium text-foreground/80">{o.customer}</span>
+                    <span className="text-[10px] opacity-80">{o.time}</span>
+                  </div>
                 </Card>
               ))
               )
@@ -1590,54 +1734,54 @@ const POS = () => {
           {/* Cart Items */}
           <div className="flex-1 overflow-y-auto p-2 sm:p-3">
             {cart.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
-                <div className="h-20 w-20 rounded-2xl bg-muted/40 flex items-center justify-center mb-4">
-                  <ShoppingCart className="h-10 w-10 opacity-20" />
+              <div className="flex flex-col items-center justify-center h-full py-12 text-center text-muted-foreground">
+                <div className="h-20 w-20 rounded-3xl bg-primary/10 border border-primary/20 flex items-center justify-center mb-3 shadow-inner">
+                  <ShoppingCart className="h-9 w-9 text-primary/40" />
                 </div>
-                <p className="text-sm font-medium">No items added yet</p>
-                <p className="text-xs mt-1">Click items from the menu to add</p>
+                <p className="text-sm font-bold text-foreground">No items added yet</p>
+                <p className="text-xs text-muted-foreground mt-1 max-w-[200px]">Click items from the menu on the right to start building the order</p>
               </div>
             ) : (
-              <table className="w-full text-sm">
+              <table className="w-full text-sm border-collapse">
                 <thead>
-                  <tr className="border-b text-muted-foreground text-xs">
-                    <th className="text-left py-2 font-medium">Item</th>
-                    <th className="text-center py-2 font-medium w-16">Price</th>
-                    <th className="text-center py-2 font-medium w-24">Qty</th>
-                    <th className="text-center py-2 font-medium w-16 print:hidden">Disc.</th>
-                    <th className="text-right py-2 font-medium w-20">Total</th>
+                  <tr className="border-b border-border/80 text-muted-foreground text-[11px] uppercase tracking-wider font-semibold">
+                    <th className="text-left py-2 font-semibold">Item</th>
+                    <th className="text-center py-2 font-semibold w-16">Price</th>
+                    <th className="text-center py-2 font-semibold w-24">Qty</th>
+                    <th className="text-center py-2 font-semibold w-16 print:hidden">Disc.</th>
+                    <th className="text-right py-2 font-semibold w-20">Total</th>
                     <th className="w-8 print:hidden"></th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody className="divide-y divide-border/40">
                   {cart.map((item) => (
-                    <tr key={item.id} className="border-b last:border-0">
-                      <td className="py-2">
-                        <span className="font-medium">{item.name}</span>
+                    <tr key={item.id} className="hover:bg-muted/30 transition-colors group">
+                      <td className="py-2.5 pr-2">
+                        <span className="font-semibold text-foreground text-xs">{item.name}</span>
                         {item.modifiers && item.modifiers.length > 0 && (
-                          <p className="text-[10px] text-muted-foreground">{item.modifiers.join(", ")}</p>
+                          <p className="text-[10px] text-muted-foreground/90 font-medium">{item.modifiers.join(", ")}</p>
                         )}
                         {item.notes && (
-                          <p className="text-[10px] text-warning italic truncate max-w-[120px]">{item.notes}</p>
+                          <p className="text-[10px] text-warning font-medium italic truncate max-w-[140px] mt-0.5">{item.notes}</p>
                         )}
-                        <button onClick={() => { setEditingNotesId(item.id); setTempNotes(item.notes || ""); }} className="text-[10px] text-muted-foreground hover:text-primary mt-0.5 flex items-center gap-0.5">
-                            <StickyNote className="h-2.5 w-2.5" />{item.notes ? "Edit" : "Note"}
+                        <button onClick={() => { setEditingNotesId(item.id); setTempNotes(item.notes || ""); }} className="text-[10px] text-muted-foreground hover:text-primary mt-1 flex items-center gap-1 font-medium transition-colors">
+                          <StickyNote className="h-2.5 w-2.5" />{item.notes ? "Edit note" : "+ Note"}
                         </button>
                       </td>
-                      <td className="text-center py-2 text-xs">Rs. {item.price}</td>
-                      <td className="py-2">
-                        <div className="flex items-center justify-center gap-1">
-                          <Button variant="outline" size="icon" className="h-6 w-6 print:hidden" onClick={() => updateQty(item.id, -1)}><Minus className="h-3 w-3" /></Button>
-                          <span className="w-6 text-center font-medium">{item.qty}</span>
-                          <Button variant="outline" size="icon" className="h-6 w-6 print:hidden" onClick={() => updateQty(item.id, 1)}><Plus className="h-3 w-3" /></Button>
+                      <td className="text-center py-2.5 text-xs font-medium text-muted-foreground">Rs.{item.price}</td>
+                      <td className="py-2.5">
+                        <div className="flex items-center justify-center gap-1 bg-muted/30 p-0.5 rounded-lg border border-border/40 w-max mx-auto">
+                          <Button variant="ghost" size="icon" className="h-5 w-5 rounded-md print:hidden hover:bg-background shadow-xs" onClick={() => updateQty(item.id, -1)}><Minus className="h-2.5 w-2.5" /></Button>
+                          <span className="w-5 text-center font-bold text-xs text-foreground">{item.qty}</span>
+                          <Button variant="ghost" size="icon" className="h-5 w-5 rounded-md print:hidden hover:bg-background shadow-xs" onClick={() => updateQty(item.id, 1)}><Plus className="h-2.5 w-2.5" /></Button>
                         </div>
                       </td>
-                      <td className="py-2 print:hidden">
-                        <Input type="number" value={item.discount || ""} onChange={(e) => updateItemDiscount(item.id, Number(e.target.value))} className="h-6 w-14 text-xs text-center mx-auto" placeholder="0" />
+                      <td className="py-2.5 print:hidden">
+                        <Input type="number" value={item.discount || ""} onChange={(e) => updateItemDiscount(item.id, Number(e.target.value))} className="h-6 w-14 text-xs text-center mx-auto rounded-md bg-background border-border/60" placeholder="0" />
                       </td>
-                      <td className="text-right py-2 font-medium">Rs. {((item.price * item.qty) - item.discount).toLocaleString()}</td>
-                      <td className="py-2 print:hidden">
-                        <button onClick={() => removeItem(item.id)} className="text-destructive hover:text-destructive/80"><X className="h-4 w-4" /></button>
+                      <td className="text-right py-2.5 font-bold text-xs text-foreground">Rs. {((item.price * item.qty) - item.discount).toLocaleString()}</td>
+                      <td className="py-2.5 text-right print:hidden">
+                        <button onClick={() => removeItem(item.id)} className="text-muted-foreground hover:text-destructive p-1 rounded-md transition-colors"><X className="h-3.5 w-3.5" /></button>
                       </td>
                     </tr>
                   ))}
@@ -1647,12 +1791,18 @@ const POS = () => {
           </div>
 
           {/* Bottom Totals & Actions */}
-          <div className="border-t-2 border-primary/10 bg-card p-2.5 sm:p-3 space-y-2 print:hidden shadow-[0_-4px_20px_-8px_hsl(var(--primary)/0.08)]">
-            <div className="flex justify-between items-center text-lg sm:text-xl font-bold"><span>Total</span><span className="text-primary">Rs. {total.toLocaleString()}</span></div>
+          <div className="border-t-2 border-primary/15 bg-card p-3 space-y-2.5 print:hidden shadow-[0_-6px_24px_-8px_hsl(var(--primary)/0.12)]">
+            <div className="flex justify-between items-baseline">
+              <div className="flex items-baseline gap-1.5">
+                <span className="text-sm font-semibold text-muted-foreground">Total</span>
+                <span className="text-xs text-muted-foreground font-medium">({cart.reduce((s, c) => s + c.qty, 0)} items)</span>
+              </div>
+              <span className="text-xl sm:text-2xl font-extrabold text-primary tracking-tight">Rs. {total.toLocaleString()}</span>
+            </div>
 
             {/* Advance Payment Banner — shown when a future order is loaded */}
             {loadedAdvancePayment > 0 && (
-              <div className="bg-success/10 border border-success/30 rounded-lg p-2 space-y-1">
+              <div className="bg-success/10 border border-success/30 rounded-xl p-2.5 space-y-1">
                 <div className="flex justify-between items-center text-xs">
                   <span className="text-muted-foreground font-medium">Advance ({loadedAdvanceMethod}):</span>
                   <span className="font-bold text-success text-sm">- Rs. {loadedAdvancePayment.toLocaleString()}</span>
@@ -1664,22 +1814,22 @@ const POS = () => {
               </div>
             )}
 
-            <div className="space-y-1.5 pt-1">
+            <div className="space-y-2 pt-0.5">
               {/* Secondary Actions Row */}
-              <div className="grid grid-cols-4 gap-1">
-                <Button variant="outline" className="text-destructive border-destructive/30 text-[10px] h-8 rounded-lg hover:bg-destructive/5" onClick={cancelOrder}><Trash2 className="h-3 w-3 mr-0.5" />Cancel</Button>
-                <Button variant="outline" className="text-accent border-accent/30 text-[10px] h-8 rounded-lg hover:bg-accent/5" onClick={saveDraft}><FileText className="h-3 w-3 mr-0.5" />Draft</Button>
-                <Button variant="outline" className="text-info border-info/30 text-[10px] h-8 rounded-lg hover:bg-info/5" onClick={() => cart.length > 0 && setShowQuotation(true)}><FileText className="h-3 w-3 mr-0.5" />Quote</Button>
-                <Button variant="outline" className="text-info border-info/30 text-[10px] h-8 rounded-lg hover:bg-info/5" onClick={() => cart.length > 0 && setShowInvoice(true)}><Printer className="h-3 w-3 mr-0.5" />Invoice</Button>
+              <div className="grid grid-cols-4 gap-1.5">
+                <Button variant="outline" className="text-destructive border-destructive/30 text-[10px] h-8 rounded-lg hover:bg-destructive/10 font-semibold" onClick={cancelOrder}><Trash2 className="h-3 w-3 mr-1" />Clear</Button>
+                <Button variant="outline" className="text-amber-500 border-amber-500/30 text-[10px] h-8 rounded-lg hover:bg-amber-500/10 font-semibold" onClick={saveDraft}><FileText className="h-3 w-3 mr-1" />Draft</Button>
+                <Button variant="outline" className="text-blue-500 border-blue-500/30 text-[10px] h-8 rounded-lg hover:bg-blue-500/10 font-semibold" onClick={() => cart.length > 0 && setShowQuotation(true)}><FileText className="h-3 w-3 mr-1" />Quote</Button>
+                <Button variant="outline" className="text-indigo-500 border-indigo-500/30 text-[10px] h-8 rounded-lg hover:bg-indigo-500/10 font-semibold" onClick={() => cart.length > 0 && setShowInvoice(true)}><Printer className="h-3 w-3 mr-1" />Invoice</Button>
               </div>
-              {/* KOT Print Row */}
-              <div className="grid grid-cols-2 gap-1.5">
-                <Button variant="outline" className="text-warning border-warning/30 text-xs h-9 rounded-lg hover:bg-warning/5 font-semibold" onClick={() => {
+              {/* KOT Print & Primary Order Button Row */}
+              <div className="grid grid-cols-5 gap-2">
+                <Button variant="outline" className="col-span-2 text-amber-600 dark:text-amber-400 border-amber-500/30 text-xs h-10 rounded-xl hover:bg-amber-500/10 font-bold gap-1" onClick={() => {
                   if (cart.length === 0) { toast.error("Add items first"); return; }
                   setKotItems([...cart]); setKotOrderType(orderType); setKotTableNumber(tableNumber); setKotStaffName(selectedStaff);
                   setKotOrderNumber("NEW"); setShowKOT(true);
-                }}><ChefHat className="h-3.5 w-3.5 mr-1" />Print KOT</Button>
-                <Button className={cn("w-full text-primary-foreground text-sm h-9 font-bold rounded-lg shadow-md hover:shadow-lg transition-shadow", paymentOnlyMode ? "bg-warning hover:bg-warning/90" : "gradient-primary")} onClick={handlePlaceOrder}>
+                }}><ChefHat className="h-4 w-4" />Print KOT</Button>
+                <Button className={cn("col-span-3 text-primary-foreground text-sm h-10 font-extrabold rounded-xl shadow-lg hover:shadow-xl transition-all duration-200", paymentOnlyMode ? "bg-warning hover:bg-warning/90" : "gradient-primary")} onClick={handlePlaceOrder}>
                   {paymentOnlyMode ? "Collect Payment" : loadedOrderId ? "Update Order" : "Place Order"}
                 </Button>
               </div>
@@ -1699,17 +1849,34 @@ const POS = () => {
               <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search menu items..." className="pl-9 h-8 sm:h-9 text-xs rounded-lg bg-muted/40 border-transparent focus:border-primary/30 focus:bg-background transition-colors" />
             </div>
           </div>
-          <div className="flex border-b border-border/60 overflow-x-auto bg-muted/20 scrollbar-none">
-            {["All", ...foodCategories.map((c) => c.name)].map((cat) => (
-              <button key={cat} onClick={() => setActiveCategory(cat)} className={cn(
-                "px-3 sm:px-3.5 py-2 sm:py-2.5 text-[11px] sm:text-xs whitespace-nowrap border-b-2 font-semibold transition-all",
-                activeCategory === cat ? "border-primary text-primary bg-primary/5" : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/40"
-              )}>
-                {cat}
-              </button>
-            ))}
+          <div className="flex items-center gap-1.5 border-b border-border/60 p-2 overflow-x-auto bg-muted/15 scrollbar-none">
+            {["All", ...foodCategories.map((c) => c.name)].map((cat) => {
+              const count = cat === "All"
+                ? foodMenuItems.filter((i) => i.available).length
+                : foodMenuItems.filter((i) => i.available && i.category === cat).length;
+              return (
+                <button
+                  key={cat}
+                  onClick={() => setActiveCategory(cat)}
+                  className={cn(
+                    "px-3 py-1.5 text-xs rounded-xl whitespace-nowrap font-medium transition-all flex items-center gap-1.5 shrink-0",
+                    activeCategory === cat
+                      ? "gradient-primary text-primary-foreground shadow-md font-bold"
+                      : "bg-card border border-border/60 text-muted-foreground hover:text-foreground hover:bg-muted/50 hover:border-border"
+                  )}
+                >
+                  <span>{cat}</span>
+                  <span className={cn(
+                    "text-[10px] px-1.5 py-0.2 rounded-full font-bold",
+                    activeCategory === cat ? "bg-black/20 text-white" : "bg-muted text-muted-foreground"
+                  )}>
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
           </div>
-          <div className="flex-1 overflow-y-auto p-2 sm:p-3 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-3 2xl:grid-cols-4 gap-2 auto-rows-max">
+          <div className="flex-1 overflow-y-auto p-2.5 sm:p-3.5 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-3 2xl:grid-cols-4 gap-3 auto-rows-max">
             {filteredMenu.length === 0 ? (
               <div className="col-span-full text-center py-12 text-muted-foreground">
                 <Search className="h-8 w-8 mx-auto opacity-20 mb-2" />
@@ -1721,32 +1888,45 @@ const POS = () => {
                   const recipe = (window as any).__recipes?.[item.name];
                   return recipe?.some((r: any) => r.ingredientId === ing.id && ing.currentStock <= ing.lowStockLevel);
                 });
+                const variantsCount = (item as any).variants?.length || 0;
                 return (
                 <React.Fragment key={item.id}>
                   <button onClick={() => addToCart(item)} className={cn(
-                    "bg-background rounded-xl border border-border/60 p-1.5 hover:shadow-lg hover:scale-[1.02] transition-all text-left group relative",
-                    expandedItemId === item.id && "ring-2 ring-primary border-primary"
+                    "bg-card rounded-2xl border border-border/70 p-2 hover:shadow-xl hover:border-primary/40 transition-all duration-200 text-left group relative flex flex-col justify-between hover:-translate-y-0.5",
+                    expandedItemId === item.id && "ring-2 ring-primary border-primary bg-primary/5 shadow-md"
                   )}>
-                    <div className="aspect-[4/3] rounded-lg overflow-hidden mb-1 relative">
+                    <div className="aspect-[4/3] rounded-xl overflow-hidden mb-2 relative border border-border/40 w-full bg-muted/40">
                       {item.image ? (
                         <img src={item.image} alt={item.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
                       ) : (
-                        <div className="w-full h-full gradient-primary flex items-center justify-center rounded-lg">
-                          <span className="text-primary-foreground text-xl font-bold">{item.name.charAt(0)}</span>
+                        <div className="w-full h-full bg-gradient-to-br from-card via-muted/60 to-primary/10 flex flex-col items-center justify-center relative overflow-hidden group-hover:from-card group-hover:to-primary/20 transition-colors">
+                          <Utensils className="h-9 w-9 text-primary/20 group-hover:text-primary/35 group-hover:scale-110 transition-all duration-300" />
+                          <span className="absolute bottom-1.5 right-1.5 text-[11px] font-extrabold tracking-wider bg-background/80 text-primary px-2 py-0.5 rounded-md border border-primary/20 backdrop-blur-xs shadow-xs">
+                            {item.name.charAt(0)}
+                          </span>
                         </div>
                       )}
                       {!item.available && (
-                        <div className="absolute inset-0 bg-background/80 flex items-center justify-center rounded-lg">
-                          <Badge variant="destructive" className="text-[9px]">Unavailable</Badge>
+                        <div className="absolute inset-0 bg-background/85 backdrop-blur-xs flex items-center justify-center">
+                          <Badge variant="destructive" className="text-[10px] font-bold shadow-xs">Unavailable</Badge>
+                        </div>
+                      )}
+                      {variantsCount > 0 && (
+                        <div className="absolute top-1.5 right-1.5">
+                          <Badge variant="secondary" className="text-[9px] px-1.5 py-0 bg-background/80 backdrop-blur-xs text-foreground font-semibold border border-border/60 shadow-2xs">
+                            {variantsCount} Sizes
+                          </Badge>
                         </div>
                       )}
                     </div>
-                    <p className="text-xs font-semibold truncate">{item.name}</p>
-                    <div className="flex items-center justify-between mt-0.5">
-                      <p className="text-[11px] text-primary font-bold">{effectiveSettings.currency} {resolvePrice(item, orderType)}</p>
-                      {(item as any).cookingTime > 0 && (
-                        <span className="text-[9px] text-muted-foreground flex items-center gap-0.5"><Timer className="h-2.5 w-2.5" />{(item as any).cookingTime}m</span>
-                      )}
+                    <div>
+                      <p className="text-xs font-bold text-foreground truncate group-hover:text-primary transition-colors">{item.name}</p>
+                      <div className="flex items-center justify-between mt-1">
+                        <p className="text-xs text-primary font-extrabold">{effectiveSettings.currency} {resolvePrice(item, orderType)}</p>
+                        {(item as any).cookingTime > 0 && (
+                          <span className="text-[9px] text-muted-foreground flex items-center gap-0.5 font-medium bg-muted/50 px-1.5 py-0.5 rounded-md"><Timer className="h-2.5 w-2.5" />{(item as any).cookingTime}m</span>
+                        )}
+                      </div>
                     </div>
                   </button>
                   {expandedItemId === item.id && (
@@ -3078,57 +3258,282 @@ const POS = () => {
 
       {/* Register Close Dialog */}
       <Dialog open={showRegisterClose} onOpenChange={setShowRegisterClose}>
-        <DialogContent className="max-w-md" onPointerDownOutside={(e) => e.preventDefault()}>
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2"><Banknote className="h-5 w-5 text-primary" />Close Cash Register</DialogTitle>
+        <DialogContent className="max-w-[95vw] sm:max-w-3xl max-h-[92vh] overflow-y-auto p-4 sm:p-6">
+          <DialogHeader className="border-b pb-3">
+            <div className="flex items-center justify-between">
+              <DialogTitle className="flex items-center gap-2 text-xl font-extrabold text-foreground">
+                <Banknote className="h-6 w-6 text-primary" />
+                Close Cash Register & Shift Reconciliation
+              </DialogTitle>
+              {activeShift && (
+                <Badge variant="outline" className="text-xs font-bold px-3 py-1 bg-primary/10 text-primary border-primary/30">
+                  Shift #{activeShift.shiftNumber}
+                </Badge>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              Opened by <strong className="text-foreground">{activeShift?.cashierName || user?.name || "Cashier"}</strong> at {activeShift?.openedAt ? new Date(activeShift.openedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "—"}
+            </p>
           </DialogHeader>
-          <div className="space-y-3 py-2 text-sm">
-            <div className="grid grid-cols-2 gap-3">
-              <Card className="p-3"><p className="text-xs text-muted-foreground">Opening Cash</p><p className="font-bold text-lg">Rs. {activeShift?.openingCash.toLocaleString()}</p></Card>
-              <Card className="p-3"><p className="text-xs text-muted-foreground">Total Sales</p><p className="font-bold text-lg text-primary">Rs. {shiftSales.total.toLocaleString()}</p></Card>
-              <Card className="p-3"><p className="text-xs text-muted-foreground">Cash Sales</p><p className="font-bold text-lg">Rs. {shiftSales.cash.toLocaleString()}</p></Card>
-              <Card className="p-3"><p className="text-xs text-muted-foreground">Card/Online</p><p className="font-bold text-lg">Rs. {shiftSales.nonCash.toLocaleString()}</p></Card>
+
+          <div className="space-y-5 py-2 text-sm">
+            {/* Top Key Metrics Grid */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <Card className="p-3 bg-muted/30 border-border/70">
+                <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Opening Cash</p>
+                <p className="font-extrabold text-lg sm:text-xl text-foreground mt-0.5">{effectiveSettings.currency} {(activeShift?.openingCash || 0).toLocaleString()}</p>
+              </Card>
+
+              <Card className="p-3 bg-muted/30 border-border/70">
+                <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">POS Sales ({shiftSales.pos.count})</p>
+                <p className="font-extrabold text-lg sm:text-xl text-amber-500 mt-0.5">{effectiveSettings.currency} {shiftSales.pos.total.toLocaleString()}</p>
+                <p className="text-[10px] text-muted-foreground font-medium">Cash: {effectiveSettings.currency} {shiftSales.pos.cash.toLocaleString()}</p>
+              </Card>
+
+              <Card className="p-3 bg-muted/30 border-border/70">
+                <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Waiter Sales ({shiftSales.waiter.count})</p>
+                <p className="font-extrabold text-lg sm:text-xl text-blue-500 mt-0.5">{effectiveSettings.currency} {shiftSales.waiter.total.toLocaleString()}</p>
+                <p className="text-[10px] text-muted-foreground font-medium">Cash: {effectiveSettings.currency} {shiftSales.waiter.cash.toLocaleString()}</p>
+              </Card>
+
+              <Card className="p-3 bg-primary/10 border-primary/30">
+                <p className="text-[11px] font-semibold text-primary uppercase tracking-wider">Total Sales ({shiftSales.count})</p>
+                <p className="font-extrabold text-lg sm:text-xl text-primary mt-0.5">{effectiveSettings.currency} {shiftSales.total.toLocaleString()}</p>
+                <p className="text-[10px] text-primary/80 font-medium">Total Cash: {effectiveSettings.currency} {shiftSales.cash.toLocaleString()}</p>
+              </Card>
             </div>
-            <Card className="p-3 border-primary/30 bg-primary/5">
-              <p className="text-xs text-muted-foreground">Expected Cash in Drawer</p>
-              <p className="font-bold text-xl text-primary">Rs. {((activeShift?.openingCash || 0) + shiftSales.cash).toLocaleString()}</p>
-            </Card>
-            <div>
-              <Label>Actual Closing Cash (Rs.)</Label>
-              <Input type="number" value={closingCashInput} onChange={e => setClosingCashInput(e.target.value)} placeholder="Count and enter cash" className="mt-1" min="0" />
-            </div>
-            <div>
-              <Label>Notes (optional)</Label>
-              <Input value={closingNotes} onChange={e => setClosingNotes(e.target.value)} placeholder="Any notes..." className="mt-1" />
-            </div>
-            {closingCashInput && (
-              <div className={cn("p-2 rounded text-sm font-medium", Number(closingCashInput) - ((activeShift?.openingCash || 0) + shiftSales.cash) === 0 ? "bg-success/10 text-success" : "bg-destructive/10 text-destructive")}>
-                Difference: Rs. {(Number(closingCashInput) - ((activeShift?.openingCash || 0) + shiftSales.cash)).toLocaleString()}
+
+            {/* SECTION 1: POS Sales Breakdown */}
+            <div className="space-y-3 bg-card rounded-2xl p-4 border border-border/70">
+              <div className="flex items-center justify-between border-b border-border/50 pb-2">
+                <h3 className="font-extrabold text-sm flex items-center gap-2 text-foreground">
+                  <Flame className="h-4 w-4 text-amber-500" />
+                  POS Counter Sales Breakdown
+                </h3>
+                <Badge variant="secondary" className="text-xs font-bold">{shiftSales.pos.count} orders</Badge>
               </div>
-            )}
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <div className="p-2.5 rounded-xl bg-muted/40 border border-border/50">
+                  <span className="text-[10px] text-muted-foreground font-semibold block">Total POS Sales</span>
+                  <span className="font-extrabold text-sm text-foreground">{effectiveSettings.currency} {shiftSales.pos.total.toLocaleString()}</span>
+                </div>
+                <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
+                  <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold block">POS Cash Sales</span>
+                  <span className="font-extrabold text-sm text-emerald-600 dark:text-emerald-400">{effectiveSettings.currency} {shiftSales.pos.cash.toLocaleString()}</span>
+                </div>
+                <div className="p-2.5 rounded-xl bg-info/10 border border-info/20">
+                  <span className="text-[10px] text-info font-semibold block">POS Card/Online</span>
+                  <span className="font-extrabold text-sm text-info">{effectiveSettings.currency} {shiftSales.pos.nonCash.toLocaleString()}</span>
+                </div>
+                <div className="p-2.5 rounded-xl bg-muted/40 border border-border/50">
+                  <span className="text-[10px] text-muted-foreground font-semibold block">POS Orders</span>
+                  <span className="font-extrabold text-sm text-foreground">{shiftSales.pos.count} orders</span>
+                </div>
+              </div>
+
+              {/* Payment Methods breakdown for POS */}
+              <div>
+                <p className="text-[11px] font-extrabold text-muted-foreground uppercase tracking-wider mb-2">POS Sales by Payment Method</p>
+                <div className="flex flex-wrap gap-2">
+                  {Object.entries(shiftSales.pos.byMethod).map(([method, amount]) => (
+                    <div key={method} className="flex items-center gap-2 bg-muted/50 border border-border/60 rounded-xl px-3 py-1.5 text-xs font-semibold">
+                      <span className="text-muted-foreground">{method}:</span>
+                      <span className="font-bold text-foreground">{effectiveSettings.currency} {amount.toLocaleString()}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* SECTION 2: Waiter Panel Sales Detailed View */}
+            <div className="space-y-3 bg-card rounded-2xl p-4 border border-border/70">
+              <div className="flex items-center justify-between border-b border-border/50 pb-2">
+                <h3 className="font-extrabold text-sm flex items-center gap-2 text-foreground">
+                  <UtensilsCrossed className="h-4 w-4 text-blue-500" />
+                  Waiter Panel Sales (Detailed View)
+                </h3>
+                <Badge variant="secondary" className="text-xs font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20">{shiftSales.waiter.count} orders</Badge>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <div className="p-2.5 rounded-xl bg-muted/40 border border-border/50">
+                  <span className="text-[10px] text-muted-foreground font-semibold block">Total Waiter Sales</span>
+                  <span className="font-extrabold text-sm text-foreground">{effectiveSettings.currency} {shiftSales.waiter.total.toLocaleString()}</span>
+                </div>
+                <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
+                  <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold block">Waiter Cash Collected</span>
+                  <span className="font-extrabold text-sm text-emerald-600 dark:text-emerald-400">{effectiveSettings.currency} {shiftSales.waiter.cash.toLocaleString()}</span>
+                </div>
+                <div className="p-2.5 rounded-xl bg-info/10 border border-info/20">
+                  <span className="text-[10px] text-info font-semibold block">Waiter Non-Cash</span>
+                  <span className="font-extrabold text-sm text-info">{effectiveSettings.currency} {shiftSales.waiter.nonCash.toLocaleString()}</span>
+                </div>
+                <div className="p-2.5 rounded-xl bg-muted/40 border border-border/50">
+                  <span className="text-[10px] text-muted-foreground font-semibold block">Waiter Orders</span>
+                  <span className="font-extrabold text-sm text-foreground">{shiftSales.waiter.count} orders</span>
+                </div>
+              </div>
+
+              {/* Payment Methods breakdown for Waiter Panel Completed Sales */}
+              <div>
+                <p className="text-[11px] font-extrabold text-muted-foreground uppercase tracking-wider mb-2">Waiter Sales by Payment Method</p>
+                <div className="flex flex-wrap gap-2">
+                  {Object.entries(shiftSales.waiter.byMethod).map(([method, amount]) => (
+                    <div key={method} className="flex items-center gap-2 bg-muted/50 border border-border/60 rounded-xl px-3 py-1.5 text-xs font-semibold">
+                      <span className="text-muted-foreground">{method}:</span>
+                      <span className="font-bold text-foreground">{effectiveSettings.currency} {amount.toLocaleString()}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Detailed Orders Table for Waiter Panel Completed Sales */}
+              <div className="mt-3 pt-2">
+                <p className="text-[11px] font-extrabold text-muted-foreground uppercase tracking-wider mb-2">Waiter Orders List ({shiftSales.waiter.orders.length})</p>
+                {shiftSales.waiter.orders.length === 0 ? (
+                  <div className="p-4 text-center text-xs text-muted-foreground bg-muted/30 rounded-xl border border-dashed border-border/60">
+                    No completed sales recorded from Waiter Panel in this shift.
+                  </div>
+                ) : (
+                  <div className="max-h-48 overflow-y-auto rounded-xl border border-border/60 bg-muted/20">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="text-[10px] uppercase font-bold text-muted-foreground">
+                          <TableHead className="py-2">Order #</TableHead>
+                          <TableHead className="py-2">Table</TableHead>
+                          <TableHead className="py-2">Waiter</TableHead>
+                          <TableHead className="py-2">Method</TableHead>
+                          <TableHead className="py-2 text-center">Status</TableHead>
+                          <TableHead className="py-2 text-right">Amount</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody className="text-xs font-medium">
+                        {shiftSales.waiter.orders.map((o: any) => (
+                          <TableRow key={o.id} className="hover:bg-muted/40">
+                            <TableCell className="py-2 font-bold">{o.orderNumber}</TableCell>
+                            <TableCell className="py-2">{o.tableNumber ? `Table ${o.tableNumber}` : "—"}</TableCell>
+                            <TableCell className="py-2">{o.staff || "Waiter"}</TableCell>
+                            <TableCell className="py-2"><Badge variant="outline" className="text-[9px]">{o.paymentMethod || "Cash"}</Badge></TableCell>
+                            <TableCell className="py-2 text-center">
+                              <Badge className="text-[9px] px-1.5 py-0 capitalize bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
+                                {o.status}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="py-2 text-right font-bold text-foreground">{effectiveSettings.currency} {o.total.toLocaleString()}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* SECTION 3: Overall Reconciliation & Expected Cash */}
+            <div className="space-y-3 border-t pt-3">
+              <Card className="p-4 border-primary/30 bg-primary/5 rounded-2xl space-y-2">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Expected Cash in Drawer</p>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">
+                      Opening Cash ({effectiveSettings.currency} {(activeShift?.openingCash || 0).toLocaleString()}) + POS Cash ({effectiveSettings.currency} {shiftSales.pos.cash.toLocaleString()}) + Waiter Cash ({effectiveSettings.currency} {shiftSales.waiter.cash.toLocaleString()})
+                    </p>
+                  </div>
+                  <p className="font-extrabold text-2xl text-primary font-mono">
+                    {effectiveSettings.currency} {((activeShift?.openingCash || 0) + shiftSales.cash).toLocaleString()}
+                  </p>
+                </div>
+              </Card>
+
+              {/* Combined Payment Methods Bar */}
+              <div>
+                <p className="text-[11px] font-extrabold text-muted-foreground uppercase tracking-wider mb-2">Overall Shift Sales by Payment Method</p>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  {Object.entries(shiftSales.byMethod).map(([method, amount]) => (
+                    <div key={method} className="p-2.5 rounded-xl bg-muted/40 border border-border/60 flex items-center justify-between">
+                      <span className="text-xs text-muted-foreground font-semibold">{method}</span>
+                      <span className="font-extrabold text-xs text-foreground">{effectiveSettings.currency} {amount.toLocaleString()}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Inputs */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+                <div>
+                  <Label className="text-xs font-extrabold">Actual Closing Cash (Rs.) *</Label>
+                  <Input
+                    type="number"
+                    value={closingCashInput}
+                    onChange={e => setClosingCashInput(e.target.value)}
+                    placeholder="Count and enter physical cash in drawer"
+                    className="mt-1 h-10 text-base font-bold"
+                    min="0"
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs font-extrabold">Notes / Explanation (optional)</Label>
+                  <Input
+                    value={closingNotes}
+                    onChange={e => setClosingNotes(e.target.value)}
+                    placeholder="Any shift notes or variance reason..."
+                    className="mt-1 h-10 text-xs"
+                  />
+                </div>
+              </div>
+
+              {/* Difference Calculation Alert */}
+              {closingCashInput && (
+                <div className={cn(
+                  "p-3 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-between border",
+                  Number(closingCashInput) - ((activeShift?.openingCash || 0) + shiftSales.cash) === 0
+                    ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
+                    : Number(closingCashInput) - ((activeShift?.openingCash || 0) + shiftSales.cash) < 0
+                    ? "bg-destructive/10 text-destructive border-destructive/30"
+                    : "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30"
+                )}>
+                  <span>
+                    {Number(closingCashInput) - ((activeShift?.openingCash || 0) + shiftSales.cash) === 0 && "✔ Cash drawer matches perfectly!"}
+                    {Number(closingCashInput) - ((activeShift?.openingCash || 0) + shiftSales.cash) < 0 && "⚠ Shortage detected in cash drawer"}
+                    {Number(closingCashInput) - ((activeShift?.openingCash || 0) + shiftSales.cash) > 0 && "ℹ Excess cash detected in drawer"}
+                  </span>
+                  <span className="font-extrabold text-sm font-mono">
+                    Difference: {effectiveSettings.currency} {(Number(closingCashInput) - ((activeShift?.openingCash || 0) + shiftSales.cash)).toLocaleString()}
+                  </span>
+                </div>
+              )}
+            </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowRegisterClose(false)}>Continue Working</Button>
-            <Button className="gradient-primary text-primary-foreground" disabled={!closingCashInput || !activeShift} onClick={async () => {
-              if (!activeShift) return;
-              try {
-                await shiftService.closeShift(activeShift.id, {
-                  closingCash:      Number(closingCashInput),
-                  totalSales:       shiftSales.total,
-                  totalCashSales:   shiftSales.cash,
-                  totalCardSales:   shiftSales.card,
-                  totalOnlineSales: shiftSales.online,
-                  orderCount:       shiftSales.count,
-                  cancelledOrders:  0,
-                  totalExpenses:    0,
-                  notes:            closingNotes,
-                });
-                toast.success("Register closed successfully");
-                window.location.href = "/";
-              } catch (err: any) {
-                toast.error(err?.message || "Failed to close register");
-              }
-            }}>Close Register & Exit</Button>
+
+          <DialogFooter className="gap-2 border-t pt-3">
+            <Button variant="outline" className="h-10 text-xs rounded-xl font-bold" onClick={() => setShowRegisterClose(false)}>Continue Working</Button>
+            <Button
+              className="gradient-primary text-primary-foreground h-10 text-xs sm:text-sm font-extrabold rounded-xl shadow-md hover:shadow-lg transition-all"
+              disabled={!closingCashInput || !activeShift}
+              onClick={async () => {
+                if (!activeShift) return;
+                try {
+                  await shiftService.closeShift(activeShift.id, {
+                    closingCash:      Number(closingCashInput),
+                    totalSales:       shiftSales.total,
+                    totalCashSales:   shiftSales.cash,
+                    totalCardSales:   shiftSales.card,
+                    totalOnlineSales: shiftSales.online,
+                    orderCount:       shiftSales.count,
+                    cancelledOrders:  0,
+                    totalExpenses:    0,
+                    notes:            closingNotes,
+                  });
+                  toast.success("Cash Register closed successfully!");
+                  window.location.href = "/";
+                } catch (err: any) {
+                  toast.error(err?.message || "Failed to close register");
+                }
+              }}
+            >
+              <Check className="h-4 w-4 mr-1.5" /> Close Register & Exit Shift
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
