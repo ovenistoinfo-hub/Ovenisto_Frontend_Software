@@ -16,12 +16,12 @@ import { useOrderEvents } from "@/hooks/use-order-events";
 import { useTableEvents } from "@/hooks/use-table-events";
 import { useReservationEvents } from "@/hooks/use-reservation-events";
 import { getSocket } from "@/lib/socket";
-import { Search, Plus, Minus, X, ShoppingCart, FileText, Printer, ArrowLeft, Trash2, User, Users, MapPin, Phone, Flame, Check, CreditCard, Banknote, Smartphone, RotateCcw, Download, ClipboardList, AlertTriangle, UtensilsCrossed, CalendarClock, Calendar, Timer, ChefHat, Tag, Zap, History, Monitor, BookOpen, StickyNote, Eye, Building2, Crown, CircleAlert, Bell, DollarSign, Package, Ban, Truck, ShoppingBag, Utensils, AlertCircle, CheckCircle2, Clock } from "lucide-react";
+import { Search, Plus, Minus, X, ShoppingCart, FileText, Printer, ArrowLeft, Trash2, User, Users, MapPin, Phone, Flame, Check, CreditCard, Banknote, Smartphone, RotateCcw, Download, ClipboardList, AlertTriangle, UtensilsCrossed, CalendarClock, Calendar, Timer, ChefHat, Tag, Zap, History, Monitor, BookOpen, StickyNote, Eye, Building2, Crown, CircleAlert, Bell, DollarSign, Package, Ban, Truck, ShoppingBag, Utensils, AlertCircle, CheckCircle2, Clock, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -29,7 +29,7 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
-import { Sheet, SheetContent } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
 import { Link, useLocation } from "react-router-dom";
@@ -122,6 +122,7 @@ const POS = () => {
   // per-order gate that keeps a filed order's "Cancel" button locked without
   // touching every other order's (each order's request state is independent).
   const [myPendingCancelOrderIds, setMyPendingCancelOrderIds] = useState<Set<string>>(new Set());
+  const [completingOrderIds, setCompletingOrderIds] = useState<Set<string>>(new Set());
 
   // Prefer API settings; fall back to localStorage settings
   const effectiveSettings = apiSettings ?? settings;
@@ -418,7 +419,8 @@ const POS = () => {
 
   // Order Status
   const [showOrderStatus, setShowOrderStatus] = useState(false);
-  const [orderStatusTab, setOrderStatusTab] = useState<"all" | "pending" | "preparing" | "ready">("all");
+  const [orderStatusTab, setOrderStatusTab] = useState<"pending" | "preparing" | "ready" | "completed">("pending");
+  const [orderStatusTypeFilter, setOrderStatusTypeFilter] = useState<"all" | "Dine In" | "Take Away" | "Delivery">("all");
 
   // Tick statusClock every second while Order Status sheet is open
   useEffect(() => {
@@ -544,6 +546,27 @@ const POS = () => {
     setShowDealDialog(false);
     setSelectedDeal(null);
     toast.success(`${selectedDeal.name} added to cart`);
+  };
+
+  const handleMarkOrderCompleted = async (orderId: string, orderNumber: string) => {
+    setCompletingOrderIds(prev => new Set(prev).add(orderId));
+    try {
+      await orderService.updateOrderStatus(orderId, "completed");
+      toast.success(`Order ${orderNumber} marked as completed & handed over!`);
+      await loadApiOrders();
+      const localMatch = localOrdersData.find(o => o.id === orderId);
+      if (localMatch) {
+        updateDataItem("orders", orderId, { ...localMatch, status: "completed" });
+      }
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to update order status");
+    } finally {
+      setCompletingOrderIds(prev => {
+        const next = new Set(prev);
+        next.delete(orderId);
+        return next;
+      });
+    }
   };
 
   const runningOrders = allOrdersData.filter((o) => o.status === "preparing" || o.status === "pending");
@@ -728,13 +751,16 @@ const POS = () => {
     };
   }, [allOrdersData, activeShift, effectiveSettings]);
 
-  const activeOrders = useMemo(() => allOrdersData.filter(o => o.status !== "completed" && o.status !== "cancelled" && o.status !== "scheduled"), [allOrdersData]);
-  const activeOrdersCount = activeOrders.length;
+  const todayDateStr = useMemo(() => new Date().toISOString().split("T")[0], []);
+
+  const activeOrders = useMemo(() => allOrdersData.filter(o => o.status !== "cancelled" && o.status !== "scheduled"), [allOrdersData]);
+  const activeOrdersCount = activeOrders.filter(o => o.status !== "completed").length;
   const ordersByStatus = useMemo(() => ({
     pending: activeOrders.filter(o => o.status === "pending"),
     preparing: activeOrders.filter(o => o.status === "preparing"),
     ready: activeOrders.filter(o => o.status === "ready"),
-  }), [activeOrders]);
+    completed: activeOrders.filter(o => o.status === "completed" && (o.date ? o.date.startsWith(todayDateStr) : true)).sort((a, b) => new Date(b.date || Date.now()).getTime() - new Date(a.date || Date.now()).getTime()),
+  }), [activeOrders, todayDateStr]);
 
   const futureOrders = useMemo(() =>
     allOrdersData.filter(o => o.isFutureSale === true && o.status === "scheduled")
@@ -2077,7 +2103,7 @@ const POS = () => {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Confirm Order</AlertDialogTitle>
-            <AlertDialogDescription>
+            <AlertDialogDescription asChild>
               <div className="space-y-2 text-left">
                 <p>Type: <strong>{orderType}</strong>{tableNumber ? ` — Table ${tableNumber}` : ""}</p>
                 <p>Customer: <strong>{selectedCustomerData?.name || "Walk-in"}</strong></p>
@@ -2288,6 +2314,10 @@ const POS = () => {
       {/* KOT Dialog */}
       <Dialog open={showKOT} onOpenChange={setShowKOT}>
         <DialogContent className="max-w-sm">
+          <DialogHeader className="sr-only">
+            <DialogTitle>Kitchen Order Ticket</DialogTitle>
+            <DialogDescription>Kitchen order ticket details and printing preview</DialogDescription>
+          </DialogHeader>
           <div className="space-y-4" id="kot-print">
             <div className="text-center border-b pb-3">
               <p className="font-bold text-lg">KITCHEN ORDER TICKET</p>
@@ -2345,6 +2375,10 @@ const POS = () => {
       {/* Order Status Sheet */}
       <Sheet open={showOrderStatus} onOpenChange={setShowOrderStatus}>
         <SheetContent side="right" className="w-full sm:max-w-none sm:w-[600px] md:w-[700px] lg:w-[800px] xl:w-[850px] p-0 flex flex-col">
+          <SheetHeader className="sr-only">
+            <SheetTitle>Live Order Status Tracking</SheetTitle>
+            <SheetDescription>Real-time order tracking and status management sheet</SheetDescription>
+          </SheetHeader>
           <div className="p-5 border-b bg-card space-y-4 shadow-2xs">
             <div className="flex items-center justify-between">
               <h2 className="font-bold text-xl flex items-center gap-2.5 text-foreground">
@@ -2356,24 +2390,8 @@ const POS = () => {
               </Badge>
             </div>
 
-            {/* Clickable Status Filter Cards — All, Pending, Preparing, Ready */}
+            {/* Clickable Status Filter Cards — Pending, Preparing, Ready, Completed */}
             <div className="grid grid-cols-4 gap-2">
-              <button
-                type="button"
-                onClick={() => setOrderStatusTab("all")}
-                className={cn(
-                  "p-3 rounded-2xl border text-center transition-all cursor-pointer flex flex-col items-center justify-center gap-1.5 font-bold",
-                  orderStatusTab === "all"
-                    ? "bg-primary text-primary-foreground border-primary shadow-md font-extrabold ring-2 ring-primary/40 scale-[1.02]"
-                    : "bg-muted/40 border-border/70 text-muted-foreground hover:bg-muted hover:text-foreground"
-                )}
-              >
-                <div className="flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wider">
-                  <ClipboardList className="h-3.5 w-3.5" /> All
-                </div>
-                <span className="text-xl font-black">{activeOrdersCount}</span>
-              </button>
-
               <button
                 type="button"
                 onClick={() => setOrderStatusTab("pending")}
@@ -2421,45 +2439,94 @@ const POS = () => {
                 </div>
                 <span className="text-xl font-black text-emerald-600 dark:text-emerald-400">{ordersByStatus.ready.length}</span>
               </button>
+
+              <button
+                type="button"
+                onClick={() => setOrderStatusTab("completed")}
+                className={cn(
+                  "p-3 rounded-2xl border text-center transition-all cursor-pointer flex flex-col items-center justify-center gap-1.5 font-bold",
+                  orderStatusTab === "completed"
+                    ? "bg-purple-500/20 border-purple-500 text-purple-600 dark:text-purple-400 font-extrabold ring-2 ring-purple-500/40 shadow-md scale-[1.02]"
+                    : "bg-muted/40 border-border/70 text-muted-foreground hover:bg-purple-500/10 hover:text-purple-500"
+                )}
+              >
+                <div className="flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wider text-purple-600 dark:text-purple-400">
+                  <CheckCircle2 className="h-3.5 w-3.5" /> Completed
+                </div>
+                <span className="text-xl font-black text-purple-600 dark:text-purple-400">{ordersByStatus.completed.length}</span>
+              </button>
+            </div>
+
+            {/* Order Type Sub-Filters Bar: All, Dine In, Take Away, Delivery */}
+            <div className="flex items-center gap-1.5 p-1.5 bg-muted/60 rounded-2xl border border-border/50 shadow-2xs">
+              <button
+                type="button"
+                onClick={() => setOrderStatusTypeFilter("all")}
+                className={cn(
+                  "flex-1 py-1.5 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5",
+                  orderStatusTypeFilter === "all"
+                    ? "bg-card text-foreground shadow-xs border border-border font-extrabold scale-[1.01]"
+                    : "text-muted-foreground hover:text-foreground hover:bg-card/40"
+                )}
+              >
+                <span>All Types</span>
+                <Badge variant="secondary" className="text-[10px] px-1.5 py-0 rounded-full font-bold">
+                  {ordersByStatus[orderStatusTab].length}
+                </Badge>
+              </button>
+
+              {(["Dine In", "Take Away", "Delivery"] as const).map(type => {
+                const count = ordersByStatus[orderStatusTab].filter(o => o.type === type).length;
+                return (
+                  <button
+                    key={type}
+                    type="button"
+                    onClick={() => setOrderStatusTypeFilter(type)}
+                    className={cn(
+                      "flex-1 py-1.5 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5",
+                      orderStatusTypeFilter === type
+                        ? "bg-card text-foreground shadow-xs border border-border font-extrabold scale-[1.01]"
+                        : "text-muted-foreground hover:text-foreground hover:bg-card/40"
+                    )}
+                  >
+                    <span>{type}</span>
+                    <Badge variant="secondary" className="text-[10px] px-1.5 py-0 rounded-full font-bold">
+                      {count}
+                    </Badge>
+                  </button>
+                );
+              })}
             </div>
           </div>
 
           <div className="p-5 space-y-4 overflow-y-auto flex-1 bg-background/40">
             {(() => {
-              const statusesToRender: Array<"pending" | "preparing" | "ready"> =
-                orderStatusTab === "all"
-                  ? ["pending", "preparing", "ready"]
-                  : [orderStatusTab];
+              const currentList = ordersByStatus[orderStatusTab].filter(o =>
+                orderStatusTypeFilter === "all" || o.type === orderStatusTypeFilter
+              );
 
-              const totalMatchingOrders = statusesToRender.reduce((sum, st) => sum + ordersByStatus[st].length, 0);
-
-              if (totalMatchingOrders === 0) {
+              if (currentList.length === 0) {
                 return (
                   <div className="text-center py-20 text-muted-foreground">
                     <ClipboardList className="h-12 w-12 mx-auto mb-3 opacity-30 text-primary" />
                     <p className="font-bold text-base text-foreground">
-                      No {orderStatusTab === "all" ? "active" : orderStatusTab} orders found
+                      No {orderStatusTypeFilter !== "all" ? orderStatusTypeFilter : ""} {orderStatusTab} orders found
                     </p>
-                    <p className="text-xs mt-1">Orders in this state will appear here</p>
+                    <p className="text-xs mt-1">Orders matching this filter will appear here</p>
                   </div>
                 );
               }
 
-              return statusesToRender.map(status => (
-                ordersByStatus[status].length > 0 && (
-                  <div key={status} className="space-y-3">
-                    {orderStatusTab === "all" && (
-                      <h3 className="text-sm font-extrabold capitalize flex items-center gap-2 text-foreground pt-1">
-                        <div className={cn("h-2.5 w-2.5 rounded-full", status === "pending" ? "bg-warning" : status === "preparing" ? "bg-info" : "bg-emerald-500")} />
-                        {status} Orders ({ordersByStatus[status].length})
-                      </h3>
-                    )}
-                    <div className="space-y-3">
-                      {ordersByStatus[status].map(order => (
+              const status = orderStatusTab;
+              return (
+                <div className="space-y-3">
+                  <div className="space-y-3">
+                    {currentList.map(order => (
                         <Card key={order.id} className={cn(
                           "p-4 text-xs border-l-4 rounded-2xl transition-all duration-200 hover:shadow-md bg-card space-y-3",
                           status === "pending" ? "border-l-warning border-border/70" :
-                          status === "preparing" ? "border-l-info border-border/70" : "border-l-emerald-500 border-border/70"
+                          status === "preparing" ? "border-l-info border-border/70" :
+                          status === "ready" ? "border-l-emerald-500 border-border/70" : "border-l-purple-500 border-border/70"
                         )}>
                           <div className="flex justify-between items-start border-b border-border/40 pb-2.5">
                             <div>
@@ -2468,7 +2535,8 @@ const POS = () => {
                             </div>
                             <Badge variant="outline" className={cn("text-xs font-extrabold capitalize px-2.5 py-0.5 rounded-xl border flex items-center gap-1",
                               status === "pending" ? "bg-warning/15 text-warning border-warning/30" :
-                              status === "preparing" ? "bg-info/15 text-info border-info/30" : "bg-emerald-500/15 text-emerald-500 border-emerald-500/30"
+                              status === "preparing" ? "bg-info/15 text-info border-info/30" :
+                              status === "ready" ? "bg-emerald-500/15 text-emerald-500 border-emerald-500/30" : "bg-purple-500/15 text-purple-500 border-purple-500/30"
                             )}>
                               {status === "pending" ? <Clock className="h-3 w-3" /> :
                                status === "preparing" ? <ChefHat className="h-3 w-3" /> : <CheckCircle2 className="h-3 w-3" />}
@@ -2529,7 +2597,7 @@ const POS = () => {
                           </div>
 
                           {(() => {
-                            if (status === "ready") return null;
+                            if (status === "ready" || status === "completed") return null;
                             const rawCookTime = Math.max(...order.items.map((i: any) => i.cookingTime || 0), 0);
                             const cookTime = rawCookTime > 0 ? rawCookTime : 10;
 
@@ -2570,31 +2638,61 @@ const POS = () => {
                             );
                           })()}
 
-                          <div className="flex gap-2 pt-1">
-                            <Button size="sm" variant="outline" className="h-8 text-xs font-bold border-warning/40 text-warning hover:bg-warning/10 rounded-xl flex-1 disabled:opacity-60"
-                              disabled={myPendingCancelOrderIds.has(order.id)}
-                              onClick={() => { setModifyCancelAction("modify"); setModifyCancelReason(""); setShowModifyOrder(order.id); }}>
-                              Modify Order
-                            </Button>
-                            <Button size="sm" variant="outline" className="h-8 text-xs font-bold border-destructive/40 text-destructive hover:bg-destructive/10 rounded-xl flex-1 disabled:opacity-60"
-                              disabled={myPendingCancelOrderIds.has(order.id)}
-                              onClick={() => {
-                                setModifyCancelAction("cancel"); setModifyCancelReason(""); setShowModifyOrder(order.id);
-                                const orderOutletId = (order as any).outletId as string | null | undefined;
-                                setApiApprovers([]);
-                                setApiResponsibleStaff([]);
-                                userService.getStaffPicker(CANCEL_APPROVER_ROLES, orderOutletId).then(setApiApprovers).catch(() => {});
-                                userService.getStaffPicker(CANCEL_RESPONSIBLE_ROLES, orderOutletId).then(setApiResponsibleStaff).catch(() => {});
-                              }}>
-                              {myPendingCancelOrderIds.has(order.id) ? "Pending Approval" : "Cancel Order"}
-                            </Button>
-                          </div>
+                          {status === "completed" ? (
+                            <div className="pt-1">
+                              <Badge variant="secondary" className="w-full py-1 text-center justify-center font-bold text-xs bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20">
+                                ✔ Order Completed & Settled
+                              </Badge>
+                            </div>
+                          ) : (
+                            <div className="space-y-2 pt-1">
+                              {status === "ready" && (order.type === "Take Away" || order.type === "Takeout") && (
+                                <Button
+                                  size="sm"
+                                  disabled={completingOrderIds.has(order.id)}
+                                  className="w-full h-9 text-xs font-bold gradient-primary text-primary-foreground shadow-xs rounded-xl flex items-center justify-center gap-1.5 cursor-pointer hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-75"
+                                  onClick={() => handleMarkOrderCompleted(order.id, order.orderNumber)}
+                                >
+                                  {completingOrderIds.has(order.id) ? (
+                                    <>
+                                      <Loader2 className="h-4 w-4 animate-spin shrink-0" />
+                                      <span>Completing...</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <CheckCircle2 className="h-4 w-4 shrink-0" />
+                                      <span>Complete / Handed Over</span>
+                                    </>
+                                  )}
+                                </Button>
+                              )}
+
+                              <div className="flex gap-2">
+                                <Button size="sm" variant="outline" className="h-8 text-xs font-bold border-warning/40 text-warning hover:bg-warning/10 rounded-xl flex-1 disabled:opacity-60"
+                                  disabled={myPendingCancelOrderIds.has(order.id)}
+                                  onClick={() => { setModifyCancelAction("modify"); setModifyCancelReason(""); setShowModifyOrder(order.id); }}>
+                                  Modify Order
+                                </Button>
+                                <Button size="sm" variant="outline" className="h-8 text-xs font-bold border-destructive/40 text-destructive hover:bg-destructive/10 rounded-xl flex-1 disabled:opacity-60"
+                                  disabled={myPendingCancelOrderIds.has(order.id)}
+                                  onClick={() => {
+                                    setModifyCancelAction("cancel"); setModifyCancelReason(""); setShowModifyOrder(order.id);
+                                    const orderOutletId = (order as any).outletId as string | null | undefined;
+                                    setApiApprovers([]);
+                                    setApiResponsibleStaff([]);
+                                    userService.getStaffPicker(CANCEL_APPROVER_ROLES, orderOutletId).then(setApiApprovers).catch(() => {});
+                                    userService.getStaffPicker(CANCEL_RESPONSIBLE_ROLES, orderOutletId).then(setApiResponsibleStaff).catch(() => {});
+                                  }}>
+                                  {myPendingCancelOrderIds.has(order.id) ? "Pending Approval" : "Cancel Order"}
+                                </Button>
+                              </div>
+                            </div>
+                          )}
                         </Card>
                       ))}
                     </div>
                   </div>
-                )
-              ));
+                );
             })()}
           </div>
         </SheetContent>
