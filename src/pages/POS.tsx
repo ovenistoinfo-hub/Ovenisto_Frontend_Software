@@ -620,10 +620,14 @@ const POS = () => {
       waiter: { total: 0, cash: 0, nonCash: 0, count: 0, byMethod: createMethodMap(), orders: [] as any[], pendingOrders: [] as any[], pendingTotal: 0, pendingCount: 0 }
     };
 
+    const shiftStartMs = new Date(activeShift.openedAt).getTime();
     const shiftOrders = allOrdersData.filter(o => {
-      const orderDate = new Date(o.date);
-      const shiftStart = new Date(activeShift.openedAt);
-      return orderDate >= new Date(shiftStart.toISOString().split("T")[0]) && o.status !== "cancelled";
+      const orderTimeMs = Math.max(
+        (o as any).updatedAt ? new Date((o as any).updatedAt).getTime() : 0,
+        o.createdAt ? new Date(o.createdAt).getTime() : 0,
+        o.date ? new Date(o.date).getTime() : 0
+      );
+      return orderTimeMs >= shiftStartMs && o.status !== "cancelled";
     });
 
     const parsePaymentSplits = (paymentMethodStr: string, orderTotal: number) => {

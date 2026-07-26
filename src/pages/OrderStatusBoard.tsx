@@ -1,10 +1,10 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import type { OrderStatus } from "@/data/mock-data";
 import {
   ArrowLeft, RefreshCw, Bell, Clock, BarChart3, TrendingUp, ShoppingBag,
-  AlertCircle, ChefHat, CheckCircle2, XCircle, Timer, UtensilsCrossed,
-  ShoppingCart, Truck, Globe, CreditCard, Banknote, Receipt, Check,
+  AlertCircle, ChefHat, CheckCircle2, Timer, UtensilsCrossed,
+  ShoppingCart, Truck, CreditCard, Banknote, Receipt, Check,
+  Columns, LayoutGrid, Sparkles, User
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -22,28 +22,100 @@ import { orderService } from "@/services/order.service";
 import { useVisiblePolling } from "@/hooks/use-visible-polling";
 import { useOrderEvents } from "@/hooks/use-order-events";
 
-// ─── Config ────────────────────────────────────────────────────────────────
+// ─── Status Definitions & Professional Theme Config ───────────────────────
 
-const statusConfig: Record<string, { label: string; bg: string; text: string; border: string; icon: typeof Clock; pill: string }> = {
-  pending:   { label: "Pending",   bg: "bg-warning/10",     text: "text-warning",     border: "border-l-warning",     icon: AlertCircle,   pill: "bg-warning/10 text-warning border-warning/30" },
-  preparing: { label: "Preparing", bg: "bg-accent/10",      text: "text-accent",      border: "border-l-accent",      icon: ChefHat,       pill: "bg-accent/10 text-accent border-accent/30" },
-  ready:     { label: "Ready",     bg: "bg-success/10",     text: "text-success",     border: "border-l-success",     icon: CheckCircle2,  pill: "bg-success/10 text-success border-success/30" },
-  completed: { label: "Completed", bg: "bg-info/10",        text: "text-info",        border: "border-l-info",        icon: CheckCircle2,  pill: "bg-info/10 text-info border-info/30" },
-  cancelled: { label: "Cancelled", bg: "bg-destructive/10", text: "text-destructive", border: "border-l-destructive", icon: XCircle,       pill: "bg-destructive/10 text-destructive border-destructive/30" },
-  scheduled: { label: "Scheduled", bg: "bg-info/10",        text: "text-info",        border: "border-l-info",        icon: Clock,         pill: "bg-info/10 text-info border-info/30" },
+type FilterStatus = "pending" | "preparing" | "ready" | "completed";
+
+interface StatusConfigItem {
+  label: string;
+  bgActive: string;
+  text: string;
+  borderActive: string;
+  iconBg: string;
+  icon: typeof Clock;
+  pill: string;
+}
+
+const statusConfig: Record<FilterStatus, StatusConfigItem> = {
+  pending: {
+    label: "Pending",
+    bgActive: "bg-amber-500/10 border-amber-500/50 shadow-sm",
+    text: "text-amber-500 dark:text-amber-400",
+    borderActive: "border-amber-500/50",
+    iconBg: "bg-amber-500/15 text-amber-500",
+    icon: AlertCircle,
+    pill: "bg-amber-500/15 text-amber-500 border-amber-500/30",
+  },
+  preparing: {
+    label: "Preparing",
+    bgActive: "bg-sky-500/10 border-sky-500/50 shadow-sm",
+    text: "text-sky-500 dark:text-sky-400",
+    borderActive: "border-sky-500/50",
+    iconBg: "bg-sky-500/15 text-sky-500",
+    icon: ChefHat,
+    pill: "bg-sky-500/15 text-sky-500 border-sky-500/30",
+  },
+  ready: {
+    label: "Ready",
+    bgActive: "bg-emerald-500/10 border-emerald-500/50 shadow-sm",
+    text: "text-emerald-500 dark:text-emerald-400",
+    borderActive: "border-emerald-500/50",
+    iconBg: "bg-emerald-500/15 text-emerald-500",
+    icon: CheckCircle2,
+    pill: "bg-emerald-500/15 text-emerald-500 border-emerald-500/30",
+  },
+  completed: {
+    label: "Completed",
+    bgActive: "bg-purple-500/10 border-purple-500/50 shadow-sm",
+    text: "text-purple-500 dark:text-purple-400",
+    borderActive: "border-purple-500/50",
+    iconBg: "bg-purple-500/15 text-purple-500",
+    icon: Check,
+    pill: "bg-purple-500/15 text-purple-500 border-purple-500/30",
+  },
 };
 
-const statusFilters: (OrderStatus | "all")[] = ["all", "pending", "preparing", "ready", "completed"];
+// 3 Main Order Type Columns
+type OrderColumnKey = "dine-in" | "takeaway" | "delivery";
 
-type OrderTypeTab = "all" | "dine-in" | "takeaway" | "delivery" | "foodpanda" | "online";
+interface OrderColumnConfig {
+  key: OrderColumnKey;
+  title: string;
+  subtitle: string;
+  icon: typeof UtensilsCrossed;
+  types: string[];
+  iconBg: string;
+  badgeBg: string;
+}
 
-const typeTabs: { key: OrderTypeTab; label: string; icon: typeof UtensilsCrossed; types: string[] }[] = [
-  { key: "all",       label: "All Orders", icon: ShoppingBag,     types: [] },
-  { key: "dine-in",   label: "Dine In",    icon: UtensilsCrossed, types: ["Dine In", "Self Order"] },
-  { key: "takeaway",  label: "Take Away",  icon: ShoppingCart,    types: ["Take Away", "Walk-in"] },
-  { key: "delivery",  label: "Delivery",   icon: Truck,           types: ["Delivery"] },
-  { key: "foodpanda", label: "Foodpanda",  icon: Globe,           types: ["Foodpanda"] },
-  { key: "online",    label: "Online",     icon: Globe,           types: ["Online"] },
+const orderColumns: OrderColumnConfig[] = [
+  {
+    key: "dine-in",
+    title: "Dine In & Tables",
+    subtitle: "Dine In & Self Order",
+    icon: UtensilsCrossed,
+    types: ["Dine In", "Self Order"],
+    iconBg: "bg-rose-500/15 text-rose-500 border border-rose-500/20",
+    badgeBg: "bg-rose-500/20 text-rose-400 border border-rose-500/30",
+  },
+  {
+    key: "takeaway",
+    title: "Take Away & Pickup",
+    subtitle: "Take Away & Walk-in",
+    icon: ShoppingCart,
+    types: ["Take Away", "Walk-in"],
+    iconBg: "bg-amber-500/15 text-amber-500 border border-amber-500/20",
+    badgeBg: "bg-amber-500/20 text-amber-400 border border-amber-500/30",
+  },
+  {
+    key: "delivery",
+    title: "Delivery & Online",
+    subtitle: "Delivery, Foodpanda & Online",
+    icon: Truck,
+    types: ["Delivery", "Foodpanda", "Online"],
+    iconBg: "bg-sky-500/15 text-sky-500 border border-sky-500/20",
+    badgeBg: "bg-sky-500/20 text-sky-400 border border-sky-500/30",
+  },
 ];
 
 const normalize = (o: any) => ({
@@ -57,19 +129,18 @@ const normalize = (o: any) => ({
   items: (o.items || []).map((i: any) => ({ ...i, price: Number(i.price) })),
 });
 
-// ─── Component ─────────────────────────────────────────────────────────────
+// ─── Main Component ─────────────────────────────────────────────────────────
 
 const OrderStatusBoard = () => {
   const navigate = useNavigate();
   const { foodMenuItems } = useData();
   const [allOrders, setAllOrders] = useState<any[]>([]);
-  const [typeTab, setTypeTab]     = useState<OrderTypeTab>("all");
-  const [statusFilter, setStatusFilter] = useState<OrderStatus | "all">("all");
+  const [activeStatus, setActiveStatus] = useState<FilterStatus>("pending");
+  const [viewMode, setViewMode] = useState<"columns" | "grid">("columns");
   const [time, setTime] = useState(new Date());
-  const [autoRefresh, setAutoRefresh] = useState(true);
+  const [autoRefresh] = useState(true);
   const [soundAlert, setSoundAlert] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
-  const [mounted, setMounted] = useState(false);
 
   const loadOrders = useCallback(async () => {
     try {
@@ -78,53 +149,48 @@ const OrderStatusBoard = () => {
     } catch {}
   }, []);
 
-  useEffect(() => { setMounted(true); }, []);
   useEffect(() => { const t = setInterval(() => setTime(new Date()), 1000); return () => clearInterval(t); }, []);
-  // Real-time order push + a 60s safety poll, gated on tab visibility AND the
-  // Live/Paused (autoRefresh) toggle. A backgrounded or paused board stops
-  // querying so the Neon compute can scale to zero.
   useOrderEvents(loadOrders);
   useVisiblePolling(loadOrders, 60000, autoRefresh);
 
-  // ── Filtering ──
+  // ── Status Filter Counts ──
+  const statusCounts: Record<FilterStatus, number> = useMemo(() => ({
+    pending: allOrders.filter((o) => o.status === "pending").length,
+    preparing: allOrders.filter((o) => o.status === "preparing").length,
+    ready: allOrders.filter((o) => o.status === "ready").length,
+    completed: allOrders.filter((o) => o.status === "completed").length,
+  }), [allOrders]);
 
-  const typeFiltered = typeTab === "all"
-    ? allOrders
-    : allOrders.filter((o) => {
-        const tab = typeTabs.find((t) => t.key === typeTab);
-        return tab ? tab.types.includes(o.type) : true;
-      });
+  // Active status orders list
+  const activeStatusOrders = useMemo(() => {
+    return allOrders.filter((o) => o.status === activeStatus);
+  }, [allOrders, activeStatus]);
 
-  const displayed = statusFilter === "all"
-    ? typeFiltered
-    : typeFiltered.filter((o) => o.status === statusFilter);
+  // Group active orders by column (Dine In, Takeaway, Delivery)
+  const ordersByColumn = useMemo(() => {
+    const map: Record<OrderColumnKey, any[]> = {
+      "dine-in": [],
+      takeaway: [],
+      delivery: [],
+    };
+    activeStatusOrders.forEach((o) => {
+      if (orderColumns[0].types.includes(o.type)) {
+        map["dine-in"].push(o);
+      } else if (orderColumns[1].types.includes(o.type)) {
+        map["takeaway"].push(o);
+      } else {
+        map["delivery"].push(o);
+      }
+    });
+    return map;
+  }, [activeStatusOrders]);
 
-  // Counts scoped to current type tab
-  const statusCounts: Record<string, number> = {
-    all:       typeFiltered.length,
-    pending:   typeFiltered.filter((o) => o.status === "pending").length,
-    preparing: typeFiltered.filter((o) => o.status === "preparing").length,
-    ready:     typeFiltered.filter((o) => o.status === "ready").length,
-    completed: typeFiltered.filter((o) => o.status === "completed").length,
-  };
-
-  // Type tab counts (across all orders)
-  const typeTabCounts: Record<OrderTypeTab, number> = {
-    all:       allOrders.length,
-    "dine-in": allOrders.filter((o) => ["Dine In", "Self Order"].includes(o.type)).length,
-    takeaway:  allOrders.filter((o) => ["Take Away", "Walk-in"].includes(o.type)).length,
-    delivery:  allOrders.filter((o) => o.type === "Delivery").length,
-    foodpanda: allOrders.filter((o) => o.type === "Foodpanda").length,
-    online:    allOrders.filter((o) => o.type === "Online").length,
-  };
-
-  const todayStr    = new Date().toISOString().split("T")[0];
-  const todayOrders = allOrders.filter((o) => o.date === todayStr);
-  const todayRevenue = todayOrders.reduce((s: number, o: any) => s + o.total, 0);
+  const todayStr = new Date().toISOString().split("T")[0];
+  const todayOrders = useMemo(() => allOrders.filter((o) => o.date === todayStr), [allOrders, todayStr]);
+  const todayRevenue = useMemo(() => todayOrders.reduce((s: number, o: any) => s + o.total, 0), [todayOrders]);
 
   // ── Helpers ──
-
-  const isPaid = (o: any) => !!o.paymentMethod;
+  const isPaid = (o: any) => !!o.paymentMethod && o.paymentMethod !== "Pending" && o.paymentMethod !== "Unpaid";
   const needsPayment = (o: any) =>
     !isPaid(o) && o.status !== "cancelled" && o.status !== "completed" && o.status !== "scheduled";
 
@@ -160,7 +226,7 @@ const OrderStatusBoard = () => {
       if (selectedOrder && selectedOrder.id === orderId) {
         setSelectedOrder(prev => prev ? { ...prev, status: newStatus } : null);
       }
-      toast.success(`Order status updated to ${newStatus}`);
+      toast.success(`Order #${orderId.slice(-4)} updated to ${newStatus}`);
     } catch {
       toast.error("Failed to update order status");
     }
@@ -170,370 +236,458 @@ const OrderStatusBoard = () => {
     navigate("/pos", { state: { loadOrderId: order.id, paymentOnly: true } });
   };
 
+  // ── Render Individual Order Card ──
+  const renderOrderCard = (order: any) => {
+    const cfg = statusConfig[order.status as FilterStatus] ?? statusConfig.pending;
+    const elapsed = getElapsed(order);
+    const paid = isPaid(order);
+    const cookInfo = getCookingInfo(order);
+
+    return (
+      <Card
+        key={order.id}
+        onClick={() => setSelectedOrder(order)}
+        className="cursor-pointer hover:border-primary/50 hover:shadow-md transition-all duration-150 border border-border/70 bg-card rounded-xl overflow-hidden group"
+      >
+        <CardContent className="p-0">
+          {/* Card Top Banner */}
+          <div className="px-3.5 py-2.5 flex items-center justify-between border-b border-border/50 bg-muted/20">
+            <div className="flex items-center gap-2">
+              <span className="font-extrabold text-sm tracking-tight text-foreground">{order.orderNumber}</span>
+              <Badge variant="outline" className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-background/80 border-border/60">
+                {order.type}
+              </Badge>
+              {order.tableNumber && (
+                <Badge className="text-[10px] font-extrabold px-1.5 py-0.5 rounded-md bg-rose-500/90 text-white">
+                  T-{order.tableNumber}
+                </Badge>
+              )}
+            </div>
+            <span className="text-[10px] font-mono font-bold text-muted-foreground bg-background/80 px-2 py-0.5 rounded-full flex items-center gap-1 border border-border/50">
+              <Timer className="h-3 w-3 text-amber-500" />
+              {elapsed}
+            </span>
+          </div>
+
+          {/* Card Main Info */}
+          <div className="p-3.5 space-y-2.5">
+            {/* Customer & Staff */}
+            <div className="flex items-center justify-between text-xs">
+              <div className="flex items-center gap-1.5 truncate">
+                <User className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                <span className="font-bold text-foreground truncate">{order.customer}</span>
+              </div>
+              {order.staff && (
+                <span className="text-[10px] text-muted-foreground bg-muted/40 px-2 py-0.5 rounded-full shrink-0 border border-border/30">
+                  {order.staff}
+                </span>
+              )}
+            </div>
+
+            {/* Items List Snippet */}
+            <div className="bg-muted/30 rounded-lg p-2.5 space-y-1 border border-border/40">
+              {order.items.slice(0, 3).map((item: any, i: number) => (
+                <div key={i} className="flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground truncate font-medium">
+                    <span className="font-extrabold text-foreground mr-1">{item.qty}×</span> {item.name}
+                  </span>
+                  <span className="font-mono text-[11px] font-semibold text-foreground/80">Rs.{(item.price * item.qty).toLocaleString()}</span>
+                </div>
+              ))}
+              {order.items.length > 3 && (
+                <p className="text-[10px] text-primary font-bold pt-0.5 text-right">+{order.items.length - 3} more items</p>
+              )}
+            </div>
+
+            {/* Cooking Progress Bar if applicable */}
+            {(order.status === "pending" || order.status === "preparing") && cookInfo && (
+              <div className="space-y-1 pt-0.5">
+                <div className="flex items-center justify-between text-[10px]">
+                  <span className={cn("font-bold flex items-center gap-1", cookInfo.isOverdue ? "text-destructive" : cookInfo.remainingMin <= 2 ? "text-amber-500" : "text-muted-foreground")}>
+                    <ChefHat className="h-3 w-3" />
+                    {cookInfo.isOverdue ? `Overdue +${cookInfo.elapsedMin - cookInfo.maxCookTime}m` : `${cookInfo.remainingMin}m left`}
+                  </span>
+                  <span className="text-muted-foreground font-mono">{cookInfo.maxCookTime}m max</span>
+                </div>
+                <Progress value={cookInfo.progress} className={cn("h-1.5 rounded-full", cookInfo.isOverdue && "[&>div]:bg-destructive", !cookInfo.isOverdue && cookInfo.progress > 75 && "[&>div]:bg-amber-500")} />
+              </div>
+            )}
+
+            {/* Footer: Price + Payment Status */}
+            <div className="flex items-center justify-between pt-1 border-t border-border/40">
+              <div>
+                <p className="text-[10px] text-muted-foreground font-medium">Total Bill</p>
+                <p className="text-sm font-extrabold text-primary font-mono">Rs. {order.total.toLocaleString()}</p>
+              </div>
+
+              <Badge className={cn("text-[10px] font-bold px-2 py-0.5 rounded-md flex items-center gap-1", paid ? "bg-emerald-500/10 text-emerald-500 border border-emerald-500/30" : "bg-amber-500/10 text-amber-500 border border-amber-500/30")}>
+                {paid ? <CreditCard className="h-3 w-3" /> : <Banknote className="h-3 w-3" />}
+                {paid ? (order.paymentMethod || "Paid") : "Unpaid"}
+              </Badge>
+            </div>
+
+            {/* Action Button */}
+            {order.status === "pending" && (
+              <Button
+                size="sm"
+                onClick={(e) => { e.stopPropagation(); handleStatusUpdate(order.id, "preparing"); }}
+                className="w-full h-8 text-xs bg-amber-500 hover:bg-amber-600 text-white font-bold shadow-xs flex items-center justify-center gap-1.5 rounded-lg transition-all"
+              >
+                <ChefHat className="h-3.5 w-3.5" /> Start Preparing
+              </Button>
+            )}
+            {order.status === "preparing" && (
+              <Button
+                size="sm"
+                onClick={(e) => { e.stopPropagation(); handleStatusUpdate(order.id, "ready"); }}
+                className="w-full h-8 text-xs bg-sky-500 hover:bg-sky-600 text-white font-bold shadow-xs flex items-center justify-center gap-1.5 rounded-lg transition-all"
+              >
+                <CheckCircle2 className="h-3.5 w-3.5" /> Mark Ready
+              </Button>
+            )}
+            {order.status === "ready" && (
+              <Button
+                size="sm"
+                onClick={(e) => { e.stopPropagation(); handleStatusUpdate(order.id, "completed"); }}
+                className="w-full h-8 text-xs bg-emerald-500 hover:bg-emerald-600 text-white font-bold shadow-xs flex items-center justify-center gap-1.5 rounded-lg transition-all"
+              >
+                <Check className="h-3.5 w-3.5" /> Complete Order
+              </Button>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+    );
+  };
+
   return (
-    <div className="fixed inset-0 z-50 bg-background flex flex-col">
-      {/* Header */}
-      <div className="h-14 bg-card border-b-2 border-primary/15 flex items-center justify-between px-4 sm:px-5 shrink-0 shadow-sm">
+    <div className="fixed inset-0 z-50 bg-background flex flex-col overflow-hidden font-sans">
+      {/* ════════════ HEADER BAR ════════════ */}
+      <header className="h-14 bg-card border-b border-border/60 flex items-center justify-between px-4 sm:px-6 shrink-0 shadow-xs">
         <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" className="h-9 w-9 rounded-full hover:bg-primary/10" asChild>
+          <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg hover:bg-muted" asChild>
             <Link to="/"><ArrowLeft className="h-4 w-4" /></Link>
           </Button>
-          <Separator orientation="vertical" className="h-8" />
+          <Separator orientation="vertical" className="h-6" />
           <div className="flex items-center gap-2.5">
-            <div className="h-9 w-9 rounded-xl gradient-primary flex items-center justify-center shadow-md">
-              <BarChart3 className="h-4.5 w-4.5 text-primary-foreground" />
+            <div className="h-8 w-8 rounded-lg gradient-primary flex items-center justify-center shadow-xs">
+              <BarChart3 className="h-4 w-4 text-primary-foreground" />
             </div>
             <div>
-              <h1 className="text-sm font-bold tracking-tight text-foreground">Order Status</h1>
-              <p className="text-[10px] text-muted-foreground hidden sm:block">Central order monitoring</p>
+              <h1 className="text-sm font-extrabold tracking-tight text-foreground flex items-center gap-2">
+                Order Status Console
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold bg-primary/10 text-primary border border-primary/20">
+                  <Sparkles className="h-2.5 w-2.5 mr-1" /> Live
+                </span>
+              </h1>
             </div>
           </div>
         </div>
-        <div className="flex items-center gap-2 sm:gap-3">
-          <div className="hidden sm:flex items-center gap-2">
+
+        <div className="flex items-center gap-3">
+          {/* View Mode Switcher */}
+          <div className="bg-muted/50 p-1 rounded-lg border border-border/60 flex items-center gap-1">
+            <button
+              onClick={() => setViewMode("columns")}
+              className={cn(
+                "flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-bold transition-all",
+                viewMode === "columns" ? "bg-card text-foreground shadow-xs border border-border/60" : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              <Columns className="h-3.5 w-3.5 text-primary" />
+              <span className="hidden md:inline">Type Columns</span>
+            </button>
+            <button
+              onClick={() => setViewMode("grid")}
+              className={cn(
+                "flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-bold transition-all",
+                viewMode === "grid" ? "bg-card text-foreground shadow-xs border border-border/60" : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              <LayoutGrid className="h-3.5 w-3.5 text-primary" />
+              <span className="hidden md:inline">Grid View</span>
+            </button>
+          </div>
+
+          <div className="hidden sm:flex items-center gap-2 bg-muted/30 px-2.5 py-1 rounded-lg border border-border/40">
             <Checkbox id="sound" checked={soundAlert} onCheckedChange={(v) => setSoundAlert(!!v)} />
-            <Label htmlFor="sound" className="text-xs cursor-pointer flex items-center gap-1 text-muted-foreground">
-              <Bell className="h-3 w-3" />Sound
+            <Label htmlFor="sound" className="text-xs font-medium cursor-pointer flex items-center gap-1 text-muted-foreground">
+              <Bell className="h-3.5 w-3.5 text-amber-500" /> Sound
             </Label>
           </div>
-          <Badge variant="secondary" className={cn("text-[10px] rounded-full px-2.5 border hidden sm:flex", autoRefresh ? "bg-success/10 text-success border-success/20" : "bg-muted")}>
-            <RefreshCw className={cn("h-2.5 w-2.5 mr-1", autoRefresh && "animate-spin")} />
-            {autoRefresh ? "Live" : "Paused"}
-          </Badge>
-          <div className="flex items-center gap-1.5 bg-card border border-border/60 rounded-xl px-2.5 py-1 shadow-sm">
+
+          <div className="flex items-center gap-2 bg-card border border-border/80 rounded-lg px-2.5 py-1 shadow-xs">
             <Clock className="h-3.5 w-3.5 text-primary" />
             <span className="text-xs font-mono font-bold text-foreground tracking-tight">
               {time.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
             </span>
           </div>
         </div>
+      </header>
+
+      {/* ════════════ TOP 4 HERO STATUS CARDS (NO ALL ORDERS CARD) ════════════ */}
+      <div className="px-4 sm:px-6 py-3 bg-card/60 border-b border-border/60 shrink-0">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 w-full">
+          {(["pending", "preparing", "ready", "completed"] as FilterStatus[]).map((statusKey) => {
+            const cfg = statusConfig[statusKey];
+            const Icon = cfg.icon;
+            const count = statusCounts[statusKey];
+            const isActive = activeStatus === statusKey;
+
+            return (
+              <button
+                key={statusKey}
+                onClick={() => setActiveStatus(statusKey)}
+                className={cn(
+                  "p-3 rounded-xl text-left border transition-all duration-150 relative overflow-hidden group cursor-pointer",
+                  isActive
+                    ? `${cfg.bgActive} ${cfg.borderActive}`
+                    : "bg-card hover:bg-card/90 border-border/60 text-muted-foreground"
+                )}
+              >
+                <div className="flex items-center justify-between relative z-10">
+                  <span className={cn("text-xs font-extrabold uppercase tracking-wider", isActive ? cfg.text : "text-muted-foreground")}>
+                    {cfg.label}
+                  </span>
+                  <div className={cn("h-7 w-7 rounded-lg flex items-center justify-center transition-transform group-hover:scale-105", cfg.iconBg)}>
+                    <Icon className="h-4 w-4" />
+                  </div>
+                </div>
+
+                <div className="mt-1.5 flex items-baseline justify-between relative z-10">
+                  <span className={cn("text-2xl font-black font-mono tracking-tight", isActive ? "text-foreground" : "text-foreground/80")}>
+                    {count}
+                  </span>
+                  {isActive && (
+                    <span className={cn("text-[9px] font-bold px-2 py-0.5 rounded-full border", cfg.pill)}>
+                      Active Filter
+                    </span>
+                  )}
+                </div>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
-      {/* ── Order Type Tabs ── */}
-      <div className="flex gap-1 px-4 sm:px-5 py-2.5 border-b border-border/60 bg-card/60 shrink-0 overflow-x-auto">
-        {typeTabs.map(({ key, label, icon: Icon }) => {
-          const isActive = typeTab === key;
-          const count = typeTabCounts[key];
-          return (
-            <button
-              key={key}
-              onClick={() => { setTypeTab(key); setStatusFilter("all"); }}
-              className={cn(
-                "flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold border transition-all whitespace-nowrap shrink-0",
-                isActive
-                  ? "gradient-primary text-primary-foreground border-transparent shadow-md"
-                  : "bg-card border-border/50 text-muted-foreground hover:text-foreground hover:border-border"
-              )}
-            >
-              <Icon className="h-3.5 w-3.5" />
-              {label}
-              <span className={cn(
-                "rounded-full px-1.5 py-0.5 text-[10px] font-bold",
-                isActive ? "bg-white/20" : "bg-muted"
-              )}>
-                {count}
-              </span>
-            </button>
-          );
-        })}
-      </div>
-
-      {/* ── Status Sub-filter ── */}
-      <div className="flex gap-1.5 px-4 sm:px-5 py-2 border-b border-border/40 bg-muted/20 shrink-0">
-        {statusFilters.map((s) => {
-          const isActive = statusFilter === s;
-          const cfg = s === "all" ? { label: "All", text: "text-foreground", bg: "bg-muted/60" } : statusConfig[s];
-          return (
-            <button
-              key={s}
-              onClick={() => setStatusFilter(s)}
-              className={cn(
-                "px-2.5 py-1 rounded-full text-[10px] font-semibold border transition-all",
-                isActive
-                  ? s === "all"
-                    ? "bg-foreground/10 text-foreground border-foreground/20"
-                    : `${cfg.bg} ${cfg.text} border-current/30`
-                  : "bg-card border-border/40 text-muted-foreground hover:text-foreground"
-              )}
-            >
-              {cfg.label} · {statusCounts[s]}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* ── Order Cards Grid ── */}
-      <div className="flex-1 overflow-y-auto p-4 sm:p-5">
-        {displayed.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
-            <div className="h-20 w-20 rounded-3xl bg-muted/30 flex items-center justify-center mb-4">
-              <ShoppingBag className="h-10 w-10 text-muted-foreground/30" />
+      {/* ════════════ MAIN CONTENT AREA (FULL SCREEN WIDTH) ════════════ */}
+      <main className="flex-1 overflow-hidden p-4 sm:px-6 py-4 bg-muted/10 w-full">
+        {activeStatusOrders.length === 0 ? (
+          <div className="h-full flex flex-col items-center justify-center text-center p-8">
+            <div className="h-16 w-16 rounded-2xl bg-muted/40 flex items-center justify-center mb-3 border border-border/60">
+              <ShoppingBag className="h-8 w-8 text-muted-foreground/40" />
             </div>
-            <p className="text-lg font-bold text-foreground mb-1">No orders</p>
-            <p className="text-sm">Try a different filter or category</p>
+            <h2 className="text-base font-extrabold text-foreground mb-1">No Orders Found</h2>
+            <p className="text-xs text-muted-foreground max-w-sm">
+              There are currently no <strong className="text-foreground uppercase">{activeStatus}</strong> orders.
+            </p>
           </div>
-        ) : (
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-            {displayed.map((order, idx) => {
-              const cfg = statusConfig[order.status] ?? statusConfig.pending;
-              const StatusIcon = cfg.icon;
-              const elapsed = getElapsed(order);
-              const paid = isPaid(order);
+        ) : viewMode === "columns" ? (
+          /* ── MULTI-COLUMN LAYOUT BY ORDER TYPE (FULL WIDTH 3 COLUMNS) ── */
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 lg:gap-6 h-full w-full overflow-hidden">
+            {orderColumns.map((col) => {
+              const colOrders = ordersByColumn[col.key] || [];
+              const ColIcon = col.icon;
+              const totalColSum = colOrders.reduce((s, o) => s + o.total, 0);
 
               return (
-                <Card
-                  key={order.id}
-                  onClick={() => setSelectedOrder(order)}
-                  className={cn(
-                    "cursor-pointer hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 border-l-4 rounded-xl overflow-hidden animate-in fade-in slide-in-from-bottom-2",
-                    cfg.border,
-                    !mounted && `animation-delay-[${idx * 30}ms]`
-                  )}
-                >
-                  <CardContent className="p-0">
-                    {/* Card Header */}
-                    <div className={cn("px-3 pt-2.5 pb-2 flex items-start justify-between gap-1", cfg.bg)}>
-                      <div className="min-w-0">
-                        <p className="font-bold text-sm text-foreground tracking-tight">{order.orderNumber}</p>
-                        <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                          <Badge variant="secondary" className="text-[9px] px-1.5 py-0 rounded-full">{order.type}</Badge>
-                          {order.tableNumber && (
-                            <Badge variant="outline" className="text-[9px] px-1.5 py-0 rounded-full">T-{order.tableNumber}</Badge>
-                          )}
-                        </div>
+                <div key={col.key} className="flex flex-col h-full bg-card rounded-2xl border border-border/70 overflow-hidden shadow-xs">
+                  {/* Column Header */}
+                  <div className="p-3.5 border-b border-border/60 bg-muted/30 flex items-center justify-between shrink-0">
+                    <div className="flex items-center gap-2.5">
+                      <div className={cn("h-8 w-8 rounded-lg flex items-center justify-center shrink-0", col.iconBg)}>
+                        <ColIcon className="h-4 w-4" />
                       </div>
-                      <div className={cn("h-6 w-6 rounded-lg flex items-center justify-center shrink-0", cfg.bg)}>
-                        <StatusIcon className={cn("h-3 w-3", cfg.text)} />
+                      <div>
+                        <h3 className="font-extrabold text-sm text-foreground tracking-tight flex items-center gap-1.5">
+                          {col.title}
+                        </h3>
+                        <p className="text-[10px] text-muted-foreground font-medium">{col.subtitle}</p>
                       </div>
                     </div>
 
-                    <div className="px-3 py-2 space-y-1.5">
-                      {/* Customer & staff */}
-                      <p className="text-xs font-semibold text-foreground truncate">{order.customer}</p>
-                      {order.staff && (
-                        <p className="text-[10px] text-muted-foreground truncate">Staff: {order.staff}</p>
-                      )}
-
-                      {/* Items */}
-                      <div className="space-y-0.5">
-                        {order.items.slice(0, 2).map((item: any, i: number) => (
-                          <p key={i} className="text-[10px] text-muted-foreground truncate">
-                            <span className="font-medium text-foreground">{item.qty}×</span> {item.name}
-                          </p>
-                        ))}
-                        {order.items.length > 2 && (
-                          <p className="text-[9px] text-muted-foreground italic">+{order.items.length - 2} more</p>
-                        )}
-                      </div>
-
-                      {/* Footer: total + payment + time */}
-                      <div className="flex items-center justify-between pt-1.5 border-t border-border/40">
-                        <span className="font-bold text-sm text-primary">Rs. {order.total.toLocaleString()}</span>
-                        <div className="flex items-center gap-1.5">
-                          {paid ? (
-                            <CreditCard className="h-3 w-3 text-success" />
-                          ) : (
-                            <Banknote className="h-3 w-3 text-muted-foreground/50" />
-                          )}
-                          <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
-                            <Timer className="h-2.5 w-2.5" />{elapsed}
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Cooking progress */}
-                      {(order.status === "pending" || order.status === "preparing") && (() => {
-                        const info = getCookingInfo(order);
-                        if (!info) return null;
-                        return (
-                          <div className="pt-1 space-y-0.5">
-                            <div className="flex items-center justify-between text-[9px]">
-                              <span className={cn("font-semibold", info.isOverdue ? "text-destructive" : info.remainingMin <= 2 ? "text-warning" : "text-muted-foreground")}>
-                                {info.isOverdue ? `Overdue +${info.elapsedMin - info.maxCookTime}m` : `${info.remainingMin}m left`}
-                              </span>
-                              <span className="text-muted-foreground">{info.maxCookTime}m</span>
-                            </div>
-                            <Progress value={info.progress} className={cn("h-1", info.isOverdue && "[&>div]:bg-destructive", !info.isOverdue && info.progress > 75 && "[&>div]:bg-warning")} />
-                          </div>
-                        );
-                      })()}
-
-                      {/* Quick Status Action Buttons */}
-                      {order.status === "pending" && (
-                        <Button
-                          size="sm"
-                          onClick={(e) => { e.stopPropagation(); handleStatusUpdate(order.id, "preparing"); }}
-                          className="w-full mt-2 h-7 text-xs bg-warning hover:bg-warning/90 text-warning-foreground font-bold shadow-xs flex items-center justify-center gap-1 rounded-lg"
-                        >
-                          <ChefHat className="h-3.5 w-3.5" /> Start Preparing
-                        </Button>
-                      )}
-                      {order.status === "preparing" && (
-                        <Button
-                          size="sm"
-                          onClick={(e) => { e.stopPropagation(); handleStatusUpdate(order.id, "ready"); }}
-                          className="w-full mt-2 h-7 text-xs bg-accent hover:bg-accent/90 text-accent-foreground font-bold shadow-xs flex items-center justify-center gap-1 rounded-lg"
-                        >
-                          <CheckCircle2 className="h-3.5 w-3.5" /> Mark Ready
-                        </Button>
-                      )}
-                      {order.status === "ready" && (
-                        <Button
-                          size="sm"
-                          onClick={(e) => { e.stopPropagation(); handleStatusUpdate(order.id, "completed"); }}
-                          className="w-full mt-2 h-7 text-xs bg-success hover:bg-success/90 text-success-foreground font-bold shadow-xs flex items-center justify-center gap-1 rounded-lg"
-                        >
-                          <Check className="h-3.5 w-3.5" /> Mark Completed
-                        </Button>
-                      )}
+                    <div className="text-right">
+                      <Badge className={cn("text-xs font-extrabold px-2 py-0.5 rounded-md", col.badgeBg)}>
+                        {colOrders.length} Orders
+                      </Badge>
+                      <p className="text-[10px] font-mono font-bold text-muted-foreground mt-0.5">
+                        Rs. {totalColSum.toLocaleString()}
+                      </p>
                     </div>
-                  </CardContent>
-                </Card>
+                  </div>
+
+                  {/* Column Cards Vertical Scroll Container */}
+                  <div className="flex-1 overflow-y-auto p-3 space-y-3 custom-scrollbar">
+                    {colOrders.length === 0 ? (
+                      <div className="h-40 flex flex-col items-center justify-center text-center p-4 border border-dashed border-border/50 rounded-xl">
+                        <p className="text-xs font-bold text-muted-foreground">No {col.title} orders</p>
+                        <p className="text-[10px] text-muted-foreground/60">in {activeStatus} state</p>
+                      </div>
+                    ) : (
+                      colOrders.map((order) => renderOrderCard(order))
+                    )}
+                  </div>
+                </div>
               );
             })}
           </div>
+        ) : (
+          /* ── FULL GRID VIEW ── */
+          <div className="h-full overflow-y-auto w-full pr-1">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3.5">
+              {activeStatusOrders.map((order) => renderOrderCard(order))}
+            </div>
+          </div>
         )}
-      </div>
+      </main>
 
-      {/* ── Bottom KPI Bar ── */}
-      <div className="bg-card border-t-2 border-primary/10 flex items-center justify-center gap-6 sm:gap-10 px-4 py-2.5 shrink-0">
-        <div className="flex items-center gap-2">
+      {/* ════════════ BOTTOM KPI SUMMARY BAR ════════════ */}
+      <footer className="bg-card border-t border-border/60 flex items-center justify-center gap-6 sm:gap-12 px-4 py-2.5 shrink-0 shadow-xs">
+        <div className="flex items-center gap-2.5">
           <div className="h-7 w-7 rounded-lg bg-primary/10 flex items-center justify-center">
             <ShoppingBag className="h-3.5 w-3.5 text-primary" />
           </div>
           <div>
-            <p className="text-[10px] text-muted-foreground">Today</p>
-            <p className="text-xs font-bold text-foreground">{todayOrders.length} orders</p>
+            <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider">Today's Orders</p>
+            <p className="text-xs font-extrabold text-foreground">{todayOrders.length} total orders</p>
           </div>
         </div>
-        <Separator orientation="vertical" className="h-7" />
-        <div className="flex items-center gap-2">
-          <div className="h-7 w-7 rounded-lg bg-success/10 flex items-center justify-center">
-            <TrendingUp className="h-3.5 w-3.5 text-success" />
-          </div>
-          <div>
-            <p className="text-[10px] text-muted-foreground">Revenue</p>
-            <p className="text-xs font-bold text-foreground">Rs. {todayRevenue.toLocaleString()}</p>
-          </div>
-        </div>
-        <Separator orientation="vertical" className="h-7" />
-        <div className="flex items-center gap-2">
-          <div className="h-7 w-7 rounded-lg bg-warning/10 flex items-center justify-center">
-            <AlertCircle className="h-3.5 w-3.5 text-warning" />
-          </div>
-          <div>
-            <p className="text-[10px] text-muted-foreground">Pending</p>
-            <p className="text-xs font-bold text-warning">{statusCounts.pending}</p>
-          </div>
-        </div>
-        <Separator orientation="vertical" className="h-7" />
-        <div className="flex items-center gap-2">
-          <div className="h-7 w-7 rounded-lg bg-accent/10 flex items-center justify-center">
-            <ChefHat className="h-3.5 w-3.5 text-accent" />
-          </div>
-          <div>
-            <p className="text-[10px] text-muted-foreground">Preparing</p>
-            <p className="text-xs font-bold text-accent">{statusCounts.preparing}</p>
-          </div>
-        </div>
-      </div>
 
-      {/* ── Order Detail Dialog ── */}
+        <Separator orientation="vertical" className="h-7" />
+
+        <div className="flex items-center gap-2.5">
+          <div className="h-7 w-7 rounded-lg bg-emerald-500/10 flex items-center justify-center">
+            <TrendingUp className="h-3.5 w-3.5 text-emerald-500" />
+          </div>
+          <div>
+            <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider">Today's Revenue</p>
+            <p className="text-xs font-extrabold text-foreground font-mono">Rs. {todayRevenue.toLocaleString()}</p>
+          </div>
+        </div>
+
+        <Separator orientation="vertical" className="h-7" />
+
+        <div className="flex items-center gap-2.5">
+          <div className="h-7 w-7 rounded-lg bg-amber-500/10 flex items-center justify-center">
+            <AlertCircle className="h-3.5 w-3.5 text-amber-500" />
+          </div>
+          <div>
+            <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider">Active Pending</p>
+            <p className="text-xs font-extrabold text-amber-500 font-mono">{statusCounts.pending}</p>
+          </div>
+        </div>
+
+        <Separator orientation="vertical" className="h-7 hidden sm:block" />
+
+        <div className="hidden sm:flex items-center gap-2.5">
+          <div className="h-7 w-7 rounded-lg bg-sky-500/10 flex items-center justify-center">
+            <ChefHat className="h-3.5 w-3.5 text-sky-500" />
+          </div>
+          <div>
+            <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider">In Kitchen</p>
+            <p className="text-xs font-extrabold text-sky-500 font-mono">{statusCounts.preparing}</p>
+          </div>
+        </div>
+      </footer>
+
+      {/* ════════════ ORDER DETAIL DIALOG ════════════ */}
       <Dialog open={!!selectedOrder} onOpenChange={() => setSelectedOrder(null)}>
-        <DialogContent className="max-w-lg w-[95vw] max-h-[90vh] overflow-y-auto p-4 sm:p-6">
+        <DialogContent className="max-w-lg w-[95vw] max-h-[90vh] overflow-y-auto p-4 sm:p-6 rounded-2xl">
           {selectedOrder && (() => {
-            const cfg = statusConfig[selectedOrder.status] ?? statusConfig.pending;
+            const cfg = statusConfig[selectedOrder.status as FilterStatus] ?? statusConfig.pending;
             const paid = isPaid(selectedOrder);
             const showLoadToPOS = needsPayment(selectedOrder);
 
             return (
               <>
-                <DialogHeader>
+                <DialogHeader className="border-b pb-3">
                   <DialogTitle className="flex items-center justify-between gap-2 flex-wrap">
-                    <span className="font-bold tracking-tight">{selectedOrder.orderNumber}</span>
-                    <Badge className={cn("text-xs rounded-full px-3 border font-semibold", cfg.pill)}>
+                    <div className="flex items-center gap-2">
+                      <span className="font-black text-xl tracking-tight text-foreground">{selectedOrder.orderNumber}</span>
+                      <Badge className="text-xs font-extrabold px-2.5 py-0.5 rounded-md bg-primary/15 text-primary border border-primary/20">
+                        {selectedOrder.type}
+                      </Badge>
+                    </div>
+                    <Badge className={cn("text-xs font-extrabold rounded-full px-3 py-1 border", cfg.pill)}>
                       {cfg.label}
                     </Badge>
                   </DialogTitle>
                 </DialogHeader>
 
-                <div className="space-y-4 text-sm">
-                  {/* Info grid */}
-                  <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs bg-muted/30 rounded-xl p-3">
-                    <p><span className="text-muted-foreground">Type:</span> <strong>{selectedOrder.type}</strong></p>
-                    <p><span className="text-muted-foreground">Time:</span> <strong>{selectedOrder.time || getElapsed(selectedOrder)}</strong></p>
-                    <p><span className="text-muted-foreground">Customer:</span> <strong>{selectedOrder.customer}</strong></p>
-                    <p><span className="text-muted-foreground">Phone:</span> <strong>{selectedOrder.phone || "—"}</strong></p>
+                <div className="space-y-4 text-sm pt-2">
+                  {/* Detailed Customer & Order Info Box */}
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs bg-muted/40 rounded-xl p-3.5 border border-border/50">
+                    <p><span className="text-muted-foreground">Order Time:</span> <strong className="text-foreground">{selectedOrder.time || getElapsed(selectedOrder)}</strong></p>
+                    <p><span className="text-muted-foreground">Customer:</span> <strong className="text-foreground">{selectedOrder.customer}</strong></p>
+                    <p><span className="text-muted-foreground">Phone:</span> <strong className="text-foreground">{selectedOrder.phone || "—"}</strong></p>
                     {selectedOrder.staff && (
-                      <p><span className="text-muted-foreground">Staff:</span> <strong>{selectedOrder.staff}</strong></p>
+                      <p><span className="text-muted-foreground">Staff:</span> <strong className="text-foreground">{selectedOrder.staff}</strong></p>
                     )}
                     {selectedOrder.tableNumber && (
-                      <p><span className="text-muted-foreground">Table:</span> <strong>#{selectedOrder.tableNumber}</strong></p>
+                      <p><span className="text-muted-foreground">Table:</span> <strong className="text-rose-500 font-extrabold">#{selectedOrder.tableNumber}</strong></p>
                     )}
                     {selectedOrder.deliveryAddress && (
-                      <p className="col-span-2"><span className="text-muted-foreground">Address:</span> <strong>{selectedOrder.deliveryAddress}</strong></p>
+                      <p className="col-span-2"><span className="text-muted-foreground">Address:</span> <strong className="text-foreground">{selectedOrder.deliveryAddress}</strong></p>
                     )}
                     <p>
-                      <span className="text-muted-foreground">Payment:</span>{" "}
+                      <span className="text-muted-foreground">Payment Status:</span>{" "}
                       {paid
-                        ? <strong className="text-success">{selectedOrder.paymentMethod}</strong>
-                        : <strong className="text-warning">Unpaid</strong>
+                        ? <strong className="text-emerald-500 font-extrabold">{selectedOrder.paymentMethod}</strong>
+                        : <strong className="text-amber-500 font-extrabold">Unpaid</strong>
                       }
                     </p>
                     {selectedOrder.advancePayment > 0 && (
-                      <p><span className="text-muted-foreground">Advance:</span> <strong className="text-info">Rs. {selectedOrder.advancePayment.toLocaleString()}</strong></p>
+                      <p><span className="text-muted-foreground">Advance Paid:</span> <strong className="text-sky-500 font-extrabold">Rs. {selectedOrder.advancePayment.toLocaleString()}</strong></p>
                     )}
                   </div>
 
                   <Separator />
 
-                  {/* Items */}
-                  <div className="overflow-x-auto -mx-4 sm:mx-0 px-4 sm:px-0">
+                  {/* Items Table */}
+                  <div className="rounded-xl border border-border/60 overflow-hidden">
                     <Table>
-                      <TableHeader>
-                        <TableRow className="bg-muted/50 hover:bg-muted/50">
-                          <TableHead className="text-xs min-w-[120px]">Item</TableHead>
-                          <TableHead className="text-xs text-center">Qty</TableHead>
-                          <TableHead className="text-xs text-right whitespace-nowrap">Price</TableHead>
-                          <TableHead className="text-xs text-right whitespace-nowrap">Total</TableHead>
+                      <TableHeader className="bg-muted/60">
+                        <TableRow>
+                          <TableHead className="text-xs font-bold">Item Description</TableHead>
+                          <TableHead className="text-xs font-bold text-center">Qty</TableHead>
+                          <TableHead className="text-xs font-bold text-right">Price</TableHead>
+                          <TableHead className="text-xs font-bold text-right">Total</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {selectedOrder.items.map((item: any, i: number) => (
                           <TableRow key={i} className="hover:bg-muted/30">
-                            <TableCell className="text-xs py-1.5 font-medium">{item.name}</TableCell>
-                            <TableCell className="text-xs text-center py-1.5">{item.qty}</TableCell>
-                            <TableCell className="text-xs text-right py-1.5">Rs. {item.price.toLocaleString()}</TableCell>
-                            <TableCell className="text-xs text-right py-1.5">Rs. {((item.price * item.qty) - (item.discount || 0)).toLocaleString()}</TableCell>
+                            <TableCell className="text-xs font-semibold py-2">{item.name}</TableCell>
+                            <TableCell className="text-xs font-bold text-center py-2">{item.qty}</TableCell>
+                            <TableCell className="text-xs font-mono text-right py-2">Rs. {item.price.toLocaleString()}</TableCell>
+                            <TableCell className="text-xs font-mono font-bold text-right py-2">Rs. {((item.price * item.qty) - (item.discount || 0)).toLocaleString()}</TableCell>
                           </TableRow>
                         ))}
                       </TableBody>
                     </Table>
                   </div>
 
-                  <Separator />
-
-                  {/* Totals */}
-                  <div className="space-y-1 text-xs">
-                    <div className="flex justify-between"><span className="text-muted-foreground">Subtotal</span><span>Rs. {Number(selectedOrder.subtotal).toLocaleString()}</span></div>
+                  {/* Totals Summary */}
+                  <div className="bg-muted/30 rounded-xl p-3 space-y-1.5 text-xs border border-border/40">
+                    <div className="flex justify-between"><span className="text-muted-foreground">Subtotal</span><span className="font-mono font-semibold">Rs. {Number(selectedOrder.subtotal).toLocaleString()}</span></div>
                     {selectedOrder.discount > 0 && (
-                      <div className="flex justify-between"><span className="text-muted-foreground">Discount</span><span className="text-destructive">-Rs. {Number(selectedOrder.discount).toLocaleString()}</span></div>
+                      <div className="flex justify-between"><span className="text-muted-foreground">Discount</span><span className="font-mono font-semibold text-destructive">-Rs. {Number(selectedOrder.discount).toLocaleString()}</span></div>
                     )}
-                    <div className="flex justify-between"><span className="text-muted-foreground">Tax</span><span>Rs. {Number(selectedOrder.tax).toLocaleString()}</span></div>
-                    <Separator />
-                    <div className="flex justify-between font-bold text-base pt-0.5">
-                      <span>Total</span>
-                      <span className="text-primary">Rs. {selectedOrder.total.toLocaleString()}</span>
+                    <div className="flex justify-between"><span className="text-muted-foreground">Tax</span><span className="font-mono font-semibold">Rs. {Number(selectedOrder.tax).toLocaleString()}</span></div>
+                    <Separator className="my-1" />
+                    <div className="flex justify-between font-extrabold text-base pt-0.5">
+                      <span>Total Amount</span>
+                      <span className="text-primary font-mono">Rs. {selectedOrder.total.toLocaleString()}</span>
                     </div>
                   </div>
                 </div>
 
-                <DialogFooter className="flex-col sm:flex-row gap-2 pt-2 flex-wrap justify-end">
-                  <Button variant="outline" className="w-full sm:w-auto" onClick={() => setSelectedOrder(null)}>Close</Button>
+                <DialogFooter className="flex-col sm:flex-row gap-2 pt-3 border-t">
+                  <Button variant="outline" className="w-full sm:w-auto rounded-xl font-bold" onClick={() => setSelectedOrder(null)}>Close Window</Button>
 
                   {selectedOrder.status === "pending" && (
                     <Button
-                      className="w-full sm:w-auto bg-warning hover:bg-warning/90 text-warning-foreground font-bold shadow-md"
+                      className="w-full sm:w-auto bg-amber-500 hover:bg-amber-600 text-white font-extrabold rounded-xl shadow-md"
                       onClick={() => handleStatusUpdate(selectedOrder.id, "preparing")}
                     >
                       <ChefHat className="h-4 w-4 mr-1.5" />
@@ -543,7 +697,7 @@ const OrderStatusBoard = () => {
 
                   {selectedOrder.status === "preparing" && (
                     <Button
-                      className="w-full sm:w-auto bg-accent hover:bg-accent/90 text-accent-foreground font-bold shadow-md"
+                      className="w-full sm:w-auto bg-sky-500 hover:bg-sky-600 text-white font-extrabold rounded-xl shadow-md"
                       onClick={() => handleStatusUpdate(selectedOrder.id, "ready")}
                     >
                       <CheckCircle2 className="h-4 w-4 mr-1.5" />
@@ -553,7 +707,7 @@ const OrderStatusBoard = () => {
 
                   {selectedOrder.status === "ready" && (
                     <Button
-                      className="w-full sm:w-auto bg-success hover:bg-success/90 text-success-foreground font-bold shadow-md"
+                      className="w-full sm:w-auto bg-emerald-500 hover:bg-emerald-600 text-white font-extrabold rounded-xl shadow-md"
                       onClick={() => handleStatusUpdate(selectedOrder.id, "completed")}
                     >
                       <Check className="h-4 w-4 mr-1.5" />
@@ -563,7 +717,7 @@ const OrderStatusBoard = () => {
 
                   {showLoadToPOS && (
                     <Button
-                      className="w-full sm:w-auto gradient-primary text-primary-foreground shadow-md"
+                      className="w-full sm:w-auto gradient-primary text-primary-foreground font-extrabold rounded-xl shadow-md"
                       onClick={() => { setSelectedOrder(null); handleLoadToPOS(selectedOrder); }}
                     >
                       <Receipt className="h-4 w-4 mr-2" />

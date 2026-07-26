@@ -110,9 +110,15 @@ const Shifts = () => {
 
   const closeShift = () => {
     if (!activeShift || !closingCash) { toast.error("Closing cash required"); return; }
+    const shiftStartMs = new Date(activeShift.openedAt).getTime();
     const shiftOrders = orders.filter(o => {
-      const od = new Date(`${o.date}T${o.time?.replace(" AM", "").replace(" PM", "") || "00:00"}`);
-      return od >= new Date(activeShift.openedAt);
+      const od = new Date(`${o.date}T${o.time?.replace(" AM", "").replace(" PM", "") || "00:00"}`).getTime();
+      const orderTimeMs = Math.max(
+        (o as any).updatedAt ? new Date((o as any).updatedAt).getTime() : 0,
+        (o as any).createdAt ? new Date((o as any).createdAt).getTime() : 0,
+        !isNaN(od) ? od : 0
+      );
+      return orderTimeMs >= shiftStartMs;
     });
     const totalSales = shiftOrders.filter(o => o.status === "completed").reduce((s, o) => s + o.total, 0);
     const cashSales = shiftOrders.filter(o => o.paymentMethod === "Cash").reduce((s, o) => s + o.total, 0);
