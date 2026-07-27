@@ -29,6 +29,7 @@ import { useOutletFilter } from "@/hooks/useOutletFilter";
 import { OutletFilterSelect } from "@/components/OutletFilterSelect";
 import { useAuth } from "@/contexts/AuthContext";
 import { useReservationEvents } from "@/hooks/use-reservation-events";
+import { useVisiblePolling } from "@/hooks/use-visible-polling";
 import { cn } from "@/lib/utils";
 
 import { useData } from "@/contexts/DataContext";
@@ -107,9 +108,12 @@ const Reservations = () => {
   const tomorrow = (() => { const d = new Date(); d.setDate(d.getDate() + 1); return d.toISOString().split("T")[0]; })();
 
   // Queries
+  // Refresh on real-time push (instant), plus a 60s visibility-gated safety poll so a
+  // dropped/never-connected socket doesn't leave this page stale (matches POS/WaiterPanel/KitchenPanel).
   useReservationEvents(() => {
-    queryClient.invalidateQueries({ queryKey: ["reservations"] });
+    qc.invalidateQueries({ queryKey: ["reservations"] });
   });
+  useVisiblePolling(() => qc.invalidateQueries({ queryKey: ["reservations"] }), 60000);
 
   const { data: reservations = [], isLoading } = useQuery({
     queryKey: ["reservations", selectedOutletId],

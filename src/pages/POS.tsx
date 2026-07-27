@@ -261,6 +261,7 @@ const POS = () => {
   useOrderEvents(loadApiOrders);
   useReservationEvents(loadApiReservations);
   useVisiblePolling(loadApiOrders, 60000);
+  useVisiblePolling(loadApiReservations, 60000);
 
   // Let the staff member who requested a cancellation know the outcome as soon as
   // the approver reviews it — otherwise the request dialog just closes on submit
@@ -580,7 +581,9 @@ const POS = () => {
     loadTables();
   }, [loadTables]);
 
+  // Real-time push, plus a 60s visibility-gated safety poll (matches orders/reservations above).
   useTableEvents(loadTables);
+  useVisiblePolling(loadTables, 60000);
 
   // Load available riders when delivery type is selected
   useEffect(() => {
