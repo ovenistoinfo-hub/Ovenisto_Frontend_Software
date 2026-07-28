@@ -39,8 +39,14 @@ const OnlineOrders = () => {
     try {
       const res = await orderService.getOrders({ limit: 200 });
       const all = (res.data || []).map(normalize);
-      // show Online type + self-order staff
-      setApiOrders(all.filter((o: any) => o.type === "Online" || o.type === "Self Order" || o.staff === "Self Order" || o.staff === "Website"));
+      // show Online type + self-order staff. A self-order stays hidden here until a
+      // waiter has verified it (same pending+unaccepted gate as Kitchen/Order Status
+      // Board) -- matched via type, not the staff==="Self Order" clause, since that
+      // clause is always true whenever type is, and would otherwise bypass this gate.
+      setApiOrders(all.filter((o: any) => {
+        if (o.type === "Self Order") return !(o.status === "pending" && !o.acceptedById);
+        return o.type === "Online" || o.staff === "Website";
+      }));
     } catch {}
   }, []);
 
