@@ -45,6 +45,10 @@ export interface OrderRecord {
   scheduledTime: string | null;
   futureNotes: string | null;
   advancePayment: number;
+  guestCount: number | null;
+  acceptedById: string | null;
+  acceptedByName: string | null;
+  rejectionReason: string | null;
   isUrgent: boolean;
   customerType: string | null;
   orderSource: string | null;
@@ -133,6 +137,16 @@ export const orderService = {
 
   async updateOrderStatus(id: string, status: string): Promise<OrderRecord> {
     const res = await api.put<{ success: boolean; data: OrderRecord }>(`/orders/${id}/status`, { status });
+    return res.data;
+  },
+
+  async acceptSelfOrder(id: string): Promise<OrderRecord> {
+    const res = await api.post<{ success: boolean; data: OrderRecord }>(`/orders/${id}/accept-self-order`, {});
+    return res.data;
+  },
+
+  async rejectSelfOrder(id: string, reason?: string): Promise<OrderRecord> {
+    const res = await api.post<{ success: boolean; data: OrderRecord }>(`/orders/${id}/reject-self-order`, { reason });
     return res.data;
   },
 
