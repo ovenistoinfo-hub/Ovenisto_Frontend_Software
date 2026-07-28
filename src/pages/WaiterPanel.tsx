@@ -215,6 +215,7 @@ const WaiterPanel = () => {
   const [floorFilter,  setFloorFilter]  = useState<string>("all");
   const [billReqSet,    setBillReqSet]    = useState<Set<number>>(new Set());
   const [acceptingId,   setAcceptingId]   = useState<string | null>(null);
+  const [rejectingId,   setRejectingId]   = useState<string | null>(null);
   const [selectedTableId, setSelectedTableId] = useState<string | null>(null);
   const [cartItems,       setCartItems]        = useState<CartItem[]>([]);
   const [menuCategory,    setMenuCategory]     = useState("All");
@@ -442,7 +443,7 @@ const WaiterPanel = () => {
     orders.filter((o) => o.tableNumber === tableNum && ACTIVE_STATUSES.includes(o.status));
 
   const pendingSelfOrders = orders.filter(
-    (o) => o.type === "Self Order" && o.status === "pending"
+    (o) => o.type === "Self Order" && o.status === "pending" && !o.acceptedById
   );
 
   const selectedTable    = tables.find((t) => t.id === selectedTableId) ?? null;
@@ -666,13 +667,28 @@ const WaiterPanel = () => {
     setAcceptingId(order.id);
     try {
       markMine();
-      await orderService.updateOrderStatus(order.id, "preparing");
-      toast.success(`Table ${order.tableNumber} — sent to kitchen`);
+      await orderService.acceptSelfOrder(order.id);
+      toast.success(`Table ${order.tableNumber} order accepted — now visible to kitchen`);
       await loadOrders();
-    } catch {
-      toast.error("Failed to accept order");
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to accept order");
     } finally {
       setAcceptingId(null);
+    }
+  };
+
+  const rejectSelfOrder = async (order: OrderRecord) => {
+    const reason = window.prompt("Reason for declining (optional):") ?? undefined;
+    setRejectingId(order.id);
+    try {
+      markMine();
+      await orderService.rejectSelfOrder(order.id, reason || undefined);
+      toast.success(`Table ${order.tableNumber} order declined`);
+      await loadOrders();
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to decline order");
+    } finally {
+      setRejectingId(null);
     }
   };
 
@@ -1272,7 +1288,13 @@ const WaiterPanel = () => {
               {pendingSelfOrders.map((order) => (
                 <div key={order.id} className="flex items-center justify-between bg-card rounded-xl px-4 py-3 border border-border/50 gap-3">
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-bold">Table {order.tableNumber}</p>
+                    <p className="text-sm font-bold">
+                      Table {order.tableNumber}
+                      {order.customerName && <span className="font-normal text-muted-foreground"> · {order.customerName}</span>}
+                    </p>
+                    <p className="text-[11px] text-muted-foreground">
+                      {order.phone ? `${order.phone} · ` : ""}{order.guestCount ? `${order.guestCount} Pax` : ""}
+                    </p>
                     <p className="text-xs text-muted-foreground">
                       {order.items.length} item{order.items.length !== 1 ? "s" : ""} &mdash; {currency} {order.total.toLocaleString()}
                     </p>
@@ -1280,17 +1302,28 @@ const WaiterPanel = () => {
                       {order.items.map((i) => `${i.name} ×${i.qty}`).join(", ")}
                     </p>
                   </div>
-                  <Button
-                    size="sm"
-                    className="gradient-primary text-primary-foreground text-xs rounded-lg shrink-0 min-h-[34px] px-4"
-                    disabled={acceptingId === order.id}
-                    onClick={() => acceptSelfOrder(order)}
-                  >
-                    {acceptingId === order.id
-                      ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      : <><Check className="h-3.5 w-3.5 mr-1" />Accept</>
-                    }
-                  </Button>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="text-destructive hover:bg-destructive/10 text-xs rounded-lg min-h-[34px] px-3"
+                      disabled={rejectingId === order.id || acceptingId === order.id}
+                      onClick={() => rejectSelfOrder(order)}
+                    >
+                      {rejectingId === order.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Reject"}
+                    </Button>
+                    <Button
+                      size="sm"
+                      className="gradient-primary text-primary-foreground text-xs rounded-lg min-h-[34px] px-4"
+                      disabled={acceptingId === order.id || rejectingId === order.id}
+                      onClick={() => acceptSelfOrder(order)}
+                    >
+                      {acceptingId === order.id
+                        ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        : <><Check className="h-3.5 w-3.5 mr-1" />Accept</>
+                      }
+                    </Button>
+                  </div>
                 </div>
               ))}
             </div>
