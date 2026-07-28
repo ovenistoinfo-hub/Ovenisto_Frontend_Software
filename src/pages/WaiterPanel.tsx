@@ -678,11 +678,12 @@ const WaiterPanel = () => {
   };
 
   const rejectSelfOrder = async (order: OrderRecord) => {
-    const reason = window.prompt("Reason for declining (optional):") ?? undefined;
+    const rawReason = window.prompt("Reason for declining (optional):");
+    if (rawReason === null) return; // user clicked Cancel — abort, don't reject anything
     setRejectingId(order.id);
     try {
       markMine();
-      await orderService.rejectSelfOrder(order.id, reason || undefined);
+      await orderService.rejectSelfOrder(order.id, rawReason || undefined);
       toast.success(`Table ${order.tableNumber} order declined`);
       await loadOrders();
     } catch (err: any) {
