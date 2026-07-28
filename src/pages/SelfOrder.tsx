@@ -13,22 +13,23 @@ import {
   selfOrderService,
   type SelfOrderTable,
   type SelfOrderMenu,
+  type SelfOrderMenuItem,
   type SelfOrderStatus,
 } from "@/services/self-order.service";
-import type { MenuItemRecord } from "@/services/menu.service";
 
 interface CartItem {
   id: string;
   menuItemId: string | null;
+  variantId?: string | null;
   name: string;
   price: number;
   qty: number;
   variant?: string;
   modifiers?: string[];
+  modifierIds?: string[];
 }
 
-const resolveModifiers = (item: MenuItemRecord) =>
-  item.modifiers?.filter((m) => m.status === "active") || [];
+const resolveModifiers = (item: SelfOrderMenuItem) => item.modifiers || [];
 
 const formatPhoneNumber = (val: string): string => {
   const digitsOnly = val.replace(/\D/g, "").slice(0, 11);
@@ -69,7 +70,7 @@ const SelfOrder = () => {
   const [cartOpen, setCartOpen] = useState(false);
   const [notes, setNotes] = useState("");
   const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
-  const [selectedVariant, setSelectedVariant] = useState<{ name: string; price: number } | null>(null);
+  const [selectedVariant, setSelectedVariant] = useState<{ id: string; name: string; price: number } | null>(null);
   const [selectedModifiers, setSelectedModifiers] = useState<string[]>([]);
   const [placing, setPlacing] = useState(false);
 
@@ -168,11 +169,13 @@ const SelfOrder = () => {
       return [...prev, {
         id: cartKey,
         menuItemId: item.id,
+        variantId: selectedVariant?.id ?? null,
         name: variantName ? `${item.name} (${variantName})` : item.name,
         price: totalPrice,
         qty: 1,
         variant: variantName,
         modifiers: modNames,
+        modifierIds: selectedModifiers,
       }];
     });
 
@@ -201,7 +204,7 @@ const SelfOrder = () => {
         tax,
         total: cartTotal + tax,
         specialInstructions: notes || undefined,
-        items: cart.map((i) => ({ menuItemId: i.menuItemId, name: i.name, price: i.price, qty: i.qty, modifiers: i.modifiers })),
+        items: cart.map((i) => ({ menuItemId: i.menuItemId, variantId: i.variantId, name: i.name, price: i.price, qty: i.qty, modifierIds: i.modifierIds })),
       });
       setPlacedOrderId(orderId);
       setOrderStatus({ status: "pending", accepted: false });

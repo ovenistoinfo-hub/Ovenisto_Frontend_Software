@@ -9,8 +9,6 @@
  * fetch helper instead, used only by the public /self-order/* endpoints.
  */
 
-import type { CategoryRecord, MenuItemRecord } from "./menu.service";
-
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:3001/api";
 
 export class SelfOrderApiError extends Error {
@@ -42,17 +40,46 @@ export interface SelfOrderTable {
   outletName: string | null;
 }
 
+export interface SelfOrderMenuVariant {
+  id: string;
+  name: string;
+  price: number;
+}
+
+export interface SelfOrderMenuModifier {
+  id: string;
+  name: string;
+  price: number;
+}
+
+export interface SelfOrderMenuCategory {
+  id: string;
+  name: string;
+  displayOrder: number;
+  status: string;
+}
+
+export interface SelfOrderMenuItem {
+  id: string;
+  name: string;
+  price: number;
+  category: { id: string; name: string } | null;
+  variants: SelfOrderMenuVariant[];
+  modifiers: SelfOrderMenuModifier[];
+}
+
 export interface SelfOrderMenu {
-  categories: CategoryRecord[];
-  items: MenuItemRecord[];
+  categories: SelfOrderMenuCategory[];
+  items: SelfOrderMenuItem[];
 }
 
 export interface CreateSelfOrderItemInput {
   menuItemId?: string | null;
+  variantId?: string | null;
   name: string;
   price: number;
   qty: number;
-  modifiers?: string[];
+  modifierIds?: string[];
 }
 
 export interface CreateSelfOrderInput {
