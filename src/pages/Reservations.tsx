@@ -30,6 +30,8 @@ import { OutletFilterSelect } from "@/components/OutletFilterSelect";
 import { useAuth } from "@/contexts/AuthContext";
 import { useReservationEvents } from "@/hooks/use-reservation-events";
 import { useVisiblePolling } from "@/hooks/use-visible-polling";
+import { useSelfMutationGuard } from "@/hooks/use-self-mutation-guard";
+import { getSocket } from "@/lib/socket";
 import { cn } from "@/lib/utils";
 
 import { useData } from "@/contexts/DataContext";
@@ -120,6 +122,38 @@ const Reservations = () => {
     queryFn: () => reservationService.getAll({ outletId: selectedOutletId !== "all" ? selectedOutletId : undefined }),
   });
 
+  // Friendly toast when a reservation changes from elsewhere (another device/session/staff
+  // member) — suppressed for a few seconds after THIS client's own writes so it doesn't
+  // double up with the specific success toast that mutation already shows.
+  const { markMine, isLikelyOwnEcho } = useSelfMutationGuard();
+  const reservationsRef = useRef(reservations);
+  useEffect(() => { reservationsRef.current = reservations; }, [reservations]);
+
+  useEffect(() => {
+    const socket = getSocket();
+    const onCreated = (payload: Reservation) => {
+      if (isLikelyOwnEcho()) return;
+      toast.info(`New reservation: ${payload.customerName} — ${payload.date} at ${payload.time}`);
+    };
+    const onUpdated = (payload: Reservation) => {
+      if (isLikelyOwnEcho()) return;
+      toast.info(`Reservation for ${payload.customerName} updated — now ${payload.status}`);
+    };
+    const onDeleted = (payload: { id: string }) => {
+      if (isLikelyOwnEcho()) return;
+      const found = reservationsRef.current.find(r => r.id === payload.id);
+      toast.info(`Reservation for ${found?.customerName ?? "a customer"} was deleted`);
+    };
+    socket.on("reservation:created", onCreated);
+    socket.on("reservation:updated", onUpdated);
+    socket.on("reservation:deleted", onDeleted);
+    return () => {
+      socket.off("reservation:created", onCreated);
+      socket.off("reservation:updated", onUpdated);
+      socket.off("reservation:deleted", onDeleted);
+    };
+  }, [isLikelyOwnEcho]);
+
   const { data: tables = [] } = useQuery({
     queryKey: ["tables", selectedOutletId],
     queryFn: () => tableService.getTables(),
@@ -175,6 +209,7 @@ const Reservations = () => {
   const createMutation = useMutation({
     mutationFn: (data: CreateReservationInput) => reservationService.create(data),
     onSuccess: () => {
+      markMine();
       qc.invalidateQueries({ queryKey: ["reservations"] });
       toast.success(form.bookingType === "future_order" ? "Future Pre-Order created!" : "Table Reservation added!");
       setShowForm(false);
@@ -186,6 +221,7 @@ const Reservations = () => {
     mutationFn: ({ id, data }: { id: string; data: Partial<CreateReservationInput & { status: string }> }) =>
       reservationService.update(id, data),
     onSuccess: () => {
+      markMine();
       qc.invalidateQueries({ queryKey: ["reservations"] });
       toast.success("Updated successfully");
       setShowForm(false);
@@ -196,6 +232,7 @@ const Reservations = () => {
   const deleteMutation = useMutation({
     mutationFn: (id: string) => reservationService.delete(id),
     onSuccess: () => {
+      markMine();
       qc.invalidateQueries({ queryKey: ["reservations"] });
       toast.success("Deleted successfully");
       setDeleteId(null);
@@ -206,6 +243,7 @@ const Reservations = () => {
   const convertMutation = useMutation({
     mutationFn: (id: string) => reservationService.convertToOrder(id),
     onSuccess: (order) => {
+      markMine();
       qc.invalidateQueries({ queryKey: ["reservations"] });
       qc.invalidateQueries({ queryKey: ["orders"] });
       qc.invalidateQueries({ queryKey: ["tables"] });
@@ -300,6 +338,15 @@ const Reservations = () => {
   }, [dateFilteredReservations]);
 
   // Form Handlers
+  const toggleForm = () => {
+    if (showForm) {
+      setShowForm(false);
+      setEditId(null);
+    } else {
+      openAdd("table_reservation");
+    }
+  };
+
   const openAdd = (type: "table_reservation" | "future_order" = "table_reservation") => {
     setEditId(null);
     setForm({ ...emptyForm(), bookingType: type });
@@ -479,6 +526,11 @@ const Reservations = () => {
     if (!form.customerName?.trim()) { toast.error("Customer name required"); return; }
     if (!form.date) { toast.error("Date required"); return; }
     if (!form.time) { toast.error("Time required"); return; }
+    if (!form.customerPhone?.trim()) { toast.error("Phone number is required"); return; }
+    if (form.orderType === "Dine In" && !form.tableId) {
+      toast.error("Please select a table for this Dine In reservation");
+      return;
+    }
 
     if (form.orderType === "Take Away" || form.orderType === "Delivery") {
       if (!form.preOrderItems || form.preOrderItems.length === 0) {
@@ -630,13 +682,347 @@ const Reservations = () => {
           title="Reservations & Future Sales"
           subtitle="Manage Dine In, Take Away, Delivery pre-orders and advance deposits"
           actions={!isSuperAdmin ? (
-            <Button className="gradient-primary text-primary-foreground shadow-md font-bold" onClick={() => openAdd("table_reservation")}>
-              <Plus className="h-4 w-4 mr-2" />New Booking / Pre-Order
+            <Button
+              variant={showForm ? "outline" : "default"}
+              className={cn(
+                "font-bold transition-all shadow-md",
+                showForm
+                  ? "bg-destructive/10 text-destructive border-destructive/30 hover:bg-destructive/20 hover:border-destructive/50"
+                  : "gradient-primary text-primary-foreground"
+              )}
+              onClick={toggleForm}
+            >
+              {showForm ? (
+                <>
+                  <X className="h-4 w-4 mr-2" />Close Form
+                </>
+              ) : (
+                <>
+                  <Plus className="h-4 w-4 mr-2" />New Booking / Pre-Order
+                </>
+              )}
             </Button>
           ) : undefined}
         />
         <OutletFilterSelect outletId={selectedOutletId} setOutletId={setOutletId} outlets={outlets} isSuperAdmin={isSuperAdmin} />
       </div>
+
+      {/* Reservation & Pre-Order Form Card */}
+      {showForm && (!isSuperAdmin || editId) && (
+        <Card className="shadow-lg border-primary/40 relative animate-in fade-in slide-in-from-top-2 duration-200">
+          <CardHeader className="pb-3 border-b bg-muted/20 flex flex-row items-start justify-between">
+            <div>
+              <CardTitle className="text-base flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-primary" />
+                {editId ? "Edit" : "New"} {form.bookingType === "future_order" ? "Future Sale / Pre-Order" : "Table Reservation"}
+              </CardTitle>
+              <CardDescription className="text-xs mt-0.5">
+                Fill in customer details, schedule date/time, select pre-order food items, and collect advance deposits.
+              </CardDescription>
+            </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted/80 shrink-0 -mr-1 -mt-1"
+              onClick={() => { setShowForm(false); setEditId(null); }}
+              title="Close form"
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </CardHeader>
+          <CardContent className="space-y-4 pt-4">
+
+            {/* Booking / Fulfillment Type Switcher (3 Parts: Dine In, Take Away, Delivery) */}
+            <div className="grid grid-cols-3 gap-2 p-1 bg-muted/60 rounded-xl">
+              <Button
+                type="button"
+                variant={form.orderType === "Dine In" ? "default" : "ghost"}
+                className={cn("w-full text-xs font-semibold rounded-lg flex items-center justify-center gap-1.5", form.orderType === "Dine In" && "gradient-primary text-primary-foreground shadow")}
+                onClick={() => setForm(p => ({ ...p, bookingType: "table_reservation", orderType: "Dine In" }))}
+              >
+                <Utensils className="h-3.5 w-3.5" /> Dine In
+              </Button>
+              <Button
+                type="button"
+                variant={form.orderType === "Take Away" ? "default" : "ghost"}
+                className={cn("w-full text-xs font-semibold rounded-lg flex items-center justify-center gap-1.5", form.orderType === "Take Away" && "gradient-primary text-primary-foreground shadow")}
+                onClick={() => setForm(p => ({ ...p, bookingType: "future_order", orderType: "Take Away", tableId: undefined, tableNumber: undefined }))}
+              >
+                <ShoppingBag className="h-3.5 w-3.5" /> Take Away
+              </Button>
+              <Button
+                type="button"
+                variant={form.orderType === "Delivery" ? "default" : "ghost"}
+                className={cn("w-full text-xs font-semibold rounded-lg flex items-center justify-center gap-1.5", form.orderType === "Delivery" && "gradient-primary text-primary-foreground shadow")}
+                onClick={() => setForm(p => ({ ...p, bookingType: "future_order", orderType: "Delivery", tableId: undefined, tableNumber: undefined }))}
+              >
+                <Truck className="h-3.5 w-3.5" /> Delivery
+              </Button>
+            </div>
+
+            {/* Customer Inputs with Suggestions */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 relative" ref={dropdownRef}>
+              <div className="relative">
+                <Label className="text-xs font-semibold">Customer Name *</Label>
+                <Input
+                  value={form.customerName || ""}
+                  onFocus={() => setShowCustSuggestions(true)}
+                  onChange={e => {
+                    setForm(p => ({ ...p, customerName: e.target.value }));
+                    setShowCustSuggestions(true);
+                  }}
+                  placeholder="Type or select registered customer"
+                  className="mt-1"
+                />
+              </div>
+
+              <div>
+                <Label className="text-xs font-semibold">Phone (11 Digits) *</Label>
+                <Input
+                  value={form.customerPhone || ""}
+                  onFocus={() => setShowCustSuggestions(true)}
+                  onChange={e => {
+                    const formatted = formatPhoneNumber(e.target.value);
+                    setForm(p => ({ ...p, customerPhone: formatted }));
+                    setShowCustSuggestions(true);
+                  }}
+                  placeholder="0300-1234567"
+                  className="mt-1"
+                />
+              </div>
+
+              {/* Registered Customers Suggestions Popup */}
+              {showCustSuggestions && filteredCustomerSuggestions.length > 0 && (
+                <div className="absolute left-0 top-full mt-1 w-full bg-popover text-popover-foreground border border-border rounded-xl shadow-xl z-50 p-1.5 space-y-1 animate-in fade-in-50 slide-in-from-top-1">
+                  <p className="text-[10px] font-semibold text-muted-foreground uppercase px-2 py-1 flex items-center gap-1">
+                    <Users className="h-3 w-3 text-primary" /> Registered Customer Suggestions ({filteredCustomerSuggestions.length})
+                  </p>
+                  {filteredCustomerSuggestions.map(c => (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => handleSelectCustomer(c)}
+                      className="w-full text-left px-2.5 py-1.5 hover:bg-accent hover:text-accent-foreground rounded-lg transition-colors flex items-center justify-between text-xs"
+                    >
+                      <div>
+                        <span className="font-semibold text-foreground">{c.name}</span>
+                        {c.phone && <span className="text-muted-foreground ml-2">({c.phone})</span>}
+                      </div>
+                      <span className="text-[10px] text-primary font-bold flex items-center gap-0.5">
+                        Select <CheckCircle2 className="h-3 w-3" />
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Date, Time & Guests / Requirement info */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <Label className="text-xs font-semibold">Date *</Label>
+                <Input
+                  type="date"
+                  min={today}
+                  value={form.date || ""}
+                  onChange={e => setForm(p => ({ ...p, date: e.target.value }))}
+                  className="mt-1 [color-scheme:dark] bg-background border-border text-foreground font-semibold"
+                />
+              </div>
+              <div>
+                <Label className="text-xs font-semibold">Time *</Label>
+                <Input
+                  type="time"
+                  value={form.time || ""}
+                  onChange={e => setForm(p => ({ ...p, time: e.target.value }))}
+                  className="mt-1 [color-scheme:dark] bg-background border-border text-foreground font-semibold"
+                />
+              </div>
+
+              {form.orderType === "Dine In" ? (
+                <div>
+                  <Label className="text-xs font-semibold">Guests (Pax)</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    value={form.guestCount || 1}
+                    onChange={e => setForm(p => ({ ...p, guestCount: Number(e.target.value) }))}
+                    className="mt-1"
+                  />
+                </div>
+              ) : (
+                <div>
+                  <Label className="text-xs font-semibold">Pre-Order Requirement</Label>
+                  <div className="mt-1 h-9 flex items-center px-3 rounded-md bg-amber-500/10 border border-amber-500/30 text-amber-600 dark:text-amber-400 font-bold text-xs">
+                    Food Menu Mandatory
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Delivery Address if Delivery pre-order */}
+            {form.bookingType === "future_order" && form.orderType === "Delivery" && (
+              <div>
+                <Label className="text-xs font-semibold">Delivery Address *</Label>
+                <Input
+                  value={form.deliveryAddress || ""}
+                  onChange={e => setForm(p => ({ ...p, deliveryAddress: e.target.value }))}
+                  placeholder="Complete delivery location / street address..."
+                  className="mt-1"
+                />
+              </div>
+            )}
+
+            {/* Table Selection for Dine-In */}
+            {(form.bookingType === "table_reservation" || form.orderType === "Dine In") && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-xs font-semibold">Table *</Label>
+                  <Select value={form.tableId || "none"} onValueChange={v => {
+                    const t = tables.find(t => t.id === v);
+                    setForm(p => ({ ...p, tableId: v === "none" ? undefined : v, tableNumber: t?.number ? String(t.number) : "" }));
+                  }}>
+                    <SelectTrigger className="mt-1 bg-background border-border text-foreground font-medium"><SelectValue placeholder="Select table" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">No table assigned</SelectItem>
+                      {tables.map(t => {
+                        const resInfo = getTableReservationStatus(t);
+                        return (
+                          <SelectItem key={t.id} value={t.id} disabled={resInfo.isReserved}>
+                            {resInfo.isReserved ? "🟡 " : "🟢 "}
+                            Table {t.number} ({t.floor || "Main Hall"}) · {t.capacity} seats · {resInfo.label}
+                          </SelectItem>
+                        );
+                      })}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <Label className="text-xs font-semibold">Booking Source</Label>
+                  <Select value={form.source || "phone"} onValueChange={v => setForm(p => ({ ...p, source: v }))}>
+                    <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="phone">Phone</SelectItem>
+                      <SelectItem value="walkin">Walk-in</SelectItem>
+                      <SelectItem value="online">Online / WhatsApp</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            )}
+
+            {/* Pre-Order Food Items Selection Section */}
+            <div className="border border-border/80 rounded-xl p-3 bg-muted/20 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-bold flex items-center gap-1.5 text-foreground">
+                    <Utensils className="h-4 w-4 text-primary" /> Pre-Order Food Items ({form.preOrderItems?.length || 0})
+                  </p>
+                  <p className="text-[11px] text-muted-foreground">Select food items customer wants to pre-order in advance.</p>
+                </div>
+                <Button type="button" variant="outline" size="sm" className="h-8 border-primary/40 hover:bg-primary/10 text-xs font-semibold" onClick={() => setShowMenuPicker(true)}>
+                  <Plus className="h-3.5 w-3.5 mr-1 text-primary" /> Add Food Items
+                </Button>
+              </div>
+
+              {form.preOrderItems && form.preOrderItems.length > 0 ? (
+                <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                  {form.preOrderItems.map((item, idx) => (
+                    <div key={idx} className="flex items-center justify-between p-2 rounded-lg bg-card border border-border text-xs">
+                      <div>
+                        <p className="font-semibold text-foreground">{item.name}</p>
+                        <p className="text-[10px] text-muted-foreground">PKR {item.price.toLocaleString()} each</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1 bg-muted rounded-md px-1.5 py-0.5">
+                          <button type="button" onClick={() => handleUpdateItemQty(idx, -1)} className="hover:text-primary font-bold px-1">-</button>
+                          <span className="font-bold text-foreground">{item.qty}</span>
+                          <button type="button" onClick={() => handleUpdateItemQty(idx, 1)} className="hover:text-primary font-bold px-1">+</button>
+                        </div>
+                        <span className="font-mono font-bold text-foreground w-16 text-right">PKR {(item.price * item.qty).toLocaleString()}</span>
+                        <Button type="button" variant="ghost" size="icon" className="h-6 w-6 text-destructive" onClick={() => handleUpdateItemQty(idx, -item.qty)}>
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+
+                  <div className="flex justify-between items-center pt-2 border-t text-xs font-bold">
+                    <span>Food Total Price:</span>
+                    <span className="text-primary font-mono text-sm">PKR {(form.subtotal || 0).toLocaleString()}</span>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-xs text-center py-4 text-muted-foreground border border-dashed rounded-lg">
+                  No pre-order food items added yet. Click "Add Food Items" above.
+                </p>
+              )}
+            </div>
+
+            {/* Advance Payment & Deposit Collection Section */}
+            <div className="border border-emerald-500/30 rounded-xl p-3 bg-emerald-500/5 space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-bold flex items-center gap-1.5 text-emerald-400">
+                  <CreditCard className="h-4 w-4" /> Advance Deposit & Payment
+                </p>
+                <Badge className="bg-emerald-500/15 text-emerald-400 border-emerald-500/30 text-[10px]">
+                  Auto-Deducted in POS Bill
+                </Badge>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <Label className="text-xs font-semibold">Advance Paid (PKR)</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    value={form.advancePaid || ""}
+                    onChange={e => setForm(p => ({ ...p, advancePaid: e.target.value === "" ? 0 : Number(e.target.value) }))}
+                    className="mt-1 font-bold text-emerald-400"
+                    placeholder="0"
+                  />
+                </div>
+
+                <div>
+                  <Label className="text-xs font-semibold">Payment Method</Label>
+                  <Select value={form.paymentMethod || registeredPaymentMethods[0] || "Cash"} onValueChange={v => setForm(p => ({ ...p, paymentMethod: v }))}>
+                    <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {registeredPaymentMethods.map((pm: string) => (
+                        <SelectItem key={pm} value={pm}>{pm}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <Label className="text-xs font-semibold">Receipt / Ref # (Optional)</Label>
+                  <Input
+                    value={form.depositRef || ""}
+                    onChange={e => setForm(p => ({ ...p, depositRef: e.target.value }))}
+                    placeholder="Tx Ref #..."
+                    className="mt-1"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <Label className="text-xs font-semibold">Special Requests / Event Notes</Label>
+              <Textarea value={form.specialRequests || ""} onChange={e => setForm(p => ({ ...p, specialRequests: e.target.value }))} className="mt-1" placeholder="e.g. Birthday setup, high chair required, spicy food..." />
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="outline" onClick={() => setShowForm(false)}>Cancel</Button>
+              <Button className="gradient-primary text-primary-foreground font-semibold shadow" onClick={handleSave}
+                disabled={createMutation.isPending || updateMutation.isPending}>
+                Save {form.bookingType === "future_order" ? "Pre-Order" : "Reservation"}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Top Level Date Filter Bar */}
       <Card className="shadow-sm border-primary/20 bg-card/60 backdrop-blur">
@@ -966,312 +1352,6 @@ const Reservations = () => {
           </div>
         </CardContent>
       </Card>
-
-      {/* Reservation & Pre-Order Form Card */}
-      {showForm && (!isSuperAdmin || editId) && (
-        <Card className="shadow-lg border-primary/40 relative">
-          <CardHeader className="pb-3 border-b bg-muted/20">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Sparkles className="h-4 w-4 text-primary" />
-              {editId ? "Edit" : "New"} {form.bookingType === "future_order" ? "Future Sale / Pre-Order" : "Table Reservation"}
-            </CardTitle>
-            <CardDescription className="text-xs">
-              Fill in customer details, schedule date/time, select pre-order food items, and collect advance deposits.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4 pt-4">
-
-            {/* Booking / Fulfillment Type Switcher (3 Parts: Dine In, Take Away, Delivery) */}
-            <div className="grid grid-cols-3 gap-2 p-1 bg-muted/60 rounded-xl">
-              <Button
-                type="button"
-                variant={form.orderType === "Dine In" ? "default" : "ghost"}
-                className={cn("w-full text-xs font-semibold rounded-lg flex items-center justify-center gap-1.5", form.orderType === "Dine In" && "gradient-primary text-primary-foreground shadow")}
-                onClick={() => setForm(p => ({ ...p, bookingType: "table_reservation", orderType: "Dine In" }))}
-              >
-                <Utensils className="h-3.5 w-3.5" /> Dine In
-              </Button>
-              <Button
-                type="button"
-                variant={form.orderType === "Take Away" ? "default" : "ghost"}
-                className={cn("w-full text-xs font-semibold rounded-lg flex items-center justify-center gap-1.5", form.orderType === "Take Away" && "gradient-primary text-primary-foreground shadow")}
-                onClick={() => setForm(p => ({ ...p, bookingType: "future_order", orderType: "Take Away", tableId: undefined, tableNumber: undefined }))}
-              >
-                <ShoppingBag className="h-3.5 w-3.5" /> Take Away
-              </Button>
-              <Button
-                type="button"
-                variant={form.orderType === "Delivery" ? "default" : "ghost"}
-                className={cn("w-full text-xs font-semibold rounded-lg flex items-center justify-center gap-1.5", form.orderType === "Delivery" && "gradient-primary text-primary-foreground shadow")}
-                onClick={() => setForm(p => ({ ...p, bookingType: "future_order", orderType: "Delivery", tableId: undefined, tableNumber: undefined }))}
-              >
-                <Truck className="h-3.5 w-3.5" /> Delivery
-              </Button>
-            </div>
-
-            {/* Customer Inputs with Suggestions */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 relative" ref={dropdownRef}>
-              <div className="relative">
-                <Label className="text-xs font-semibold">Customer Name *</Label>
-                <Input
-                  value={form.customerName || ""}
-                  onFocus={() => setShowCustSuggestions(true)}
-                  onChange={e => {
-                    setForm(p => ({ ...p, customerName: e.target.value }));
-                    setShowCustSuggestions(true);
-                  }}
-                  placeholder="Type or select registered customer"
-                  className="mt-1"
-                />
-              </div>
-
-              <div>
-                <Label className="text-xs font-semibold">Phone (11 Digits)</Label>
-                <Input
-                  value={form.customerPhone || ""}
-                  onFocus={() => setShowCustSuggestions(true)}
-                  onChange={e => {
-                    const formatted = formatPhoneNumber(e.target.value);
-                    setForm(p => ({ ...p, customerPhone: formatted }));
-                    setShowCustSuggestions(true);
-                  }}
-                  placeholder="0300-1234567"
-                  className="mt-1"
-                />
-              </div>
-
-              {/* Registered Customers Suggestions Popup */}
-              {showCustSuggestions && filteredCustomerSuggestions.length > 0 && (
-                <div className="absolute left-0 top-full mt-1 w-full bg-popover text-popover-foreground border border-border rounded-xl shadow-xl z-50 p-1.5 space-y-1 animate-in fade-in-50 slide-in-from-top-1">
-                  <p className="text-[10px] font-semibold text-muted-foreground uppercase px-2 py-1 flex items-center gap-1">
-                    <Users className="h-3 w-3 text-primary" /> Registered Customer Suggestions ({filteredCustomerSuggestions.length})
-                  </p>
-                  {filteredCustomerSuggestions.map(c => (
-                    <button
-                      key={c.id}
-                      type="button"
-                      onClick={() => handleSelectCustomer(c)}
-                      className="w-full text-left px-2.5 py-1.5 hover:bg-accent hover:text-accent-foreground rounded-lg transition-colors flex items-center justify-between text-xs"
-                    >
-                      <div>
-                        <span className="font-semibold text-foreground">{c.name}</span>
-                        {c.phone && <span className="text-muted-foreground ml-2">({c.phone})</span>}
-                      </div>
-                      <span className="text-[10px] text-primary font-bold flex items-center gap-0.5">
-                        Select <CheckCircle2 className="h-3 w-3" />
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Date, Time & Guests / Requirement info */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div>
-                <Label className="text-xs font-semibold">Date *</Label>
-                <Input
-                  type="date"
-                  min={today}
-                  value={form.date || ""}
-                  onChange={e => setForm(p => ({ ...p, date: e.target.value }))}
-                  className="mt-1 [color-scheme:dark] bg-background border-border text-foreground font-semibold"
-                />
-              </div>
-              <div>
-                <Label className="text-xs font-semibold">Time *</Label>
-                <Input
-                  type="time"
-                  value={form.time || ""}
-                  onChange={e => setForm(p => ({ ...p, time: e.target.value }))}
-                  className="mt-1 [color-scheme:dark] bg-background border-border text-foreground font-semibold"
-                />
-              </div>
-
-              {form.orderType === "Dine In" ? (
-                <div>
-                  <Label className="text-xs font-semibold">Guests (Pax)</Label>
-                  <Input
-                    type="number"
-                    min={1}
-                    value={form.guestCount || 1}
-                    onChange={e => setForm(p => ({ ...p, guestCount: Number(e.target.value) }))}
-                    className="mt-1"
-                  />
-                </div>
-              ) : (
-                <div>
-                  <Label className="text-xs font-semibold">Pre-Order Requirement</Label>
-                  <div className="mt-1 h-9 flex items-center px-3 rounded-md bg-amber-500/10 border border-amber-500/30 text-amber-600 dark:text-amber-400 font-bold text-xs">
-                    Food Menu Mandatory
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Delivery Address if Delivery pre-order */}
-            {form.bookingType === "future_order" && form.orderType === "Delivery" && (
-              <div>
-                <Label className="text-xs font-semibold">Delivery Address *</Label>
-                <Input
-                  value={form.deliveryAddress || ""}
-                  onChange={e => setForm(p => ({ ...p, deliveryAddress: e.target.value }))}
-                  placeholder="Complete delivery location / street address..."
-                  className="mt-1"
-                />
-              </div>
-            )}
-
-            {/* Table Selection for Dine-In */}
-            {(form.bookingType === "table_reservation" || form.orderType === "Dine In") && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <Label className="text-xs font-semibold">Table</Label>
-                  <Select value={form.tableId || "none"} onValueChange={v => {
-                    const t = tables.find(t => t.id === v);
-                    setForm(p => ({ ...p, tableId: v === "none" ? undefined : v, tableNumber: t?.number ? String(t.number) : "" }));
-                  }}>
-                    <SelectTrigger className="mt-1 bg-background border-border text-foreground font-medium"><SelectValue placeholder="Select table" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">No table assigned</SelectItem>
-                      {tables.map(t => {
-                        const resInfo = getTableReservationStatus(t);
-                        return (
-                          <SelectItem key={t.id} value={t.id} disabled={resInfo.isReserved}>
-                            {resInfo.isReserved ? "🟡 " : "🟢 "}
-                            Table {t.number} ({t.floor || "Main Hall"}) · {t.capacity} seats · {resInfo.label}
-                          </SelectItem>
-                        );
-                      })}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div>
-                  <Label className="text-xs font-semibold">Booking Source</Label>
-                  <Select value={form.source || "phone"} onValueChange={v => setForm(p => ({ ...p, source: v }))}>
-                    <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="phone">Phone</SelectItem>
-                      <SelectItem value="walkin">Walk-in</SelectItem>
-                      <SelectItem value="online">Online / WhatsApp</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            )}
-
-            {/* Pre-Order Food Items Selection Section */}
-            <div className="border border-border/80 rounded-xl p-3 bg-muted/20 space-y-3">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-bold flex items-center gap-1.5 text-foreground">
-                    <Utensils className="h-4 w-4 text-primary" /> Pre-Order Food Items ({form.preOrderItems?.length || 0})
-                  </p>
-                  <p className="text-[11px] text-muted-foreground">Select food items customer wants to pre-order in advance.</p>
-                </div>
-                <Button type="button" variant="outline" size="sm" className="h-8 border-primary/40 hover:bg-primary/10 text-xs font-semibold" onClick={() => setShowMenuPicker(true)}>
-                  <Plus className="h-3.5 w-3.5 mr-1 text-primary" /> Add Food Items
-                </Button>
-              </div>
-
-              {form.preOrderItems && form.preOrderItems.length > 0 ? (
-                <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
-                  {form.preOrderItems.map((item, idx) => (
-                    <div key={idx} className="flex items-center justify-between p-2 rounded-lg bg-card border border-border text-xs">
-                      <div>
-                        <p className="font-semibold text-foreground">{item.name}</p>
-                        <p className="text-[10px] text-muted-foreground">PKR {item.price.toLocaleString()} each</p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className="flex items-center gap-1 bg-muted rounded-md px-1.5 py-0.5">
-                          <button type="button" onClick={() => handleUpdateItemQty(idx, -1)} className="hover:text-primary font-bold px-1">-</button>
-                          <span className="font-bold text-foreground">{item.qty}</span>
-                          <button type="button" onClick={() => handleUpdateItemQty(idx, 1)} className="hover:text-primary font-bold px-1">+</button>
-                        </div>
-                        <span className="font-mono font-bold text-foreground w-16 text-right">PKR {(item.price * item.qty).toLocaleString()}</span>
-                        <Button type="button" variant="ghost" size="icon" className="h-6 w-6 text-destructive" onClick={() => handleUpdateItemQty(idx, -item.qty)}>
-                          <Trash2 className="h-3 w-3" />
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-
-                  <div className="flex justify-between items-center pt-2 border-t text-xs font-bold">
-                    <span>Food Total Price:</span>
-                    <span className="text-primary font-mono text-sm">PKR {(form.subtotal || 0).toLocaleString()}</span>
-                  </div>
-                </div>
-              ) : (
-                <p className="text-xs text-center py-4 text-muted-foreground border border-dashed rounded-lg">
-                  No pre-order food items added yet. Click "Add Food Items" above.
-                </p>
-              )}
-            </div>
-
-            {/* Advance Payment & Deposit Collection Section */}
-            <div className="border border-emerald-500/30 rounded-xl p-3 bg-emerald-500/5 space-y-3">
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-bold flex items-center gap-1.5 text-emerald-400">
-                  <CreditCard className="h-4 w-4" /> Advance Deposit & Payment
-                </p>
-                <Badge className="bg-emerald-500/15 text-emerald-400 border-emerald-500/30 text-[10px]">
-                  Auto-Deducted in POS Bill
-                </Badge>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div>
-                  <Label className="text-xs font-semibold">Advance Paid (PKR)</Label>
-                  <Input
-                    type="number"
-                    min={0}
-                    value={form.advancePaid || ""}
-                    onChange={e => setForm(p => ({ ...p, advancePaid: e.target.value === "" ? 0 : Number(e.target.value) }))}
-                    className="mt-1 font-bold text-emerald-400"
-                    placeholder="0"
-                  />
-                </div>
-
-                <div>
-                  <Label className="text-xs font-semibold">Payment Method</Label>
-                  <Select value={form.paymentMethod || registeredPaymentMethods[0] || "Cash"} onValueChange={v => setForm(p => ({ ...p, paymentMethod: v }))}>
-                    <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {registeredPaymentMethods.map((pm: string) => (
-                        <SelectItem key={pm} value={pm}>{pm}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div>
-                  <Label className="text-xs font-semibold">Receipt / Ref # (Optional)</Label>
-                  <Input
-                    value={form.depositRef || ""}
-                    onChange={e => setForm(p => ({ ...p, depositRef: e.target.value }))}
-                    placeholder="Tx Ref #..."
-                    className="mt-1"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div>
-              <Label className="text-xs font-semibold">Special Requests / Event Notes</Label>
-              <Textarea value={form.specialRequests || ""} onChange={e => setForm(p => ({ ...p, specialRequests: e.target.value }))} className="mt-1" placeholder="e.g. Birthday setup, high chair required, spicy food..." />
-            </div>
-
-            <div className="flex justify-end gap-2 pt-2">
-              <Button variant="outline" onClick={() => setShowForm(false)}>Cancel</Button>
-              <Button className="gradient-primary text-primary-foreground font-semibold shadow" onClick={handleSave}
-                disabled={createMutation.isPending || updateMutation.isPending}>
-                Save {form.bookingType === "future_order" ? "Pre-Order" : "Reservation"}
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
 
       {/* Menu Item Picker Modal for Pre-Orders (POS Style) */}
       <Dialog open={showMenuPicker} onOpenChange={setShowMenuPicker}>

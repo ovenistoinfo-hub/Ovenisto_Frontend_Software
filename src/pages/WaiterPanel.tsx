@@ -24,6 +24,8 @@ import { useVisiblePolling } from "@/hooks/use-visible-polling";
 import { useOrderEvents } from "@/hooks/use-order-events";
 import { useTableEvents } from "@/hooks/use-table-events";
 import { useReservationEvents } from "@/hooks/use-reservation-events";
+import { useSelfMutationGuard } from "@/hooks/use-self-mutation-guard";
+import { getSocket } from "@/lib/socket";
 import { menuService, type MenuItemRecord, type CategoryRecord, type ModifierRecord, type MenuItemVariant } from "@/services/menu.service";
 import { tableService, type TableRecord } from "@/services/table.service";
 import { reservationService, type Reservation } from "@/services/reservation.service";
@@ -165,6 +167,7 @@ const WaiterPanel = () => {
   const { settings, updateSettings } = useData();
   const { user } = useAuth();
   const currency = settings.currency || "Rs.";
+  const { markMine, isLikelyOwnEcho } = useSelfMutationGuard();
 
   // Dynamic ticking clock for live order countdown/wait timers
   const [clock, setClock] = useState(new Date());
@@ -275,6 +278,7 @@ const WaiterPanel = () => {
 
   const handleCancelReservation = async (id: string) => {
     try {
+      markMine();
       await reservationService.update(id, { status: "cancelled" });
       toast.success("Reservation cancelled");
       loadReservations();
@@ -351,6 +355,51 @@ const WaiterPanel = () => {
   useVisiblePolling(loadTables, 60000);
   useVisiblePolling(loadReservations, 60000);
   useVisiblePolling(loadCustomers, 60000);
+
+  // Friendly toast for changes pushed from elsewhere (another waiter, POS, kitchen) —
+  // suppressed for a few seconds after this client's own writes (see markMine() calls above)
+  // so it doesn't double up with the specific success toast that action already shows. Order
+  // events aren't outlet-room-scoped server-side (unlike table/reservation), so they're also
+  // filtered to this outlet here.
+  useEffect(() => {
+    const socket = getSocket();
+    const onOrderCreated = (payload: OrderRecord) => {
+      if (isLikelyOwnEcho()) return;
+      if (payload.outletId && payload.outletId !== user?.outletId) return;
+      toast.info(`New order — Table ${payload.tableNumber ?? "—"} (#${payload.orderNumber})`);
+    };
+    const onOrderUpdated = (payload: OrderRecord) => {
+      if (isLikelyOwnEcho()) return;
+      if (payload.outletId && payload.outletId !== user?.outletId) return;
+      if (payload.status === "cancelled") {
+        toast.error(`Order #${payload.orderNumber} was cancelled`);
+      }
+    };
+    const onTableUpdated = (payload: TableRecord) => {
+      if (isLikelyOwnEcho()) return;
+      toast.info(`Table ${payload.number} is now ${payload.status}`);
+    };
+    const onReservationCreated = (payload: Reservation) => {
+      if (isLikelyOwnEcho()) return;
+      toast.info(`New reservation: ${payload.customerName} — ${payload.date} at ${payload.time}`);
+    };
+    const onReservationUpdated = (payload: Reservation) => {
+      if (isLikelyOwnEcho()) return;
+      toast.info(`Reservation for ${payload.customerName} updated — now ${payload.status}`);
+    };
+    socket.on("order:created", onOrderCreated);
+    socket.on("order:updated", onOrderUpdated);
+    socket.on("table:updated", onTableUpdated);
+    socket.on("reservation:created", onReservationCreated);
+    socket.on("reservation:updated", onReservationUpdated);
+    return () => {
+      socket.off("order:created", onOrderCreated);
+      socket.off("order:updated", onOrderUpdated);
+      socket.off("table:updated", onTableUpdated);
+      socket.off("reservation:created", onReservationCreated);
+      socket.off("reservation:updated", onReservationUpdated);
+    };
+  }, [isLikelyOwnEcho, user?.outletId]);
 
   // ── Derived ──
 
@@ -616,6 +665,7 @@ const WaiterPanel = () => {
   const acceptSelfOrder = async (order: OrderRecord) => {
     setAcceptingId(order.id);
     try {
+      markMine();
       await orderService.updateOrderStatus(order.id, "preparing");
       toast.success(`Table ${order.tableNumber} — sent to kitchen`);
       await loadOrders();
@@ -712,9 +762,25 @@ const WaiterPanel = () => {
     return parts[1] && !isNaN(Number(parts[1])) ? Number(parts[1]) : t.capacity;
   };
 
+  // Pre-fills the Guests dialog (pax + linked reservation + customer) from a table's active
+  // reservation, so the waiter sees the booked party size immediately instead of the table's
+  // raw seating capacity — still freely adjustable via the +/- buttons or the dropdown below.
+  const applyReservationToGuestsDialog = (res: Reservation) => {
+    setSelectedReservationForSitting(res.id);
+    if (res.guestCount) setGuestsCount(res.guestCount);
+    const matchedCust = customers.find(c => c.name.toLowerCase() === res.customerName.toLowerCase() || (res.customerPhone && c.phone === res.customerPhone));
+    if (matchedCust && selectedTableNum !== null) {
+      handleSelectCustomerForTable(matchedCust.id);
+    }
+  };
+
   const handlePlaceOrderClick = () => {
     if (selectedTable && selectedTable.status !== "occupied") {
-      setGuestsCount(selectedTable.capacity);
+      if (activeReservationForTable) {
+        applyReservationToGuestsDialog(activeReservationForTable);
+      } else {
+        setGuestsCount(selectedTable.capacity);
+      }
       setGuestsActionType("place-order");
       setShowGuestsDialog(true);
     } else {
@@ -724,7 +790,11 @@ const WaiterPanel = () => {
 
   const handleStartSittingClick = () => {
     if (!selectedTable) return;
-    setGuestsCount(selectedTable.capacity);
+    if (activeReservationForTable) {
+      applyReservationToGuestsDialog(activeReservationForTable);
+    } else {
+      setGuestsCount(selectedTable.capacity);
+    }
     setGuestsActionType("start-sitting");
     setShowGuestsDialog(true);
   };
@@ -755,6 +825,7 @@ const WaiterPanel = () => {
     const tax      = Math.round(subtotal * (taxRate / 100));
     const total    = subtotal + tax;
     try {
+      markMine();
       await orderService.createOrder({
         type: "Dine In",
         tableNumber: selectedTableNum,
@@ -794,6 +865,7 @@ const WaiterPanel = () => {
     if (!selectedTable || startingSitting) return;
     setStartingSitting(true);
     try {
+      markMine();
       const guests = guestsInput || selectedTable.capacity;
       const targetResId = selectedReservationForSitting || activeReservationForTable?.id;
       const targetRes = reservations.find(r => r.id === targetResId) || activeReservationForTable;
@@ -844,6 +916,7 @@ const WaiterPanel = () => {
     }
     setEndingSitting(true);
     try {
+      markMine();
       const uncompletedPaidOrders = activeTableOrders.filter(o => o.status !== "completed" && !isOrderUnpaid(o));
       if (uncompletedPaidOrders.length > 0) {
         await Promise.all(
@@ -883,6 +956,7 @@ const WaiterPanel = () => {
     if (!selectedTable || selectedTableNum === null) return;
     setSettlingBillingState(true);
     try {
+      markMine();
       if (activeReservationForTable && activeReservationForTable.status !== "completed") {
         await reservationService.update(activeReservationForTable.id, { status: "completed" }).catch(() => {});
       }
@@ -926,6 +1000,7 @@ const WaiterPanel = () => {
     if (!selectedTable || !targetTable) return;
     setMovingTable(true);
     try {
+      markMine();
       if (activeTableOrders.length > 0) {
         await Promise.all(
           activeTableOrders.map((o) =>
@@ -2422,16 +2497,11 @@ const WaiterPanel = () => {
                 <Select
                   value={selectedReservationForSitting || "none"}
                   onValueChange={(val) => {
-                    setSelectedReservationForSitting(val === "none" ? null : val);
-                    if (val !== "none") {
+                    if (val === "none") {
+                      setSelectedReservationForSitting(null);
+                    } else {
                       const resObj = confirmedReservations.find(r => r.id === val);
-                      if (resObj) {
-                        if (resObj.guestCount) setGuestsCount(resObj.guestCount);
-                        const matchedCust = customers.find(c => c.name.toLowerCase() === resObj.customerName.toLowerCase() || (resObj.customerPhone && c.phone === resObj.customerPhone));
-                        if (matchedCust && selectedTableNum !== null) {
-                          handleSelectCustomerForTable(matchedCust.id);
-                        }
-                      }
+                      if (resObj) applyReservationToGuestsDialog(resObj);
                     }
                   }}
                 >

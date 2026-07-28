@@ -12,6 +12,9 @@ import { orderService, type OrderRecord, type KitchenRecord } from "@/services/o
 import { ORDER_TYPE_COLORS } from "@/lib/constants";
 import { useVisiblePolling } from "@/hooks/use-visible-polling";
 import { useOrderEvents } from "@/hooks/use-order-events";
+import { useSelfMutationGuard } from "@/hooks/use-self-mutation-guard";
+import { getSocket } from "@/lib/socket";
+import { useAuth } from "@/contexts/AuthContext";
 
 type KitchenOrderStatus = "new" | "preparing" | "ready" | "completed";
 
@@ -52,6 +55,8 @@ const mapKitchenStatusToApi = (status: KitchenOrderStatus): string => {
 
 const KitchenPanel = () => {
   const { id } = useParams();
+  const { user } = useAuth();
+  const { markMine, isLikelyOwnEcho } = useSelfMutationGuard();
 
   const [kitchen, setKitchen] = useState<KitchenRecord | null>(null);
   const [kitchenOrders, setKitchenOrders] = useState<KitchenOrder[]>([]);
@@ -147,6 +152,32 @@ const KitchenPanel = () => {
   useOrderEvents(load);
   useVisiblePolling(load, 60000, !!kitchen);
 
+  // Friendly toast for orders pushed from elsewhere (POS, waiter, self-order) — a new order is
+  // the single most useful KDS alert. Suppressed for a few seconds after this kitchen's own
+  // status-advance action (see markMine() above), and filtered to this outlet since order
+  // events aren't outlet-room-scoped server-side (unlike table/reservation).
+  useEffect(() => {
+    const socket = getSocket();
+    const onOrderCreated = (payload: OrderRecord) => {
+      if (isLikelyOwnEcho()) return;
+      if (payload.outletId && payload.outletId !== user?.outletId) return;
+      toast.info(`New order received — #${payload.orderNumber}`);
+    };
+    const onOrderUpdated = (payload: OrderRecord) => {
+      if (isLikelyOwnEcho()) return;
+      if (payload.outletId && payload.outletId !== user?.outletId) return;
+      if (payload.status === "cancelled") {
+        toast.error(`Order #${payload.orderNumber} was cancelled — stop preparation!`);
+      }
+    };
+    socket.on("order:created", onOrderCreated);
+    socket.on("order:updated", onOrderUpdated);
+    return () => {
+      socket.off("order:created", onOrderCreated);
+      socket.off("order:updated", onOrderUpdated);
+    };
+  }, [isLikelyOwnEcho, user?.outletId]);
+
   /** Returns elapsed seconds since preparingAt started */
   const getElapsedSeconds = (preparingAt: Date) =>
     Math.floor((clock.getTime() - preparingAt.getTime()) / 1000);
@@ -177,6 +208,7 @@ const KitchenPanel = () => {
     ));
 
     try {
+      markMine();
       await orderService.updateOrderStatus(orderId, newApiStatus);
       toast.success(`Order ${order.orderNumber} moved to ${newKitchenStatus}`);
     } catch {

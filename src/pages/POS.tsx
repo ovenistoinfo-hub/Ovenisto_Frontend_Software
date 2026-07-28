@@ -15,6 +15,7 @@ import { useVisiblePolling } from "@/hooks/use-visible-polling";
 import { useOrderEvents } from "@/hooks/use-order-events";
 import { useTableEvents } from "@/hooks/use-table-events";
 import { useReservationEvents } from "@/hooks/use-reservation-events";
+import { useSelfMutationGuard } from "@/hooks/use-self-mutation-guard";
 import { getSocket } from "@/lib/socket";
 import { Search, Plus, Minus, X, ShoppingCart, FileText, Printer, ArrowLeft, Trash2, User, Users, MapPin, Phone, Flame, Check, CreditCard, Banknote, Smartphone, RotateCcw, Download, ClipboardList, AlertTriangle, UtensilsCrossed, CalendarClock, Calendar, Timer, ChefHat, Tag, Zap, History, Monitor, BookOpen, StickyNote, Eye, Building2, Crown, CircleAlert, Bell, DollarSign, Package, Ban, Truck, ShoppingBag, Utensils, AlertCircle, CheckCircle2, Clock, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -103,6 +104,7 @@ const POS = () => {
   const { orders: localOrdersData, customers: customersList, foodMenuItems: localFoodMenuItems, foodCategories: localFoodCategories, modifiers: localModifiers, kitchens: localKitchens, ingredients, addItem, updateItem: updateDataItem, shifts, settings, riders: deliveryRiders, deals, updateSettings } = useData();
   const { user } = useAuth();
   const location = useLocation();
+  const { markMine, isLikelyOwnEcho } = useSelfMutationGuard();
 
   // ── API data state (overrides localStorage) ──
   const [apiOrders, setApiOrders] = useState<any[]>([]);
@@ -262,6 +264,51 @@ const POS = () => {
   useReservationEvents(loadApiReservations);
   useVisiblePolling(loadApiOrders, 60000);
   useVisiblePolling(loadApiReservations, 60000);
+
+  // Friendly toast for changes pushed from elsewhere (another cashier, waiter, kitchen) —
+  // suppressed for a few seconds after this client's own writes (see markMine() calls above)
+  // so it doesn't double up with the specific success toast that action already shows. Order
+  // events aren't outlet-room-scoped server-side (unlike table/reservation), so they're also
+  // filtered to this outlet here.
+  useEffect(() => {
+    const socket = getSocket();
+    const onOrderCreated = (payload: OrderRecord) => {
+      if (isLikelyOwnEcho()) return;
+      if (payload.outletId && payload.outletId !== user?.outletId) return;
+      toast.info(`New order — ${payload.tableNumber ? `Table ${payload.tableNumber}` : payload.type} (#${payload.orderNumber})`);
+    };
+    const onOrderUpdated = (payload: OrderRecord) => {
+      if (isLikelyOwnEcho()) return;
+      if (payload.outletId && payload.outletId !== user?.outletId) return;
+      if (payload.status === "cancelled") {
+        toast.error(`Order #${payload.orderNumber} was cancelled`);
+      }
+    };
+    const onTableUpdated = (payload: TableRecord) => {
+      if (isLikelyOwnEcho()) return;
+      toast.info(`Table ${payload.number} is now ${payload.status}`);
+    };
+    const onReservationCreated = (payload: ReservationRecord) => {
+      if (isLikelyOwnEcho()) return;
+      toast.info(`New reservation: ${payload.customerName} — ${payload.date} at ${payload.time}`);
+    };
+    const onReservationUpdated = (payload: ReservationRecord) => {
+      if (isLikelyOwnEcho()) return;
+      toast.info(`Reservation for ${payload.customerName} updated — now ${payload.status}`);
+    };
+    socket.on("order:created", onOrderCreated);
+    socket.on("order:updated", onOrderUpdated);
+    socket.on("table:updated", onTableUpdated);
+    socket.on("reservation:created", onReservationCreated);
+    socket.on("reservation:updated", onReservationUpdated);
+    return () => {
+      socket.off("order:created", onOrderCreated);
+      socket.off("order:updated", onOrderUpdated);
+      socket.off("table:updated", onTableUpdated);
+      socket.off("reservation:created", onReservationCreated);
+      socket.off("reservation:updated", onReservationUpdated);
+    };
+  }, [isLikelyOwnEcho, user?.outletId]);
 
   // Let the staff member who requested a cancellation know the outcome as soon as
   // the approver reviews it — otherwise the request dialog just closes on submit
@@ -552,6 +599,7 @@ const POS = () => {
   const handleMarkOrderCompleted = async (orderId: string, orderNumber: string) => {
     setCompletingOrderIds(prev => new Set(prev).add(orderId));
     try {
+      markMine();
       await orderService.updateOrderStatus(orderId, "completed");
       toast.success(`Order ${orderNumber} marked as completed & handed over!`);
       await loadApiOrders();
@@ -1165,6 +1213,7 @@ const POS = () => {
     let finalOrderNumber = "";
 
     try {
+      markMine();
       // ── Payment-only mode: just update payment + mark completed, NO re-send to kitchen ──
       if (paymentOnlyMode && loadedOrderId) {
         const updated = await orderService.updateOrder(loadedOrderId, { paymentMethod: payMethodStr });
