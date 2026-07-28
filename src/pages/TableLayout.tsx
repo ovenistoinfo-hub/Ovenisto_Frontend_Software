@@ -461,7 +461,7 @@ const TableLayout = () => {
             <div className="flex flex-col items-center space-y-5 py-4">
               <div ref={qrRef} className="bg-white p-4 rounded-xl border border-border shadow-sm">
                 <QRCodeSVG
-                  value={`${window.location.origin}/self-order?table=${selectedQrTable.number}`}
+                  value={`${window.location.origin}/self-order?tableId=${selectedQrTable.id}`}
                   size={180}
                   level="H"
                   includeMargin
