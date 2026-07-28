@@ -145,7 +145,10 @@ const OrderStatusBoard = () => {
   const loadOrders = useCallback(async () => {
     try {
       const res = await orderService.getOrders({ limit: 200 });
-      setAllOrders((res.data || []).map(normalize));
+      // Same gate as KitchenPanel: hide a self-order until a waiter accepts it.
+      setAllOrders((res.data || [])
+        .filter((o) => !(o.type === "Self Order" && o.status === "pending" && !o.acceptedById))
+        .map(normalize));
     } catch {}
   }, []);
 

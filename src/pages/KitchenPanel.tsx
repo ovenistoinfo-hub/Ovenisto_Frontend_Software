@@ -75,8 +75,9 @@ const KitchenPanel = () => {
 
     return orders
       .filter((o) => o.status !== "completed" && o.status !== "cancelled")
-      // Exclude self-orders that are still pending (not yet approved by waiter)
-      .filter((o) => !(o.type === "Self Order" && o.status === "pending"))
+      // Exclude self-orders that are still pending AND not yet accepted by a waiter —
+      // once accepted (acceptedById set) it behaves exactly like any other pending order.
+      .filter((o) => !(o.type === "Self Order" && o.status === "pending" && !o.acceptedById))
       .map((o) => {
         // Only show items whose category matches this kitchen's assigned categories
         const relevantItems = o.items
