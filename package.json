@@ -8,7 +8,7 @@
     "dev:nodemon": "nodemon --exec vite",
     "build": "vite build",
     "build:dev": "vite build --mode development",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit --project tsconfig.app.json",
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",

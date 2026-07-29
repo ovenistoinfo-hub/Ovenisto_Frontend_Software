@@ -126,7 +126,7 @@ const SelfOrder = () => {
 
   // ── Cart helpers ──
 
-  const addToCart = (item: MenuItemRecord) => {
+  const addToCart = (item: SelfOrderMenuItem) => {
     const hasVariants = item.variants.length > 0;
     const hasModifiers = resolveModifiers(item).length > 0;
 
@@ -151,7 +151,7 @@ const SelfOrder = () => {
     }
   };
 
-  const confirmAddWithOptions = (item: MenuItemRecord) => {
+  const confirmAddWithOptions = (item: SelfOrderMenuItem) => {
     const hasVariants = item.variants.length > 0;
     if (hasVariants && !selectedVariant) { toast.error("Please select a size"); return; }
 
