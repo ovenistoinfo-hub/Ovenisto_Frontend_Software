@@ -253,10 +253,11 @@ const SelfOrder = () => {
             </>
           ) : confirmed ? (
             <>
-              <CheckCircle2 className="h-16 w-16 mx-auto text-success" />
+              <CheckCircle2 className="h-16 w-16 mx-auto text-success animate-bounce" />
               <h1 className="text-2xl font-bold">Order Confirmed!</h1>
-              <p className="text-muted-foreground">Your order is being prepared.</p>
-              <p className="text-sm text-muted-foreground">Sit back and relax — it'll be brought to Table {table?.tableNumber}.</p>
+              <p className="text-muted-foreground">
+                Your order is being prepared in the kitchen. Enjoy your meal! Please pay your bill with your server or at the counter when finished.
+              </p>
             </>
           ) : (
             <>
