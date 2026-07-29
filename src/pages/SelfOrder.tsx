@@ -37,6 +37,47 @@ const formatPhoneNumber = (val: string): string => {
   return digitsOnly;
 };
 
+interface PersistedSession {
+  entryDone: boolean;
+  customerName: string;
+  customerPhone: string;
+  guestCount: number;
+  cart: CartItem[];
+  notes: string;
+  placedOrderId: string | null;
+  sessionToken: string | null;
+}
+
+function sessionStorageKey(tableId: string): string {
+  return `ovenisto_self_order_session_${tableId}`;
+}
+
+function loadPersistedSession(tableId: string): PersistedSession | null {
+  try {
+    const raw = localStorage.getItem(sessionStorageKey(tableId));
+    return raw ? (JSON.parse(raw) as PersistedSession) : null;
+  } catch {
+    return null;
+  }
+}
+
+function savePersistedSession(tableId: string, session: PersistedSession): void {
+  try {
+    localStorage.setItem(sessionStorageKey(tableId), JSON.stringify(session));
+  } catch {
+    // localStorage can throw in private-browsing/quota-exceeded cases — the
+    // page still works, it just won't survive a refresh.
+  }
+}
+
+function clearPersistedSession(tableId: string): void {
+  try {
+    localStorage.removeItem(sessionStorageKey(tableId));
+  } catch {
+    // no-op
+  }
+}
+
 const SelfOrder = () => {
   const [searchParams] = useSearchParams();
   const tableId = searchParams.get("tableId");
@@ -62,6 +103,8 @@ const SelfOrder = () => {
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
   const [guestCount, setGuestCount] = useState(2);
+  const [nameConflict, setNameConflict] = useState<{ savedName: string; typedName: string } | null>(null);
+  const [checkingCustomer, setCheckingCustomer] = useState(false);
 
   // ── Menu browsing / cart ──
   const [search, setSearch] = useState("");
@@ -77,6 +120,7 @@ const SelfOrder = () => {
   // ── Placed-order waiting/status screen ──
   const [placedOrderId, setPlacedOrderId] = useState<string | null>(null);
   const [orderStatus, setOrderStatus] = useState<SelfOrderStatus | null>(null);
+  const [sessionToken, setSessionToken] = useState<string | null>(null);
 
   useEffect(() => {
     if (!tableId) { setTableError("No table specified — please scan the QR code on your table."); setTableLoading(false); return; }
@@ -85,6 +129,32 @@ const SelfOrder = () => {
       .catch(() => setTableError("This table could not be found. Please ask staff for help."))
       .finally(() => setTableLoading(false));
   }, [tableId]);
+
+  const [hydrated, setHydrated] = useState(false);
+
+  useEffect(() => {
+    if (!table || hydrated) return;
+    const persisted = loadPersistedSession(table.tableId);
+    if (persisted) {
+      setEntryDone(persisted.entryDone);
+      setCustomerName(persisted.customerName);
+      setCustomerPhone(persisted.customerPhone);
+      setGuestCount(persisted.guestCount);
+      setCart(persisted.cart);
+      setNotes(persisted.notes);
+      setPlacedOrderId(persisted.placedOrderId);
+      setSessionToken(persisted.sessionToken);
+    }
+    setHydrated(true);
+  }, [table, hydrated]);
+
+  useEffect(() => {
+    if (!table || !hydrated) return;
+    savePersistedSession(table.tableId, {
+      entryDone, customerName, customerPhone, guestCount, cart, notes,
+      placedOrderId, sessionToken,
+    });
+  }, [table, hydrated, entryDone, customerName, customerPhone, guestCount, cart, notes, placedOrderId, sessionToken]);
 
   useEffect(() => {
     settingsService.getSettings().then((s) => {
@@ -187,6 +257,30 @@ const SelfOrder = () => {
 
   const updateQty = (id: string, delta: number) => {
     setCart((prev) => prev.map((c) => (c.id === id ? { ...c, qty: Math.max(0, c.qty + delta) } : c)).filter((c) => c.qty > 0));
+  };
+
+  // ── Entry gate: continue-to-menu with name-conflict check ──
+
+  const handleContinueToMenu = async () => {
+    setCheckingCustomer(true);
+    try {
+      const result = await selfOrderService.lookupCustomerByPhone(customerPhone);
+      if (result.exists && result.name && result.name.trim() !== customerName.trim()) {
+        setNameConflict({ savedName: result.name, typedName: customerName.trim() });
+        return;
+      }
+    } catch {
+      // Lookup failing shouldn't block ordering — proceed with whatever was typed.
+    } finally {
+      setCheckingCustomer(false);
+    }
+    setEntryDone(true);
+  };
+
+  const resolveNameConflict = (useSavedName: boolean) => {
+    if (nameConflict && useSavedName) setCustomerName(nameConflict.savedName);
+    setNameConflict(null);
+    setEntryDone(true);
   };
 
   // ── Place order ──
@@ -303,10 +397,24 @@ const SelfOrder = () => {
               </div>
             </div>
           </div>
-          <Button className="w-full h-12 gradient-primary text-primary-foreground font-semibold" disabled={!canContinue} onClick={() => setEntryDone(true)}>
+          <Button className="w-full h-12 gradient-primary text-primary-foreground font-semibold" disabled={!canContinue || checkingCustomer} onClick={handleContinueToMenu}>
+            {checkingCustomer ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
             Continue to Menu
           </Button>
         </div>
+        {nameConflict && (
+          <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-6">
+            <div className="bg-card rounded-2xl p-5 max-w-xs w-full space-y-4 text-center">
+              <p className="text-sm text-muted-foreground">
+                We have you as <span className="font-bold text-foreground">{nameConflict.savedName}</span> — keep this name, or use <span className="font-bold text-foreground">{nameConflict.typedName}</span>?
+              </p>
+              <div className="flex gap-2">
+                <Button variant="outline" className="flex-1" onClick={() => resolveNameConflict(false)}>Use "{nameConflict.typedName}"</Button>
+                <Button className="flex-1 gradient-primary text-primary-foreground" onClick={() => resolveNameConflict(true)}>Keep "{nameConflict.savedName}"</Button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
