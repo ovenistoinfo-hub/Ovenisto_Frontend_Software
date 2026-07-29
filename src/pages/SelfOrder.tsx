@@ -207,7 +207,7 @@ const SelfOrder = () => {
         items: cart.map((i) => ({ menuItemId: i.menuItemId, variantId: i.variantId, name: i.name, price: i.price, qty: i.qty, modifierIds: i.modifierIds })),
       });
       setPlacedOrderId(orderId);
-      setOrderStatus({ status: "pending", accepted: false });
+      setOrderStatus({ status: "pending", accepted: false, paid: false });
       setCartOpen(false);
     } catch {
       toast.error("Failed to place order. Please try again.");

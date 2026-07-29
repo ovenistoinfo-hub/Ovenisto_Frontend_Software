@@ -98,6 +98,12 @@ export interface SelfOrderStatus {
   status: "pending" | "confirmed" | "cancelled";
   accepted: boolean;
   rejectionReason?: string;
+  paid: boolean;
+}
+
+export interface CustomerLookupResult {
+  exists: boolean;
+  name?: string;
 }
 
 export const selfOrderService = {
@@ -118,5 +124,9 @@ export const selfOrderService = {
 
   async getStatus(orderId: string): Promise<SelfOrderStatus> {
     return publicRequest<SelfOrderStatus>(`/self-order/orders/${orderId}/status`);
+  },
+
+  async lookupCustomerByPhone(phone: string): Promise<CustomerLookupResult> {
+    return publicRequest<CustomerLookupResult>(`/self-order/customer-lookup?phone=${encodeURIComponent(phone)}`);
   },
 };
