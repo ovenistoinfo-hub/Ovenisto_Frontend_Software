@@ -167,15 +167,29 @@ const SelfOrder = () => {
     if (!table || !hydrated) return;
     const socket = getSelfOrderSocket();
 
-    socket.emit(
-      "join-table",
-      { tableId: table.tableId, sessionToken: sessionToken ?? undefined },
-      (res: { role: "host"; sessionToken: string } | { role: "viewer" } | { error: string }) => {
-        if ("error" in res) return;
-        setRole(res.role);
-        if (res.role === "host") setSessionToken(res.sessionToken);
-      }
-    );
+    const joinTable = () => {
+      socket.emit(
+        "join-table",
+        { tableId: table.tableId, sessionToken: sessionToken ?? undefined },
+        (res: { role: "host"; sessionToken: string } | { role: "viewer" } | { error: string }) => {
+          if ("error" in res) return;
+          setRole(res.role);
+          if (res.role === "host") setSessionToken(res.sessionToken);
+        }
+      );
+    };
+
+    joinTable();
+
+    // socket.io-client's "connect" event fires on the initial connection AND
+    // on every automatic reconnect (reconnection: true, reconnectionAttempts:
+    // Infinity — see src/lib/self-order-socket.ts). Without re-emitting
+    // join-table here, a customer whose phone briefly drops wifi/cellular
+    // reconnects with a fresh server-side socket id, is no longer in the
+    // table's room, and silently stops receiving order:updated/session:ended
+    // for the rest of the session. The backend's join-table handler is
+    // idempotent/safe to call repeatedly.
+    socket.on("connect", joinTable);
 
     const onOrderUpdated = (payload: SelfOrderStatus) => {
       if (!placedOrderId) return;
@@ -203,6 +217,7 @@ const SelfOrder = () => {
     socket.on("role:changed", onRoleChanged);
 
     return () => {
+      socket.off("connect", joinTable);
       socket.off("order:updated", onOrderUpdated);
       socket.off("session:ended", onSessionEnded);
       socket.off("host-request", onHostRequest);
@@ -240,7 +255,7 @@ const SelfOrder = () => {
     if (!placedOrderId) return;
     selfOrderService.getStatus(placedOrderId).then(setOrderStatus).catch(() => {});
   }, [placedOrderId]);
-  useVisiblePolling(pollStatus, 4000, !!placedOrderId && !orderStatus?.accepted && orderStatus?.status !== "cancelled" && !orderStatus?.paid);
+  useVisiblePolling(pollStatus, 4000, !!placedOrderId && orderStatus?.status !== "cancelled" && !orderStatus?.paid);
 
   const availableItems = useMemo(() => menu?.items ?? [], [menu]);
   const categories = useMemo(() => ["All", ...(menu?.categories.map((c) => c.name) ?? [])], [menu]);
