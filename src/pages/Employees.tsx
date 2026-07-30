@@ -28,11 +28,21 @@ const DUTY_TYPES = ["Full Time", "Part Time"];
 const GENDERS = ["Male", "Female", "Other"];
 const MARITAL_STATUSES = ["Single", "Married", "Divorced", "Widowed"];
 
+const DAYS_OF_WEEK = [
+  { value: 1, label: "Monday" },
+  { value: 2, label: "Tuesday" },
+  { value: 3, label: "Wednesday" },
+  { value: 4, label: "Thursday" },
+  { value: 5, label: "Friday" },
+  { value: 6, label: "Saturday" },
+  { value: 0, label: "Sunday" },
+];
+
 const emptyForm: EmployeeInput = {
   firstName: "", lastName: "", email: "@ovenisto.com", phone: "", photoUrl: "",
   userId: "", supervisorId: "",
   division: "", designation: "", dutyType: "", hireDate: "",
-  rateType: "Hourly", rate: 0, payFrequency: "", penaltyFee: null,
+  rateType: "Hourly", rate: 0, payFrequency: "", penaltyFee: null, defaultOffDay: 1,
   dateOfBirth: "", gender: "", maritalStatus: "", cnic: "",
   emergencyContactName: "", emergencyContactRelation: "", emergencyContactPhone: "",
 };
@@ -111,7 +121,7 @@ const Employees = () => {
       photoUrl: e.photoUrl ?? "", userId: e.userId ?? "", supervisorId: e.supervisorId ?? "",
       division: e.division ?? "", designation: e.designation, dutyType: e.dutyType ?? "",
       hireDate: e.hireDate.slice(0, 10), rateType: e.rateType, rate: e.rate,
-      payFrequency: e.payFrequency ?? "", penaltyFee: e.penaltyFee,
+      payFrequency: e.payFrequency ?? "", penaltyFee: e.penaltyFee, defaultOffDay: e.defaultOffDay ?? 1,
       dateOfBirth: e.dateOfBirth ? e.dateOfBirth.slice(0, 10) : "", gender: e.gender ?? "",
       maritalStatus: e.maritalStatus ?? "", cnic: e.cnic ?? "",
       emergencyContactName: e.emergencyContactName ?? "", emergencyContactRelation: e.emergencyContactRelation ?? "",
@@ -339,6 +349,7 @@ const Employees = () => {
         dutyType: form.dutyType || null,
         payFrequency: form.payFrequency || null,
         penaltyFee: form.penaltyFee || null,
+        defaultOffDay: form.defaultOffDay != null ? Number(form.defaultOffDay) : 1,
         dateOfBirth: form.dateOfBirth || null,
         gender: form.gender || null,
         maritalStatus: form.maritalStatus || null,
@@ -582,6 +593,15 @@ const Employees = () => {
                     </Select>
                   </div>
                   <div className="space-y-1.5"><Label>Penalty Fee (PKR, per absence)</Label><Input type="number" min="0" value={form.penaltyFee ?? ""} onChange={(e) => setForm(p => ({ ...p, penaltyFee: e.target.value ? Number(e.target.value) : null }))} /></div>
+                  <div className="space-y-1.5">
+                    <Label>Default Weekly Off Day</Label>
+                    <Select value={String(form.defaultOffDay ?? 1)} onValueChange={(v) => setForm(p => ({ ...p, defaultOffDay: Number(v) }))}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {DAYS_OF_WEEK.map(d => <SelectItem key={d.value} value={String(d.value)}>{d.label}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
               </TabsContent>
 

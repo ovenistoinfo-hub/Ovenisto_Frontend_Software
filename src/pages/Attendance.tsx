@@ -355,21 +355,6 @@ export default function AttendancePage() {
     for (const dStr of dates) {
       for (const u of staffUsers) {
         if (!recordSet.has(`${u.id}|${dStr}`)) {
-          const isOnLeave = leaveBlockedDates[u.id]?.has(dStr);
-          if (isOnLeave) {
-            rows.push({
-              id: `unrecorded-${u.id}-${dStr}`,
-              date: dStr,
-              userId: u.id,
-              clockIn: null,
-              clockOut: null,
-              status: "leave",
-              notes: "Approved Leave",
-              user: u,
-            });
-            continue;
-          }
-
           const shiftType = getShiftTypeOnDate(u.id, dStr);
 
           if (shiftType === "off") {
@@ -381,6 +366,21 @@ export default function AttendancePage() {
               clockOut: null,
               status: "off",
               notes: "Scheduled Off",
+              user: u,
+            });
+            continue;
+          }
+
+          const isOnLeave = leaveBlockedDates[u.id]?.has(dStr);
+          if (isOnLeave) {
+            rows.push({
+              id: `unrecorded-${u.id}-${dStr}`,
+              date: dStr,
+              userId: u.id,
+              clockIn: null,
+              clockOut: null,
+              status: "leave",
+              notes: "Approved Leave",
               user: u,
             });
             continue;
@@ -1099,7 +1099,10 @@ export default function AttendancePage() {
                         </td>
                         {getWeekDates(activeSection.weekStart).map((date, i) => {
                           const dateStr = date.toISOString().split("T")[0];
-                          const onLeave = leaveBlockedDates[u.id]?.has(dateStr);
+                          const jsDay   = date.getUTCDay();
+                          const isDefaultOff = jsDay === 1;
+                          const shiftType = getDraftOrSaved(u.id, activeSection.weekStart, i, saved);
+                          const onLeave = leaveBlockedDates[u.id]?.has(dateStr) && !isDefaultOff;
                           if (onLeave) {
                             return (
                               <td key={i} className={cn("border p-1.5 text-center", activeSection.cellBg)}>
@@ -1109,7 +1112,6 @@ export default function AttendancePage() {
                               </td>
                             );
                           }
-                          const shiftType = getDraftOrSaved(u.id, activeSection.weekStart, i, saved);
                           const label     = shiftType === "off" ? "Off" : shiftType.charAt(0).toUpperCase() + shiftType.slice(1);
                           const times     = shiftType !== "off" ? shiftConfig[shiftType as ShiftName] : null;
                           const isFilteredMatch = schedShiftFilter !== "all" && shiftType === schedShiftFilter;

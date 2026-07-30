@@ -21,6 +21,7 @@ export interface EmployeeRecord {
   rate: number;
   payFrequency: string | null;
   penaltyFee: number | null;
+  defaultOffDay?: number | null;
   dateOfBirth: string | null;
   gender: string | null;
   maritalStatus: string | null;
@@ -60,6 +61,7 @@ export interface EmployeeInput {
   rate: number;
   payFrequency?: string | null;
   penaltyFee?: number | null;
+  defaultOffDay?: number | null;
   dateOfBirth?: string | null;
   gender?: string | null;
   maritalStatus?: string | null;

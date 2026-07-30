@@ -218,7 +218,7 @@ export default function EmployeePortal() {
       d.setUTCDate(d.getUTCDate() + s.dayIndex);
       const dStr = d.toISOString().split("T")[0];
       const isOnLeave = approvedLeaves.some(l => l.startDate <= dStr && l.endDate >= dStr);
-      shiftByDate[dStr] = isOnLeave ? "leave" : s.shiftType;
+      shiftByDate[dStr] = (isOnLeave && s.shiftType !== "off") ? "leave" : s.shiftType;
     });
   });
 
@@ -493,7 +493,16 @@ export default function EmployeePortal() {
                   {scheduleDates.map(ds => {
                     const obj     = new Date(ds + "T00:00:00Z");
                     const dayName = obj.toLocaleDateString("en-US", { weekday: "short", timeZone: "UTC" });
-                    const shiftType = shiftByDate[ds] ?? "off";
+                    const jsDay   = obj.getUTCDay();
+                    const userDefaultOff = myEmployee?.defaultOffDay ?? 1;
+                    const isDefaultOff = jsDay === userDefaultOff;
+                    const isOnLeave = approvedLeaves.some(l => l.startDate <= ds && l.endDate >= ds);
+
+                    let shiftType = shiftByDate[ds] ?? "off";
+                    if (isOnLeave) {
+                      shiftType = isDefaultOff ? "off" : "leave";
+                    }
+
                     const label     = shiftType === "leave" ? "Leave" : (shiftType === "off" ? "Day Off" : shiftType.charAt(0).toUpperCase() + shiftType.slice(1));
                     const isToday   = ds === today;
                     const times     = (shiftType !== "off" && shiftType !== "leave") ? shiftConfig[shiftType as ShiftName] : null;
