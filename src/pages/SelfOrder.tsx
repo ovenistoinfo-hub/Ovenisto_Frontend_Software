@@ -124,6 +124,9 @@ const SelfOrder = () => {
   const [sessionToken, setSessionToken] = useState<string | null>(null);
   const [role, setRole] = useState<"host" | "viewer" | null>(null);
   const [sessionEnded, setSessionEnded] = useState(false);
+  const [requestPending, setRequestPending] = useState(false);
+  const [requestTimedOut, setRequestTimedOut] = useState(false);
+  const [incomingHostRequest, setIncomingHostRequest] = useState(false);
 
   useEffect(() => {
     if (!tableId) { setTableError("No table specified — please scan the QR code on your table."); setTableLoading(false); return; }
@@ -179,13 +182,32 @@ const SelfOrder = () => {
       setOrderStatus(payload);
     };
     const onSessionEnded = () => setSessionEnded(true);
+    const onHostRequest = () => setIncomingHostRequest(true);
+    const onHostRequestDeclined = () => {
+      setRequestPending(false);
+      toast.error("Request declined");
+    };
+    const onRoleChanged = (payload: { role: "host"; sessionToken: string } | { role: "viewer" }) => {
+      setRole(payload.role);
+      if (payload.role === "host") {
+        setSessionToken(payload.sessionToken);
+        setRequestPending(false);
+        setRequestTimedOut(false);
+      }
+    };
 
     socket.on("order:updated", onOrderUpdated);
     socket.on("session:ended", onSessionEnded);
+    socket.on("host-request", onHostRequest);
+    socket.on("host-request:declined", onHostRequestDeclined);
+    socket.on("role:changed", onRoleChanged);
 
     return () => {
       socket.off("order:updated", onOrderUpdated);
       socket.off("session:ended", onSessionEnded);
+      socket.off("host-request", onHostRequest);
+      socket.off("host-request:declined", onHostRequestDeclined);
+      socket.off("role:changed", onRoleChanged);
     };
   }, [table, hydrated, sessionToken, placedOrderId]);
 
@@ -349,6 +371,33 @@ const SelfOrder = () => {
     }
   };
 
+  // ── Handoff: request/respond to takeover requests ──
+
+  const requestTakeover = () => {
+    const socket = getSelfOrderSocket();
+    setRequestPending(true);
+    setRequestTimedOut(false);
+    socket.emit("request-host", {}, (res: { sent: true } | { error: string }) => {
+      if ("error" in res) {
+        setRequestPending(false);
+        toast.error(res.error);
+        return;
+      }
+      setTimeout(() => {
+        setRequestPending((stillPending) => {
+          if (stillPending) setRequestTimedOut(true);
+          return stillPending;
+        });
+      }, 60000);
+    });
+  };
+
+  const respondToHostRequest = (approve: boolean) => {
+    const socket = getSelfOrderSocket();
+    socket.emit("respond-host-request", { approve });
+    setIncomingHostRequest(false);
+  };
+
   // ── Render: table resolution error ──
   if (tableError) {
     return (
@@ -376,6 +425,51 @@ const SelfOrder = () => {
           <CheckCircle2 className="h-16 w-16 mx-auto text-success" />
           <h1 className="text-2xl font-bold">Thanks for dining with us!</h1>
           <p className="text-muted-foreground">We hope to see you again soon.</p>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Render: incoming take-over request prompt (host side) ──
+  if (incomingHostRequest) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center p-6">
+        <div className="text-center space-y-4 max-w-sm">
+          <Users className="h-12 w-12 mx-auto text-primary" />
+          <h1 className="text-xl font-bold">Someone else wants to take over this table's session</h1>
+          <div className="flex gap-2">
+            <Button variant="outline" className="flex-1" onClick={() => respondToHostRequest(false)}>Deny</Button>
+            <Button className="flex-1 gradient-primary text-primary-foreground" onClick={() => respondToHostRequest(true)}>Approve</Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Render: viewer screen — another device at this table is already the host ──
+  if (role === "viewer" && !placedOrderId) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center p-6">
+        <div className="text-center space-y-4 max-w-sm">
+          <Users className="h-16 w-16 mx-auto text-muted-foreground" />
+          <h1 className="text-2xl font-bold">This table already has an active order</h1>
+          <p className="text-muted-foreground">Someone else at this table is already placing an order.</p>
+          {requestPending ? (
+            requestTimedOut ? (
+              <>
+                <p className="text-sm text-muted-foreground">No response yet.</p>
+                <Button className="w-full h-12 gradient-primary text-primary-foreground font-semibold" onClick={requestTakeover}>
+                  Try Again
+                </Button>
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground">Waiting for a response…</p>
+            )
+          ) : (
+            <Button className="w-full h-12 gradient-primary text-primary-foreground font-semibold" onClick={requestTakeover}>
+              Request to Take Over
+            </Button>
+          )}
         </div>
       </div>
     );
