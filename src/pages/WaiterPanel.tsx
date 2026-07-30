@@ -563,7 +563,7 @@ const WaiterPanel = () => {
 
   const customerHistory = useMemo(() => {
     if (!selectedCustomerData) return null;
-    const custOrders = orders.filter(o => o.customerName === selectedCustomerData.name || (selectedCustomerData.phone && o.phone === selectedCustomerData.phone));
+    const custOrders = orders.filter(o => o.customerName === selectedCustomerData.name || (selectedCustomerData.phone && o.phone && o.phone.replace(/\D/g, "") === selectedCustomerData.phone.replace(/\D/g, "")));
     const avgBill = custOrders.length > 0 ? Math.round(custOrders.reduce((s, o) => s + Number(o.total), 0) / custOrders.length) : 0;
     const topItems: Record<string, number> = {};
     custOrders.forEach(o => (o.items || []).forEach(i => { topItems[i.name] = (topItems[i.name] || 0) + i.qty; }));
@@ -605,7 +605,7 @@ const WaiterPanel = () => {
         const custId = (orderWithCust as any).customerId;
         const matched = custId 
           ? customers.find(c => c.id === custId)
-          : customers.find(c => c.name === orderWithCust.customerName || (orderWithCust.phone && c.phone === orderWithCust.phone));
+          : customers.find(c => c.name === orderWithCust.customerName || (orderWithCust.phone && c.phone && c.phone.replace(/\D/g, "") === orderWithCust.phone.replace(/\D/g, "")));
         if (matched) {
           setSelectedCustomerId(matched.id);
           setTableCustomerMap(prev => {
@@ -785,7 +785,7 @@ const WaiterPanel = () => {
   const applyReservationToGuestsDialog = (res: Reservation) => {
     setSelectedReservationForSitting(res.id);
     if (res.guestCount) setGuestsCount(res.guestCount);
-    const matchedCust = customers.find(c => c.name.toLowerCase() === res.customerName.toLowerCase() || (res.customerPhone && c.phone === res.customerPhone));
+    const matchedCust = customers.find(c => c.name.toLowerCase() === res.customerName.toLowerCase() || (res.customerPhone && c.phone && c.phone.replace(/\D/g, "") === res.customerPhone.replace(/\D/g, "")));
     if (matchedCust && selectedTableNum !== null) {
       handleSelectCustomerForTable(matchedCust.id);
     }
