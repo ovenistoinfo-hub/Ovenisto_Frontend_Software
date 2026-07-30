@@ -14,6 +14,7 @@ interface PayslipData {
   penalties: number;
   rewards: number;
   rewardNote?: string;
+  advanceAmount?: number;
   finalPay: number;
   isReceipt: boolean; // true = already-disbursed receipt, false = calculated preview
   transactionId?: string;
@@ -77,6 +78,9 @@ export function generatePayslipPDF(data: PayslipData) {
     [data.penaltiesLabel ?? "Penalties (Absents)", `-Rs.${data.penalties.toLocaleString()}`],
     ["Rewards / Bonuses", `+Rs.${data.rewards.toLocaleString()}`],
   ];
+  if (data.advanceAmount && data.advanceAmount > 0) {
+    rows.push(["Less Salary Advance", `-Rs.${data.advanceAmount.toLocaleString()}`]);
+  }
   if (data.rewardNote) rows.push(["Note", data.rewardNote]);
 
   autoTable(doc, {
@@ -98,9 +102,12 @@ export function generatePayslipPDF(data: PayslipData) {
   doc.line(4, y, w - 4, y);
   y += 4;
 
-  doc.setFontSize(10);
+  doc.setFontSize(9);
   doc.setFont("helvetica", "bold");
-  doc.text(data.isReceipt ? "TOTAL DISBURSED" : "TOTAL NET PAY", 4, y);
+  const totalLabel = data.isReceipt
+    ? (data.advanceAmount && data.advanceAmount > 0 ? "REMAINING NET DISBURSED" : "TOTAL DISBURSED")
+    : (data.advanceAmount && data.advanceAmount > 0 ? "REMAINING NET PAY" : "TOTAL NET PAY");
+  doc.text(totalLabel, 4, y);
   doc.text(`Rs. ${data.finalPay.toLocaleString()}`, w - 4, y, { align: "right" });
   y += 6;
 

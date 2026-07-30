@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Plus, Search, Pencil, IdCard, ChevronUp, Upload, Loader2, Trash2, Eye } from "lucide-react";
+import { Plus, Search, Pencil, IdCard, ChevronUp, ChevronLeft, ChevronRight, Upload, Loader2, Trash2, Eye } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PageHeader } from "@/components/ui/page-header";
 import { TablePagination, paginate } from "@/components/TablePagination";
@@ -29,7 +29,7 @@ const GENDERS = ["Male", "Female", "Other"];
 const MARITAL_STATUSES = ["Single", "Married", "Divorced", "Widowed"];
 
 const emptyForm: EmployeeInput = {
-  firstName: "", lastName: "", email: "", phone: "", photoUrl: "",
+  firstName: "", lastName: "", email: "@ovenisto.com", phone: "", photoUrl: "",
   userId: "", supervisorId: "",
   division: "", designation: "", dutyType: "", hireDate: "",
   rateType: "Hourly", rate: 0, payFrequency: "", penaltyFee: null,
@@ -71,6 +71,9 @@ const Employees = () => {
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const TABS_ORDER = ["basic", "positional", "supervisor", "biographical", "emergency"];
+  const [activeTab, setActiveTab] = useState("basic");
+
   // Termination fields
   const [terminationEmployee, setTerminationEmployee] = useState<EmployeeRecord | null>(null);
   const [terminationReason, setTerminationReason] = useState("");
@@ -97,14 +100,14 @@ const Employees = () => {
     enabled: showForm,
   });
 
-  const resetForm = () => { setShowForm(false); setEditingId(null); setForm(emptyForm); };
+  const resetForm = () => { setShowForm(false); setEditingId(null); setForm({ ...emptyForm, email: "@ovenisto.com" }); setActiveTab("basic"); };
 
-  const openAdd = () => { setEditingId(null); setForm(emptyForm); setShowForm(true); };
+  const openAdd = () => { setEditingId(null); setForm({ ...emptyForm, email: "@ovenisto.com" }); setActiveTab("basic"); setShowForm(true); };
 
   const openEdit = (e: EmployeeRecord) => {
     setEditingId(e.id);
     setForm({
-      firstName: e.firstName, lastName: e.lastName ?? "", email: e.email ?? "", phone: e.phone,
+      firstName: e.firstName, lastName: e.lastName ?? "", email: e.email || "@ovenisto.com", phone: e.phone,
       photoUrl: e.photoUrl ?? "", userId: e.userId ?? "", supervisorId: e.supervisorId ?? "",
       division: e.division ?? "", designation: e.designation, dutyType: e.dutyType ?? "",
       hireDate: e.hireDate.slice(0, 10), rateType: e.rateType, rate: e.rate,
@@ -114,6 +117,7 @@ const Employees = () => {
       emergencyContactName: e.emergencyContactName ?? "", emergencyContactRelation: e.emergencyContactRelation ?? "",
       emergencyContactPhone: e.emergencyContactPhone ?? "",
     });
+    setActiveTab("basic");
     setShowForm(true);
   };
 
@@ -142,42 +146,186 @@ const Employees = () => {
     }
   };
 
-  const handleSave = async () => {
-    if (!form.firstName.trim() || !form.phone.trim() || !form.designation.trim() || !form.hireDate || !form.rate) {
-      toast.error("First name, phone, designation, hire date, and rate are required");
-      return;
+  const validateBasic = (): boolean => {
+    if (!form.firstName.trim()) {
+      toast.error("First name is required");
+      setActiveTab("basic");
+      return false;
     }
-    // Duplicate checks
-    const lowerEmail = form.email?.trim().toLowerCase();
-    const cleanPhone = form.phone.trim();
-    const cleanCnic = form.cnic?.trim();
-    const cleanEmergencyPhone = form.emergencyContactPhone?.trim();
-
-    if (cleanPhone.replace(/\D/g, "").length !== 11) {
+    if (!form.phone.trim()) {
+      toast.error("Phone number is required");
+      setActiveTab("basic");
+      return false;
+    }
+    if (form.phone.replace(/\D/g, "").length !== 11) {
       toast.error("Phone number must be exactly 11 digits");
-      return;
+      setActiveTab("basic");
+      return false;
     }
-    if (cleanEmergencyPhone && cleanEmergencyPhone.replace(/\D/g, "").length !== 11) {
+    if (list.some(e => e.id !== editingId && e.phone?.trim() === form.phone.trim())) {
+      toast.error(`Phone number "${form.phone}" is already assigned to another employee!`);
+      setActiveTab("basic");
+      return false;
+    }
+    const cleanEmail = form.email ? form.email.trim() : "";
+    if (!cleanEmail || cleanEmail === "@ovenisto.com" || cleanEmail.startsWith("@")) {
+      toast.error("Please enter a valid email handle before @ovenisto.com");
+      setActiveTab("basic");
+      return false;
+    }
+    const lowerEmail = cleanEmail.toLowerCase();
+    if (list.some(e => e.id !== editingId && e.email?.trim().toLowerCase() === lowerEmail)) {
+      toast.error(`Email "${cleanEmail}" is already assigned to another employee!`);
+      setActiveTab("basic");
+      return false;
+    }
+    if (!form.photoUrl?.trim()) {
+      toast.error("Photograph is required");
+      setActiveTab("basic");
+      return false;
+    }
+    return true;
+  };
+
+  const validatePositional = (): boolean => {
+    if (!form.designation.trim()) {
+      toast.error("Designation is required");
+      setActiveTab("positional");
+      return false;
+    }
+    if (!form.dutyType?.trim()) {
+      toast.error("Duty type is required");
+      setActiveTab("positional");
+      return false;
+    }
+    if (!form.hireDate) {
+      toast.error("Hire date is required");
+      setActiveTab("positional");
+      return false;
+    }
+    if (!form.rateType) {
+      toast.error("Rate type is required");
+      setActiveTab("positional");
+      return false;
+    }
+    if (form.rate === undefined || form.rate === null || form.rate <= 0) {
+      toast.error("Pay rate is required");
+      setActiveTab("positional");
+      return false;
+    }
+    if (!form.payFrequency?.trim()) {
+      toast.error("Pay frequency is required");
+      setActiveTab("positional");
+      return false;
+    }
+    return true;
+  };
+
+  const validateBiographical = (): boolean => {
+    if (!form.dateOfBirth) {
+      toast.error("Date of birth is required");
+      setActiveTab("biographical");
+      return false;
+    }
+    if (!form.gender?.trim()) {
+      toast.error("Gender is required");
+      setActiveTab("biographical");
+      return false;
+    }
+    if (!form.maritalStatus?.trim()) {
+      toast.error("Marital status is required");
+      setActiveTab("biographical");
+      return false;
+    }
+    if (!form.cnic?.trim()) {
+      toast.error("CNIC is required");
+      setActiveTab("biographical");
+      return false;
+    }
+    const cleanCnic = form.cnic.trim();
+    if (cleanCnic.length !== 15) {
+      toast.error("CNIC must be in format XXXXX-XXXXXXX-X (13 digits)");
+      setActiveTab("biographical");
+      return false;
+    }
+    if (list.some(e => e.id !== editingId && e.cnic?.trim() === cleanCnic)) {
+      toast.error(`CNIC "${form.cnic}" is already assigned to another employee!`);
+      setActiveTab("biographical");
+      return false;
+    }
+    return true;
+  };
+
+  const validateEmergency = (): boolean => {
+    if (!form.emergencyContactName?.trim()) {
+      toast.error("Emergency contact name is required");
+      setActiveTab("emergency");
+      return false;
+    }
+    if (/[^a-zA-Z\s]/.test(form.emergencyContactName)) {
+      toast.error("Emergency contact name can only contain letters and spaces");
+      setActiveTab("emergency");
+      return false;
+    }
+    if (!form.emergencyContactRelation?.trim()) {
+      toast.error("Emergency contact relationship is required");
+      setActiveTab("emergency");
+      return false;
+    }
+    if (!form.emergencyContactPhone?.trim()) {
+      toast.error("Emergency contact phone is required");
+      setActiveTab("emergency");
+      return false;
+    }
+    if (form.emergencyContactPhone.replace(/\D/g, "").length !== 11) {
       toast.error("Emergency contact phone number must be exactly 11 digits");
+      setActiveTab("emergency");
+      return false;
+    }
+    return true;
+  };
+
+  const handleNext = () => {
+    if (activeTab === "basic") {
+      if (validateBasic()) setActiveTab("positional");
+    } else if (activeTab === "positional") {
+      if (validatePositional()) setActiveTab("supervisor");
+    } else if (activeTab === "supervisor") {
+      setActiveTab("biographical");
+    } else if (activeTab === "biographical") {
+      if (validateBiographical()) setActiveTab("emergency");
+    }
+  };
+
+  const handleBack = () => {
+    const currentIndex = TABS_ORDER.indexOf(activeTab);
+    if (currentIndex > 0) {
+      setActiveTab(TABS_ORDER[currentIndex - 1]);
+    }
+  };
+
+  const handleTabChange = (targetTab: string) => {
+    const currentIndex = TABS_ORDER.indexOf(activeTab);
+    const targetIndex = TABS_ORDER.indexOf(targetTab);
+
+    if (targetIndex <= currentIndex) {
+      setActiveTab(targetTab);
       return;
     }
 
-    if (lowerEmail && list.some(e => e.id !== editingId && e.email?.trim().toLowerCase() === lowerEmail)) {
-      toast.error(`Email "${form.email}" is already assigned to another employee!`);
-      return;
-    }
-    if (list.some(e => e.id !== editingId && e.phone?.trim() === cleanPhone)) {
-      toast.error(`Phone number "${form.phone}" is already assigned to another employee!`);
-      return;
-    }
-    if (cleanCnic && cleanCnic.length === 15 && list.some(e => e.id !== editingId && e.cnic?.trim() === cleanCnic)) {
-      toast.error(`CNIC "${form.cnic}" is already assigned to another employee!`);
-      return;
-    }
-    if (cleanCnic && cleanCnic.length > 0 && cleanCnic.length < 15) {
-      toast.error("CNIC must be in format XXXXX-XXXXXXX-X (13 digits)");
-      return;
-    }
+    if (currentIndex === 0 && !validateBasic()) return;
+    if (targetIndex > 1 && !validatePositional()) return;
+    if (targetIndex > 3 && !validateBiographical()) return;
+
+    setActiveTab(targetTab);
+  };
+
+  const handleSave = async () => {
+    if (!validateBasic()) return;
+    if (!validatePositional()) return;
+    if (!validateBiographical()) return;
+    if (!validateEmergency()) return;
+
     setSaving(true);
     try {
       const payload: EmployeeInput = {
@@ -301,7 +449,7 @@ const Employees = () => {
             <Button variant="ghost" size="icon" className="h-7 w-7" onClick={resetForm}><ChevronUp className="h-4 w-4" /></Button>
           </CardHeader>
           <CardContent>
-            <Tabs defaultValue="basic">
+            <Tabs value={activeTab} onValueChange={handleTabChange}>
               <TabsList className="flex-wrap h-auto gap-1">
                 <TabsTrigger value="basic">Basic Information</TabsTrigger>
                 <TabsTrigger value="positional">Positional Info</TabsTrigger>
@@ -343,12 +491,22 @@ const Employees = () => {
                     )}
                   </div>
                   <div className="space-y-1.5">
-                    <Label>Email</Label>
+                    <Label>Email <span className="text-destructive">*</span></Label>
                     <Input
                       type="email"
+                      placeholder="name@ovenisto.com"
                       list="emp-email-list"
-                      value={form.email ?? ""}
-                      onChange={(e) => setForm(p => ({ ...p, email: e.target.value }))}
+                      value={form.email ?? "@ovenisto.com"}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (!val) {
+                          setForm(p => ({ ...p, email: "@ovenisto.com" }));
+                        } else if (!val.includes("@") && !val.endsWith("@ovenisto.com")) {
+                          setForm(p => ({ ...p, email: `${val}@ovenisto.com` }));
+                        } else {
+                          setForm(p => ({ ...p, email: val }));
+                        }
+                      }}
                       className={form.email && list.some(e => e.id !== editingId && e.email?.toLowerCase() === form.email?.toLowerCase()) ? "border-destructive" : ""}
                     />
                     <datalist id="emp-email-list">
@@ -368,17 +526,17 @@ const Employees = () => {
                     </Select>
                   </div>
                   <div className="space-y-1.5">
-                    <Label>Photograph</Label>
+                    <Label>Photograph <span className="text-destructive">*</span></Label>
                     <input type="file" accept="image/*" ref={fileInputRef} className="hidden" onChange={handleImageUpload} />
                     {uploading ? (
                       <div className="border rounded-lg p-2 flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />Uploading...</div>
                     ) : form.photoUrl ? (
                       <div className="flex items-center gap-2">
-                        <Avatar className="h-10 w-10"><AvatarImage src={form.photoUrl} /></Avatar>
+                        <Avatar className="h-10 w-10 border border-primary/20"><AvatarImage src={form.photoUrl} /></Avatar>
                         <Button type="button" variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}>Change</Button>
                       </div>
                     ) : (
-                      <Button type="button" variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}><Upload className="h-3 w-3 mr-1.5" />Upload</Button>
+                      <Button type="button" variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} className="border-destructive/60 text-destructive hover:bg-destructive/10"><Upload className="h-3 w-3 mr-1.5" />Upload Photo *</Button>
                     )}
                   </div>
                 </div>
@@ -401,7 +559,7 @@ const Employees = () => {
                     </datalist>
                   </div>
                   <div className="space-y-1.5">
-                    <Label>Duty Type</Label>
+                    <Label>Duty Type <span className="text-destructive">*</span></Label>
                     <Select value={form.dutyType ?? ""} onValueChange={(v) => setForm(p => ({ ...p, dutyType: v }))}>
                       <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
                       <SelectContent>{DUTY_TYPES.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}</SelectContent>
@@ -417,7 +575,7 @@ const Employees = () => {
                   </div>
                   <div className="space-y-1.5"><Label>Rate (PKR) <span className="text-destructive">*</span></Label><Input type="number" min="0" value={form.rate} onChange={(e) => setForm(p => ({ ...p, rate: Number(e.target.value) }))} /></div>
                   <div className="space-y-1.5">
-                    <Label>Pay Frequency</Label>
+                    <Label>Pay Frequency <span className="text-destructive">*</span></Label>
                     <Select value={form.payFrequency ?? ""} onValueChange={(v) => setForm(p => ({ ...p, payFrequency: v }))}>
                       <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
                       <SelectContent>{PAY_FREQUENCIES.map(f => <SelectItem key={f} value={f}>{f}</SelectItem>)}</SelectContent>
@@ -443,23 +601,23 @@ const Employees = () => {
 
               <TabsContent value="biographical" className="mt-4 space-y-3">
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                  <div className="space-y-1.5"><Label>Date of Birth</Label><Input type="date" value={form.dateOfBirth ?? ""} onChange={(e) => setForm(p => ({ ...p, dateOfBirth: e.target.value }))} /></div>
+                  <div className="space-y-1.5"><Label>Date of Birth <span className="text-destructive">*</span></Label><Input type="date" value={form.dateOfBirth ?? ""} onChange={(e) => setForm(p => ({ ...p, dateOfBirth: e.target.value }))} /></div>
                   <div className="space-y-1.5">
-                    <Label>Gender</Label>
+                    <Label>Gender <span className="text-destructive">*</span></Label>
                     <Select value={form.gender ?? ""} onValueChange={(v) => setForm(p => ({ ...p, gender: v }))}>
                       <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
                       <SelectContent>{GENDERS.map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}</SelectContent>
                     </Select>
                   </div>
                   <div className="space-y-1.5">
-                    <Label>Marital Status</Label>
+                    <Label>Marital Status <span className="text-destructive">*</span></Label>
                     <Select value={form.maritalStatus ?? ""} onValueChange={(v) => setForm(p => ({ ...p, maritalStatus: v }))}>
                       <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
                       <SelectContent>{MARITAL_STATUSES.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
                     </Select>
                   </div>
                   <div className="space-y-1.5">
-                    <Label>CNIC</Label>
+                    <Label>CNIC <span className="text-destructive">*</span></Label>
                     <Input
                       placeholder="42101-1234567-1"
                       value={form.cnic ?? ""}
@@ -479,22 +637,47 @@ const Employees = () => {
 
               <TabsContent value="emergency" className="mt-4 space-y-3">
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                  <div className="space-y-1.5"><Label>Contact Name</Label><Input value={form.emergencyContactName ?? ""} onChange={(e) => setForm(p => ({ ...p, emergencyContactName: e.target.value }))} /></div>
                   <div className="space-y-1.5">
-                    <Label>Relationship</Label>
+                    <Label>Contact Name <span className="text-destructive">*</span></Label>
+                    <Input
+                      placeholder="e.g. Imran Ali"
+                      value={form.emergencyContactName ?? ""}
+                      onChange={(e) => {
+                        const filtered = e.target.value.replace(/[^a-zA-Z\s]/g, "");
+                        setForm(p => ({ ...p, emergencyContactName: filtered }));
+                      }}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Relationship <span className="text-destructive">*</span></Label>
                     <Input list="employee-relation-list" value={form.emergencyContactRelation ?? ""} onChange={(e) => setForm(p => ({ ...p, emergencyContactRelation: e.target.value }))} />
                     <datalist id="employee-relation-list">
                       {["Father", "Mother", "Spouse", "Brother", "Sister", "Son", "Daughter", "Friend"].map(rel => <option key={rel} value={rel} />)}
                     </datalist>
                   </div>
-                  <div className="space-y-1.5"><Label>Phone</Label><Input value={form.emergencyContactPhone ?? ""} maxLength={12} onChange={(e) => setForm(p => ({ ...p, emergencyContactPhone: formatPhone(e.target.value) }))} /></div>
+                  <div className="space-y-1.5"><Label>Phone <span className="text-destructive">*</span></Label><Input value={form.emergencyContactPhone ?? ""} maxLength={12} onChange={(e) => setForm(p => ({ ...p, emergencyContactPhone: formatPhone(e.target.value) }))} /></div>
                 </div>
               </TabsContent>
             </Tabs>
 
-            <div className="flex justify-end gap-2 pt-4">
-              <Button variant="outline" onClick={resetForm}>Cancel</Button>
-              <Button className="gradient-primary text-primary-foreground" onClick={handleSave} disabled={saving}>{saving ? "Saving..." : "Save"}</Button>
+            <div className="flex items-center justify-between pt-4 border-t border-border mt-4">
+              <Button type="button" variant="outline" onClick={resetForm}>Cancel</Button>
+              <div className="flex items-center gap-2">
+                {activeTab !== "basic" && (
+                  <Button type="button" variant="outline" onClick={handleBack}>
+                    <ChevronLeft className="h-4 w-4 mr-1" /> Back
+                  </Button>
+                )}
+                {activeTab !== "emergency" ? (
+                  <Button type="button" className="gradient-primary text-primary-foreground" onClick={handleNext}>
+                    Next <ChevronRight className="h-4 w-4 ml-1" />
+                  </Button>
+                ) : (
+                  <Button type="button" className="gradient-primary text-primary-foreground" onClick={handleSave} disabled={saving}>
+                    {saving ? "Saving..." : editingId ? "Update Employee" : "Save Employee"}
+                  </Button>
+                )}
+              </div>
             </div>
           </CardContent>
         </Card>

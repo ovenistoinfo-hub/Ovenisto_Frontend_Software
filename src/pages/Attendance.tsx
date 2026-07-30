@@ -20,6 +20,7 @@ import { attendanceService, type AttendanceRecord } from "@/services/attendance.
 import { leaveService, type LeaveBalance } from "@/services/leave.service";
 import { scheduleService, type StaffSchedule, SHIFT_COLORS } from "@/services/schedule.service";
 import { userService, type UserRecord } from "@/services/user.service";
+import { employeeService, type EmployeeRecord } from "@/services/employee.service";
 import { settingsService } from "@/services/settings.service";
 import { useOutletFilter } from "@/hooks/useOutletFilter";
 import { OutletFilterSelect } from "@/components/OutletFilterSelect";
@@ -80,6 +81,9 @@ const ATT_STATUS_COLORS: Record<string, string> = {
   halfday: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-200",
   absent:  "bg-destructive/10 text-destructive",
   off:     "bg-muted text-muted-foreground",
+  leave:   "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-200",
+  upcoming: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-200",
+  "waiting for clock in": "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-200",
 };
 
 function getWeekStart(offset = 0): string {
@@ -169,14 +173,21 @@ export default function AttendancePage() {
   const [shiftConfigDraft, setShiftConfigDraft]     = useState<ShiftConfig>(DEFAULT_SHIFT_CONFIG);
   const [schedSearch, setSchedSearch]         = useState("");
   const [schedRoleFilter, setSchedRoleFilter] = useState("all");
+  const [schedShiftFilter, setSchedShiftFilter] = useState<"all" | ShiftName>("all");
 
   // ── Queries ──
-  const { data: usersResult } = useQuery({
-    queryKey: ["users-list", selectedOutletId],
-    queryFn: () => userService.getUsers({ limit: 500, outletId: selectedOutletId !== "all" ? selectedOutletId : undefined } as any),
+  const { data: employeesResult } = useQuery({
+    queryKey: ["employees-list-schedule", selectedOutletId],
+    queryFn: () => employeeService.getAll({ limit: 500, status: "active", outletId: selectedOutletId !== "all" ? selectedOutletId : undefined }),
   });
-  const users: UserRecord[] = usersResult?.data ?? [];
-  const staffUsers = useMemo(() => users.filter(u => !["Rider", "Customer Screen", "Admin", "Super Admin"].includes(u.role)), [users]);
+  const employees: EmployeeRecord[] = employeesResult?.data ?? [];
+  const staffUsers = useMemo(() => employees.map(e => ({
+    id: e.userId || e.id,
+    employeeId: e.id,
+    name: `${e.firstName} ${e.lastName ?? ""}`.trim(),
+    role: e.designation,
+    email: e.email ?? ""
+  })), [employees]);
 
   const { data: settings } = useQuery({
     queryKey: ["settings"],
@@ -315,6 +326,19 @@ export default function AttendancePage() {
     };
   }, [currSchedules, prevSchedules, nextSchedules, currentWeekStart, prevWeekStart, nextWeekStart]);
 
+  const leaveBlockedDates = useMemo(() => {
+    const map: Record<string, Set<string>> = {};
+    for (const leave of approvedLeaves) {
+      if (!map[leave.userId]) map[leave.userId] = new Set();
+      const start = new Date(leave.startDate + "T00:00:00Z");
+      const end   = new Date(leave.endDate   + "T00:00:00Z");
+      for (let d = new Date(start); d <= end; d.setUTCDate(d.getUTCDate() + 1)) {
+        map[leave.userId].add(d.toISOString().split("T")[0]);
+      }
+    }
+    return map;
+  }, [approvedLeaves]);
+
   const attRows: AttendanceRecord[] = attPage?.data ?? [];
 
   const unrecordedRows = useMemo(() => {
@@ -322,25 +346,99 @@ export default function AttendancePage() {
     const rows: any[] = [];
     const recordSet = new Set(attRows.map(r => `${r.userId}|${r.date}`));
 
+    const pktNowMs = Date.now() + 5 * 60 * 60 * 1000;
+    const pktNow = new Date(pktNowMs);
+    const todayStr = pktNow.toISOString().split("T")[0];
+    const nowMinutes = pktNow.getUTCHours() * 60 + pktNow.getUTCMinutes();
+    const graceMinutes = settings?.graceMinutes ?? 15;
+
     for (const dStr of dates) {
       for (const u of staffUsers) {
         if (!recordSet.has(`${u.id}|${dStr}`)) {
-          const shift = getShiftTypeOnDate(u.id, dStr);
+          const isOnLeave = leaveBlockedDates[u.id]?.has(dStr);
+          if (isOnLeave) {
+            rows.push({
+              id: `unrecorded-${u.id}-${dStr}`,
+              date: dStr,
+              userId: u.id,
+              clockIn: null,
+              clockOut: null,
+              status: "leave",
+              notes: "Approved Leave",
+              user: u,
+            });
+            continue;
+          }
+
+          const shiftType = getShiftTypeOnDate(u.id, dStr);
+
+          if (shiftType === "off") {
+            rows.push({
+              id: `unrecorded-${u.id}-${dStr}`,
+              date: dStr,
+              userId: u.id,
+              clockIn: null,
+              clockOut: null,
+              status: "off",
+              notes: "Scheduled Off",
+              user: u,
+            });
+            continue;
+          }
+
+          let computedStatus = "absent";
+          let computedNotes = "No record";
+
+          const startTimeStr = (shiftConfig as any)?.[shiftType]?.start ?? DEFAULT_SHIFT_CONFIG[shiftType as ShiftName]?.start ?? "09:00";
+          const format12h = (tStr: string) => {
+            const [h, m] = tStr.split(":").map(Number);
+            const period = h >= 12 ? "PM" : "AM";
+            const h12 = h % 12 || 12;
+            return `${String(h12).padStart(2, "0")}:${String(m).padStart(2, "0")} ${period}`;
+          };
+
+          if (dStr === todayStr) {
+            const [sh, sm] = startTimeStr.split(":").map(Number);
+            const shiftStartMinutes = sh * 60 + sm;
+            const graceEndMinutes = shiftStartMinutes + graceMinutes;
+            const absentCutoffMinutes = graceEndMinutes + 60;
+
+            if (nowMinutes < shiftStartMinutes) {
+              computedStatus = "upcoming";
+              computedNotes = `Shift starts at ${format12h(startTimeStr)}`;
+            } else if (nowMinutes <= graceEndMinutes) {
+              computedStatus = "waiting for clock in";
+              computedNotes = "Grace period active";
+            } else if (nowMinutes <= absentCutoffMinutes) {
+              computedStatus = "late";
+              computedNotes = "Grace period ended";
+            } else {
+              computedStatus = "absent";
+              computedNotes = "Shift window expired";
+            }
+          } else if (dStr < todayStr) {
+            computedStatus = "absent";
+            computedNotes = "No record";
+          } else {
+            computedStatus = "upcoming";
+            computedNotes = `Shift starts at ${format12h(startTimeStr)}`;
+          }
+
           rows.push({
             id: `unrecorded-${u.id}-${dStr}`,
             date: dStr,
             userId: u.id,
             clockIn: null,
             clockOut: null,
-            status: shift === "off" ? "off" : "absent",
-            notes: shift === "off" ? "Scheduled Off" : "No record",
+            status: computedStatus,
+            notes: computedNotes,
             user: u,
           });
         }
       }
     }
     return rows;
-  }, [attRows, staffUsers, attFrom, attTo, getShiftTypeOnDate]);
+  }, [attRows, staffUsers, attFrom, attTo, getShiftTypeOnDate, settings, shiftConfig, leaveBlockedDates]);
 
   const present = attRows.filter(r => r.status === "present").length;
   const late     = attRows.filter(r => r.status === "late").length;
@@ -353,6 +451,10 @@ export default function AttendancePage() {
     if (statusFilter === "not-recorded") return unrecordedRows;
     return attRows.filter(r => r.status === statusFilter);
   }, [attRows, statusFilter, unrecordedRows]);
+
+  const filteredLeaves = useMemo(() => {
+    return leaveRequests.filter(r => r.status === "pending" || (r.startDate >= leaveFrom && r.startDate <= leaveTo));
+  }, [leaveRequests, leaveFrom, leaveTo]);
 
   function startEdit(r: AttendanceRecord) {
     setEditRow(r.id);
@@ -405,27 +507,6 @@ export default function AttendancePage() {
 
 
 
-  const staffRoles = useMemo(() => [...new Set(staffUsers.map(u => u.role))].sort(), [users]);
-
-  const filteredStaff = useMemo(() => staffUsers.filter(u => {
-    const matchesRole   = schedRoleFilter === "all" || u.role === schedRoleFilter;
-    const matchesSearch = !schedSearch || u.name.toLowerCase().includes(schedSearch.toLowerCase());
-    return matchesRole && matchesSearch;
-  }), [users, schedRoleFilter, schedSearch]);
-
-  const leaveBlockedDates = useMemo(() => {
-    const map: Record<string, Set<string>> = {};
-    for (const leave of approvedLeaves) {
-      if (!map[leave.userId]) map[leave.userId] = new Set();
-      const start = new Date(leave.startDate + "T00:00:00Z");
-      const end   = new Date(leave.endDate   + "T00:00:00Z");
-      for (let d = new Date(start); d <= end; d.setUTCDate(d.getUTCDate() + 1)) {
-        map[leave.userId].add(d.toISOString().split("T")[0]);
-      }
-    }
-    return map;
-  }, [approvedLeaves]);
-
   const weekSections = [
     {
       key: "prev" as const, label: "Last Week", weekStart: prevWeekStart, schedules: prevSchedules,
@@ -453,6 +534,21 @@ export default function AttendancePage() {
     },
   ];
   const activeSection = weekSections.find(s => s.key === schedWeekView) ?? weekSections[1];
+
+  const staffRoles = useMemo(() => [...new Set(staffUsers.map(u => u.role))].sort(), [staffUsers]);
+
+  const filteredStaff = useMemo(() => staffUsers.filter(u => {
+    const matchesRole   = schedRoleFilter === "all" || u.role === schedRoleFilter;
+    const matchesSearch = !schedSearch || u.name.toLowerCase().includes(schedSearch.toLowerCase());
+    if (!matchesRole || !matchesSearch) return false;
+    if (schedShiftFilter === "all") return true;
+
+    const saved = activeSection.schedules.find(s => s.userId === u.id);
+    return [0, 1, 2, 3, 4, 5, 6].some(dayIdx => {
+      const shiftType = getDraftOrSaved(u.id, activeSection.weekStart, dayIdx, saved);
+      return shiftType === schedShiftFilter;
+    });
+  }), [staffUsers, schedRoleFilter, schedSearch, schedShiftFilter, activeSection, draftShifts]);
 
   return (
     <div className="space-y-6">
@@ -612,18 +708,23 @@ export default function AttendancePage() {
           <div className="flex flex-wrap gap-3 items-end">
             <div>
               <Label className="text-xs">From</Label>
-              <Input type="date" value={leaveFrom} onChange={e => setLeaveFrom(e.target.value)} className="mt-1 w-40" />
+              <Input type="date" value={leaveFrom} onChange={e => setLeaveFrom(e.target.value)} disabled={leaveFilter === "pending"} className="mt-1 w-40 disabled:opacity-50" />
             </div>
             <div>
               <Label className="text-xs">To</Label>
-              <Input type="date" value={leaveTo} onChange={e => setLeaveTo(e.target.value)} className="mt-1 w-40" />
+              <Input type="date" value={leaveTo} onChange={e => setLeaveTo(e.target.value)} disabled={leaveFilter === "pending"} className="mt-1 w-40 disabled:opacity-50" />
             </div>
-            <Button size="sm" variant="outline" onClick={() => { setLeaveFrom(yearStart); setLeaveTo(today); }}>This Year</Button>
-            <Button size="sm" variant="outline" onClick={() => {
+            <Button size="sm" variant="outline" disabled={leaveFilter === "pending"} onClick={() => { setLeaveFrom(yearStart); setLeaveTo(today); }}>This Year</Button>
+            <Button size="sm" variant="outline" disabled={leaveFilter === "pending"} onClick={() => {
               const m = today.slice(0, 7);
               setLeaveFrom(`${m}-01`);
               setLeaveTo(today);
             }}>This Month</Button>
+            {leaveFilter === "pending" && (
+              <span className="text-xs text-amber-600 dark:text-amber-400 font-medium pb-1.5 flex items-center gap-1">
+                ⚡ Showing all pending requests (date filter bypassed)
+              </span>
+            )}
           </div>
           <div className="flex gap-2 flex-wrap">
             {["pending", "approved", "rejected", "all"].map(f => (
@@ -648,7 +749,7 @@ export default function AttendancePage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {leaveRequests.filter(r => r.startDate >= leaveFrom && r.startDate <= leaveTo).map(r => (
+                  {filteredLeaves.map(r => (
                     <Fragment key={r.id}>
                       <TableRow className="hover:bg-muted/20">
                         <TableCell>
@@ -700,8 +801,8 @@ export default function AttendancePage() {
                       )}
                     </Fragment>
                   ))}
-                  {leaveRequests.filter(r => r.startDate >= leaveFrom && r.startDate <= leaveTo).length === 0 && (
-                    <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground py-8">No {leaveFilter !== "all" ? leaveFilter : ""} leave requests for selected period</TableCell></TableRow>
+                  {filteredLeaves.length === 0 && (
+                    <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground py-8">No {leaveFilter !== "all" ? leaveFilter : ""} leave requests found</TableCell></TableRow>
                   )}
                 </TableBody>
               </Table>
@@ -791,52 +892,89 @@ export default function AttendancePage() {
         <TabsContent value="schedules" className="mt-4 space-y-4">
           <Card className="shadow-sm">
             <CardHeader className="pb-2">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between flex-wrap gap-2">
                 <CardTitle className="text-sm flex items-center gap-1.5">
                   <Settings2 className="h-4 w-4" />Shift Timings
+                  {schedShiftFilter !== "all" && (
+                    <Badge variant="secondary" className="ml-2 text-xs font-normal">
+                      Filtering: <span className="font-semibold capitalize ml-1">{schedShiftFilter}</span>
+                    </Badge>
+                  )}
                 </CardTitle>
-                {isAdminOrHigher && (
-                  !editingShiftConfig ? (
-                    <Button size="sm" variant="outline" className="h-7 text-xs"
-                      onClick={() => { setShiftConfigDraft({ morning: { ...shiftConfig.morning }, evening: { ...shiftConfig.evening }, night: { ...shiftConfig.night } }); setEditingShiftConfig(true); }}>
-                      Edit Timings
+                <div className="flex items-center gap-2">
+                  {schedShiftFilter !== "all" && (
+                    <Button size="sm" variant="ghost" className="h-7 text-xs text-muted-foreground hover:text-foreground"
+                      onClick={() => setSchedShiftFilter("all")}>
+                      Reset Filter
                     </Button>
-                  ) : (
-                    <div className="flex gap-2">
-                      <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setEditingShiftConfig(false)}>Cancel</Button>
-                      <Button size="sm" className="h-7 text-xs gradient-primary text-primary-foreground"
-                        disabled={saveShiftConfigMut.isPending}
-                        onClick={() => saveShiftConfigMut.mutate(shiftConfigDraft)}>Save</Button>
-                    </div>
-                  )
-                )}
+                  )}
+                  {isAdminOrHigher && (
+                    !editingShiftConfig ? (
+                      <Button size="sm" variant="outline" className="h-7 text-xs"
+                        onClick={() => { setShiftConfigDraft({ morning: { ...shiftConfig.morning }, evening: { ...shiftConfig.evening }, night: { ...shiftConfig.night } }); setEditingShiftConfig(true); }}>
+                        Edit Timings
+                      </Button>
+                    ) : (
+                      <div className="flex gap-2">
+                        <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setEditingShiftConfig(false)}>Cancel</Button>
+                        <Button size="sm" className="h-7 text-xs gradient-primary text-primary-foreground"
+                          disabled={saveShiftConfigMut.isPending}
+                          onClick={() => saveShiftConfigMut.mutate(shiftConfigDraft)}>Save</Button>
+                      </div>
+                    )
+                  )}
+                </div>
               </div>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                {(["morning", "evening", "night"] as ShiftName[]).map(shift => (
-                  <div key={shift} className={cn("rounded-md p-3 border", SHIFT_COLORS[shift])}>
-                    <p className="text-xs font-semibold capitalize mb-2">{shift}</p>
-                    {editingShiftConfig ? (
-                      <div className="space-y-1.5">
-                        <div className="flex items-center gap-2">
-                          <Label className="text-[10px] w-8 shrink-0">Start</Label>
-                          <Input type="time" value={shiftConfigDraft[shift].start}
-                            onChange={e => setShiftConfigDraft(c => ({ ...c, [shift]: { ...c[shift], start: e.target.value } }))}
-                            className="h-7 text-xs bg-background" />
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Label className="text-[10px] w-8 shrink-0">End</Label>
-                          <Input type="time" value={shiftConfigDraft[shift].end}
-                            onChange={e => setShiftConfigDraft(c => ({ ...c, [shift]: { ...c[shift], end: e.target.value } }))}
-                            className="h-7 text-xs bg-background" />
-                        </div>
+                {(["morning", "evening", "night"] as ShiftName[]).map(shift => {
+                  const isActiveFilter = schedShiftFilter === shift;
+                  return (
+                    <div
+                      key={shift}
+                      onClick={() => {
+                        if (!editingShiftConfig) {
+                          setSchedShiftFilter(prev => (prev === shift ? "all" : shift));
+                        }
+                      }}
+                      className={cn(
+                        "rounded-md p-3 border transition-all select-none",
+                        SHIFT_COLORS[shift],
+                        !editingShiftConfig && "cursor-pointer hover:shadow-md hover:scale-[1.01]",
+                        isActiveFilter && "ring-2 ring-primary shadow-md font-bold"
+                      )}
+                    >
+                      <div className="flex items-center justify-between mb-1.5">
+                        <p className="text-xs font-semibold capitalize flex items-center gap-1.5">
+                          {shift} Shift
+                          {isActiveFilter && <Badge className="text-[9px] h-4 px-1">Active</Badge>}
+                        </p>
+                        <span className="text-[10px] opacity-75 font-medium">
+                          {isActiveFilter ? "Click to clear" : "Click to filter"}
+                        </span>
                       </div>
-                    ) : (
-                      <p className="text-xs font-mono">{shiftConfig[shift].start} – {shiftConfig[shift].end}</p>
-                    )}
-                  </div>
-                ))}
+                      {editingShiftConfig ? (
+                        <div className="space-y-1.5" onClick={e => e.stopPropagation()}>
+                          <div className="flex items-center gap-2">
+                            <Label className="text-[10px] w-8 shrink-0">Start</Label>
+                            <Input type="time" value={shiftConfigDraft[shift].start}
+                              onChange={e => setShiftConfigDraft(c => ({ ...c, [shift]: { ...c[shift], start: e.target.value } }))}
+                              className="h-7 text-xs bg-background" />
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Label className="text-[10px] w-8 shrink-0">End</Label>
+                            <Input type="time" value={shiftConfigDraft[shift].end}
+                              onChange={e => setShiftConfigDraft(c => ({ ...c, [shift]: { ...c[shift], end: e.target.value } }))}
+                              className="h-7 text-xs bg-background" />
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-xs font-mono">{shiftConfig[shift].start} – {shiftConfig[shift].end}</p>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </CardContent>
           </Card>
@@ -889,6 +1027,18 @@ export default function AttendancePage() {
                   <SelectContent>
                     <SelectItem value="all">All Divisions</SelectItem>
                     {staffRoles.map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-xs">Shift Filter</Label>
+                <Select value={schedShiftFilter} onValueChange={(val) => setSchedShiftFilter(val as any)}>
+                  <SelectTrigger className="mt-1 h-8 w-36 text-sm capitalize"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Shifts</SelectItem>
+                    <SelectItem value="morning">Morning</SelectItem>
+                    <SelectItem value="evening">Evening</SelectItem>
+                    <SelectItem value="night">Night</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -962,6 +1112,8 @@ export default function AttendancePage() {
                           const shiftType = getDraftOrSaved(u.id, activeSection.weekStart, i, saved);
                           const label     = shiftType === "off" ? "Off" : shiftType.charAt(0).toUpperCase() + shiftType.slice(1);
                           const times     = shiftType !== "off" ? shiftConfig[shiftType as ShiftName] : null;
+                          const isFilteredMatch = schedShiftFilter !== "all" && shiftType === schedShiftFilter;
+                          const isFilteredMismatch = schedShiftFilter !== "all" && shiftType !== schedShiftFilter;
                           return (
                             <td key={i} className={cn("border p-1.5 text-center", activeSection.cellBg)}>
                               <button
@@ -970,7 +1122,9 @@ export default function AttendancePage() {
                                 className={cn(
                                   "text-[10px] px-2 py-1.5 rounded-md font-medium transition-all w-full border",
                                   SHIFT_COLORS[shiftType],
-                                  !isPublished && "cursor-pointer hover:opacity-80 hover:ring-1 hover:ring-primary/40"
+                                  !isPublished && "cursor-pointer hover:opacity-80 hover:ring-1 hover:ring-primary/40",
+                                  isFilteredMatch && "ring-2 ring-primary font-bold scale-[1.03] shadow-sm opacity-100",
+                                  isFilteredMismatch && "opacity-35 hover:opacity-100"
                                 )}
                                 onClick={() => cycleDayShift(u.id, activeSection.weekStart, i, shiftType)}
                               >

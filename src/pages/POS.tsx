@@ -674,7 +674,7 @@ const POS = () => {
     const shiftStartMs = new Date(activeShift.openedAt).getTime();
     const shiftOrders = allOrdersData.filter(o => {
       const orderTimeMs = Math.max(
-        (o as any).updatedAt ? new Date((o as any).updatedAt).getTime() : 0,
+        o.updatedAt ? new Date(o.updatedAt).getTime() : 0,
         o.createdAt ? new Date(o.createdAt).getTime() : 0,
         o.date ? new Date(o.date).getTime() : 0
       );
@@ -2702,7 +2702,7 @@ const POS = () => {
                             </div>
                           ) : (
                             <div className="space-y-2 pt-1">
-                              {status === "ready" && (order.type === "Take Away" || order.type === "Takeout") && (
+                              {status === "ready" && order.type === "Take Away" && (
                                 <Button
                                   size="sm"
                                   disabled={completingOrderIds.has(order.id)}
@@ -3083,7 +3083,7 @@ const POS = () => {
                     : "text-muted-foreground hover:text-foreground hover:bg-background/50"
                 )}
               >
-                <ShoppingBag className="h-4 w-4 text-info" /> Take Away ({todayReservations.filter(r => r.orderType === "Take Away" || (r.bookingType === "future_order" && r.orderType === "Take Away")).length})
+                <ShoppingBag className="h-4 w-4 text-info" /> Take Away ({todayReservations.filter(r => r.orderType === "Take Away").length})
               </button>
               <button
                 type="button"
@@ -3095,7 +3095,7 @@ const POS = () => {
                     : "text-muted-foreground hover:text-foreground hover:bg-background/50"
                 )}
               >
-                <Truck className="h-4 w-4 text-amber-500" /> Delivery ({todayReservations.filter(r => r.orderType === "Delivery" || (r.bookingType === "future_order" && r.orderType === "Delivery")).length})
+                <Truck className="h-4 w-4 text-amber-500" /> Delivery ({todayReservations.filter(r => r.orderType === "Delivery").length})
               </button>
             </div>
           </div>
@@ -3103,16 +3103,16 @@ const POS = () => {
           <div className="p-5 space-y-4 overflow-y-auto flex-1 bg-background/40">
             {(() => {
               const currentList = todayReservations.filter(res => {
-                if (posReservationTab === "dine_in") {
-                  return (!res.orderType || res.orderType === "Dine In") && res.bookingType !== "future_order";
+                switch (posReservationTab) {
+                  case "dine_in":
+                    return (!res.orderType || res.orderType === "Dine In") && res.bookingType !== "future_order";
+                  case "take_away":
+                    return res.orderType === "Take Away";
+                  case "delivery":
+                    return res.orderType === "Delivery";
+                  default:
+                    return true;
                 }
-                if (posReservationTab === "take_away") {
-                  return res.orderType === "Take Away" || (res.bookingType === "future_order" && res.orderType === "Take Away");
-                }
-                if (posReservationTab === "delivery") {
-                  return res.orderType === "Delivery" || (res.bookingType === "future_order" && res.orderType === "Delivery");
-                }
-                return true;
               });
 
               if (currentList.length === 0) {

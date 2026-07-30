@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Timer, Plus, Eye, Calendar, CalendarOff, ChevronLeft, ChevronRight, Check, X, Clock, Users, FileText, Send } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -16,6 +17,7 @@ import { useData } from "@/contexts/DataContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { employeeService } from "@/services/employee.service";
 import type { Shift, StaffSchedule, LeaveRequest, ShiftTemplate } from "@/contexts/DataContext";
 
 const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -62,6 +64,17 @@ const Shifts = () => {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<"cash" | "schedule" | "leave">("cash");
   useEffect(() => { const t = setTimeout(() => setLoading(false), 500); return () => clearTimeout(t); }, []);
+
+  const { data: employeesList = [] } = useQuery({
+    queryKey: ["employees-for-shifts-page"],
+    queryFn: () => employeeService.getAll({ limit: 200, status: "active" }).then(r => r.data),
+  });
+
+  const staffEmployees = useMemo(() => employeesList.map(e => ({
+    id: e.userId || e.id,
+    name: `${e.firstName} ${e.lastName ?? ""}`.trim(),
+    role: e.designation,
+  })), [employeesList]);
 
   // ── Cash Shifts State ──
   const [showOpen, setShowOpen] = useState(false);
@@ -152,7 +165,7 @@ const Shifts = () => {
 
   const handleAddSchedule = () => {
     if (!newSchedEmployee) return;
-    const emp = users.find(u => u.id === newSchedEmployee);
+    const emp = staffEmployees.find(u => u.id === newSchedEmployee);
     if (!emp) return;
     if (weekSchedules.find(s => s.employeeId === emp.id)) { toast.error("Employee already has schedule for this week"); return; }
     const defaultShifts = DAY_LABELS.map((_, i) => ({ day: i, templateId: "st-off", templateName: "Day Off", startTime: "", endTime: "" }));
@@ -172,7 +185,7 @@ const Shifts = () => {
   // ── Leave functions ──
   const handleLeaveSubmit = () => {
     if (!leaveForm.employeeId || !leaveForm.startDate || !leaveForm.endDate || !leaveForm.reason) { toast.error("All fields are required"); return; }
-    const emp = users.find(u => u.id === leaveForm.employeeId);
+    const emp = staffEmployees.find(u => u.id === leaveForm.employeeId);
     const start = new Date(leaveForm.startDate);
     const end = new Date(leaveForm.endDate);
     const totalDays = Math.max(1, Math.ceil((end.getTime() - start.getTime()) / 86400000) + 1);
@@ -183,7 +196,6 @@ const Shifts = () => {
       status: "pending" as const, appliedOn: formatDate(new Date()),
     } as LeaveRequest);
     toast.success("Leave request submitted");
-    setShowLeaveForm(false); setLeaveForm({ employeeId: "", leaveType: "casual", startDate: "", endDate: "", reason: "" });
   };
 
   const handleLeaveAction = (action: "approved" | "rejected") => {
@@ -197,6 +209,49 @@ const Shifts = () => {
         const type = reviewingLeave.leaveType === "emergency" ? "casual" : reviewingLeave.leaveType;
         const current = bal[type];
         updateItem("leaveBalances", reviewingLeave.employeeId, { [type]: { ...current, used: current.used + reviewingLeave.totalDays } });
+      }
+
+      // Automatically sync staffSchedules to Day Off for the approved leave days
+      const startMs = new Date(`${reviewingLeave.startDate}T00:00:00Z`).getTime();
+      const endMs = new Date(`${reviewingLeave.endDate}T00:00:00Z`).getTime();
+      let curMs = startMs;
+      const daysToOff: { weekStart: string; dayIndex: number }[] = [];
+
+      while (curMs <= endMs) {
+        const curDate = new Date(curMs);
+        const day = curDate.getUTCDay(); // 0=Sun..6=Sat
+        const diff = day === 0 ? -6 : 1 - day;
+        const mondayMs = curMs + diff * 86_400_000;
+        const weekStart = formatDate(new Date(mondayMs));
+        const dayIndex = day === 0 ? 6 : day - 1;
+
+        daysToOff.push({ weekStart, dayIndex });
+        curMs += 86_400_000;
+      }
+
+      const byWeek: Record<string, number[]> = {};
+      for (const item of daysToOff) {
+        if (!byWeek[item.weekStart]) byWeek[item.weekStart] = [];
+        if (!byWeek[item.weekStart].includes(item.dayIndex)) {
+          byWeek[item.weekStart].push(item.dayIndex);
+        }
+      }
+
+      for (const [wStart, dayIndices] of Object.entries(byWeek)) {
+        const sched = staffSchedules.find(s => (s.employeeId === reviewingLeave.employeeId || s.employeeName === reviewingLeave.employeeName) && s.weekStart === wStart);
+        if (sched) {
+          const newShifts = sched.shifts.map(sh =>
+            dayIndices.includes(sh.day)
+              ? { ...sh, templateId: "st-off", templateName: "Day Off", startTime: "", endTime: "" }
+              : sh
+          );
+          for (const dIdx of dayIndices) {
+            if (!newShifts.find(sh => sh.day === dIdx)) {
+              newShifts.push({ day: dIdx, templateId: "st-off", templateName: "Day Off", startTime: "", endTime: "" });
+            }
+          }
+          updateItem("staffSchedules", sched.id, { shifts: newShifts });
+        }
       }
     }
     toast.success(`Leave ${action}`);
@@ -366,12 +421,29 @@ const Shifts = () => {
                           </div>
                         </TableCell>
                         {DAY_LABELS.map((_, dayIdx) => {
+                          const dateObj = weekDates[dayIdx];
+                          const dateStr = formatDate(dateObj);
+                          const approvedLeave = leaveRequests.find(
+                            l => l.status === "approved" &&
+                                 (l.employeeId === sched.employeeId || l.employeeName === sched.employeeName) &&
+                                 l.startDate <= dateStr &&
+                                 l.endDate >= dateStr
+                          );
+
                           const dayShift = sched.shifts.find(sh => sh.day === dayIdx);
                           const tmpl = dayShift ? shiftTemplates.find(t => t.id === dayShift.templateId) : null;
                           const isEditing = editingCell?.schedId === sched.id && editingCell?.day === dayIdx;
                           return (
                             <TableCell key={dayIdx} className="text-center p-1">
-                              {isEditing ? (
+                              {approvedLeave ? (
+                                <div
+                                  title={`Approved ${approvedLeave.leaveType} leave (${approvedLeave.startDate} to ${approvedLeave.endDate})`}
+                                  className="w-full rounded-md px-2 py-1.5 text-xs font-semibold bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30 flex flex-col items-center justify-center cursor-default"
+                                >
+                                  <span>🌴 On Leave</span>
+                                  <span className="text-[9px] opacity-80 capitalize">({approvedLeave.leaveType})</span>
+                                </div>
+                              ) : isEditing ? (
                                 <Select onValueChange={(v) => handleAssignShift(sched.id, dayIdx, v)} onOpenChange={(open) => { if (!open) setEditingCell(null); }}>
                                   <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select" /></SelectTrigger>
                                   <SelectContent>
@@ -579,7 +651,7 @@ const Shifts = () => {
             <Select value={newSchedEmployee} onValueChange={setNewSchedEmployee}>
               <SelectTrigger><SelectValue placeholder="Choose employee" /></SelectTrigger>
               <SelectContent>
-                {users.filter(u => !weekSchedules.find(s => s.employeeId === u.id)).map(u => (
+                {staffEmployees.filter(u => !weekSchedules.find(s => s.employeeId === u.id)).map(u => (
                   <SelectItem key={u.id} value={u.id}>{u.name} ({u.role})</SelectItem>
                 ))}
               </SelectContent>
@@ -595,7 +667,7 @@ const Shifts = () => {
           <div><Label>Employee</Label>
             <Select value={leaveForm.employeeId} onValueChange={v => setLeaveForm(p => ({ ...p, employeeId: v }))}>
               <SelectTrigger><SelectValue placeholder="Select employee" /></SelectTrigger>
-              <SelectContent>{users.map(u => <SelectItem key={u.id} value={u.id}>{u.name} ({u.role})</SelectItem>)}</SelectContent>
+              <SelectContent>{staffEmployees.map(u => <SelectItem key={u.id} value={u.id}>{u.name} ({u.role})</SelectItem>)}</SelectContent>
             </Select>
           </div>
           <div><Label>Leave Type</Label>

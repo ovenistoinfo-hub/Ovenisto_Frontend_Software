@@ -43,6 +43,9 @@ const ATT_STATUS_COLORS: Record<string, string> = {
   halfday: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-200",
   absent:  "bg-destructive/10 text-destructive",
   off:     "bg-muted text-muted-foreground",
+  leave:   "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-200",
+  upcoming: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-200",
+  "waiting for clock in": "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-200",
 };
 
 type ShiftName = "morning" | "evening" | "night";
@@ -194,6 +197,17 @@ export default function EmployeePortal() {
     })),
   });
 
+  const { data: myRequests } = useQuery({
+    queryKey: ["my-leave-requests", user?.id],
+    queryFn: () => leaveService.getMyRequests(user?.id),
+    enabled: !!user?.id,
+  });
+
+  const approvedLeaves = useMemo(
+    () => (myRequests || []).filter(l => l.status === "approved"),
+    [myRequests]
+  );
+
   const shiftByDate: Record<string, string> = {};
   scheduleQueries.forEach((q, i) => {
     const sched = q.data;
@@ -202,7 +216,9 @@ export default function EmployeePortal() {
     sched.shifts.forEach(s => {
       const d = new Date(ws + "T00:00:00Z");
       d.setUTCDate(d.getUTCDate() + s.dayIndex);
-      shiftByDate[d.toISOString().split("T")[0]] = s.shiftType;
+      const dStr = d.toISOString().split("T")[0];
+      const isOnLeave = approvedLeaves.some(l => l.startDate <= dStr && l.endDate >= dStr);
+      shiftByDate[dStr] = isOnLeave ? "leave" : s.shiftType;
     });
   });
 
@@ -225,12 +241,6 @@ export default function EmployeePortal() {
   const { data: leaveBalance } = useQuery({
     queryKey: ["my-leave-balance"],
     queryFn: () => leaveService.getMyBalance(),
-  });
-
-  const { data: myRequests } = useQuery({
-    queryKey: ["my-leave-requests", user?.id],
-    queryFn: () => leaveService.getMyRequests(user?.id),
-    enabled: !!user?.id,
   });
 
   const { data: shiftsData } = useQuery({
@@ -287,22 +297,94 @@ export default function EmployeePortal() {
     const rows: any[] = [];
     const recordSet = new Set(historyRows.map(r => r.date));
 
+    const pktNowMs = Date.now() + 5 * 60 * 60 * 1000;
+    const pktNow = new Date(pktNowMs);
+    const todayStr = pktNow.toISOString().split("T")[0];
+    const nowMinutes = pktNow.getUTCHours() * 60 + pktNow.getUTCMinutes();
+    const graceMinutes = settings?.graceMinutes ?? 15;
+
     for (const dStr of dates) {
       if (!recordSet.has(dStr)) {
-        const shift = shiftByDate[dStr] ?? "off";
+        const isOnLeave = approvedLeaves.some(l => l.startDate <= dStr && l.endDate >= dStr);
+        if (isOnLeave) {
+          rows.push({
+            id: `unrecorded-${dStr}`,
+            date: dStr,
+            userId: user?.id,
+            clockIn: null,
+            clockOut: null,
+            status: "leave",
+            notes: "Approved Leave",
+          });
+          continue;
+        }
+
+        const shiftType = shiftByDate[dStr] ?? "off";
+
+        if (shiftType === "off") {
+          rows.push({
+            id: `unrecorded-${dStr}`,
+            date: dStr,
+            userId: user?.id,
+            clockIn: null,
+            clockOut: null,
+            status: "off",
+            notes: "Scheduled Off",
+          });
+          continue;
+        }
+
+        let computedStatus = "absent";
+        let computedNotes = "No record";
+
+        const startTimeStr = (shiftConfig as any)?.[shiftType]?.start ?? DEFAULT_SHIFT_CONFIG[shiftType as ShiftName]?.start ?? "09:00";
+        const format12h = (tStr: string) => {
+          const [h, m] = tStr.split(":").map(Number);
+          const period = h >= 12 ? "PM" : "AM";
+          const h12 = h % 12 || 12;
+          return `${String(h12).padStart(2, "0")}:${String(m).padStart(2, "0")} ${period}`;
+        };
+
+        if (dStr === todayStr) {
+          const [sh, sm] = startTimeStr.split(":").map(Number);
+          const shiftStartMinutes = sh * 60 + sm;
+          const graceEndMinutes = shiftStartMinutes + graceMinutes;
+          const absentCutoffMinutes = graceEndMinutes + 60;
+
+          if (nowMinutes < shiftStartMinutes) {
+            computedStatus = "upcoming";
+            computedNotes = `Shift starts at ${format12h(startTimeStr)}`;
+          } else if (nowMinutes <= graceEndMinutes) {
+            computedStatus = "waiting for clock in";
+            computedNotes = "Grace period active";
+          } else if (nowMinutes <= absentCutoffMinutes) {
+            computedStatus = "late";
+            computedNotes = "Grace period ended";
+          } else {
+            computedStatus = "absent";
+            computedNotes = "Shift window expired";
+          }
+        } else if (dStr < todayStr) {
+          computedStatus = "absent";
+          computedNotes = "No record";
+        } else {
+          computedStatus = "upcoming";
+          computedNotes = `Shift starts at ${format12h(startTimeStr)}`;
+        }
+
         rows.push({
           id: `unrecorded-${dStr}`,
           date: dStr,
           userId: user?.id,
           clockIn: null,
           clockOut: null,
-          status: shift === "off" ? "off" : "absent",
-          notes: shift === "off" ? "Scheduled Off" : "No record",
+          status: computedStatus,
+          notes: computedNotes,
         });
       }
     }
     return rows;
-  }, [historyRows, attFrom, attTo, shiftByDate, user?.id]);
+  }, [historyRows, attFrom, attTo, shiftByDate, user?.id, approvedLeaves, settings, shiftConfig]);
 
   const filteredHistoryRows = useMemo(() => {
     if (statusFilter === "all") return historyRows;
@@ -412,9 +494,9 @@ export default function EmployeePortal() {
                     const obj     = new Date(ds + "T00:00:00Z");
                     const dayName = obj.toLocaleDateString("en-US", { weekday: "short", timeZone: "UTC" });
                     const shiftType = shiftByDate[ds] ?? "off";
-                    const label     = shiftType === "off" ? "Day Off" : shiftType.charAt(0).toUpperCase() + shiftType.slice(1);
+                    const label     = shiftType === "leave" ? "Leave" : (shiftType === "off" ? "Day Off" : shiftType.charAt(0).toUpperCase() + shiftType.slice(1));
                     const isToday   = ds === today;
-                    const times     = shiftType !== "off" ? shiftConfig[shiftType as ShiftName] : null;
+                    const times     = (shiftType !== "off" && shiftType !== "leave") ? shiftConfig[shiftType as ShiftName] : null;
                     return (
                       <TableRow key={ds} className={cn("hover:bg-muted/20", isToday && "bg-primary/5")}>
                         <TableCell className="text-sm font-medium">
@@ -426,7 +508,7 @@ export default function EmployeePortal() {
                           <Badge variant="secondary" className={cn("text-xs", SHIFT_COLORS[shiftType])}>{label}</Badge>
                         </TableCell>
                         <TableCell className="text-sm font-mono text-muted-foreground">
-                          {times ? `${times.start} – ${times.end}` : "—"}
+                          {shiftType === "leave" ? "Approved Leave" : (times ? `${times.start} – ${times.end}` : "—")}
                         </TableCell>
                       </TableRow>
                     );
@@ -468,6 +550,11 @@ export default function EmployeePortal() {
                   <p className="text-sm text-muted-foreground">
                     Clocked in at {formatTime(todayStatus.clockIn)} · Elapsed: <ElapsedTimer clockIn={todayStatus.clockIn} />
                   </p>
+                  <div>
+                    <Badge className={cn("capitalize", ATT_STATUS_COLORS[todayStatus.status])}>
+                      {todayStatus.status === "halfday" ? "half day" : todayStatus.status}
+                    </Badge>
+                  </div>
                   <Button size="lg" variant="outline" className="gap-2 border-warning/40 text-warning w-full max-w-xs"
                     onClick={() => clockOutMut.mutate()} disabled={clockOutMut.isPending}>
                     <LogOut className="h-5 w-5" />Check Out
@@ -634,13 +721,14 @@ export default function EmployeePortal() {
               {(["annual", "sick", "casual", "halfday"] as const).map(type => {
                 const used  = leaveBalance[`${type}Used` as keyof LeaveBalance] as number;
                 const total = leaveBalance[type] as number;
+                const remaining = Math.max(0, total - used);
                 const label = type === "halfday" ? "half day" : type;
                 return (
                   <Card key={type} className="shadow-sm">
                     <CardContent className="p-3 space-y-1">
                       <p className="text-xs font-medium capitalize">{label}</p>
-                      <p className="text-lg font-bold">{total - used}<span className="text-xs text-muted-foreground font-normal"> / {total}</span></p>
-                      <Progress value={total > 0 ? (used / total) * 100 : 0} className="h-1.5" />
+                      <p className="text-lg font-bold">{remaining}<span className="text-xs text-muted-foreground font-normal"> / {total}</span></p>
+                      <Progress value={total > 0 ? Math.min(100, (used / total) * 100) : 0} className="h-1.5" />
                     </CardContent>
                   </Card>
                 );

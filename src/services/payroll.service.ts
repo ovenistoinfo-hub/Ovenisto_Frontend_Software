@@ -9,6 +9,8 @@ export interface PaymentLogRecord {
   penalties: number;
   rewards: number;
   finalPay: number;
+  advanceAmount?: number;
+  isAdvance?: boolean;
   rateType: string | null;
   rate: number | null;
   unitsWorked: number | null;
@@ -34,6 +36,8 @@ export interface PayoutInput {
   penalties: number;
   rewards: number;
   finalPay: number;
+  advanceAmount?: number;
+  isAdvance?: boolean;
   notes?: string;
   rateType?: string;
   rate?: number;
