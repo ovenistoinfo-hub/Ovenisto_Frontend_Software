@@ -8,6 +8,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useVisiblePolling } from "@/hooks/use-visible-polling";
+import { getSelfOrderSocket } from "@/lib/self-order-socket";
 import { settingsService } from "@/services/settings.service";
 import {
   selfOrderService,
@@ -121,6 +122,8 @@ const SelfOrder = () => {
   const [placedOrderId, setPlacedOrderId] = useState<string | null>(null);
   const [orderStatus, setOrderStatus] = useState<SelfOrderStatus | null>(null);
   const [sessionToken, setSessionToken] = useState<string | null>(null);
+  const [role, setRole] = useState<"host" | "viewer" | null>(null);
+  const [sessionEnded, setSessionEnded] = useState(false);
 
   useEffect(() => {
     if (!tableId) { setTableError("No table specified — please scan the QR code on your table."); setTableLoading(false); return; }
@@ -156,6 +159,42 @@ const SelfOrder = () => {
     });
   }, [table, hydrated, entryDone, customerName, customerPhone, guestCount, cart, notes, placedOrderId, sessionToken]);
 
+  // ── Join this table's socket room for live order/session updates ──
+  useEffect(() => {
+    if (!table || !hydrated) return;
+    const socket = getSelfOrderSocket();
+
+    socket.emit(
+      "join-table",
+      { tableId: table.tableId, sessionToken: sessionToken ?? undefined },
+      (res: { role: "host"; sessionToken: string } | { role: "viewer" } | { error: string }) => {
+        if ("error" in res) return;
+        setRole(res.role);
+        if (res.role === "host") setSessionToken(res.sessionToken);
+      }
+    );
+
+    const onOrderUpdated = (payload: SelfOrderStatus) => {
+      if (!placedOrderId) return;
+      setOrderStatus(payload);
+    };
+    const onSessionEnded = () => setSessionEnded(true);
+
+    socket.on("order:updated", onOrderUpdated);
+    socket.on("session:ended", onSessionEnded);
+
+    return () => {
+      socket.off("order:updated", onOrderUpdated);
+      socket.off("session:ended", onSessionEnded);
+    };
+  }, [table, hydrated, sessionToken, placedOrderId]);
+
+  // ── Clear the persisted session once staff ends the sitting ──
+  useEffect(() => {
+    if (!sessionEnded || !table) return;
+    clearPersistedSession(table.tableId);
+  }, [sessionEnded, table]);
+
   useEffect(() => {
     settingsService.getSettings().then((s) => {
       setCurrency(s.currency || "Rs.");
@@ -179,7 +218,7 @@ const SelfOrder = () => {
     if (!placedOrderId) return;
     selfOrderService.getStatus(placedOrderId).then(setOrderStatus).catch(() => {});
   }, [placedOrderId]);
-  useVisiblePolling(pollStatus, 4000, !!placedOrderId && !orderStatus?.accepted && orderStatus?.status !== "cancelled");
+  useVisiblePolling(pollStatus, 4000, !!placedOrderId && !orderStatus?.accepted && orderStatus?.status !== "cancelled" && !orderStatus?.paid);
 
   const availableItems = useMemo(() => menu?.items ?? [], [menu]);
   const categories = useMemo(() => ["All", ...(menu?.categories.map((c) => c.name) ?? [])], [menu]);
@@ -329,10 +368,24 @@ const SelfOrder = () => {
     );
   }
 
+  // ── Render: staff ended the sitting — session cleared, fresh start on refresh ──
+  if (sessionEnded) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center p-6">
+        <div className="text-center space-y-4 max-w-sm">
+          <CheckCircle2 className="h-16 w-16 mx-auto text-success" />
+          <h1 className="text-2xl font-bold">Thanks for dining with us!</h1>
+          <p className="text-muted-foreground">We hope to see you again soon.</p>
+        </div>
+      </div>
+    );
+  }
+
   // ── Render: waiting/status screen after placing an order ──
   if (placedOrderId && orderStatus) {
     const declined = orderStatus.status === "cancelled";
-    const confirmed = orderStatus.accepted && !declined;
+    const paid = orderStatus.paid;
+    const confirmed = orderStatus.accepted && !declined && !paid;
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-6">
         <div className="text-center space-y-4 max-w-sm">
@@ -344,6 +397,12 @@ const SelfOrder = () => {
                 {orderStatus.rejectionReason || "The restaurant could not confirm this order."}
               </p>
               <p className="text-sm text-muted-foreground">Please speak to a staff member at Table {table?.tableNumber}.</p>
+            </>
+          ) : paid ? (
+            <>
+              <CheckCircle2 className="h-16 w-16 mx-auto text-success" />
+              <h1 className="text-2xl font-bold">Bill Paid — Thank you!</h1>
+              <p className="text-muted-foreground">Your bill has been settled. We hope you enjoyed your meal!</p>
             </>
           ) : confirmed ? (
             <>
