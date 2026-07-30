@@ -49,4 +49,8 @@ export const tableService = {
   async deleteTable(id: string): Promise<void> {
     await api.delete<{ success: boolean }>(`/tables/${id}`);
   },
+
+  async notifySelfOrderSessionEnded(tableId: string): Promise<void> {
+    await api.post<{ success: boolean }>(`/self-order/table/${tableId}/end-session`, {});
+  },
 };

@@ -946,6 +946,7 @@ const WaiterPanel = () => {
       }
 
       await tableService.updateTable(selectedTable.id, { status: "available", currentOrderId: null });
+      await tableService.notifySelfOrderSessionEnded(selectedTable.id).catch(() => {});
       setTables(prev => prev.map(t => t.id === selectedTable.id ? { ...t, status: "available", currentOrderId: null } : t));
       setBillReqSet((p) => { const n = new Set(p); n.delete(selectedTableNum); return n; });
       if (selectedTableNum !== null) {
