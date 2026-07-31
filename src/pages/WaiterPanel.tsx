@@ -603,9 +603,9 @@ const WaiterPanel = () => {
       const orderWithCust = activeTableOrders.find(o => (o as any).customerId || (o.customerName && o.customerName !== "Walk-in"));
       if (orderWithCust) {
         const custId = (orderWithCust as any).customerId;
-        const matched = custId 
-          ? customers.find(c => c.id === custId)
-          : customers.find(c => c.name === orderWithCust.customerName || (orderWithCust.phone && c.phone && c.phone.replace(/\D/g, "") === orderWithCust.phone.replace(/\D/g, "")));
+        const byId = custId ? customers.find(c => c.id === custId) : undefined;
+        const matched = byId
+          ?? customers.find(c => c.name === orderWithCust.customerName || (orderWithCust.phone && c.phone && c.phone.replace(/\D/g, "") === orderWithCust.phone.replace(/\D/g, "")));
         if (matched) {
           setSelectedCustomerId(matched.id);
           setTableCustomerMap(prev => {
