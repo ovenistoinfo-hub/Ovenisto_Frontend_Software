@@ -95,6 +95,7 @@ export interface CreateSelfOrderInput {
 }
 
 export interface SelfOrderStatus {
+  orderId: string;
   status: "pending" | "confirmed" | "cancelled";
   accepted: boolean;
   rejectionReason?: string;

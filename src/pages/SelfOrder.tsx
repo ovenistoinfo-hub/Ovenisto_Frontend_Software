@@ -38,6 +38,12 @@ const formatPhoneNumber = (val: string): string => {
   return digitsOnly;
 };
 
+interface PlacedOrder {
+  orderId: string;
+  items: CartItem[];
+  status: SelfOrderStatus;
+}
+
 interface PersistedSession {
   entryDone: boolean;
   customerName: string;
@@ -45,7 +51,8 @@ interface PersistedSession {
   guestCount: number;
   cart: CartItem[];
   notes: string;
-  placedOrderId: string | null;
+  orders: PlacedOrder[];
+  viewingMenu: boolean;
   sessionToken: string | null;
 }
 
@@ -118,9 +125,9 @@ const SelfOrder = () => {
   const [selectedModifiers, setSelectedModifiers] = useState<string[]>([]);
   const [placing, setPlacing] = useState(false);
 
-  // ── Placed-order waiting/status screen ──
-  const [placedOrderId, setPlacedOrderId] = useState<string | null>(null);
-  const [orderStatus, setOrderStatus] = useState<SelfOrderStatus | null>(null);
+  // ── Placed orders for this table sitting (supports multiple orders per visit) ──
+  const [orders, setOrders] = useState<PlacedOrder[]>([]);
+  const [viewingMenu, setViewingMenu] = useState(false);
   const [sessionToken, setSessionToken] = useState<string | null>(null);
   const [role, setRole] = useState<"host" | "viewer" | null>(null);
   const [sessionEnded, setSessionEnded] = useState(false);
@@ -148,7 +155,8 @@ const SelfOrder = () => {
       setGuestCount(persisted.guestCount);
       setCart(persisted.cart);
       setNotes(persisted.notes);
-      setPlacedOrderId(persisted.placedOrderId);
+      setOrders(persisted.orders ?? []);
+      setViewingMenu(persisted.viewingMenu ?? false);
       setSessionToken(persisted.sessionToken);
     }
     setHydrated(true);
@@ -158,9 +166,9 @@ const SelfOrder = () => {
     if (!table || !hydrated) return;
     savePersistedSession(table.tableId, {
       entryDone, customerName, customerPhone, guestCount, cart, notes,
-      placedOrderId, sessionToken,
+      orders, viewingMenu, sessionToken,
     });
-  }, [table, hydrated, entryDone, customerName, customerPhone, guestCount, cart, notes, placedOrderId, sessionToken]);
+  }, [table, hydrated, entryDone, customerName, customerPhone, guestCount, cart, notes, orders, viewingMenu, sessionToken]);
 
   // ── Join this table's socket room for live order/session updates ──
   useEffect(() => {
@@ -192,8 +200,7 @@ const SelfOrder = () => {
     socket.on("connect", joinTable);
 
     const onOrderUpdated = (payload: SelfOrderStatus) => {
-      if (!placedOrderId) return;
-      setOrderStatus(payload);
+      setOrders((prev) => prev.map((o) => (o.orderId === payload.orderId ? { ...o, status: payload } : o)));
     };
     const onSessionEnded = () => setSessionEnded(true);
     const onHostRequest = () => setIncomingHostRequest(true);
@@ -224,7 +231,7 @@ const SelfOrder = () => {
       socket.off("host-request:declined", onHostRequestDeclined);
       socket.off("role:changed", onRoleChanged);
     };
-  }, [table, hydrated, sessionToken, placedOrderId]);
+  }, [table, hydrated, sessionToken]);
 
   // ── Clear the persisted session once staff ends the sitting ──
   useEffect(() => {
@@ -250,12 +257,18 @@ const SelfOrder = () => {
       .finally(() => setMenuLoading(false));
   }, [entryDone]);
 
-  // ── Poll order status until accepted or rejected ──
+  // ── Poll every non-terminal order's status as a fallback if the socket drops ──
   const pollStatus = useCallback(() => {
-    if (!placedOrderId) return;
-    selfOrderService.getStatus(placedOrderId).then(setOrderStatus).catch(() => {});
-  }, [placedOrderId]);
-  useVisiblePolling(pollStatus, 4000, !!placedOrderId && orderStatus?.status !== "cancelled" && !orderStatus?.paid);
+    orders
+      .filter((o) => o.status.status !== "cancelled" && !o.status.paid)
+      .forEach((o) => {
+        selfOrderService.getStatus(o.orderId).then((status) => {
+          setOrders((prev) => prev.map((p) => (p.orderId === o.orderId ? { ...p, status } : p)));
+        }).catch(() => {});
+      });
+  }, [orders]);
+  const hasActiveOrder = orders.some((o) => o.status.status !== "cancelled" && !o.status.paid);
+  useVisiblePolling(pollStatus, 4000, hasActiveOrder);
 
   const availableItems = useMemo(() => menu?.items ?? [], [menu]);
   const categories = useMemo(() => ["All", ...(menu?.categories.map((c) => c.name) ?? [])], [menu]);
@@ -376,9 +389,10 @@ const SelfOrder = () => {
         specialInstructions: notes || undefined,
         items: cart.map((i) => ({ menuItemId: i.menuItemId, variantId: i.variantId, name: i.name, price: i.price, qty: i.qty, modifierIds: i.modifierIds })),
       });
-      setPlacedOrderId(orderId);
-      setOrderStatus({ status: "pending", accepted: false, paid: false });
+      setOrders((prev) => [...prev, { orderId, items: cart, status: { orderId, status: "pending", accepted: false, paid: false } }]);
+      setCart([]);
       setCartOpen(false);
+      setViewingMenu(false);
     } catch {
       toast.error("Failed to place order. Please try again.");
     } finally {
@@ -462,7 +476,7 @@ const SelfOrder = () => {
   }
 
   // ── Render: viewer screen — another device at this table is already the host ──
-  if (role === "viewer" && !placedOrderId) {
+  if (role === "viewer" && orders.length === 0) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-6">
         <div className="text-center space-y-4 max-w-sm">
@@ -490,44 +504,58 @@ const SelfOrder = () => {
     );
   }
 
-  // ── Render: waiting/status screen after placing an order ──
-  if (placedOrderId && orderStatus) {
-    const declined = orderStatus.status === "cancelled";
-    const paid = orderStatus.paid;
-    const confirmed = orderStatus.accepted && !declined && !paid;
+  // ── Render: order list — every order placed this sitting, each with its own live status ──
+  if (orders.length > 0 && !viewingMenu) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center p-6">
-        <div className="text-center space-y-4 max-w-sm">
-          {declined ? (
-            <>
-              <XCircle className="h-16 w-16 mx-auto text-destructive" />
-              <h1 className="text-2xl font-bold">Order Declined</h1>
-              <p className="text-muted-foreground">
-                {orderStatus.rejectionReason || "The restaurant could not confirm this order."}
-              </p>
-              <p className="text-sm text-muted-foreground">Please speak to a staff member at Table {table?.tableNumber}.</p>
-            </>
-          ) : paid ? (
-            <>
-              <CheckCircle2 className="h-16 w-16 mx-auto text-success" />
-              <h1 className="text-2xl font-bold">Bill Paid — Thank you!</h1>
-              <p className="text-muted-foreground">Your bill has been settled. We hope you enjoyed your meal!</p>
-            </>
-          ) : confirmed ? (
-            <>
-              <CheckCircle2 className="h-16 w-16 mx-auto text-success animate-bounce" />
-              <h1 className="text-2xl font-bold">Order Confirmed!</h1>
-              <p className="text-muted-foreground">
-                Your order is being prepared in the kitchen. Enjoy your meal! Please pay your bill with your server or at the counter when finished.
-              </p>
-            </>
-          ) : (
-            <>
-              <Loader2 className="h-16 w-16 mx-auto animate-spin text-primary" />
-              <h1 className="text-2xl font-bold">Waiting for Confirmation</h1>
-              <p className="text-muted-foreground">A staff member is reviewing your order.</p>
-            </>
-          )}
+      <div className="min-h-screen bg-background p-6">
+        <div className="max-w-sm mx-auto space-y-4">
+          <div className="text-center space-y-1">
+            <Flame className="h-8 w-8 mx-auto text-primary" />
+            <h1 className="font-bold text-lg">{restaurantName || "Your Orders"}</h1>
+            <p className="text-xs text-muted-foreground">
+              Table {table?.tableNumber}{table?.floor ? ` · ${table.floor}` : ""}
+            </p>
+          </div>
+          {orders.map((o) => {
+            const declined = o.status.status === "cancelled";
+            const paid = o.status.paid;
+            const confirmed = o.status.accepted && !declined && !paid;
+            return (
+              <div key={o.orderId} className="bg-card rounded-xl border border-border p-4 space-y-2">
+                <div className="flex items-center gap-2">
+                  {declined ? (
+                    <XCircle className="h-5 w-5 text-destructive shrink-0" />
+                  ) : paid || confirmed ? (
+                    <CheckCircle2 className="h-5 w-5 text-success shrink-0" />
+                  ) : (
+                    <Loader2 className="h-5 w-5 animate-spin text-primary shrink-0" />
+                  )}
+                  <p className="font-semibold text-sm">
+                    {declined ? "Order Declined" : paid ? "Bill Paid" : confirmed ? "Order Confirmed" : "Waiting for Confirmation"}
+                  </p>
+                </div>
+                {declined && (
+                  <p className="text-xs text-muted-foreground">
+                    {o.status.rejectionReason || "The restaurant could not confirm this order."}
+                  </p>
+                )}
+                <div className="space-y-1 pt-1 border-t border-border/50">
+                  {o.items.map((item) => (
+                    <div key={item.id} className="flex justify-between text-xs">
+                      <span className="text-muted-foreground">{item.qty}x {item.name}</span>
+                      <span>{currency} {(item.price * item.qty).toLocaleString()}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+          <Button
+            className="w-full h-12 gradient-primary text-primary-foreground font-semibold"
+            onClick={() => setViewingMenu(true)}
+          >
+            <Plus className="h-4 w-4 mr-2" /> Place Another Order
+          </Button>
         </div>
       </div>
     );
@@ -592,9 +620,16 @@ const SelfOrder = () => {
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <div className="sticky top-0 z-20 bg-card border-b border-border px-4 py-3">
-        <div className="flex items-center gap-2">
-          <Flame className="h-6 w-6 text-primary" />
-          <span className="font-bold text-primary text-lg">{restaurantName}</span>
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <Flame className="h-6 w-6 text-primary" />
+            <span className="font-bold text-primary text-lg">{restaurantName}</span>
+          </div>
+          {orders.length > 0 && (
+            <button onClick={() => setViewingMenu(false)} className="text-xs font-semibold text-primary underline underline-offset-2">
+              My Orders ({orders.length})
+            </button>
+          )}
         </div>
         <p className="text-xs text-muted-foreground mt-0.5">Table {table?.tableNumber} · Dine In · {guestCount} Guests</p>
       </div>
