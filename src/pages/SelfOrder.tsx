@@ -139,6 +139,7 @@ const SelfOrder = () => {
   // ── Placed orders for this table sitting ──
   const [orders, setOrders] = useState<PlacedOrder[]>([]);
   const [viewingMenu, setViewingMenu] = useState(false);
+  const [showReceipt, setShowReceipt] = useState(false);
   const [sessionToken, setSessionToken] = useState<string | null>(null);
   const [role, setRole] = useState<"host" | "viewer" | null>(null);
   const [sessionEnded, setSessionEnded] = useState(false);
@@ -289,6 +290,27 @@ const SelfOrder = () => {
   const cartTotal = cart.reduce((s, i) => s + i.price * i.qty, 0);
   const cartCount = cart.reduce((s, i) => s + i.qty, 0);
   const tax = Math.round(cartTotal * (taxRate / 100));
+
+  // ── Sitting Bill Calculations ──
+  const nonDeclinedOrders = useMemo(
+    () => orders.filter((o) => o.status.status !== "cancelled"),
+    [orders]
+  );
+  const sittingSubtotal = useMemo(
+    () =>
+      nonDeclinedOrders.reduce(
+        (sum, o) => sum + o.items.reduce((iSum, item) => iSum + item.price * item.qty, 0),
+        0
+      ),
+    [nonDeclinedOrders]
+  );
+  const sittingTax = useMemo(
+    () => Math.round(sittingSubtotal * (taxRate / 100)),
+    [sittingSubtotal, taxRate]
+  );
+  const sittingGrandTotal = sittingSubtotal + sittingTax;
+  const isSittingFullyPaid =
+    orders.length > 0 && orders.every((o) => o.status.paid || o.status.status === "cancelled");
 
   // ── Cart helpers ──
 
@@ -534,29 +556,6 @@ const SelfOrder = () => {
       </div>
     );
   }
-
-  // ── Sitting Bill Calculations ──
-  const [showReceipt, setShowReceipt] = useState(false);
-
-  const nonDeclinedOrders = useMemo(
-    () => orders.filter((o) => o.status.status !== "cancelled"),
-    [orders]
-  );
-  const sittingSubtotal = useMemo(
-    () =>
-      nonDeclinedOrders.reduce(
-        (sum, o) => sum + o.items.reduce((iSum, item) => iSum + item.price * item.qty, 0),
-        0
-      ),
-    [nonDeclinedOrders]
-  );
-  const sittingTax = useMemo(
-    () => Math.round(sittingSubtotal * (taxRate / 100)),
-    [sittingSubtotal, taxRate]
-  );
-  const sittingGrandTotal = sittingSubtotal + sittingTax;
-  const isSittingFullyPaid =
-    orders.length > 0 && orders.every((o) => o.status.paid || o.status.status === "cancelled");
 
   // ── Render: order list ──
   if (orders.length > 0 && !viewingMenu) {
