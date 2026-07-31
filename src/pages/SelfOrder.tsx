@@ -3,7 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import {
   Flame, Search, ShoppingCart, Plus, Minus, Send, ChevronUp, Loader2,
   XCircle, CheckCircle2, Users, Phone, User, BellRing, Utensils, Sparkles,
-  ArrowRight, X
+  ArrowRight, X, Receipt, FileText
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -535,10 +535,34 @@ const SelfOrder = () => {
     );
   }
 
+  // ── Sitting Bill Calculations ──
+  const [showReceipt, setShowReceipt] = useState(false);
+
+  const nonDeclinedOrders = useMemo(
+    () => orders.filter((o) => o.status.status !== "cancelled"),
+    [orders]
+  );
+  const sittingSubtotal = useMemo(
+    () =>
+      nonDeclinedOrders.reduce(
+        (sum, o) => sum + o.items.reduce((iSum, item) => iSum + item.price * item.qty, 0),
+        0
+      ),
+    [nonDeclinedOrders]
+  );
+  const sittingTax = useMemo(
+    () => Math.round(sittingSubtotal * (taxRate / 100)),
+    [sittingSubtotal, taxRate]
+  );
+  const sittingGrandTotal = sittingSubtotal + sittingTax;
+  const isSittingFullyPaid =
+    orders.length > 0 && orders.every((o) => o.status.paid || o.status.status === "cancelled");
+
   // ── Render: order list ──
   if (orders.length > 0 && !viewingMenu) {
     return (
       <div className="min-h-screen bg-background flex flex-col">
+        {/* Header */}
         <div className="sticky top-0 z-30 bg-card/90 backdrop-blur-md border-b border-border/80 px-4 py-3 shadow-xs">
           <div className="max-w-lg mx-auto flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -565,77 +589,257 @@ const SelfOrder = () => {
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-4 py-5 space-y-4 max-w-lg mx-auto w-full">
-          {orders.map((o, idx) => {
-            const declined = o.status.status === "cancelled";
-            const paid = o.status.paid;
-            const confirmed = o.status.accepted && !declined && !paid;
-            const isPending = !o.status.accepted && !declined && !paid;
+        {/* Orders List & Bill Summary */}
+        <div className="flex-1 overflow-y-auto px-4 py-5 space-y-4 max-w-lg mx-auto w-full pb-10">
+          <div className="space-y-3">
+            <h2 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+              Active Table Orders ({orders.length})
+            </h2>
+            {orders.map((o, idx) => {
+              const declined = o.status.status === "cancelled";
+              const paid = o.status.paid;
+              const confirmed = o.status.accepted && !declined && !paid;
+              const isPending = !o.status.accepted && !declined && !paid;
 
-            return (
-              <div key={o.orderId} className="bg-card rounded-2xl border border-border/80 shadow-md p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
-                    Order #{idx + 1}
-                  </span>
-
-                  <div
-                    className={cn(
-                      "flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-extrabold border",
-                      declined && "bg-destructive/10 text-destructive border-destructive/20",
-                      paid && "bg-success/10 text-success border-success/20",
-                      confirmed && "bg-success/15 text-success border-success/30 animate-pulse",
-                      isPending && "bg-warning/15 text-warning-foreground border-warning/30"
-                    )}
-                  >
-                    {declined ? (
-                      <XCircle className="h-3.5 w-3.5" />
-                    ) : paid || confirmed ? (
-                      <CheckCircle2 className="h-3.5 w-3.5" />
-                    ) : (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    )}
-                    <span>
-                      {declined
-                        ? "Order Declined"
-                        : paid
-                        ? "Bill Settled"
-                        : confirmed
-                        ? "Order Confirmed & Preparing"
-                        : "Waiting for Kitchen Confirmation"}
+              return (
+                <div key={o.orderId} className="bg-card rounded-2xl border border-border/80 shadow-md p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
+                      Order #{idx + 1}
                     </span>
+
+                    <div
+                      className={cn(
+                        "flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-extrabold border",
+                        declined && "bg-destructive/10 text-destructive border-destructive/20",
+                        paid && "bg-success/10 text-success border-success/20",
+                        confirmed && "bg-success/15 text-success border-success/30 animate-pulse",
+                        isPending && "bg-warning/15 text-warning-foreground border-warning/30"
+                      )}
+                    >
+                      {declined ? (
+                        <XCircle className="h-3.5 w-3.5" />
+                      ) : paid || confirmed ? (
+                        <CheckCircle2 className="h-3.5 w-3.5" />
+                      ) : (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      )}
+                      <span>
+                        {declined
+                          ? "Order Declined"
+                          : paid
+                          ? "Bill Settled"
+                          : confirmed
+                          ? "Order Confirmed & Preparing"
+                          : "Waiting for Kitchen Confirmation"}
+                      </span>
+                    </div>
+                  </div>
+
+                  {declined && (
+                    <div className="p-2.5 rounded-xl bg-destructive/10 text-destructive text-xs font-medium">
+                      {o.status.rejectionReason || "The restaurant could not confirm this order at this time."}
+                    </div>
+                  )}
+
+                  <div className="space-y-1.5 pt-2 border-t border-border/60">
+                    {o.items.map((item) => (
+                      <div key={item.id} className="flex justify-between text-xs font-medium">
+                        <span className="text-foreground">
+                          <span className="font-bold text-primary mr-1">{item.qty}x</span> {item.name}
+                        </span>
+                        <span className="text-muted-foreground">
+                          {currency} {(item.price * item.qty).toLocaleString()}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Sitting Bill Summary Card */}
+          <div className="bg-card rounded-2xl border border-primary/30 p-4 space-y-3.5 shadow-xl bg-gradient-to-b from-card to-primary/5">
+            <div className="flex items-center justify-between border-b border-border/60 pb-2.5">
+              <div className="flex items-center gap-2">
+                <div className="h-7 w-7 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
+                  <Receipt className="h-4 w-4" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-foreground text-sm">Sitting Bill Summary</h3>
+                  <p className="text-[10px] text-muted-foreground">Cumulative totals for Table {table?.tableNumber}</p>
+                </div>
+              </div>
+
+              <span
+                className={cn(
+                  "text-[10px] font-extrabold px-2.5 py-0.5 rounded-full border",
+                  isSittingFullyPaid
+                    ? "bg-success/15 text-success border-success/30"
+                    : "bg-warning/15 text-warning-foreground border-warning/30"
+                )}
+              >
+                {isSittingFullyPaid ? "✔ Bill Settled" : "💳 Pay at Counter / Server"}
+              </span>
+            </div>
+
+            <div className="space-y-1.5 text-xs">
+              <div className="flex justify-between text-muted-foreground">
+                <span>Subtotal ({nonDeclinedOrders.length} {nonDeclinedOrders.length === 1 ? "Order" : "Orders"})</span>
+                <span>{currency} {sittingSubtotal.toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between text-muted-foreground">
+                <span>{taxName} ({taxRate}%)</span>
+                <span>{currency} {sittingTax.toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between font-extrabold text-base pt-2 border-t border-border/60 text-foreground">
+                <span>Total Bill Amount</span>
+                <span className="text-primary">{currency} {sittingGrandTotal.toLocaleString()}</span>
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="grid grid-cols-2 gap-2 pt-1">
+              <Button
+                variant="outline"
+                className="h-11 rounded-xl border-primary/40 text-foreground font-bold text-xs hover:bg-primary/10"
+                onClick={() => setShowReceipt(true)}
+              >
+                <FileText className="h-4 w-4 mr-1.5 text-primary" /> View Receipt
+              </Button>
+              <Button
+                className="h-11 rounded-xl gradient-primary text-primary-foreground font-bold text-xs shadow-md shadow-primary/20"
+                onClick={() => setViewingMenu(true)}
+              >
+                <Plus className="h-4 w-4 mr-1.5" /> Add More Items
+              </Button>
+            </div>
+          </div>
+        </div>
+
+        {/* Detailed Thermal Receipt Sheet */}
+        <Sheet open={showReceipt} onOpenChange={setShowReceipt}>
+          <SheetContent side="bottom" className="max-h-[90vh] rounded-t-3xl border-t border-border bg-card p-0 shadow-2xl overflow-hidden flex flex-col max-w-lg mx-auto">
+            <div className="pt-3 pb-2 px-5 border-b border-border/60 bg-muted/10 shrink-0">
+              <div className="w-10 h-1 bg-muted-foreground/30 rounded-full mx-auto mb-3" />
+              <div className="flex items-center justify-between">
+                <SheetTitle className="text-base font-bold flex items-center gap-2">
+                  <Receipt className="h-4 w-4 text-primary" /> Detailed Table Statement
+                </SheetTitle>
+                <button
+                  onClick={() => setShowReceipt(false)}
+                  className="text-xs font-semibold text-muted-foreground hover:text-foreground"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-5">
+              {/* Receipt Paper Card */}
+              <div className="bg-card border border-dashed border-border rounded-2xl p-5 shadow-inner space-y-4 font-mono text-xs text-foreground">
+                <div className="text-center space-y-1 pb-3 border-b border-dashed border-border/80">
+                  <Flame className="h-7 w-7 mx-auto text-primary" />
+                  <h2 className="font-bold text-base tracking-wider uppercase">
+                    {restaurantName || "OVENISTO RESTAURANT"}
+                  </h2>
+                  <p className="text-[10px] text-muted-foreground">Digital Dining Statement</p>
+                  <div className="flex justify-center gap-2 pt-1 text-[11px] font-sans font-semibold">
+                    <span className="px-2 py-0.5 rounded bg-primary/10 text-primary border border-primary/20">
+                      Table {table?.tableNumber}
+                    </span>
+                    {table?.floor && (
+                      <span className="px-2 py-0.5 rounded bg-muted text-muted-foreground">
+                        {table.floor}
+                      </span>
+                    )}
                   </div>
                 </div>
 
-                {declined && (
-                  <div className="p-2.5 rounded-xl bg-destructive/10 text-destructive text-xs font-medium">
-                    {o.status.rejectionReason || "The restaurant could not confirm this order at this time."}
+                {/* Customer Details */}
+                <div className="space-y-1 text-[11px] text-muted-foreground font-sans">
+                  <div className="flex justify-between">
+                    <span>Customer:</span>
+                    <span className="font-bold text-foreground">{customerName || "Dine-in Guest"}</span>
                   </div>
-                )}
+                  <div className="flex justify-between">
+                    <span>Phone:</span>
+                    <span className="font-bold text-foreground">{customerPhone || "N/A"}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Guests (Pax):</span>
+                    <span className="font-bold text-foreground">{guestCount}</span>
+                  </div>
+                </div>
 
-                <div className="space-y-1.5 pt-2 border-t border-border/60">
-                  {o.items.map((item) => (
-                    <div key={item.id} className="flex justify-between text-xs font-medium">
-                      <span className="text-foreground">
-                        <span className="font-bold text-primary mr-1">{item.qty}x</span> {item.name}
-                      </span>
-                      <span className="text-muted-foreground">
-                        {currency} {(item.price * item.qty).toLocaleString()}
-                      </span>
+                <div className="border-b border-dashed border-border/80" />
+
+                {/* Itemized breakdown per order */}
+                <div className="space-y-3">
+                  {nonDeclinedOrders.map((ord, oIdx) => (
+                    <div key={ord.orderId} className="space-y-1.5">
+                      <div className="flex justify-between text-[10px] font-sans font-bold text-primary uppercase">
+                        <span>--- Order #{oIdx + 1} ---</span>
+                        <span>{ord.status.paid ? "PAID" : ord.status.accepted ? "CONFIRMED" : "PENDING"}</span>
+                      </div>
+                      {ord.items.map((it) => (
+                        <div key={it.id} className="flex justify-between items-start">
+                          <span className="pr-2">
+                            {it.qty}x {it.name}
+                            {it.modifiers && it.modifiers.length > 0 && (
+                              <span className="block text-[10px] text-muted-foreground font-sans">
+                                + {it.modifiers.join(", ")}
+                              </span>
+                            )}
+                          </span>
+                          <span className="shrink-0 font-bold">
+                            {currency} {(it.price * it.qty).toLocaleString()}
+                          </span>
+                        </div>
+                      ))}
                     </div>
                   ))}
                 </div>
-              </div>
-            );
-          })}
 
-          <Button
-            className="w-full h-12 rounded-xl gradient-primary text-primary-foreground font-bold text-sm shadow-lg shadow-primary/25 active:scale-[0.99] transition-all"
-            onClick={() => setViewingMenu(true)}
-          >
-            <Plus className="h-4 w-4 mr-2" /> Place Another Order
-          </Button>
-        </div>
+                <div className="border-b border-dashed border-border/80" />
+
+                {/* Receipt Totals */}
+                <div className="space-y-1.5 pt-1">
+                  <div className="flex justify-between">
+                    <span>SUBTOTAL</span>
+                    <span>{currency} {sittingSubtotal.toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>{taxName} ({taxRate}%)</span>
+                    <span>{currency} {sittingTax.toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between font-extrabold text-sm pt-2 border-t border-dashed border-border/80 text-foreground">
+                    <span>GRAND TOTAL</span>
+                    <span className="text-primary">{currency} {sittingGrandTotal.toLocaleString()}</span>
+                  </div>
+                </div>
+
+                <div className="border-b border-dashed border-border/80" />
+
+                {/* Footer Notice */}
+                <div className="text-center space-y-1 text-[10px] text-muted-foreground font-sans pt-1">
+                  <p className="font-semibold text-foreground">
+                    {isSittingFullyPaid ? "✔ Thank you for your payment!" : "💳 Please present this bill at the counter or to your server."}
+                  </p>
+                  <p>Thank you for dining with us! 🔥</p>
+                </div>
+              </div>
+
+              <Button
+                className="w-full h-11 rounded-xl mt-4 gradient-primary text-primary-foreground font-bold text-xs shadow-md"
+                onClick={() => setShowReceipt(false)}
+              >
+                Close Receipt
+              </Button>
+            </div>
+          </SheetContent>
+        </Sheet>
       </div>
     );
   }
