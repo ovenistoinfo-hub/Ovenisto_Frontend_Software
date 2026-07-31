@@ -25,6 +25,7 @@ export const SHIFT_COLORS: Record<string, string> = {
   evening: 'bg-amber-100 text-amber-700',
   night:   'bg-purple-100 text-purple-700',
   off:     'bg-muted text-muted-foreground',
+  leave:   'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border-emerald-200',
 };
 
 export const scheduleService = {

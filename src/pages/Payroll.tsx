@@ -4,9 +4,11 @@ import { employeeService, type EmployeeRecord } from "@/services/employee.servic
 import { attendanceService, type AttendanceRecord } from "@/services/attendance.service";
 import { payrollService, type PayoutInput, type PaymentLogRecord } from "@/services/payroll.service";
 import { penaltyService } from "@/services/penalty.service";
+import { api } from "@/services/api";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
@@ -22,6 +24,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { settingsService } from "@/services/settings.service";
+import { cn } from "@/lib/utils";
 
 // Build last 12 months as options [{id, label, start, end}]
 // Use day=15 to avoid month-end rollover bugs (e.g. Jan 31 → setMonth(0) → Feb 3)
@@ -67,6 +70,11 @@ interface EmployeePayrollRow {
   penalties: number;
   rewards: number;
   rewardNote: string;
+  advanceDeducted: number;
+  advancePaidThisMonth: number;
+  lastAdvanceDate: string | null;
+  maxAdvanceAllowed: number;
+  remainingAdvanceAllowed: number;
   finalPay: number;
   hoursWorked: number;
   checkInCount: number;
@@ -114,6 +122,12 @@ const Payroll = () => {
   const [activeTab, setActiveTab] = useState("calculate");
   const [showBatchConfirm, setShowBatchConfirm] = useState(false);
 
+  // Advance Pay modal state
+  const [advanceModalRow, setAdvanceModalRow] = useState<EmployeePayrollRow | null>(null);
+  const [advanceAmountInput, setAdvanceAmountInput] = useState("");
+  const [advanceNoteInput, setAdvanceNoteInput] = useState("");
+  const [submittingAdvance, setSubmittingAdvance] = useState(false);
+
   const [ledgerSearch, setLedgerSearch] = useState("");
   const [expandedEmployeeId, setExpandedEmployeeId] = useState<string | null>(null);
 
@@ -125,6 +139,17 @@ const Payroll = () => {
   // Selected slip for printing/viewing
   const [selectedSlip, setSelectedSlip] = useState<EmployeePayrollRow | null>(null);
   const [selectedLogSlip, setSelectedLogSlip] = useState<PaymentLogRecord | null>(null);
+
+  const matchedAdvanceLog = useMemo(() => {
+    if (!selectedLogSlip || selectedLogSlip.isAdvance) return null;
+    return allPaymentLogs.find(
+      l => l.employeeId === selectedLogSlip.employeeId &&
+           l.isAdvance &&
+           l.startDate === selectedLogSlip.startDate
+    );
+  }, [selectedLogSlip, allPaymentLogs]);
+
+  const effectiveAdvanceAmount = selectedLogSlip?.advanceAmount || matchedAdvanceLog?.finalPay || 0;
 
   // Queries
   const { data: settings } = useQuery({
@@ -189,16 +214,31 @@ const Payroll = () => {
   const payrollRows: EmployeePayrollRow[] = employees
     .filter(emp => emp.status === "active") // only calculate for active employees
     .map(emp => {
-      // Resume from the day after this employee's latest payment within the
-      // selected month (if any) — supports paying mid-month (e.g. day 20) and
-      // having the calculator automatically pick up the remaining days next time.
       const empLogsThisMonth = paymentLogsByEmployee[emp.id] || [];
-      const latestPaidEndDate = empLogsThisMonth.length > 0
-        ? empLogsThisMonth.reduce((max, l) => (l.endDate > max ? l.endDate : max), empLogsThisMonth[0].endDate)
+
+      // Helper to distinguish advance logs vs regular monthly payout logs
+      const isLogAdvance = (l: PaymentLogRecord) =>
+        l.isAdvance === true || (Boolean(l.notes) && l.notes!.startsWith("Salary Advance"));
+
+      // Advance logs & advance paid this month
+      const advanceLogsThisMonth = empLogsThisMonth.filter(isLogAdvance);
+      const advancePaidThisMonth = advanceLogsThisMonth.reduce(
+        (sum, l) => sum + (l.isAdvance ? (l.finalPay || l.advanceAmount || 0) : (l.advanceAmount || l.finalPay || 0)),
+        0
+      );
+
+      // Non-advance (regular) monthly payout logs
+      const regularLogsThisMonth = empLogsThisMonth.filter(l => !isLogAdvance(l));
+
+      const isPaid = regularLogsThisMonth.some(l => l.startDate >= startDate && l.startDate <= endDate);
+      const paidLog = regularLogsThisMonth.length > 0 ? regularLogsThisMonth[0] : null;
+
+      const lastAdvanceDate = advanceLogsThisMonth.length > 0
+        ? (advanceLogsThisMonth[0].paidAt ? new Date(advanceLogsThisMonth[0].paidAt).toISOString().split('T')[0] : advanceLogsThisMonth[0].startDate)
         : null;
-      const periodStart = latestPaidEndDate ? addOneDay(latestPaidEndDate) : startDate;
+
+      const periodStart = startDate;
       const periodEnd = effectiveMonthEnd;
-      const isPaid = periodStart > periodEnd; // nothing left to pay this month
 
       const userRecords = emp.userId
         ? (attendanceByUser[emp.userId] || []).filter(r => r.date >= periodStart && r.date <= periodEnd)
@@ -221,9 +261,7 @@ const Payroll = () => {
       // Base pay calculation
       let basePay = 0;
       const rate = emp.rate;
-      if (isPaid) {
-        basePay = 0;
-      } else if (emp.rateType === "Hourly") {
+      if (emp.rateType === "Hourly") {
         basePay = hoursWorked * rate;
       } else if (emp.rateType === "Monthly") {
         basePay = rate; // flat monthly rate
@@ -233,6 +271,17 @@ const Payroll = () => {
 
       basePay = parseFloat(basePay.toFixed(2));
 
+      // Base Monthly Estimate for Advance 50% limit calculation
+      let monthlyEstBase = emp.rate;
+      if (emp.rateType === "Daily" || emp.rateType === "PerShift") {
+        monthlyEstBase = emp.rate * 26;
+      } else if (emp.rateType === "Hourly") {
+        monthlyEstBase = emp.rate * 208;
+      }
+
+      const maxAdvanceAllowed = Math.floor(monthlyEstBase * 0.5);
+      const remainingAdvanceAllowed = Math.max(0, maxAdvanceAllowed - advancePaidThisMonth);
+
       // Automated penalties calculation (absent count * penalty fee) + any unpaid
       // per-incident penalties (order-cancellation responsibility, etc.) for this period
       const defaultPenaltyFee = emp.penaltyFee || 0;
@@ -240,31 +289,44 @@ const Payroll = () => {
         ? (penaltiesByUser[emp.userId] || []).filter(p => p.date >= periodStart && p.date <= periodEnd)
         : [];
       const incidentPenalty = userPenaltyRecords.reduce((s, p) => s + p.amount, 0);
-      const calculatedPenalty = isPaid ? 0 : absentCount * defaultPenaltyFee + incidentPenalty;
+      const calculatedPenalty = absentCount * defaultPenaltyFee + incidentPenalty;
 
       // Local states override
-      const penaltyOverride = isPaid ? 0 : (penaltiesState[emp.id] !== undefined ? penaltiesState[emp.id] : calculatedPenalty);
-      const rewardOverride = isPaid ? 0 : (rewardsState[emp.id]?.rewards || 0);
-      const rewardNote = isPaid ? "" : (rewardsState[emp.id]?.note || "");
+      const penaltyOverride = penaltiesState[emp.id] !== undefined ? penaltiesState[emp.id] : calculatedPenalty;
+      const rewardOverride = rewardsState[emp.id]?.rewards || 0;
+      const rewardNote = rewardsState[emp.id]?.note || "";
 
-      // Final Pay: Base + Reward - Penalty
-      const finalPay = Math.max(0, parseFloat((basePay + rewardOverride - penaltyOverride).toFixed(2)));
+      // Advance Deduction from Final Pay
+      const advanceDeducted = isPaid ? (paidLog?.advanceAmount ?? advancePaidThisMonth) : advancePaidThisMonth;
+
+      // Final Pay calculation
+      const displayBasePay = isPaid ? (paidLog?.basePay ?? basePay) : basePay;
+      const displayPenalties = isPaid ? (paidLog?.penalties ?? penaltyOverride) : penaltyOverride;
+      const displayRewards = isPaid ? (paidLog?.rewards ?? rewardOverride) : rewardOverride;
+      const finalPay = isPaid
+        ? (paidLog?.finalPay ?? 0)
+        : Math.max(0, parseFloat((basePay + rewardOverride - penaltyOverride - advanceDeducted).toFixed(2)));
 
       return {
         employee: emp,
-        basePay,
-        penalties: penaltyOverride,
-        rewards: rewardOverride,
-        rewardNote,
+        basePay: displayBasePay,
+        penalties: displayPenalties,
+        rewards: displayRewards,
+        rewardNote: isPaid ? (paidLog?.notes || "") : rewardNote,
+        advanceDeducted,
+        advancePaidThisMonth,
+        lastAdvanceDate,
+        maxAdvanceAllowed,
+        remainingAdvanceAllowed,
         finalPay,
-        hoursWorked,
-        checkInCount,
+        hoursWorked: isPaid ? (paidLog?.unitsWorked ?? hoursWorked) : hoursWorked,
+        checkInCount: isPaid ? (paidLog?.unitsWorked ?? checkInCount) : checkInCount,
         lateCount,
-        absentCount,
+        absentCount: isPaid ? (paidLog?.absentDays ?? absentCount) : absentCount,
         isPaid,
         periodStart,
         periodEnd,
-        latestPaidThrough: latestPaidEndDate,
+        latestPaidThrough: regularLogsThisMonth.length > 0 ? regularLogsThisMonth[0].endDate : null,
         penaltyIds: isPaid ? [] : userPenaltyRecords.map(p => p.id),
       };
     });
@@ -341,6 +403,55 @@ const Payroll = () => {
     }));
   };
 
+  const openAdvanceModal = (row: EmployeePayrollRow) => {
+    setAdvanceModalRow(row);
+    setAdvanceAmountInput("");
+    setAdvanceNoteInput(`Salary Advance - ${selectedMonth.label}`);
+  };
+
+  const handleConfirmAdvance = async () => {
+    if (!advanceModalRow) return;
+    const amount = parseFloat(advanceAmountInput);
+    if (isNaN(amount) || amount <= 0) {
+      toast.error("Please enter a valid advance amount");
+      return;
+    }
+    if (amount > advanceModalRow.remainingAdvanceAllowed) {
+      toast.error(`Advance cannot exceed 50% of pay. Max allowed: Rs. ${advanceModalRow.remainingAdvanceAllowed}`);
+      return;
+    }
+
+    setSubmittingAdvance(true);
+    try {
+      const payout: PayoutInput = {
+        employeeId: advanceModalRow.employee.id,
+        startDate: advanceModalRow.periodStart,
+        endDate: advanceModalRow.periodEnd,
+        basePay: 0,
+        penalties: 0,
+        rewards: 0,
+        advanceAmount: amount,
+        finalPay: amount,
+        isAdvance: true,
+        notes: advanceNoteInput || `Salary Advance - ${selectedMonth.label}`,
+        rateType: advanceModalRow.employee.rateType,
+        rate: advanceModalRow.employee.rate,
+      };
+
+      await payrollService.payIndividual(payout);
+      toast.success(`Disbursed salary advance of Rs. ${amount} to ${advanceModalRow.employee.firstName}`);
+
+      setAdvanceModalRow(null);
+      api.clearCache("/payroll");
+      queryClient.invalidateQueries({ queryKey: ["payroll-logs"] });
+      queryClient.invalidateQueries({ queryKey: ["payroll-all-logs"] });
+    } catch (err: any) {
+      toast.error(err.message || "Failed to issue advance payment");
+    } finally {
+      setSubmittingAdvance(false);
+    }
+  };
+
   // Mark Individual Paid
   const handleMarkPaid = async (row: EmployeePayrollRow) => {
     setProcessingId(row.employee.id);
@@ -352,8 +463,10 @@ const Payroll = () => {
         basePay: row.basePay,
         penalties: row.penalties,
         rewards: row.rewards,
+        advanceAmount: row.advanceDeducted,
         finalPay: row.finalPay,
-        notes: row.rewardNote || "Regular payout",
+        isAdvance: false,
+        notes: row.rewardNote || (row.advanceDeducted > 0 ? `Regular payout (Advance Rs. ${row.advanceDeducted} deducted)` : "Regular payout"),
         rateType: row.employee.rateType,
         rate: row.employee.rate,
         unitsWorked: row.employee.rateType === "Hourly" ? row.hoursWorked
@@ -378,6 +491,7 @@ const Payroll = () => {
         return copy;
       });
 
+      api.clearCache("/payroll");
       queryClient.invalidateQueries({ queryKey: ["payroll-logs"] });
       queryClient.invalidateQueries({ queryKey: ["payroll-all-logs"] });
       queryClient.invalidateQueries({ queryKey: ["payroll-penalties"] });
@@ -401,8 +515,10 @@ const Payroll = () => {
         basePay: row.basePay,
         penalties: row.penalties,
         rewards: row.rewards,
+        advanceAmount: row.advanceDeducted,
         finalPay: row.finalPay,
-        notes: row.rewardNote || "Batch payroll payout",
+        isAdvance: false,
+        notes: row.rewardNote || (row.advanceDeducted > 0 ? `Batch payout (Advance Rs. ${row.advanceDeducted} deducted)` : "Batch payroll payout"),
         rateType: row.employee.rateType,
         rate: row.employee.rate,
         unitsWorked: row.employee.rateType === "Hourly" ? row.hoursWorked
@@ -418,6 +534,7 @@ const Payroll = () => {
       // Reset input fields
       setRewardsState({});
       setPenaltiesState({});
+      api.clearCache("/payroll");
       queryClient.invalidateQueries({ queryKey: ["payroll-logs"] });
       queryClient.invalidateQueries({ queryKey: ["payroll-all-logs"] });
       queryClient.invalidateQueries({ queryKey: ["payroll-penalties"] });
@@ -549,6 +666,7 @@ const Payroll = () => {
                         <TableHead>Base Pay</TableHead>
                         <TableHead>Penalties</TableHead>
                         <TableHead>Rewards</TableHead>
+                        <TableHead>Advance Deducted</TableHead>
                         <TableHead>Reward Reason / Notes</TableHead>
                         <TableHead className="font-semibold text-primary">Final Pay</TableHead>
                         <TableHead className="text-right">Actions</TableHead>
@@ -613,6 +731,23 @@ const Payroll = () => {
                             </div>
                           </TableCell>
                           <TableCell>
+                            {(row.advanceDeducted > 0 || row.advancePaidThisMonth > 0) ? (
+                              <div className="space-y-0.5">
+                                <Badge variant="secondary" className="bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-300 font-semibold text-[11px]">
+                                  - Rs. {row.advanceDeducted || row.advancePaidThisMonth}
+                                </Badge>
+                                {row.lastAdvanceDate && (
+                                  <p className="text-[9px] text-amber-600 dark:text-amber-400 font-medium">Taken: {row.lastAdvanceDate}</p>
+                                )}
+                                <p className="text-[9px] text-muted-foreground font-semibold">
+                                  {row.isPaid ? `Net Paid: Rs. ${row.finalPay}` : `Rem Payable: Rs. ${row.finalPay}`}
+                                </p>
+                              </div>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">—</span>
+                            )}
+                          </TableCell>
+                          <TableCell>
                             <Input
                               type="text"
                               placeholder="Reason..."
@@ -634,15 +769,38 @@ const Payroll = () => {
                                     <CheckCircle className="h-3 w-3" /> Paid
                                   </Badge>
                                 ) : (
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    className="h-7 text-xs border-success text-success hover:bg-success/10 font-medium"
-                                    onClick={() => handleMarkPaid(row)}
-                                    disabled={processingId === row.employee.id}
-                                  >
-                                    {processingId === row.employee.id ? "Paying..." : "Mark Paid"}
-                                  </Button>
+                                  <>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className={cn(
+                                        "h-7 text-xs font-medium border-amber-500",
+                                        row.advancePaidThisMonth > 0
+                                          ? "text-muted-foreground border-muted bg-muted/40 opacity-70 cursor-not-allowed"
+                                          : "text-amber-600 dark:text-amber-400 hover:bg-amber-500/10"
+                                      )}
+                                      onClick={() => openAdvanceModal(row)}
+                                      disabled={row.advancePaidThisMonth > 0 || row.remainingAdvanceAllowed <= 0}
+                                      title={
+                                        row.advancePaidThisMonth > 0
+                                          ? "Advance already taken this month"
+                                          : row.remainingAdvanceAllowed <= 0
+                                            ? "Advance limit (50%) reached"
+                                            : "Pay Salary Advance"
+                                      }
+                                    >
+                                      {row.advancePaidThisMonth > 0 ? "Advance Taken" : "Advance Pay"}
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="h-7 text-xs border-success text-success hover:bg-success/10 font-medium"
+                                      onClick={() => handleMarkPaid(row)}
+                                      disabled={processingId === row.employee.id}
+                                    >
+                                      {processingId === row.employee.id ? "Paying..." : "Mark Paid"}
+                                    </Button>
+                                  </>
                                 )}
                               </div>
                               {row.latestPaidThrough && (
@@ -938,11 +1096,27 @@ const Payroll = () => {
                   </TableCell>
                   <TableCell className="text-xs text-right text-success">+Rs. {(selectedSlip?.rewards ?? 0).toLocaleString()}</TableCell>
                 </TableRow>
+                {selectedSlip && selectedSlip.advanceDeducted > 0 && (
+                  <TableRow>
+                    <TableCell className="text-xs">
+                      Less Salary Advance Taken
+                      {selectedSlip.lastAdvanceDate && (
+                        <p className="text-[10px] text-amber-600 dark:text-amber-400 italic">
+                          (Paid on {selectedSlip.lastAdvanceDate})
+                        </p>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-xs text-right text-amber-600 font-semibold">-Rs. {selectedSlip.advanceDeducted.toLocaleString()}</TableCell>
+                  </TableRow>
+                )}
               </TableBody>
             </Table>
             <div className="space-y-1 text-xs">
               <Separator />
-              <div className="flex justify-between font-bold text-base"><span>Total Net Pay</span><span className="text-primary">Rs. {(selectedSlip?.finalPay ?? 0).toLocaleString()}</span></div>
+              <div className="flex justify-between font-bold text-base">
+                <span>{selectedSlip && (selectedSlip.advanceDeducted > 0 || selectedSlip.advancePaidThisMonth > 0) ? "Remaining Net Salary Payable" : "Net Salary Payable"}</span>
+                <span className="text-primary">Rs. {(selectedSlip?.finalPay ?? 0).toLocaleString()}</span>
+              </div>
             </div>
             <p className="text-[10px] text-muted-foreground text-center">Generated {new Date().toLocaleDateString("en-PK")} — not yet disbursed</p>
           </div>
@@ -966,6 +1140,7 @@ const Payroll = () => {
               penalties: selectedSlip.penalties,
               rewards: selectedSlip.rewards,
               rewardNote: selectedSlip.rewardNote || undefined,
+              advanceAmount: selectedSlip.advanceDeducted,
               finalPay: selectedSlip.finalPay,
               isReceipt: false,
             })}>
@@ -990,7 +1165,9 @@ const Payroll = () => {
               <Flame className="h-6 w-6 mx-auto text-primary" />
               <p className="font-bold text-primary">{settings?.restaurantName || "OVENISTO"}</p>
               <p className="text-xs text-muted-foreground">{settings?.address} — {settings?.phone}</p>
-              <p className="text-xs font-semibold">Salary Disbursement Receipt</p>
+              <p className="text-xs font-semibold">
+                {selectedLogSlip?.isAdvance ? "Salary Advance Receipt" : "Salary Disbursement Receipt"}
+              </p>
             </div>
             <Separator />
             <p className="text-xs">
@@ -1006,13 +1183,15 @@ const Payroll = () => {
               <TableBody>
                 <TableRow>
                   <TableCell className="text-xs">
-                    {selectedLogSlip?.rateType === "Hourly" && selectedLogSlip.unitsWorked != null
-                      ? `Base Pay (${selectedLogSlip.unitsWorked} hours)`
-                      : (selectedLogSlip?.rateType === "Daily" || selectedLogSlip?.rateType === "PerShift") && selectedLogSlip.unitsWorked != null
-                        ? `Base Pay (${selectedLogSlip.unitsWorked} shifts)`
-                        : selectedLogSlip?.rateType === "Monthly"
-                          ? "Base Pay (Monthly)"
-                          : "Base Salary Pay"}
+                    {selectedLogSlip?.isAdvance
+                      ? "Salary Advance Payment"
+                      : selectedLogSlip?.rateType === "Hourly" && selectedLogSlip.unitsWorked != null
+                        ? `Base Pay (${selectedLogSlip.unitsWorked} hours)`
+                        : (selectedLogSlip?.rateType === "Daily" || selectedLogSlip?.rateType === "PerShift") && selectedLogSlip.unitsWorked != null
+                          ? `Base Pay (${selectedLogSlip.unitsWorked} shifts)`
+                          : selectedLogSlip?.rateType === "Monthly"
+                            ? "Base Pay (Monthly)"
+                            : "Base Salary Pay"}
                   </TableCell>
                   <TableCell className="text-xs text-right">Rs. {(selectedLogSlip?.basePay ?? 0).toLocaleString()}</TableCell>
                 </TableRow>
@@ -1029,11 +1208,33 @@ const Payroll = () => {
                   </TableCell>
                   <TableCell className="text-xs text-right text-success">+Rs. {(selectedLogSlip?.rewards ?? 0).toLocaleString()}</TableCell>
                 </TableRow>
+                {effectiveAdvanceAmount > 0 && !selectedLogSlip?.isAdvance && (
+                  <TableRow>
+                    <TableCell className="text-xs">
+                      Less Salary Advance Deducted
+                      {matchedAdvanceLog?.paidAt && (
+                        <p className="text-[10px] text-amber-600 dark:text-amber-400 italic">
+                          (Paid on {new Date(matchedAdvanceLog.paidAt).toLocaleDateString("en-PK")})
+                        </p>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-xs text-right text-amber-600 font-semibold">-Rs. {effectiveAdvanceAmount.toLocaleString()}</TableCell>
+                  </TableRow>
+                )}
               </TableBody>
             </Table>
             <div className="space-y-1 text-xs">
               <Separator />
-              <div className="flex justify-between font-bold text-base"><span>Total Disbursed</span><span className="text-primary">Rs. {(selectedLogSlip?.finalPay ?? 0).toLocaleString()}</span></div>
+              <div className="flex justify-between font-bold text-base">
+                <span>
+                  {selectedLogSlip?.isAdvance
+                    ? "Salary Advance Disbursed"
+                    : effectiveAdvanceAmount > 0
+                      ? "Remaining Net Disbursed"
+                      : "Total Net Disbursed"}
+                </span>
+                <span className="text-primary">Rs. {(selectedLogSlip?.finalPay ?? 0).toLocaleString()}</span>
+              </div>
             </div>
             <Separator />
             <p className="text-xs">
@@ -1050,13 +1251,15 @@ const Payroll = () => {
               const rateType = selectedLogSlip.rateType || emp?.rateType || "—";
               const rate = selectedLogSlip.rate ?? emp?.rate ?? 0;
               const units = selectedLogSlip.unitsWorked;
-              const basePayLabel = rateType === "Hourly" && units != null
-                ? `Base Pay (${units} hours)`
-                : (rateType === "Daily" || rateType === "PerShift") && units != null
-                  ? `Base Pay (${units} shifts)`
-                  : rateType === "Monthly"
-                    ? "Base Pay (Monthly)"
-                    : "Base Salary Pay";
+              const basePayLabel = selectedLogSlip.isAdvance
+                ? "Salary Advance Payment"
+                : rateType === "Hourly" && units != null
+                  ? `Base Pay (${units} hours)`
+                  : (rateType === "Daily" || rateType === "PerShift") && units != null
+                    ? `Base Pay (${units} shifts)`
+                    : rateType === "Monthly"
+                      ? "Base Pay (Monthly)"
+                      : "Base Salary Pay";
               const penaltiesLabel = selectedLogSlip.absentDays != null
                 ? `Penalties Deducted (Absents: ${selectedLogSlip.absentDays})`
                 : "Penalties Deducted";
@@ -1075,6 +1278,7 @@ const Payroll = () => {
                 penalties: Number(selectedLogSlip.penalties),
                 rewards: Number(selectedLogSlip.rewards),
                 rewardNote: selectedLogSlip.notes || undefined,
+                advanceAmount: effectiveAdvanceAmount || undefined,
                 finalPay: Number(selectedLogSlip.finalPay),
                 isReceipt: true,
                 transactionId: selectedLogSlip.id,
@@ -1086,6 +1290,90 @@ const Payroll = () => {
             </Button>
             <Button className="gradient-primary text-primary-foreground" onClick={() => triggerPrint("log-slip-print")}>
               <Printer className="h-4 w-4 mr-1.5" /> Print Receipt
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ADVANCE PAY MODAL */}
+      <Dialog open={!!advanceModalRow} onOpenChange={open => !open && setAdvanceModalRow(null)}>
+        <DialogContent className="sm:max-w-[480px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-lg">
+              <Coins className="h-5 w-5 text-amber-500" /> Pay Salary Advance
+            </DialogTitle>
+          </DialogHeader>
+          {advanceModalRow && (
+            <div className="space-y-4 py-2">
+              <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/40 border">
+                <Avatar className="h-10 w-10">
+                  <AvatarImage src={advanceModalRow.employee.photoUrl ?? undefined} />
+                  <AvatarFallback className="text-xs">{initials(advanceModalRow.employee)}</AvatarFallback>
+                </Avatar>
+                <div>
+                  <p className="font-semibold text-sm">{advanceModalRow.employee.firstName} {advanceModalRow.employee.lastName || ""}</p>
+                  <p className="text-xs text-muted-foreground">{advanceModalRow.employee.designation} &bull; {advanceModalRow.employee.rateType} (Rs. {advanceModalRow.employee.rate})</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 text-xs">
+                <div className="p-2.5 rounded border bg-background">
+                  <p className="text-muted-foreground font-medium">Max Advance Limit (50%)</p>
+                  <p className="text-sm font-bold text-foreground">Rs. {advanceModalRow.maxAdvanceAllowed}</p>
+                </div>
+                <div className="p-2.5 rounded border bg-background">
+                  <p className="text-muted-foreground font-medium">Advance Paid This Month</p>
+                  <p className="text-sm font-bold text-amber-600">Rs. {advanceModalRow.advancePaidThisMonth}</p>
+                </div>
+              </div>
+
+              <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs flex justify-between items-center">
+                <span className="font-medium text-amber-900 dark:text-amber-200">Max Available Advance Now:</span>
+                <span className="text-base font-bold text-amber-600 dark:text-amber-400">Rs. {advanceModalRow.remainingAdvanceAllowed}</span>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold">Advance Amount (Rs.)</Label>
+                <Input
+                  type="number"
+                  placeholder={`Enter amount (max Rs. ${advanceModalRow.remainingAdvanceAllowed})`}
+                  value={advanceAmountInput}
+                  onChange={e => setAdvanceAmountInput(e.target.value)}
+                  className="h-9 text-sm"
+                />
+                {parseFloat(advanceAmountInput) > advanceModalRow.remainingAdvanceAllowed && (
+                  <p className="text-[11px] text-destructive font-medium flex items-center gap-1 mt-1">
+                    <AlertTriangle className="h-3 w-3" /> Advance pay cannot exceed 50% of monthly pay (Max: Rs. {advanceModalRow.remainingAdvanceAllowed})
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold">Notes / Reason</Label>
+                <Input
+                  type="text"
+                  placeholder="Reason for advance..."
+                  value={advanceNoteInput}
+                  onChange={e => setAdvanceNoteInput(e.target.value)}
+                  className="h-9 text-xs"
+                />
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setAdvanceModalRow(null)}>Cancel</Button>
+            <Button
+              size="sm"
+              className="bg-amber-500 hover:bg-amber-600 text-white font-semibold"
+              onClick={handleConfirmAdvance}
+              disabled={
+                submittingAdvance ||
+                !advanceAmountInput ||
+                parseFloat(advanceAmountInput) <= 0 ||
+                parseFloat(advanceAmountInput) > (advanceModalRow?.remainingAdvanceAllowed || 0)
+              }
+            >
+              {submittingAdvance ? "Disbursing..." : "Confirm & Pay Advance"}
             </Button>
           </DialogFooter>
         </DialogContent>

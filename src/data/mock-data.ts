@@ -220,6 +220,8 @@ export interface Order {
   customerType?: CustomerType;
   orderSource?: OrderSource;
   modificationLog?: OrderModificationLog[];
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export const orders: Order[] = [
