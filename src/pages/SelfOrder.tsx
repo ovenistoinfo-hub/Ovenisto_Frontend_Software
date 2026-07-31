@@ -67,6 +67,7 @@ interface PersistedSession {
   orders: PlacedOrder[];
   viewingMenu: boolean;
   sessionToken: string | null;
+  promotedGuestCount: number | null;
 }
 
 function sessionStorageKey(tableId: string): string {
@@ -171,6 +172,7 @@ const SelfOrder = () => {
       setOrders(persisted.orders ?? []);
       setViewingMenu(persisted.viewingMenu ?? false);
       setSessionToken(persisted.sessionToken);
+      setPromotedGuestCount(persisted.promotedGuestCount ?? null);
     }
     setHydrated(true);
   }, [table, hydrated]);
@@ -179,9 +181,29 @@ const SelfOrder = () => {
     if (!table || !hydrated) return;
     savePersistedSession(table.tableId, {
       entryDone, customerName, customerPhone, guestCount, cart, notes,
-      orders, viewingMenu, sessionToken,
+      orders, viewingMenu, sessionToken, promotedGuestCount,
     });
-  }, [table, hydrated, entryDone, customerName, customerPhone, guestCount, cart, notes, orders, viewingMenu, sessionToken]);
+  }, [table, hydrated, entryDone, customerName, customerPhone, guestCount, cart, notes, orders, viewingMenu, sessionToken, promotedGuestCount]);
+
+  // Fetches orders already placed at this table this sitting and merges them
+  // into local state, keyed by orderId (existing local entries keep their
+  // position; a fetched order this device didn't already know about is
+  // appended). Needed because a promoted device is a genuinely separate
+  // device with its own empty localStorage for this table — without this,
+  // it would show an empty order list / Rs. 0 bill for a table that already
+  // has real orders. Best-effort: a failed fetch just leaves local state as-is.
+  const reconcileActiveOrders = useCallback(async (tableId: string) => {
+    try {
+      const active = await selfOrderService.getActiveOrders(tableId);
+      setOrders((prev) => {
+        const byId = new Map(prev.map((o) => [o.orderId, o]));
+        active.forEach((a) => byId.set(a.orderId, a));
+        return Array.from(byId.values());
+      });
+    } catch {
+      // best-effort reconciliation; local state (if any) still stands
+    }
+  }, []);
 
   // ── Join this table's socket room ──
   useEffect(() => {
@@ -195,7 +217,10 @@ const SelfOrder = () => {
         (res: { role: "host"; sessionToken: string } | { role: "viewer" } | { error: string }) => {
           if ("error" in res) return;
           setRole(res.role);
-          if (res.role === "host") setSessionToken(res.sessionToken);
+          if (res.role === "host") {
+            setSessionToken(res.sessionToken);
+            reconcileActiveOrders(table.tableId);
+          }
         }
       );
     };
@@ -223,6 +248,7 @@ const SelfOrder = () => {
           setPromotedGuestCount(payload.guestCount);
           setGuestCount(payload.guestCount);
         }
+        reconcileActiveOrders(table.tableId);
       }
     };
 
@@ -240,7 +266,7 @@ const SelfOrder = () => {
       socket.off("host-request:declined", onHostRequestDeclined);
       socket.off("role:changed", onRoleChanged);
     };
-  }, [table, hydrated, sessionToken]);
+  }, [table, hydrated, sessionToken, reconcileActiveOrders]);
 
   useEffect(() => {
     if (!sessionEnded || !table) return;
@@ -528,14 +554,25 @@ const SelfOrder = () => {
     );
   }
 
-  // ── Render: viewer screen ──
-  if (role === "viewer" && orders.length === 0) {
+  // ── Render: viewer screen — reached whenever role is "viewer", regardless
+  //    of orders.length. A device that was host and placed orders before
+  //    being demoted (another device took over) must still lose the ability
+  //    to place MORE once demoted — it must never fall through to the
+  //    order-list screen below (whose "Add More Items" button reaches the
+  //    menu) or the menu itself, both of which are unconditional on role. ──
+  if (role === "viewer") {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-6">
         <div className="text-center space-y-4 max-w-sm">
           <Users className="h-16 w-16 mx-auto text-muted-foreground" />
-          <h1 className="text-2xl font-bold">This table already has an active order</h1>
-          <p className="text-muted-foreground">Someone else at this table is already placing an order.</p>
+          <h1 className="text-2xl font-bold">
+            {orders.length > 0 ? "Someone else is now managing this table" : "This table already has an active order"}
+          </h1>
+          <p className="text-muted-foreground">
+            {orders.length > 0
+              ? `You placed ${orders.length} order${orders.length === 1 ? "" : "s"} earlier this visit. Another device is now hosting — ask them to add more items, or request to take over again below.`
+              : "Someone else at this table is already placing an order."}
+          </p>
           {requestPending ? (
             requestTimedOut ? (
               <>

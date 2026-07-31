@@ -108,6 +108,22 @@ export interface CustomerLookupResult {
   name?: string;
 }
 
+export interface SelfOrderActiveOrderItem {
+  id: string;
+  menuItemId: string | null;
+  variantId?: string | null;
+  name: string;
+  price: number;
+  qty: number;
+  modifiers?: string[];
+}
+
+export interface SelfOrderActiveOrder {
+  orderId: string;
+  items: SelfOrderActiveOrderItem[];
+  status: SelfOrderStatus;
+}
+
 export const selfOrderService = {
   async getTable(tableId: string): Promise<SelfOrderTable> {
     return publicRequest<SelfOrderTable>(`/self-order/table/${tableId}`);
@@ -130,5 +146,9 @@ export const selfOrderService = {
 
   async lookupCustomerByPhone(phone: string): Promise<CustomerLookupResult> {
     return publicRequest<CustomerLookupResult>(`/self-order/customer-lookup?phone=${encodeURIComponent(phone)}`);
+  },
+
+  async getActiveOrders(tableId: string): Promise<SelfOrderActiveOrder[]> {
+    return publicRequest<SelfOrderActiveOrder[]>(`/self-order/table/${tableId}/active-orders`);
   },
 };
