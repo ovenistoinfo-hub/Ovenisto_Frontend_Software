@@ -388,17 +388,25 @@ const WaiterPanel = () => {
       if (isLikelyOwnEcho()) return;
       toast.info(`Reservation for ${payload.customerName} updated — now ${payload.status}`);
     };
+    const onCallWaiter = (payload: { tableId?: string; tableNumber?: string; outletId?: string }) => {
+      if (payload.outletId && payload.outletId !== user?.outletId) return;
+      toast.warning(`🔔 Customer at Table ${payload.tableNumber ?? "—"} is requesting a waiter!`, {
+        duration: 10000,
+      });
+    };
     socket.on("order:created", onOrderCreated);
     socket.on("order:updated", onOrderUpdated);
     socket.on("table:updated", onTableUpdated);
     socket.on("reservation:created", onReservationCreated);
     socket.on("reservation:updated", onReservationUpdated);
+    socket.on("call-waiter", onCallWaiter);
     return () => {
       socket.off("order:created", onOrderCreated);
       socket.off("order:updated", onOrderUpdated);
       socket.off("table:updated", onTableUpdated);
       socket.off("reservation:created", onReservationCreated);
       socket.off("reservation:updated", onReservationUpdated);
+      socket.off("call-waiter", onCallWaiter);
     };
   }, [isLikelyOwnEcho, user?.outletId]);
 
@@ -1274,63 +1282,114 @@ const WaiterPanel = () => {
         )}
       </div>
 
-      {/* ── Self-Order Pending Requests Banner ── */}
+      {/* ── Self-Order Pending Requests Card ── */}
       {!isOrderingMode && pendingSelfOrders.length > 0 && (
-        <Card className="border-warning/40 bg-warning/5 rounded-xl overflow-hidden">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2 mb-3">
-              <div className="h-7 w-7 rounded-lg bg-warning/15 flex items-center justify-center">
-                <Bell className="h-4 w-4 text-warning" />
+        <div className="bg-gradient-to-r from-amber-500/15 via-amber-500/5 to-card border border-amber-500/30 rounded-2xl p-4 shadow-xl space-y-3.5 animate-fadeInUp">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className="h-9 w-9 rounded-xl bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center font-bold shadow-xs animate-bounce">
+                <Bell className="h-5 w-5" />
               </div>
-              <span className="font-semibold text-sm text-warning">
-                {pendingSelfOrders.length} Customer Request{pendingSelfOrders.length > 1 ? "s" : ""} Waiting
-              </span>
+              <div>
+                <h3 className="font-extrabold text-foreground text-base leading-tight flex items-center gap-2">
+                  Self-Order Customer Requests
+                  <span className="bg-amber-500 text-white font-extrabold text-xs px-2.5 py-0.5 rounded-full shadow-xs">
+                    {pendingSelfOrders.length} New
+                  </span>
+                </h3>
+                <p className="text-xs text-muted-foreground">
+                  Orders placed directly by table guests — approve to send to kitchen
+                </p>
+              </div>
             </div>
-            <div className="space-y-2">
-              {pendingSelfOrders.map((order) => (
-                <div key={order.id} className="flex items-center justify-between bg-card rounded-xl px-4 py-3 border border-border/50 gap-3">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-bold">
-                      Table {order.tableNumber}
-                      {order.customerName && <span className="font-normal text-muted-foreground"> · {order.customerName}</span>}
-                    </p>
-                    <p className="text-[11px] text-muted-foreground">
-                      {order.phone ? `${order.phone} · ` : ""}{order.guestCount ? `${order.guestCount} Pax` : ""}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {order.items.length} item{order.items.length !== 1 ? "s" : ""} &mdash; {currency} {order.total.toLocaleString()}
-                    </p>
-                    <p className="text-[11px] text-muted-foreground mt-0.5 truncate">
-                      {order.items.map((i) => `${i.name} ×${i.qty}`).join(", ")}
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {pendingSelfOrders.map((order) => (
+              <div
+                key={order.id}
+                className="bg-card rounded-xl p-3.5 border border-border/80 hover:border-amber-500/40 transition-all shadow-sm flex flex-col justify-between gap-3"
+              >
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-extrabold text-sm px-2.5 py-0.5 rounded-lg bg-primary/10 text-primary border border-primary/20">
+                        Table {order.tableNumber}
+                      </span>
+                      {order.guestCount && (
+                        <span className="text-[11px] font-semibold text-muted-foreground px-2 py-0.5 rounded-md bg-secondary border border-border/40">
+                          {order.guestCount} Pax
+                        </span>
+                      )}
+                    </div>
+                    <span className="font-extrabold text-primary text-base">
+                      {currency} {order.total.toLocaleString()}
+                    </span>
+                  </div>
+
+                  <div className="text-xs space-y-0.5">
+                    <p className="font-bold text-foreground flex items-center gap-1">
+                      <User className="h-3.5 w-3.5 text-muted-foreground" />
+                      {order.customerName || "Table Guest"}
+                      {order.phone && (
+                        <span className="font-normal text-muted-foreground ml-1">({order.phone})</span>
+                      )}
                     </p>
                   </div>
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="text-destructive hover:bg-destructive/10 text-xs rounded-lg min-h-[34px] px-3"
-                      disabled={rejectingId === order.id || acceptingId === order.id}
-                      onClick={() => rejectSelfOrder(order)}
-                    >
-                      {rejectingId === order.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Reject"}
-                    </Button>
-                    <Button
-                      size="sm"
-                      className="gradient-primary text-primary-foreground text-xs rounded-lg min-h-[34px] px-4"
-                      disabled={acceptingId === order.id || rejectingId === order.id}
-                      onClick={() => acceptSelfOrder(order)}
-                    >
-                      {acceptingId === order.id
-                        ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        : <><Check className="h-3.5 w-3.5 mr-1" />Accept</>
-                      }
-                    </Button>
+
+                  {/* Items Chip Breakdown */}
+                  <div className="flex flex-wrap gap-1 pt-1">
+                    {order.items.map((i, iIdx) => (
+                      <span
+                        key={i.id || iIdx}
+                        className="bg-muted text-foreground font-semibold px-2 py-0.5 rounded-md text-[11px] border border-border/50"
+                      >
+                        {i.qty}x {i.name}
+                      </span>
+                    ))}
                   </div>
+
+                  {/* Special Instructions Note if present */}
+                  {((order as any).specialInstructions || order.futureNotes) && (
+                    <div className="text-[11px] bg-amber-500/10 text-amber-700 dark:text-amber-400 p-2 rounded-lg font-medium border border-amber-500/20">
+                      📝 <span className="font-bold">Note:</span> {(order as any).specialInstructions || order.futureNotes}
+                    </div>
+                  )}
                 </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+
+                <div className="flex items-center gap-2 pt-2 border-t border-border/50">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="flex-1 border-destructive/30 text-destructive hover:bg-destructive/10 text-xs rounded-xl h-9 font-semibold"
+                    disabled={rejectingId === order.id || acceptingId === order.id}
+                    onClick={() => rejectSelfOrder(order)}
+                  >
+                    {rejectingId === order.id ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      "Decline"
+                    )}
+                  </Button>
+                  <Button
+                    size="sm"
+                    className="flex-1 gradient-primary text-primary-foreground text-xs font-bold rounded-xl h-9 shadow-md shadow-primary/20 hover:opacity-95"
+                    disabled={acceptingId === order.id || rejectingId === order.id}
+                    onClick={() => acceptSelfOrder(order)}
+                  >
+                    {acceptingId === order.id ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <>
+                        <Check className="h-3.5 w-3.5 mr-1" /> Accept Order
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
       )}
 
       {/* Main Dual Pane Layout Container */}
