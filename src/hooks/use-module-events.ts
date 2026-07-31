@@ -9,7 +9,14 @@ import { api } from "@/services/api";
  */
 function invalidateCacheForEvents(eventsList: string[]): void {
   eventsList.forEach((evt) => {
-    if (evt.startsWith("order:")) {
+    if (evt === "order:created") {
+      // A self-order can silently create a brand-new Customer row (the public
+      // self-order flow bypasses the authenticated api.ts client entirely, so
+      // MUTATION_DEPENDENCIES never sees it) — staff clients only learn about
+      // it via this push event, so the customers cache must invalidate here too.
+      api.clearCache("/orders");
+      api.clearCache("/customers");
+    } else if (evt.startsWith("order:")) {
       api.clearCache("/orders");
     } else if (evt.startsWith("table:")) {
       api.clearCache("/tables");

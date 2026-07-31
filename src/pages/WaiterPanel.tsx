@@ -349,7 +349,13 @@ const WaiterPanel = () => {
 
   // Orders and Tables refresh on real-time push, plus a 60s visibility-gated safety poll so a
   // waiter's tablet stops querying when backgrounded (lets the Neon compute idle).
-  useOrderEvents(loadOrders);
+  useOrderEvents(useCallback(() => {
+    loadOrders();
+    // A self-order can silently create a brand-new Customer row; refresh the
+    // local cache too so the Customer Association fallback below isn't stuck
+    // matching against a stale array that never contained the new customer.
+    loadCustomers();
+  }, [loadOrders, loadCustomers]));
   useTableEvents(loadTables);
   useReservationEvents(loadReservations);
   useVisiblePolling(loadOrders, 60000);
