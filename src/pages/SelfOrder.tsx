@@ -134,6 +134,7 @@ const SelfOrder = () => {
   const [requestPending, setRequestPending] = useState(false);
   const [requestTimedOut, setRequestTimedOut] = useState(false);
   const [incomingHostRequest, setIncomingHostRequest] = useState(false);
+  const [promotedGuestCount, setPromotedGuestCount] = useState<number | null>(null);
 
   useEffect(() => {
     if (!tableId) { setTableError("No table specified — please scan the QR code on your table."); setTableLoading(false); return; }
@@ -208,12 +209,16 @@ const SelfOrder = () => {
       setRequestPending(false);
       toast.error("Request declined");
     };
-    const onRoleChanged = (payload: { role: "host"; sessionToken: string } | { role: "viewer" }) => {
+    const onRoleChanged = (payload: { role: "host"; sessionToken: string; guestCount?: number | null } | { role: "viewer" }) => {
       setRole(payload.role);
       if (payload.role === "host") {
         setSessionToken(payload.sessionToken);
         setRequestPending(false);
         setRequestTimedOut(false);
+        if (payload.guestCount != null) {
+          setPromotedGuestCount(payload.guestCount);
+          setGuestCount(payload.guestCount);
+        }
       }
     };
 
@@ -363,12 +368,14 @@ const SelfOrder = () => {
     } finally {
       setCheckingCustomer(false);
     }
+    if (role === "host" && promotedGuestCount === null) getSelfOrderSocket().emit("update-guest-count", { guestCount });
     setEntryDone(true);
   };
 
   const resolveNameConflict = (useSavedName: boolean) => {
     if (nameConflict && useSavedName) setCustomerName(nameConflict.savedName);
     setNameConflict(null);
+    if (role === "host" && promotedGuestCount === null) getSelfOrderSocket().emit("update-guest-count", { guestCount });
     setEntryDone(true);
   };
 
@@ -425,6 +432,11 @@ const SelfOrder = () => {
     const socket = getSelfOrderSocket();
     socket.emit("respond-host-request", { approve });
     setIncomingHostRequest(false);
+  };
+
+  const callWaiter = () => {
+    getSelfOrderSocket().emit("call-waiter", {});
+    toast.success("A staff member has been notified");
   };
 
   // ── Render: table resolution error ──
@@ -515,6 +527,9 @@ const SelfOrder = () => {
             <p className="text-xs text-muted-foreground">
               Table {table?.tableNumber}{table?.floor ? ` · ${table.floor}` : ""}
             </p>
+            <button onClick={callWaiter} className="text-xs font-semibold text-primary underline underline-offset-2">
+              Call Waiter
+            </button>
           </div>
           {orders.map((o) => {
             const declined = o.status.status === "cancelled";
@@ -564,7 +579,8 @@ const SelfOrder = () => {
   // ── Render: entry gate (name/phone/guest count) ──
   if (!entryDone) {
     const cleanPhone = customerPhone.replace(/\D/g, "");
-    const canContinue = customerName.trim().length > 0 && cleanPhone.length === 11 && guestCount >= 1;
+    const isPromoted = promotedGuestCount !== null;
+    const canContinue = customerName.trim().length > 0 && cleanPhone.length === 11 && (isPromoted || guestCount >= 1);
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-6">
         <div className="w-full max-w-sm space-y-5">
@@ -584,14 +600,16 @@ const SelfOrder = () => {
               <label className="text-xs font-semibold text-muted-foreground flex items-center gap-1"><Phone className="h-3.5 w-3.5" /> Phone (11 Digits) *</label>
               <Input value={customerPhone} onChange={(e) => setCustomerPhone(formatPhoneNumber(e.target.value))} placeholder="0300-1234567" className="mt-1" />
             </div>
-            <div>
-              <label className="text-xs font-semibold text-muted-foreground flex items-center gap-1"><Users className="h-3.5 w-3.5" /> Guests (Pax) *</label>
-              <div className="flex items-center gap-3 mt-1">
-                <Button type="button" variant="outline" size="icon" onClick={() => setGuestCount((g) => Math.max(1, g - 1))}><Minus className="h-4 w-4" /></Button>
-                <span className="font-bold text-lg w-8 text-center">{guestCount}</span>
-                <Button type="button" variant="outline" size="icon" onClick={() => setGuestCount((g) => Math.min(50, g + 1))}><Plus className="h-4 w-4" /></Button>
+            {!isPromoted && (
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground flex items-center gap-1"><Users className="h-3.5 w-3.5" /> Guests (Pax) *</label>
+                <div className="flex items-center gap-3 mt-1">
+                  <Button type="button" variant="outline" size="icon" onClick={() => setGuestCount((g) => Math.max(1, g - 1))}><Minus className="h-4 w-4" /></Button>
+                  <span className="font-bold text-lg w-8 text-center">{guestCount}</span>
+                  <Button type="button" variant="outline" size="icon" onClick={() => setGuestCount((g) => Math.min(50, g + 1))}><Plus className="h-4 w-4" /></Button>
+                </div>
               </div>
-            </div>
+            )}
           </div>
           <Button className="w-full h-12 gradient-primary text-primary-foreground font-semibold" disabled={!canContinue || checkingCustomer} onClick={handleContinueToMenu}>
             {checkingCustomer ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
@@ -631,7 +649,12 @@ const SelfOrder = () => {
             </button>
           )}
         </div>
-        <p className="text-xs text-muted-foreground mt-0.5">Table {table?.tableNumber} · Dine In · {guestCount} Guests</p>
+        <div className="flex items-center justify-between mt-0.5">
+          <p className="text-xs text-muted-foreground">Table {table?.tableNumber} · Dine In · {guestCount} Guests</p>
+          <button onClick={callWaiter} className="text-xs font-semibold text-primary underline underline-offset-2 shrink-0">
+            Call Waiter
+          </button>
+        </div>
       </div>
 
       <div className="px-4 py-3 bg-card border-b border-border">
