@@ -878,75 +878,97 @@ const SelfOrder = () => {
                       isExpanded ? "border-primary/50 ring-1 ring-primary/20" : "border-border/80 hover:border-border"
                     )}
                   >
-                    <div className="p-3.5 flex items-start justify-between gap-3">
-                      <div className="flex-1 min-w-0 space-y-1">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-bold text-foreground text-sm leading-snug">
-                            {item.name}
-                          </span>
-                          {item.category?.name && (
-                            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-secondary/80 text-secondary-foreground border border-border/50">
-                              {item.category.name}
-                            </span>
-                          )}
-                        </div>
-
-                        <p className="font-extrabold text-primary text-base">
-                          {hasVariants
-                            ? `${currency} ${item.variants[0].price.toLocaleString()} – ${currency} ${item.variants[item.variants.length - 1].price.toLocaleString()}`
-                            : `${currency} ${item.price.toLocaleString()}`}
-                        </p>
+                    <div className="p-3 flex items-start gap-3">
+                      {/* Food Item Image / Thumbnail Placeholder */}
+                      <div className="relative h-20 w-20 sm:h-22 sm:w-22 rounded-xl overflow-hidden bg-muted/50 shrink-0 border border-border/50 flex items-center justify-center">
+                        {item.image ? (
+                          <img
+                            src={item.image}
+                            alt={item.name}
+                            className="h-full w-full object-cover transition-transform duration-300 hover:scale-105"
+                            onError={(e) => {
+                              (e.target as HTMLElement).style.display = "none";
+                            }}
+                          />
+                        ) : (
+                          <div className="h-full w-full bg-gradient-to-br from-primary/10 to-accent/10 flex items-center justify-center text-primary/60">
+                            <Utensils className="h-7 w-7" />
+                          </div>
+                        )}
                       </div>
 
-                      <div className="shrink-0 pt-0.5">
-                        {!hasVariants && !hasModifiers && inCart ? (
-                          <div className="flex items-center gap-1.5 bg-primary/10 border border-primary/30 rounded-xl p-1 shadow-xs">
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="h-7 w-7 rounded-lg hover:bg-primary/20 text-primary"
-                              onClick={() => updateQty(item.id, -1)}
-                            >
-                              <Minus className="h-3.5 w-3.5" />
-                            </Button>
-                            <span className="font-extrabold text-xs text-primary w-5 text-center">
-                              {inCart.qty}
+                      {/* Item Info & Price */}
+                      <div className="flex-1 min-w-0 flex flex-col justify-between self-stretch">
+                        <div>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="font-bold text-foreground text-sm leading-snug line-clamp-1">
+                              {item.name}
                             </span>
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="h-7 w-7 rounded-lg gradient-primary text-primary-foreground hover:opacity-90 shadow-xs"
-                              onClick={() => updateQty(item.id, 1)}
-                            >
-                              <Plus className="h-3.5 w-3.5" />
-                            </Button>
+                            {item.category?.name && (
+                              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-secondary/80 text-secondary-foreground border border-border/40">
+                                {item.category.name}
+                              </span>
+                            )}
                           </div>
-                        ) : (
-                          <Button
-                            size="sm"
-                            className={cn(
-                              "rounded-xl text-xs font-bold transition-all shadow-xs h-9 px-3.5",
-                              isExpanded
-                                ? "bg-secondary text-secondary-foreground hover:bg-secondary/80"
-                                : "gradient-primary text-primary-foreground hover:opacity-95 shadow-md shadow-primary/20"
-                            )}
-                            onClick={() => addToCart(item)}
-                          >
-                            {isExpanded ? (
-                              <>
-                                <ChevronUp className="h-3.5 w-3.5 mr-1" /> Close
-                              </>
-                            ) : hasVariants || hasModifiers ? (
-                              <>
-                                <Plus className="h-3.5 w-3.5 mr-1" /> Customize
-                              </>
-                            ) : (
-                              <>
-                                <Plus className="h-3.5 w-3.5 mr-1" /> Add
-                              </>
-                            )}
-                          </Button>
-                        )}
+
+                          <p className="font-extrabold text-primary text-base mt-1">
+                            {hasVariants
+                              ? `${currency} ${item.variants[0].price.toLocaleString()} – ${currency} ${item.variants[item.variants.length - 1].price.toLocaleString()}`
+                              : `${currency} ${item.price.toLocaleString()}`}
+                          </p>
+                        </div>
+
+                        {/* Quick Add / Stepper Button */}
+                        <div className="flex items-center justify-end mt-2">
+                          {!hasVariants && !hasModifiers && inCart ? (
+                            <div className="flex items-center gap-1.5 bg-primary/10 border border-primary/30 rounded-xl p-1 shadow-xs">
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-7 w-7 rounded-lg hover:bg-primary/20 text-primary"
+                                onClick={() => updateQty(item.id, -1)}
+                              >
+                                <Minus className="h-3.5 w-3.5" />
+                              </Button>
+                              <span className="font-extrabold text-xs text-primary w-5 text-center">
+                                {inCart.qty}
+                              </span>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-7 w-7 rounded-lg gradient-primary text-primary-foreground hover:opacity-90 shadow-xs"
+                                onClick={() => updateQty(item.id, 1)}
+                              >
+                                <Plus className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
+                          ) : (
+                            <Button
+                              size="sm"
+                              className={cn(
+                                "rounded-xl text-xs font-bold transition-all shadow-xs h-8 px-3",
+                                isExpanded
+                                  ? "bg-secondary text-secondary-foreground hover:bg-secondary/80"
+                                  : "gradient-primary text-primary-foreground hover:opacity-95 shadow-md shadow-primary/20"
+                              )}
+                              onClick={() => addToCart(item)}
+                            >
+                              {isExpanded ? (
+                                <>
+                                  <ChevronUp className="h-3.5 w-3.5 mr-1" /> Close
+                                </>
+                              ) : hasVariants || hasModifiers ? (
+                                <>
+                                  <Plus className="h-3.5 w-3.5 mr-1" /> Customize
+                                </>
+                              ) : (
+                                <>
+                                  <Plus className="h-3.5 w-3.5 mr-1" /> Add
+                                </>
+                              )}
+                            </Button>
+                          )}
+                        </div>
                       </div>
                     </div>
 

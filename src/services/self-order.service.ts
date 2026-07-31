@@ -63,6 +63,7 @@ export interface SelfOrderMenuItem {
   id: string;
   name: string;
   price: number;
+  image?: string | null;
   category: { id: string; name: string } | null;
   variants: SelfOrderMenuVariant[];
   modifiers: SelfOrderMenuModifier[];
