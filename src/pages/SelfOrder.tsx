@@ -1,10 +1,14 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Flame, Search, ShoppingCart, Plus, Minus, Send, ChevronDown, ChevronUp, Loader2, XCircle, CheckCircle2, Users, Phone, User } from "lucide-react";
+import {
+  Flame, Search, ShoppingCart, Plus, Minus, Send, ChevronUp, Loader2,
+  XCircle, CheckCircle2, Users, Phone, User, BellRing, Utensils, Sparkles,
+  ArrowRight, X
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useVisiblePolling } from "@/hooks/use-visible-polling";
@@ -37,6 +41,15 @@ const formatPhoneNumber = (val: string): string => {
   if (digitsOnly.length > 4) return `${digitsOnly.slice(0, 4)}-${digitsOnly.slice(4)}`;
   return digitsOnly;
 };
+
+const PRESET_INSTRUCTIONS = [
+  "Less Spicy 🌶️",
+  "Extra Spicy 🌶️🔥",
+  "No Onions 🧅",
+  "Extra Sauce 🥣",
+  "Separate Packaging 📦",
+  "Serve Hot 🔥",
+];
 
 interface PlacedOrder {
   orderId: string;
@@ -73,8 +86,7 @@ function savePersistedSession(tableId: string, session: PersistedSession): void 
   try {
     localStorage.setItem(sessionStorageKey(tableId), JSON.stringify(session));
   } catch {
-    // localStorage can throw in private-browsing/quota-exceeded cases — the
-    // page still works, it just won't survive a refresh.
+    // localStorage can throw in private-browsing/quota-exceeded cases
   }
 }
 
@@ -95,8 +107,7 @@ const SelfOrder = () => {
   const [tableError, setTableError] = useState<string | null>(null);
   const [tableLoading, setTableLoading] = useState(true);
 
-  // ── Live settings (currency/tax/restaurant name — DataContext is empty for an
-  //    anonymous browser, so this must be fetched live, same reason as the menu) ──
+  // ── Live settings ──
   const [currency, setCurrency] = useState("Rs.");
   const [taxRate, setTaxRate] = useState(0);
   const [taxName, setTaxName] = useState("GST");
@@ -106,7 +117,7 @@ const SelfOrder = () => {
   const [menu, setMenu] = useState<SelfOrderMenu | null>(null);
   const [menuLoading, setMenuLoading] = useState(true);
 
-  // ── Entry gate: name / phone / guest count, required before ordering ──
+  // ── Entry gate ──
   const [entryDone, setEntryDone] = useState(false);
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
@@ -125,7 +136,7 @@ const SelfOrder = () => {
   const [selectedModifiers, setSelectedModifiers] = useState<string[]>([]);
   const [placing, setPlacing] = useState(false);
 
-  // ── Placed orders for this table sitting (supports multiple orders per visit) ──
+  // ── Placed orders for this table sitting ──
   const [orders, setOrders] = useState<PlacedOrder[]>([]);
   const [viewingMenu, setViewingMenu] = useState(false);
   const [sessionToken, setSessionToken] = useState<string | null>(null);
@@ -171,7 +182,7 @@ const SelfOrder = () => {
     });
   }, [table, hydrated, entryDone, customerName, customerPhone, guestCount, cart, notes, orders, viewingMenu, sessionToken]);
 
-  // ── Join this table's socket room for live order/session updates ──
+  // ── Join this table's socket room ──
   useEffect(() => {
     if (!table || !hydrated) return;
     const socket = getSelfOrderSocket();
@@ -190,14 +201,6 @@ const SelfOrder = () => {
 
     joinTable();
 
-    // socket.io-client's "connect" event fires on the initial connection AND
-    // on every automatic reconnect (reconnection: true, reconnectionAttempts:
-    // Infinity — see src/lib/self-order-socket.ts). Without re-emitting
-    // join-table here, a customer whose phone briefly drops wifi/cellular
-    // reconnects with a fresh server-side socket id, is no longer in the
-    // table's room, and silently stops receiving order:updated/session:ended
-    // for the rest of the session. The backend's join-table handler is
-    // idempotent/safe to call repeatedly.
     socket.on("connect", joinTable);
 
     const onOrderUpdated = (payload: SelfOrderStatus) => {
@@ -238,7 +241,6 @@ const SelfOrder = () => {
     };
   }, [table, hydrated, sessionToken]);
 
-  // ── Clear the persisted session once staff ends the sitting ──
   useEffect(() => {
     if (!sessionEnded || !table) return;
     clearPersistedSession(table.tableId);
@@ -262,7 +264,7 @@ const SelfOrder = () => {
       .finally(() => setMenuLoading(false));
   }, [entryDone]);
 
-  // ── Poll every non-terminal order's status as a fallback if the socket drops ──
+  // ── Poll every non-terminal order's status ──
   const pollStatus = useCallback(() => {
     orders
       .filter((o) => o.status.status !== "cancelled" && !o.status.paid)
@@ -353,7 +355,24 @@ const SelfOrder = () => {
     setCart((prev) => prev.map((c) => (c.id === id ? { ...c, qty: Math.max(0, c.qty + delta) } : c)).filter((c) => c.qty > 0));
   };
 
-  // ── Entry gate: continue-to-menu with name-conflict check ──
+  const togglePresetNote = (preset: string) => {
+    if (!notes) {
+      setNotes(preset);
+      return;
+    }
+    if (notes.includes(preset)) {
+      const updated = notes
+        .split(",")
+        .map((n) => n.trim())
+        .filter((n) => n !== preset)
+        .join(", ");
+      setNotes(updated);
+    } else {
+      setNotes(`${notes}, ${preset}`);
+    }
+  };
+
+  // ── Entry gate ──
 
   const handleContinueToMenu = async () => {
     setCheckingCustomer(true);
@@ -364,7 +383,7 @@ const SelfOrder = () => {
         return;
       }
     } catch {
-      // Lookup failing shouldn't block ordering — proceed with whatever was typed.
+      // Proceed on lookup fail
     } finally {
       setCheckingCustomer(false);
     }
@@ -407,7 +426,7 @@ const SelfOrder = () => {
     }
   };
 
-  // ── Handoff: request/respond to takeover requests ──
+  // ── Takeover ──
 
   const requestTakeover = () => {
     const socket = getSelfOrderSocket();
@@ -458,7 +477,7 @@ const SelfOrder = () => {
     );
   }
 
-  // ── Render: staff ended the sitting — session cleared, fresh start on refresh ──
+  // ── Render: staff ended the sitting ──
   if (sessionEnded) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-6">
@@ -471,23 +490,23 @@ const SelfOrder = () => {
     );
   }
 
-  // ── Render: incoming take-over request prompt (host side) ──
+  // ── Render: incoming takeover request ──
   if (incomingHostRequest) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-6">
         <div className="text-center space-y-4 max-w-sm">
-          <Users className="h-12 w-12 mx-auto text-primary" />
+          <Users className="h-12 w-12 mx-auto text-primary animate-pulse" />
           <h1 className="text-xl font-bold">Someone else wants to take over this table's session</h1>
           <div className="flex gap-2">
-            <Button variant="outline" className="flex-1" onClick={() => respondToHostRequest(false)}>Deny</Button>
-            <Button className="flex-1 gradient-primary text-primary-foreground" onClick={() => respondToHostRequest(true)}>Approve</Button>
+            <Button variant="outline" className="flex-1 rounded-xl" onClick={() => respondToHostRequest(false)}>Deny</Button>
+            <Button className="flex-1 rounded-xl gradient-primary text-primary-foreground font-bold" onClick={() => respondToHostRequest(true)}>Approve</Button>
           </div>
         </div>
       </div>
     );
   }
 
-  // ── Render: viewer screen — another device at this table is already the host ──
+  // ── Render: viewer screen ──
   if (role === "viewer" && orders.length === 0) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-6">
@@ -499,7 +518,7 @@ const SelfOrder = () => {
             requestTimedOut ? (
               <>
                 <p className="text-sm text-muted-foreground">No response yet.</p>
-                <Button className="w-full h-12 gradient-primary text-primary-foreground font-semibold" onClick={requestTakeover}>
+                <Button className="w-full h-12 rounded-xl gradient-primary text-primary-foreground font-semibold" onClick={requestTakeover}>
                   Try Again
                 </Button>
               </>
@@ -507,7 +526,7 @@ const SelfOrder = () => {
               <p className="text-sm text-muted-foreground">Waiting for a response…</p>
             )
           ) : (
-            <Button className="w-full h-12 gradient-primary text-primary-foreground font-semibold" onClick={requestTakeover}>
+            <Button className="w-full h-12 rounded-xl gradient-primary text-primary-foreground font-semibold" onClick={requestTakeover}>
               Request to Take Over
             </Button>
           )}
@@ -516,57 +535,102 @@ const SelfOrder = () => {
     );
   }
 
-  // ── Render: order list — every order placed this sitting, each with its own live status ──
+  // ── Render: order list ──
   if (orders.length > 0 && !viewingMenu) {
     return (
-      <div className="min-h-screen bg-background p-6">
-        <div className="max-w-sm mx-auto space-y-4">
-          <div className="text-center space-y-1">
-            <Flame className="h-8 w-8 mx-auto text-primary" />
-            <h1 className="font-bold text-lg">{restaurantName || "Your Orders"}</h1>
-            <p className="text-xs text-muted-foreground">
-              Table {table?.tableNumber}{table?.floor ? ` · ${table.floor}` : ""}
-            </p>
-            <button onClick={callWaiter} className="text-xs font-semibold text-primary underline underline-offset-2">
-              Call Waiter
+      <div className="min-h-screen bg-background flex flex-col">
+        <div className="sticky top-0 z-30 bg-card/90 backdrop-blur-md border-b border-border/80 px-4 py-3 shadow-xs">
+          <div className="max-w-lg mx-auto flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="h-8 w-8 rounded-lg gradient-primary flex items-center justify-center text-primary-foreground shadow-xs">
+                <Flame className="h-4 w-4" />
+              </div>
+              <div>
+                <h1 className="font-bold text-foreground text-sm leading-tight">
+                  {restaurantName || "Your Orders"}
+                </h1>
+                <p className="text-[11px] text-muted-foreground">
+                  Table {table?.tableNumber}{table?.floor ? ` · ${table.floor}` : ""}
+                </p>
+              </div>
+            </div>
+
+            <button
+              onClick={callWaiter}
+              className="flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold bg-secondary text-secondary-foreground hover:bg-primary/10 hover:text-primary transition-all border border-border/50"
+            >
+              <BellRing className="h-3.5 w-3.5 text-primary" />
+              <span>Call Waiter</span>
             </button>
           </div>
-          {orders.map((o) => {
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-4 py-5 space-y-4 max-w-lg mx-auto w-full">
+          {orders.map((o, idx) => {
             const declined = o.status.status === "cancelled";
             const paid = o.status.paid;
             const confirmed = o.status.accepted && !declined && !paid;
+            const isPending = !o.status.accepted && !declined && !paid;
+
             return (
-              <div key={o.orderId} className="bg-card rounded-xl border border-border p-4 space-y-2">
-                <div className="flex items-center gap-2">
-                  {declined ? (
-                    <XCircle className="h-5 w-5 text-destructive shrink-0" />
-                  ) : paid || confirmed ? (
-                    <CheckCircle2 className="h-5 w-5 text-success shrink-0" />
-                  ) : (
-                    <Loader2 className="h-5 w-5 animate-spin text-primary shrink-0" />
-                  )}
-                  <p className="font-semibold text-sm">
-                    {declined ? "Order Declined" : paid ? "Bill Paid" : confirmed ? "Order Confirmed" : "Waiting for Confirmation"}
-                  </p>
+              <div key={o.orderId} className="bg-card rounded-2xl border border-border/80 shadow-md p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
+                    Order #{idx + 1}
+                  </span>
+
+                  <div
+                    className={cn(
+                      "flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-extrabold border",
+                      declined && "bg-destructive/10 text-destructive border-destructive/20",
+                      paid && "bg-success/10 text-success border-success/20",
+                      confirmed && "bg-success/15 text-success border-success/30 animate-pulse",
+                      isPending && "bg-warning/15 text-warning-foreground border-warning/30"
+                    )}
+                  >
+                    {declined ? (
+                      <XCircle className="h-3.5 w-3.5" />
+                    ) : paid || confirmed ? (
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                    ) : (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    )}
+                    <span>
+                      {declined
+                        ? "Order Declined"
+                        : paid
+                        ? "Bill Settled"
+                        : confirmed
+                        ? "Order Confirmed & Preparing"
+                        : "Waiting for Kitchen Confirmation"}
+                    </span>
+                  </div>
                 </div>
+
                 {declined && (
-                  <p className="text-xs text-muted-foreground">
-                    {o.status.rejectionReason || "The restaurant could not confirm this order."}
-                  </p>
+                  <div className="p-2.5 rounded-xl bg-destructive/10 text-destructive text-xs font-medium">
+                    {o.status.rejectionReason || "The restaurant could not confirm this order at this time."}
+                  </div>
                 )}
-                <div className="space-y-1 pt-1 border-t border-border/50">
+
+                <div className="space-y-1.5 pt-2 border-t border-border/60">
                   {o.items.map((item) => (
-                    <div key={item.id} className="flex justify-between text-xs">
-                      <span className="text-muted-foreground">{item.qty}x {item.name}</span>
-                      <span>{currency} {(item.price * item.qty).toLocaleString()}</span>
+                    <div key={item.id} className="flex justify-between text-xs font-medium">
+                      <span className="text-foreground">
+                        <span className="font-bold text-primary mr-1">{item.qty}x</span> {item.name}
+                      </span>
+                      <span className="text-muted-foreground">
+                        {currency} {(item.price * item.qty).toLocaleString()}
+                      </span>
                     </div>
                   ))}
                 </div>
               </div>
             );
           })}
+
           <Button
-            className="w-full h-12 gradient-primary text-primary-foreground font-semibold"
+            className="w-full h-12 rounded-xl gradient-primary text-primary-foreground font-bold text-sm shadow-lg shadow-primary/25 active:scale-[0.99] transition-all"
             onClick={() => setViewingMenu(true)}
           >
             <Plus className="h-4 w-4 mr-2" /> Place Another Order
@@ -576,237 +640,563 @@ const SelfOrder = () => {
     );
   }
 
-  // ── Render: entry gate (name/phone/guest count) ──
+  // ── Render: entry gate ──
   if (!entryDone) {
     const cleanPhone = customerPhone.replace(/\D/g, "");
     const isPromoted = promotedGuestCount !== null;
     const canContinue = customerName.trim().length > 0 && cleanPhone.length === 11 && (isPromoted || guestCount >= 1);
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center p-6">
-        <div className="w-full max-w-sm space-y-5">
-          <div className="text-center space-y-1">
-            <Flame className="h-10 w-10 mx-auto text-primary" />
-            <h1 className="font-bold text-xl">{restaurantName || "Welcome"}</h1>
-            <p className="text-sm text-muted-foreground">
-              Table {table?.tableNumber}{table?.floor ? ` · ${table.floor}` : ""}
+      <div className="min-h-screen bg-background flex items-center justify-center p-4">
+        <div className="w-full max-w-sm space-y-6">
+          <div className="text-center space-y-2">
+            <div className="h-16 w-16 mx-auto rounded-2xl gradient-primary flex items-center justify-center text-primary-foreground shadow-xl shadow-primary/30 animate-pulse">
+              <Flame className="h-9 w-9" />
+            </div>
+            <div>
+              <h1 className="font-extrabold text-2xl text-foreground tracking-tight">
+                {restaurantName || "Welcome"}
+              </h1>
+              <div className="inline-flex items-center gap-1.5 mt-1 px-3 py-1 rounded-full bg-primary/10 text-primary border border-primary/20 text-xs font-bold">
+                <span>Table {table?.tableNumber}</span>
+                {table?.floor && <span>· {table.floor}</span>}
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground max-w-xs mx-auto">
+              Scan complete! Enter your name & phone to explore the digital menu.
             </p>
           </div>
-          <div className="space-y-3">
+
+          <div className="bg-card rounded-2xl border border-border/80 p-5 shadow-xl space-y-4">
             <div>
-              <label className="text-xs font-semibold text-muted-foreground flex items-center gap-1"><User className="h-3.5 w-3.5" /> Your Name *</label>
-              <Input value={customerName} onChange={(e) => setCustomerName(e.target.value)} placeholder="Full name" className="mt-1" />
+              <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5 mb-1.5">
+                <User className="h-3.5 w-3.5 text-primary" /> Your Full Name *
+              </label>
+              <Input
+                value={customerName}
+                onChange={(e) => setCustomerName(e.target.value)}
+                placeholder="e.g. Ali Khan"
+                className="h-11 rounded-xl bg-muted/30 border-border/80 focus-visible:ring-primary text-sm"
+              />
             </div>
+
             <div>
-              <label className="text-xs font-semibold text-muted-foreground flex items-center gap-1"><Phone className="h-3.5 w-3.5" /> Phone (11 Digits) *</label>
-              <Input value={customerPhone} onChange={(e) => setCustomerPhone(formatPhoneNumber(e.target.value))} placeholder="0300-1234567" className="mt-1" />
+              <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5 mb-1.5">
+                <Phone className="h-3.5 w-3.5 text-primary" /> Phone (11 Digits) *
+              </label>
+              <Input
+                value={customerPhone}
+                onChange={(e) => setCustomerPhone(formatPhoneNumber(e.target.value))}
+                placeholder="0300-1234567"
+                className="h-11 rounded-xl bg-muted/30 border-border/80 focus-visible:ring-primary text-sm"
+              />
             </div>
+
             {!isPromoted && (
               <div>
-                <label className="text-xs font-semibold text-muted-foreground flex items-center gap-1"><Users className="h-3.5 w-3.5" /> Guests (Pax) *</label>
-                <div className="flex items-center gap-3 mt-1">
-                  <Button type="button" variant="outline" size="icon" onClick={() => setGuestCount((g) => Math.max(1, g - 1))}><Minus className="h-4 w-4" /></Button>
-                  <span className="font-bold text-lg w-8 text-center">{guestCount}</span>
-                  <Button type="button" variant="outline" size="icon" onClick={() => setGuestCount((g) => Math.min(50, g + 1))}><Plus className="h-4 w-4" /></Button>
+                <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5 mb-1.5">
+                  <Users className="h-3.5 w-3.5 text-primary" /> Number of Guests (Pax) *
+                </label>
+                <div className="flex items-center justify-between bg-muted/30 border border-border/80 rounded-xl p-1.5">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="h-9 w-9 rounded-lg"
+                    onClick={() => setGuestCount((g) => Math.max(1, g - 1))}
+                  >
+                    <Minus className="h-4 w-4" />
+                  </Button>
+                  <span className="font-extrabold text-lg text-foreground w-12 text-center">
+                    {guestCount}
+                  </span>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="h-9 w-9 rounded-lg"
+                    onClick={() => setGuestCount((g) => Math.min(50, g + 1))}
+                  >
+                    <Plus className="h-4 w-4" />
+                  </Button>
                 </div>
               </div>
             )}
+
+            <Button
+              className="w-full h-12 rounded-xl gradient-primary text-primary-foreground font-bold text-sm shadow-lg shadow-primary/25 active:scale-[0.99] transition-all"
+              disabled={!canContinue || checkingCustomer}
+              onClick={handleContinueToMenu}
+            >
+              {checkingCustomer ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <ArrowRight className="h-4 w-4 mr-2" />
+              )}
+              Explore Menu & Order
+            </Button>
           </div>
-          <Button className="w-full h-12 gradient-primary text-primary-foreground font-semibold" disabled={!canContinue || checkingCustomer} onClick={handleContinueToMenu}>
-            {checkingCustomer ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
-            Continue to Menu
-          </Button>
-        </div>
-        {nameConflict && (
-          <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-6">
-            <div className="bg-card rounded-2xl p-5 max-w-xs w-full space-y-4 text-center">
-              <p className="text-sm text-muted-foreground">
-                We have you as <span className="font-bold text-foreground">{nameConflict.savedName}</span> — keep this name, or use <span className="font-bold text-foreground">{nameConflict.typedName}</span>?
-              </p>
-              <div className="flex gap-2">
-                <Button variant="outline" className="flex-1" onClick={() => resolveNameConflict(false)}>Use "{nameConflict.typedName}"</Button>
-                <Button className="flex-1 gradient-primary text-primary-foreground" onClick={() => resolveNameConflict(true)}>Keep "{nameConflict.savedName}"</Button>
+
+          {nameConflict && (
+            <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4">
+              <div className="bg-card rounded-2xl p-5 max-w-xs w-full space-y-4 text-center border border-border shadow-2xl animate-login-card">
+                <p className="text-xs text-muted-foreground">
+                  We found a profile for this number registered as <span className="font-bold text-foreground">{nameConflict.savedName}</span>. Use saved name or update to <span className="font-bold text-foreground">{nameConflict.typedName}</span>?
+                </p>
+                <div className="flex gap-2">
+                  <Button variant="outline" className="flex-1 rounded-xl text-xs" onClick={() => resolveNameConflict(false)}>
+                    Use "{nameConflict.typedName}"
+                  </Button>
+                  <Button className="flex-1 rounded-xl gradient-primary text-primary-foreground text-xs font-bold" onClick={() => resolveNameConflict(true)}>
+                    Keep "{nameConflict.savedName}"
+                  </Button>
+                </div>
               </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     );
   }
 
-  // ── Main menu UI ──
-
+  // ── Render: main menu UI ──
   return (
     <div className="min-h-screen bg-background flex flex-col">
-      <div className="sticky top-0 z-20 bg-card border-b border-border px-4 py-3">
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <Flame className="h-6 w-6 text-primary" />
-            <span className="font-bold text-primary text-lg">{restaurantName}</span>
+      {/* Sticky Header Bar */}
+      <div className="sticky top-0 z-30 bg-card/90 backdrop-blur-md border-b border-border/80 px-4 py-2.5 shadow-sm transition-all">
+        <div className="max-w-lg mx-auto flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="h-9 w-9 rounded-xl gradient-primary flex items-center justify-center text-primary-foreground shadow-md shadow-primary/25 shrink-0">
+              <Flame className="h-5 w-5 animate-pulse" />
+            </div>
+            <div className="min-w-0">
+              <h1 className="font-bold text-foreground text-base leading-tight truncate">
+                {restaurantName || "Ovenisto"}
+              </h1>
+              <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground mt-0.5">
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded bg-primary/10 text-primary font-medium border border-primary/20">
+                  Table {table?.tableNumber}
+                </span>
+                {table?.floor && <span>· {table.floor}</span>}
+                <span>· {guestCount} {guestCount === 1 ? "Guest" : "Guests"}</span>
+              </div>
+            </div>
           </div>
-          {orders.length > 0 && (
-            <button onClick={() => setViewingMenu(false)} className="text-xs font-semibold text-primary underline underline-offset-2">
-              My Orders ({orders.length})
+
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={callWaiter}
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-full text-xs font-semibold bg-secondary/80 text-secondary-foreground hover:bg-primary/10 hover:text-primary hover:border-primary/30 border border-transparent transition-all shadow-xs active:scale-95"
+              title="Notify staff"
+            >
+              <BellRing className="h-3.5 w-3.5 text-primary animate-bounce" />
+              <span className="hidden sm:inline">Call Waiter</span>
             </button>
-          )}
-        </div>
-        <div className="flex items-center justify-between mt-0.5">
-          <p className="text-xs text-muted-foreground">Table {table?.tableNumber} · Dine In · {guestCount} Guests</p>
-          <button onClick={callWaiter} className="text-xs font-semibold text-primary underline underline-offset-2 shrink-0">
-            Call Waiter
-          </button>
-        </div>
-      </div>
 
-      <div className="px-4 py-3 bg-card border-b border-border">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search menu..." className="pl-9 h-10" />
-        </div>
-      </div>
-
-      <div className="px-4 py-2 bg-card border-b border-border overflow-x-auto">
-        <div className="flex gap-2">
-          {categories.map((c) => (
-            <Button key={c} variant={catFilter === c ? "default" : "outline"} size="sm"
-              className={cn("shrink-0", catFilter === c && "gradient-primary text-primary-foreground")}
-              onClick={() => setCatFilter(c)}>
-              {c}
-            </Button>
-          ))}
+            {orders.length > 0 && (
+              <button
+                onClick={() => setViewingMenu(false)}
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all shadow-xs active:scale-95",
+                  !viewingMenu
+                    ? "bg-primary text-primary-foreground shadow-md shadow-primary/20"
+                    : "bg-muted text-foreground hover:bg-muted/80 border border-border"
+                )}
+              >
+                <Utensils className="h-3.5 w-3.5" />
+                <span>My Orders ({orders.length})</span>
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-4 py-4 pb-24">
-        {menuLoading ? (
-          <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-            {filtered.map((item) => {
-              const inCart = cart.find((c) => c.id === item.id || c.id.startsWith(`${item.id}-`));
-              const isExpanded = expandedItemId === item.id;
-              const hasVariants = item.variants.length > 0;
-              const itemModifiers = resolveModifiers(item);
-              const hasModifiers = itemModifiers.length > 0;
+      {/* Sticky Search & Category Bar */}
+      <div className="bg-card/60 backdrop-blur-xs border-b border-border/60 sticky top-[57px] z-20 space-y-2 py-2 px-4 shadow-xs">
+        <div className="max-w-lg mx-auto">
+          <div className="relative">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search dishes, burgers, drinks..."
+              className="pl-9 pr-8 h-10 rounded-xl bg-muted/50 border-border/80 focus-visible:ring-primary text-sm shadow-inner"
+            />
+            {search && (
+              <button
+                onClick={() => setSearch("")}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
 
+          <div className="flex gap-2 overflow-x-auto scrollbar-none pt-2 pb-1 -mx-4 px-4 items-center">
+            {categories.map((c) => {
+              const isActive = catFilter === c;
               return (
-                <div key={item.id} className="bg-card rounded-xl border border-border overflow-hidden">
-                  <div className="flex gap-3 p-3">
-                    <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-sm truncate">{item.name}</p>
-                      <p className="text-xs text-muted-foreground">{item.category?.name}</p>
-                      <p className="font-bold text-primary mt-1">
-                        {hasVariants
-                          ? `${currency} ${item.variants[0].price.toLocaleString()} - ${currency} ${item.variants[item.variants.length - 1].price.toLocaleString()}`
-                          : `${currency} ${item.price.toLocaleString()}`}
-                      </p>
-                    </div>
-                    <div className="flex items-center shrink-0">
-                      {!hasVariants && !hasModifiers && inCart ? (
-                        <div className="flex items-center gap-2">
-                          <Button size="icon" variant="outline" className="h-8 w-8" onClick={() => updateQty(item.id, -1)}><Minus className="h-3 w-3" /></Button>
-                          <span className="font-bold w-5 text-center">{inCart.qty}</span>
-                          <Button size="icon" className="h-8 w-8 gradient-primary text-primary-foreground" onClick={() => updateQty(item.id, 1)}><Plus className="h-3 w-3" /></Button>
-                        </div>
-                      ) : (
-                        <Button size="sm" className="gradient-primary text-primary-foreground" onClick={() => addToCart(item)}>
-                          {isExpanded ? <ChevronUp className="h-4 w-4 mr-1" /> : <Plus className="h-4 w-4 mr-1" />}
-                          {isExpanded ? "Close" : "Add"}
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-
-                  {isExpanded && (
-                    <div className="px-3 pb-3 pt-1 border-t border-border/50 bg-muted/30 space-y-3">
-                      {hasVariants && (
-                        <div>
-                          <p className="text-xs font-semibold text-muted-foreground mb-1.5">Choose Size</p>
-                          <div className="flex gap-1.5 flex-wrap">
-                            {item.variants.map((v) => (
-                              <button key={v.name}
-                                onClick={() => setSelectedVariant(selectedVariant?.name === v.name ? null : v)}
-                                className={cn("px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all",
-                                  selectedVariant?.name === v.name
-                                    ? "gradient-primary text-primary-foreground border-transparent shadow-sm"
-                                    : "bg-card border-border text-foreground hover:border-primary/50")}>
-                                {v.name} · {currency} {v.price.toLocaleString()}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                      {hasModifiers && (
-                        <div>
-                          <p className="text-xs font-semibold text-muted-foreground mb-1.5">Add Extras</p>
-                          <div className="flex gap-1.5 flex-wrap">
-                            {itemModifiers.map((mod) => (
-                              <button key={mod.id}
-                                onClick={() => setSelectedModifiers((prev) => prev.includes(mod.id) ? prev.filter((x) => x !== mod.id) : [...prev, mod.id])}
-                                className={cn("px-2.5 py-1 rounded-lg text-xs border transition-all",
-                                  selectedModifiers.includes(mod.id)
-                                    ? "bg-primary/10 border-primary/50 text-primary font-semibold"
-                                    : "bg-card border-border text-muted-foreground hover:border-primary/30")}>
-                                {mod.name}{mod.price > 0 ? ` +${currency}${mod.price}` : ""}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                      <Button size="sm" className="w-full gradient-primary text-primary-foreground" onClick={() => confirmAddWithOptions(item)}>
-                        <Plus className="h-3 w-3 mr-1" /> Add
-                      </Button>
-                    </div>
+                <button
+                  key={c}
+                  onClick={() => setCatFilter(c)}
+                  className={cn(
+                    "shrink-0 px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all duration-200 flex items-center gap-1.5 border",
+                    isActive
+                      ? "gradient-primary text-primary-foreground border-transparent shadow-md shadow-primary/25 scale-[1.02]"
+                      : "bg-card border-border/80 text-muted-foreground hover:text-foreground hover:border-primary/40"
                   )}
-                </div>
+                >
+                  <span>{c}</span>
+                </button>
               );
             })}
-            {filtered.length === 0 && <p className="text-center text-muted-foreground py-12 col-span-full">No items found</p>}
           </div>
-        )}
+        </div>
       </div>
 
+      {/* Menu Items Container */}
+      <div className="flex-1 overflow-y-auto px-4 py-4 pb-28">
+        <div className="max-w-lg mx-auto space-y-3">
+          {menuLoading ? (
+            <div className="flex flex-col items-center justify-center py-20 space-y-3 text-muted-foreground">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              <p className="text-xs font-medium">Preparing fresh menu...</p>
+            </div>
+          ) : (
+            <>
+              {filtered.map((item) => {
+                const inCart = cart.find((c) => c.id === item.id || c.id.startsWith(`${item.id}-`));
+                const isExpanded = expandedItemId === item.id;
+                const hasVariants = item.variants.length > 0;
+                const itemModifiers = resolveModifiers(item);
+                const hasModifiers = itemModifiers.length > 0;
+
+                return (
+                  <div
+                    key={item.id}
+                    className={cn(
+                      "bg-card rounded-2xl border transition-all duration-200 overflow-hidden shadow-xs hover:shadow-md",
+                      isExpanded ? "border-primary/50 ring-1 ring-primary/20" : "border-border/80 hover:border-border"
+                    )}
+                  >
+                    <div className="p-3.5 flex items-start justify-between gap-3">
+                      <div className="flex-1 min-w-0 space-y-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-bold text-foreground text-sm leading-snug">
+                            {item.name}
+                          </span>
+                          {item.category?.name && (
+                            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-secondary/80 text-secondary-foreground border border-border/50">
+                              {item.category.name}
+                            </span>
+                          )}
+                        </div>
+
+                        <p className="font-extrabold text-primary text-base">
+                          {hasVariants
+                            ? `${currency} ${item.variants[0].price.toLocaleString()} – ${currency} ${item.variants[item.variants.length - 1].price.toLocaleString()}`
+                            : `${currency} ${item.price.toLocaleString()}`}
+                        </p>
+                      </div>
+
+                      <div className="shrink-0 pt-0.5">
+                        {!hasVariants && !hasModifiers && inCart ? (
+                          <div className="flex items-center gap-1.5 bg-primary/10 border border-primary/30 rounded-xl p-1 shadow-xs">
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-7 w-7 rounded-lg hover:bg-primary/20 text-primary"
+                              onClick={() => updateQty(item.id, -1)}
+                            >
+                              <Minus className="h-3.5 w-3.5" />
+                            </Button>
+                            <span className="font-extrabold text-xs text-primary w-5 text-center">
+                              {inCart.qty}
+                            </span>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-7 w-7 rounded-lg gradient-primary text-primary-foreground hover:opacity-90 shadow-xs"
+                              onClick={() => updateQty(item.id, 1)}
+                            >
+                              <Plus className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        ) : (
+                          <Button
+                            size="sm"
+                            className={cn(
+                              "rounded-xl text-xs font-bold transition-all shadow-xs h-9 px-3.5",
+                              isExpanded
+                                ? "bg-secondary text-secondary-foreground hover:bg-secondary/80"
+                                : "gradient-primary text-primary-foreground hover:opacity-95 shadow-md shadow-primary/20"
+                            )}
+                            onClick={() => addToCart(item)}
+                          >
+                            {isExpanded ? (
+                              <>
+                                <ChevronUp className="h-3.5 w-3.5 mr-1" /> Close
+                              </>
+                            ) : hasVariants || hasModifiers ? (
+                              <>
+                                <Plus className="h-3.5 w-3.5 mr-1" /> Customize
+                              </>
+                            ) : (
+                              <>
+                                <Plus className="h-3.5 w-3.5 mr-1" /> Add
+                              </>
+                            )}
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Customization Panel */}
+                    {isExpanded && (
+                      <div className="px-3.5 pb-3.5 pt-2 border-t border-border/60 bg-muted/20 space-y-3">
+                        {hasVariants && (
+                          <div className="space-y-1.5">
+                            <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
+                              <Sparkles className="h-3 w-3 text-primary" /> Select Portion / Size
+                            </label>
+                            <div className="grid grid-cols-2 gap-1.5">
+                              {item.variants.map((v) => {
+                                const isSelected = selectedVariant?.name === v.name;
+                                return (
+                                  <button
+                                    key={v.name}
+                                    onClick={() => setSelectedVariant(isSelected ? null : v)}
+                                    className={cn(
+                                      "px-3 py-2 rounded-xl text-xs font-semibold border text-left transition-all flex items-center justify-between",
+                                      isSelected
+                                        ? "gradient-primary text-primary-foreground border-transparent shadow-md shadow-primary/20"
+                                        : "bg-card border-border/80 text-foreground hover:border-primary/40"
+                                    )}
+                                  >
+                                    <span className="truncate">{v.name}</span>
+                                    <span className="font-bold shrink-0 ml-1">
+                                      {currency} {v.price.toLocaleString()}
+                                    </span>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+
+                        {hasModifiers && (
+                          <div className="space-y-1.5">
+                            <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
+                              <Plus className="h-3 w-3 text-primary" /> Extra Add-ons
+                            </label>
+                            <div className="flex gap-1.5 flex-wrap">
+                              {itemModifiers.map((mod) => {
+                                const isSelected = selectedModifiers.includes(mod.id);
+                                return (
+                                  <button
+                                    key={mod.id}
+                                    onClick={() =>
+                                      setSelectedModifiers((prev) =>
+                                        prev.includes(mod.id)
+                                          ? prev.filter((x) => x !== mod.id)
+                                          : [...prev, mod.id]
+                                      )
+                                    }
+                                    className={cn(
+                                      "px-3 py-1.5 rounded-xl text-xs font-medium border transition-all flex items-center gap-1",
+                                      isSelected
+                                        ? "bg-primary/15 border-primary text-primary font-bold shadow-xs"
+                                        : "bg-card border-border/80 text-muted-foreground hover:border-primary/30"
+                                    )}
+                                  >
+                                    <span>{mod.name}</span>
+                                    {mod.price > 0 && (
+                                      <span className="opacity-80">
+                                        (+{currency}{mod.price})
+                                      </span>
+                                    )}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+
+                        <Button
+                          size="sm"
+                          className="w-full h-10 rounded-xl gradient-primary text-primary-foreground font-bold text-xs shadow-md shadow-primary/20"
+                          onClick={() => confirmAddWithOptions(item)}
+                        >
+                          <Plus className="h-4 w-4 mr-1" /> Add to Order
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+
+              {filtered.length === 0 && (
+                <div className="text-center py-16 px-4 space-y-2 bg-card/40 rounded-3xl border border-dashed border-border">
+                  <Search className="h-8 w-8 mx-auto text-muted-foreground/60" />
+                  <p className="font-semibold text-foreground text-sm">No dishes match "{search}"</p>
+                  <p className="text-xs text-muted-foreground">Try clearing search or picking another category.</p>
+                  <Button variant="outline" size="sm" className="mt-2 rounded-xl text-xs" onClick={() => { setSearch(""); setCatFilter("All"); }}>
+                    Reset Filters
+                  </Button>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Floating Bottom Cart Bar */}
       {cartCount > 0 && (
-        <div className="fixed bottom-0 left-0 right-0 z-30 bg-card border-t border-border p-4">
-          <Button className="w-full h-12 gradient-primary text-primary-foreground text-base font-semibold" onClick={() => setCartOpen(true)}>
-            <ShoppingCart className="h-5 w-5 mr-2" /> View Cart ({cartCount} items) · {currency} {cartTotal.toLocaleString()}
-          </Button>
+        <div className="fixed bottom-3 left-3 right-3 z-40 max-w-lg mx-auto">
+          <div
+            onClick={() => setCartOpen(true)}
+            className="bg-card/95 backdrop-blur-xl border border-primary/30 shadow-2xl shadow-primary/30 rounded-2xl p-3 flex items-center justify-between cursor-pointer hover:border-primary/50 transition-all active:scale-[0.99] group"
+          >
+            <div className="flex items-center gap-3">
+              <div className="relative h-11 w-11 rounded-xl gradient-primary flex items-center justify-center text-primary-foreground shadow-md shadow-primary/30">
+                <ShoppingCart className="h-5 w-5" />
+                <span className="absolute -top-1.5 -right-1.5 bg-foreground text-background font-extrabold text-[10px] h-5 w-5 rounded-full flex items-center justify-center border-2 border-card shadow-xs animate-bounce">
+                  {cartCount}
+                </span>
+              </div>
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Total Order</p>
+                <p className="text-base font-extrabold text-foreground leading-tight">
+                  {currency} {cartTotal.toLocaleString()}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-1.5 font-bold text-xs bg-primary text-primary-foreground px-4 py-2.5 rounded-xl shadow-sm group-hover:opacity-95">
+              <span>View Order</span>
+              <ArrowRight className="h-4 w-4 group-hover:translate-x-0.5 transition-transform" />
+            </div>
+          </div>
         </div>
       )}
 
+      {/* Cart Drawer Bottom Sheet */}
       <Sheet open={cartOpen} onOpenChange={setCartOpen}>
-        <SheetContent side="bottom" className="max-h-[85vh] overflow-y-auto rounded-t-2xl">
-          <SheetHeader><SheetTitle>Your Order</SheetTitle></SheetHeader>
-          <div className="space-y-4 mt-4">
-            {cart.map((item) => (
-              <div key={item.id} className="flex items-start justify-between">
-                <div className="flex-1 min-w-0">
-                  <p className="font-medium text-sm truncate">{item.name}</p>
-                  {item.modifiers && item.modifiers.length > 0 && (
-                    <p className="text-[10px] text-muted-foreground">+ {item.modifiers.join(", ")}</p>
-                  )}
-                  <p className="text-xs text-muted-foreground">{currency} {item.price} each</p>
+        <SheetContent side="bottom" className="max-h-[88vh] rounded-t-3xl border-t border-border bg-card p-0 shadow-2xl overflow-hidden flex flex-col max-w-lg mx-auto">
+          <div className="pt-3 pb-2 px-5 border-b border-border/60 bg-muted/10 shrink-0">
+            <div className="w-10 h-1 bg-muted-foreground/30 rounded-full mx-auto mb-3" />
+            <div className="flex items-center justify-between">
+              <SheetTitle className="text-base font-bold flex items-center gap-2">
+                <ShoppingCart className="h-4 w-4 text-primary" /> Your Table Order
+              </SheetTitle>
+              <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-primary/10 text-primary border border-primary/20">
+                Table {table?.tableNumber}
+              </span>
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-5 space-y-5">
+            <div className="space-y-3">
+              {cart.map((item) => (
+                <div key={item.id} className="flex items-center justify-between gap-3 p-3 rounded-xl bg-muted/20 border border-border/50">
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-sm text-foreground truncate">{item.name}</p>
+                    {item.modifiers && item.modifiers.length > 0 && (
+                      <p className="text-[11px] text-muted-foreground">+ {item.modifiers.join(", ")}</p>
+                    )}
+                    <p className="text-xs font-bold text-primary mt-0.5">{currency} {item.price.toLocaleString()} each</p>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    <div className="flex items-center gap-1 bg-card border border-border rounded-lg p-0.5 shadow-xs">
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-7 w-7 rounded-md hover:bg-muted"
+                        onClick={() => updateQty(item.id, -1)}
+                      >
+                        <Minus className="h-3 w-3" />
+                      </Button>
+                      <span className="font-extrabold text-xs w-6 text-center">{item.qty}</span>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-7 w-7 rounded-md hover:bg-muted"
+                        onClick={() => updateQty(item.id, 1)}
+                      >
+                        <Plus className="h-3 w-3" />
+                      </Button>
+                    </div>
+                    <span className="font-bold text-sm w-16 text-right">
+                      {currency} {(item.price * item.qty).toLocaleString()}
+                    </span>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <Button size="icon" variant="outline" className="h-7 w-7" onClick={() => updateQty(item.id, -1)}><Minus className="h-3 w-3" /></Button>
-                  <span className="font-bold w-5 text-center text-sm">{item.qty}</span>
-                  <Button size="icon" variant="outline" className="h-7 w-7" onClick={() => updateQty(item.id, 1)}><Plus className="h-3 w-3" /></Button>
-                  <span className="font-semibold text-sm w-16 text-right">{currency} {(item.price * item.qty).toLocaleString()}</span>
-                </div>
+              ))}
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center justify-between">
+                <span>Special Instructions</span>
+                <span className="text-[10px] font-normal text-muted-foreground">Tap chips to add</span>
+              </label>
+              <div className="flex gap-1.5 flex-wrap">
+                {PRESET_INSTRUCTIONS.map((preset) => {
+                  const isAdded = notes.includes(preset);
+                  return (
+                    <button
+                      key={preset}
+                      onClick={() => togglePresetNote(preset)}
+                      className={cn(
+                        "px-2.5 py-1 rounded-lg text-xs font-medium border transition-all",
+                        isAdded
+                          ? "bg-primary/15 border-primary text-primary font-bold shadow-xs"
+                          : "bg-muted/40 border-border text-muted-foreground hover:border-primary/40"
+                      )}
+                    >
+                      {preset}
+                    </button>
+                  );
+                })}
               </div>
-            ))}
-            <div>
-              <label className="text-xs font-medium text-muted-foreground">Special Instructions</label>
-              <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Any special requests..." className="mt-1" rows={2} />
+              <Textarea
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="Any extra preferences (e.g. less salt, warm water)..."
+                className="rounded-xl bg-muted/30 border-border/80 text-xs focus-visible:ring-primary"
+                rows={2}
+              />
             </div>
-            <div className="border-t border-border pt-3 space-y-1 text-sm">
-              <div className="flex justify-between"><span className="text-muted-foreground">Subtotal</span><span>{currency} {cartTotal.toLocaleString()}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">{taxName} ({taxRate}%)</span><span>{currency} {tax.toLocaleString()}</span></div>
-              <div className="flex justify-between font-bold text-base pt-1 border-t border-border"><span>Total</span><span className="text-primary">{currency} {(cartTotal + tax).toLocaleString()}</span></div>
+
+            <div className="bg-muted/30 rounded-xl p-3.5 border border-border/60 space-y-1.5 text-xs">
+              <div className="flex justify-between text-muted-foreground">
+                <span>Subtotal</span>
+                <span>{currency} {cartTotal.toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between text-muted-foreground">
+                <span>{taxName} ({taxRate}%)</span>
+                <span>{currency} {tax.toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between font-extrabold text-sm pt-2 border-t border-border/60 text-foreground">
+                <span>Total Amount</span>
+                <span className="text-primary text-base">{currency} {(cartTotal + tax).toLocaleString()}</span>
+              </div>
             </div>
-            <Button className="w-full h-12 gradient-primary text-primary-foreground text-base font-semibold" disabled={placing} onClick={placeOrder}>
-              {placing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Send className="h-4 w-4 mr-2" />} Place Order
+
+            <Button
+              className="w-full h-12 rounded-xl gradient-primary text-primary-foreground text-base font-bold shadow-lg shadow-primary/25 active:scale-[0.99] transition-all"
+              disabled={placing}
+              onClick={placeOrder}
+            >
+              {placing ? (
+                <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+              ) : (
+                <Send className="h-5 w-5 mr-2" />
+              )}
+              Send Order to Kitchen 🔥
             </Button>
-            <p className="text-center text-xs text-muted-foreground">💳 Pay at Counter</p>
+            <p className="text-center text-[11px] font-medium text-muted-foreground">
+              💳 Pay at counter or with server when finished dining
+            </p>
           </div>
         </SheetContent>
       </Sheet>
@@ -815,3 +1205,4 @@ const SelfOrder = () => {
 };
 
 export default SelfOrder;
+
