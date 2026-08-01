@@ -468,7 +468,7 @@ const POS = () => {
   // Order Status
   const [showOrderStatus, setShowOrderStatus] = useState(false);
   const [orderStatusTab, setOrderStatusTab] = useState<"pending" | "preparing" | "ready" | "completed">("pending");
-  const [orderStatusTypeFilter, setOrderStatusTypeFilter] = useState<"all" | "Dine In" | "Take Away" | "Delivery">("all");
+  const [orderStatusTypeFilter, setOrderStatusTypeFilter] = useState<"all" | "Dine In" | "Take Away" | "Delivery" | "Self Order">("all");
 
   // Tick statusClock every second while Order Status sheet is open
   useEffect(() => {
@@ -2513,13 +2513,13 @@ const POS = () => {
               </button>
             </div>
 
-            {/* Order Type Sub-Filters Bar: All, Dine In, Take Away, Delivery */}
-            <div className="flex items-center gap-1.5 p-1.5 bg-muted/60 rounded-2xl border border-border/50 shadow-2xs">
+            {/* Order Type Sub-Filters Bar: All, Dine In, Take Away, Delivery, Self Order */}
+            <div className="flex items-center gap-1.5 p-1.5 bg-muted/60 rounded-2xl border border-border/50 shadow-2xs overflow-x-auto">
               <button
                 type="button"
                 onClick={() => setOrderStatusTypeFilter("all")}
                 className={cn(
-                  "flex-1 py-1.5 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5",
+                  "flex-1 py-1.5 px-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 shrink-0",
                   orderStatusTypeFilter === "all"
                     ? "bg-card text-foreground shadow-xs border border-border font-extrabold scale-[1.01]"
                     : "text-muted-foreground hover:text-foreground hover:bg-card/40"
@@ -2531,15 +2531,19 @@ const POS = () => {
                 </Badge>
               </button>
 
-              {(["Dine In", "Take Away", "Delivery"] as const).map(type => {
-                const count = ordersByStatus[orderStatusTab].filter(o => o.type === type).length;
+              {(["Dine In", "Take Away", "Delivery", "Self Order"] as const).map(type => {
+                const count = ordersByStatus[orderStatusTab].filter(o => {
+                  const isSelf = o.type === "Self Order" || (o as any).staff === "Self Order" || (o as any).staffName === "Self Order" || (o as any).orderSource === "self-order";
+                  if (type === "Self Order") return isSelf;
+                  return o.type === type && !isSelf;
+                }).length;
                 return (
                   <button
                     key={type}
                     type="button"
                     onClick={() => setOrderStatusTypeFilter(type)}
                     className={cn(
-                      "flex-1 py-1.5 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5",
+                      "flex-1 py-1.5 px-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 shrink-0",
                       orderStatusTypeFilter === type
                         ? "bg-card text-foreground shadow-xs border border-border font-extrabold scale-[1.01]"
                         : "text-muted-foreground hover:text-foreground hover:bg-card/40"
@@ -2557,9 +2561,12 @@ const POS = () => {
 
           <div className="p-5 space-y-4 overflow-y-auto flex-1 bg-background/40">
             {(() => {
-              const currentList = ordersByStatus[orderStatusTab].filter(o =>
-                orderStatusTypeFilter === "all" || o.type === orderStatusTypeFilter
-              );
+              const currentList = ordersByStatus[orderStatusTab].filter(o => {
+                if (orderStatusTypeFilter === "all") return true;
+                const isSelf = o.type === "Self Order" || (o as any).staff === "Self Order" || (o as any).staffName === "Self Order" || (o as any).orderSource === "self-order";
+                if (orderStatusTypeFilter === "Self Order") return isSelf;
+                return o.type === orderStatusTypeFilter && !isSelf;
+              });
 
               if (currentList.length === 0) {
                 return (
