@@ -121,7 +121,7 @@ const orderColumns: OrderColumnConfig[] = [
 const normalize = (o: any) => ({
   ...o,
   customer: o.customerName || o.customer || "Walk-in",
-  staff: o.staffName || o.staff || "",
+  staff: o.acceptedByName || o.staffName || o.staff || "",
   phone: o.phone || "",
   total: Number(o.total),
   advancePayment: Number(o.advancePayment ?? 0),

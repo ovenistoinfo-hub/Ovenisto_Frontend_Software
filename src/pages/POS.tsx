@@ -134,7 +134,7 @@ const POS = () => {
   const normalizeApiOrder = useCallback((o: OrderRecord): any => ({
     ...o,
     customer: o.customerName || 'Walk-in',
-    staff: o.staffName || '',
+    staff: o.acceptedByName || o.staffName || '',
     phone: o.phone || '',
     date: o.date ? new Date(o.date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
     time: o.time || '',
@@ -1616,7 +1616,7 @@ const POS = () => {
                     </div>
                   </div>
                   <div className="flex items-center justify-between mt-1.5 text-[11px] text-muted-foreground">
-                    <span className="truncate max-w-[110px] font-medium text-foreground/80">{o.customer}</span>
+                    <span className="truncate max-w-[120px] font-medium text-foreground/80">{o.customer}{o.tableNumber ? ` · T#${o.tableNumber}` : ""}</span>
                     <span className="text-[10px] opacity-80">{o.time}</span>
                   </div>
                 </Card>
@@ -2618,13 +2618,13 @@ const POS = () => {
                             </div>
                           </div>
 
-                          {order.type === "Dine In" && order.tableNumber && (
-                            <div className="bg-muted/50 p-2.5 rounded-xl border border-border/40 flex items-center justify-between font-semibold">
+                           {order.tableNumber && (
+                            <div className="bg-amber-500/10 p-2.5 rounded-xl border border-amber-500/20 flex items-center justify-between font-semibold">
                               <span className="flex items-center gap-1.5 text-foreground">
                                 <Utensils className="h-4 w-4 text-amber-500" />
                                 Table: <strong className="text-amber-500 font-extrabold">Table {order.tableNumber}</strong>
                               </span>
-                              <Badge variant="secondary" className="text-[10px]">{order.type}</Badge>
+                              <Badge variant="secondary" className="text-[10px] font-bold bg-amber-500/20 text-amber-600 dark:text-amber-400 border-amber-500/30">{order.type || "Dine In"}</Badge>
                             </div>
                           )}
 

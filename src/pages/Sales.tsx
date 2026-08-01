@@ -205,7 +205,7 @@ const Sales = () => {
                   <span className="text-muted-foreground">Type:</span>
                   <Badge variant="secondary" className={(typeColor as any)[selectedOrder.type] ?? ""}>{selectedOrder.type}</Badge>
                 </div>
-                <div><span className="text-muted-foreground">Staff:</span> {selectedOrder.staffName || "—"}</div>
+                <div><span className="text-muted-foreground">Staff:</span> {selectedOrder.acceptedByName || selectedOrder.staffName || "—"}</div>
                 {selectedOrder.tableNumber && <div><span className="text-muted-foreground">Table:</span> #{selectedOrder.tableNumber}</div>}
                 <div className="flex items-center gap-1.5 flex-wrap">
                   <span className="text-muted-foreground">Status:</span>
