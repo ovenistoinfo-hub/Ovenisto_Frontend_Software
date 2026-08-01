@@ -1,7 +1,14 @@
 > The repo-root `../CLAUDE.md` holds the full project guide (architecture, module map,
 > roles, env vars, deployment gotchas, the Outlet Scoping access-control model). It loads
-> alongside this file in frontend sessions — read it first. This file has no
-> frontend-specific gotchas of its own yet beyond what's already in the root guide.
+> alongside this file in frontend sessions — read it first.
+
+## Frontend Dev Quick-Reference
+
+- **`SelfOrder.tsx`'s per-device `localStorage` never reflects another device's state.** A
+  promoted/fresh host's local `orders`/session data starts empty regardless of what other
+  devices already did at that table — always reconcile against the backend
+  (`self-order.service.ts`'s `getActiveOrders`) rather than assuming local state is the
+  source of truth. See root guide's "Self-Order (QR Ordering) System" for the full pattern.
 
 <!-- code-review-graph MCP tools -->
 ## MCP Tools: code-review-graph
