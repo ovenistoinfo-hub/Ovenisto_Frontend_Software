@@ -121,6 +121,7 @@ export const inventoryService = {
     lowStockLevel?: number;
     status?: string;
     supplierId?: string | null;
+    shelfLifeHours?: number | null;
   }): Promise<IngredientRecord> {
     const res = await api.post<{ success: boolean; data: IngredientRecord }>('/inventory/ingredients', data);
     return res.data;
@@ -136,6 +137,7 @@ export const inventoryService = {
     lowStockLevel: number;
     status: string;
     supplierId: string | null;
+    shelfLifeHours: number | null;
   }>): Promise<IngredientRecord> {
     const res = await api.put<{ success: boolean; data: IngredientRecord }>(`/inventory/ingredients/${id}`, data);
     return res.data;
