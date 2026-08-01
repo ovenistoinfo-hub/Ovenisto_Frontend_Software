@@ -34,7 +34,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "
 import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
 import { Link, useLocation } from "react-router-dom";
-import { cn } from "@/lib/utils";
+import { cn, formatPakistaniPhone } from "@/lib/utils";
 import { generateInvoicePDF } from "@/lib/generate-invoice-pdf";
 import { useData } from "@/contexts/DataContext";
 import { useAuth } from "@/contexts/AuthContext";
@@ -2131,7 +2131,7 @@ const POS = () => {
           <DialogHeader><DialogTitle>Quick Add Customer</DialogTitle></DialogHeader>
           <div className="space-y-3">
             <Input value={newCustomer.name} onChange={(e) => setNewCustomer((p) => ({ ...p, name: e.target.value }))} placeholder="Customer name *" />
-            <Input value={newCustomer.phone} onChange={(e) => setNewCustomer((p) => ({ ...p, phone: e.target.value }))} placeholder="Phone number *" />
+            <Input value={newCustomer.phone} maxLength={12} onChange={(e) => setNewCustomer((p) => ({ ...p, phone: formatPakistaniPhone(e.target.value) }))} placeholder="Phone number (11 Digits) *" />
             <Input value={newCustomer.email} onChange={(e) => setNewCustomer((p) => ({ ...p, email: e.target.value }))} placeholder="Email (optional)" />
             <Input value={newCustomer.address} onChange={(e) => setNewCustomer((p) => ({ ...p, address: e.target.value }))} placeholder="Address (optional)" />
             <div>

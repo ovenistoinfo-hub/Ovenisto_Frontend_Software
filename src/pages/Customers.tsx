@@ -13,6 +13,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Search, Eye, Plus, Users, Trash2, Loader2 } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { toast } from "sonner";
+import { formatPakistaniPhone } from "@/lib/utils";
 import { TablePagination, paginate } from "@/components/TablePagination";
 
 const Customers = () => {
@@ -193,7 +194,7 @@ const Customers = () => {
                         <TableRow key={c.id} className="hover:bg-muted/30 transition-colors">
                           <TableCell>{(page - 1) * 10 + i + 1}</TableCell>
                           <TableCell className="font-medium">{c.name}</TableCell>
-                          <TableCell>{c.phone}</TableCell>
+                          <TableCell>{formatPakistaniPhone(c.phone)}</TableCell>
                           <TableCell className="text-muted-foreground">{c.email}</TableCell>
                           <TableCell>{totalOrdersCount}</TableCell>
                           <TableCell>{currency} {totalSpentVal.toLocaleString()}</TableCell>

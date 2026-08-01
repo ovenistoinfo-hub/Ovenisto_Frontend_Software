@@ -10,6 +10,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/ui/page-header";
 
+import { formatPakistaniPhone } from "@/lib/utils";
+
 const CustomerDues = () => {
   const { customers, updateItem, settings } = useData();
   const currency = settings.currency || "Rs.";
@@ -30,7 +32,7 @@ const CustomerDues = () => {
       <Card className="shadow-sm border-primary/20"><CardContent className="p-5"><div className="flex items-center gap-4"><div className="h-11 w-11 rounded-xl bg-primary/10 flex items-center justify-center shrink-0"><CreditCard className="h-5 w-5 text-primary" /></div><div><p className="text-sm text-muted-foreground">Total Outstanding</p><p className="text-2xl font-bold tracking-tight text-primary">{currency} {totalDue.toLocaleString()}</p></div></div></CardContent></Card>
       <Card className="shadow-sm"><CardContent className="pt-6">
         <div className="rounded-lg border overflow-auto max-h-[calc(100vh-300px)]"><Table><TableHeader className="sticky top-0 z-10 bg-card"><TableRow className="bg-muted/50 hover:bg-muted/50"><TableHead>SN</TableHead><TableHead>Customer</TableHead><TableHead>Phone</TableHead><TableHead>Total Due</TableHead><TableHead>Last Order</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader>
-          <TableBody>{dueCustomers.map((c, i) => (<TableRow key={c.id} className="hover:bg-muted/30 transition-colors"><TableCell>{i + 1}</TableCell><TableCell className="font-medium">{c.name}</TableCell><TableCell>{c.phone}</TableCell><TableCell className="text-destructive font-bold">{currency} {c.outstandingDue.toLocaleString()}</TableCell><TableCell>{c.lastOrder}</TableCell><TableCell><Button size="sm" className="gradient-primary text-primary-foreground" onClick={() => { setShowPay(c); setAmount(String(c.outstandingDue)); }}>Receive Payment</Button></TableCell></TableRow>))}</TableBody></Table></div>
+          <TableBody>{dueCustomers.map((c, i) => (<TableRow key={c.id} className="hover:bg-muted/30 transition-colors"><TableCell>{i + 1}</TableCell><TableCell className="font-medium">{c.name}</TableCell><TableCell>{formatPakistaniPhone(c.phone)}</TableCell><TableCell className="text-destructive font-bold">{currency} {c.outstandingDue.toLocaleString()}</TableCell><TableCell>{c.lastOrder}</TableCell><TableCell><Button size="sm" className="gradient-primary text-primary-foreground" onClick={() => { setShowPay(c); setAmount(String(c.outstandingDue)); }}>Receive Payment</Button></TableCell></TableRow>))}</TableBody></Table></div>
       </CardContent></Card>
       {showPay && (
         <Card className="shadow-sm border-primary/30">

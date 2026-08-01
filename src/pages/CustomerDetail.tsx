@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { ArrowLeft, ShoppingCart, DollarSign, TrendingUp, CreditCard, Pencil, User, Loader2 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
+import { formatPakistaniPhone } from "@/lib/utils";
 import { PageHeader } from "@/components/ui/page-header";
 
 const statusColor: Record<string, string> = {
@@ -70,6 +71,13 @@ const CustomerDetail = () => {
 
   const handleEdit = async () => {
     if (!editForm.name.trim()) { toast.error("Name is required"); return; }
+    if (editForm.phone.trim()) {
+      const cleanPhone = editForm.phone.replace(/\D/g, "");
+      if (cleanPhone.length !== 11) {
+        toast.error("Phone number must be exactly 11 digits (e.g. 0300-1234567)");
+        return;
+      }
+    }
     setSaving(true);
     try {
       await customerService.updateCustomer(id!, editForm);
@@ -134,7 +142,7 @@ const CustomerDetail = () => {
             {customer.name.charAt(0)}
           </div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 flex-1 text-sm">
-            <div><span className="text-muted-foreground block">Phone</span><span className="font-medium">{customer.phone ?? "—"}</span></div>
+            <div><span className="text-muted-foreground block">Phone</span><span className="font-medium">{formatPakistaniPhone(customer.phone) || "—"}</span></div>
             <div><span className="text-muted-foreground block">Email</span><span className="font-medium">{customer.email ?? "—"}</span></div>
             <div><span className="text-muted-foreground block">Address</span><span className="font-medium">{customer.address ?? "—"}</span></div>
             <div><span className="text-muted-foreground block">Last Order</span><span className="font-medium">{lastOrderDate}</span></div>
@@ -190,7 +198,7 @@ const CustomerDetail = () => {
           <DialogHeader><DialogTitle>Edit Customer</DialogTitle></DialogHeader>
           <div className="space-y-3">
             <div className="space-y-1.5"><Label>Name</Label><Input placeholder="Name" value={editForm.name} onChange={(e) => setEditForm(p => ({ ...p, name: e.target.value }))} /></div>
-            <div className="space-y-1.5"><Label>Phone</Label><Input placeholder="Phone" value={editForm.phone} onChange={(e) => setEditForm(p => ({ ...p, phone: e.target.value }))} /></div>
+            <div className="space-y-1.5"><Label>Phone (11 Digits)</Label><Input placeholder="0300-1234567" value={editForm.phone} maxLength={12} onChange={(e) => setEditForm(p => ({ ...p, phone: formatPakistaniPhone(e.target.value) }))} /></div>
             <div className="space-y-1.5"><Label>Email</Label><Input placeholder="Email" value={editForm.email} onChange={(e) => setEditForm(p => ({ ...p, email: e.target.value }))} /></div>
             <div className="space-y-1.5"><Label>Address</Label><Input placeholder="Address" value={editForm.address} onChange={(e) => setEditForm(p => ({ ...p, address: e.target.value }))} /></div>
           </div>
