@@ -65,6 +65,8 @@ const statusConfig = {
   available:        { card: "border-success/40 hover:border-success",             dot: "bg-success",     bg: "bg-success/8",     icon: "text-success",     label: "Available" },
   occupied:         { card: "border-accent/40 hover:border-accent",               dot: "bg-accent",       bg: "bg-accent/8",       icon: "text-accent",       label: "Occupied" },
   "bill-requested": { card: "border-destructive/40 hover:border-destructive",     dot: "bg-destructive", bg: "bg-destructive/8", icon: "text-destructive", label: "Bill Req." },
+  reserved:         { card: "border-warning/40 hover:border-warning",             dot: "bg-warning",     bg: "bg-warning/8",     icon: "text-warning",     label: "Reserved" },
+  maintenance:      { card: "border-muted hover:border-muted",                     dot: "bg-muted",       bg: "bg-muted/8",       icon: "text-muted",       label: "Maintenance" },
 } as const;
 
 const renderMiniChairs = (shape: string, capacity: number, chairBgClass: string) => {
@@ -448,7 +450,8 @@ const WaiterPanel = () => {
 
     if (t) {
       if (t.status === "occupied") return "occupied";
-      if (t.status === "reserved") return "occupied"; // map reserved to occupied for UI session
+      if (t.status === "reserved") return "reserved";
+      if (t.status === "maintenance") return "maintenance";
     }
     return "available";
   };
@@ -1006,6 +1009,11 @@ const WaiterPanel = () => {
       }
       const unpaidOrders = activeTableOrders.filter(isOrderUnpaid);
       if (unpaidOrders.length > 0) {
+        const isReservationDineIn = Boolean(activeReservationForTable);
+        const mLower = paymentMethod.toLowerCase();
+        const isCashMethod = mLower.includes("cash") && !mLower.includes("jazz") && !mLower.includes("easy");
+        const shouldBeApproved = !isCashMethod || isReservationDineIn;
+
         await Promise.all(
           unpaidOrders.map((o) =>
             orderService.updateOrderStatus(o.id, "completed")
@@ -1013,7 +1021,7 @@ const WaiterPanel = () => {
         );
         await Promise.all(
           unpaidOrders.map((o) =>
-            orderService.updateOrder(o.id, { paymentMethod })
+            orderService.updateOrder(o.id, { paymentMethod, cashApproved: shouldBeApproved })
           )
         );
         await loadOrders();

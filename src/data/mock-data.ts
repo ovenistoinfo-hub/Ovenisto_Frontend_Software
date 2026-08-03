@@ -222,6 +222,7 @@ export interface Order {
   modificationLog?: OrderModificationLog[];
   createdAt?: string;
   updatedAt?: string;
+  cashApproved?: boolean;
 }
 
 export const orders: Order[] = [
