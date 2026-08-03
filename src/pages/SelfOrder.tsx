@@ -68,10 +68,39 @@ interface PersistedSession {
   viewingMenu: boolean;
   sessionToken: string | null;
   promotedGuestCount: number | null;
+  sittingGeneration: string | null;
 }
 
+// Persisted sessions are keyed per BROWSER TAB, not just per table. Two tabs on the
+// same device (e.g. testing "host" and "viewer" side by side, or a customer opening
+// the link twice) share the same origin's localStorage — without a per-tab id, the
+// second tab would silently read/overwrite the first tab's sessionToken and the two
+// would collide into a single identity, corrupting the host/viewer split entirely
+// (the second tab reconnects AS the host instead of becoming a distinct viewer, and
+// its later writes can clobber the first tab's saved token too). sessionStorage is
+// scoped per-tab by the browser (survives reloads of the same tab, never shared with
+// a different tab/window), so a device id minted from it is a stable per-tab identity.
+const DEVICE_ID_KEY = "ovenisto_self_order_device_id";
+
+function resolveDeviceId(): string {
+  try {
+    let id = sessionStorage.getItem(DEVICE_ID_KEY);
+    if (!id) {
+      id = crypto.randomUUID();
+      sessionStorage.setItem(DEVICE_ID_KEY, id);
+    }
+    return id;
+  } catch {
+    // sessionStorage can throw in private-browsing/quota-exceeded cases — fall back to
+    // a per-load id; it just means this tab won't remember its session across a reload.
+    return crypto.randomUUID();
+  }
+}
+
+const deviceId = resolveDeviceId();
+
 function sessionStorageKey(tableId: string): string {
-  return `ovenisto_self_order_session_${tableId}`;
+  return `ovenisto_self_order_session_${tableId}_${deviceId}`;
 }
 
 function loadPersistedSession(tableId: string): PersistedSession | null {
@@ -150,6 +179,7 @@ const SelfOrder = () => {
   const [requestTimedOut, setRequestTimedOut] = useState(false);
   const [incomingHostRequest, setIncomingHostRequest] = useState(false);
   const [promotedGuestCount, setPromotedGuestCount] = useState<number | null>(null);
+  const [sittingGeneration, setSittingGeneration] = useState<string | null>(null);
 
   useEffect(() => {
     if (!tableId) { setTableError("No table specified — please scan the QR code on your table."); setTableLoading(false); return; }
@@ -175,6 +205,7 @@ const SelfOrder = () => {
       setViewingMenu(persisted.viewingMenu ?? false);
       setSessionToken(persisted.sessionToken);
       setPromotedGuestCount(persisted.promotedGuestCount ?? null);
+      setSittingGeneration(persisted.sittingGeneration ?? null);
     }
     setHydrated(true);
   }, [table, hydrated]);
@@ -183,9 +214,9 @@ const SelfOrder = () => {
     if (!table || !hydrated) return;
     savePersistedSession(table.tableId, {
       entryDone, customerName, customerPhone, guestCount, cart, notes,
-      orders, viewingMenu, sessionToken, promotedGuestCount,
+      orders, viewingMenu, sessionToken, promotedGuestCount, sittingGeneration,
     });
-  }, [table, hydrated, entryDone, customerName, customerPhone, guestCount, cart, notes, orders, viewingMenu, sessionToken, promotedGuestCount]);
+  }, [table, hydrated, entryDone, customerName, customerPhone, guestCount, cart, notes, orders, viewingMenu, sessionToken, promotedGuestCount, sittingGeneration]);
 
   // Fetches orders already placed at this table this sitting and merges them
   // into local state, keyed by orderId (existing local entries keep their
@@ -218,8 +249,8 @@ const SelfOrder = () => {
         { tableId: table.tableId, sessionToken: sessionToken ?? undefined },
         (
           res:
-            | { role: "host"; sessionToken: string }
-            | { role: "viewer" }
+            | { role: "host"; sessionToken: string; sittingGeneration: string }
+            | { role: "viewer"; sittingGeneration: string }
             | { role: "blocked"; reason: "table-occupied" }
             | { error: string }
         ) => {
@@ -229,27 +260,29 @@ const SelfOrder = () => {
             setBlocked(true);
             return;
           }
+          // A different sittingGeneration than what this device last saw means
+          // the server has no memory of this device's old sitting (cleared on
+          // End Sitting, or invalidated by a new sitting starting at this
+          // table) — its persisted data (name/cart/orders) belongs to a
+          // sitting that's no longer live, whether this device ends up host OR
+          // viewer this time. A first-ever visit also lands here
+          // (sittingGeneration starts null) but there is nothing stale to
+          // reset in that case.
+          const isStaleReturningDevice = sittingGeneration !== null && sittingGeneration !== res.sittingGeneration;
+          if (isStaleReturningDevice) {
+            setEntryDone(false);
+            setCustomerName("");
+            setCustomerPhone("");
+            setGuestCount(2);
+            setCart([]);
+            setNotes("");
+            setOrders([]);
+            setViewingMenu(false);
+            setPromotedGuestCount(null);
+          }
+          setSittingGeneration(res.sittingGeneration);
           setRole(res.role);
           if (res.role === "host") {
-            // The server only hands out a DIFFERENT token than the one this
-            // device already had when it has no memory of that old session
-            // (cleared on End Sitting, or invalidated by a new sitting
-            // starting at this table) — i.e. this device's persisted data
-            // belongs to a sitting that is no longer live. A first-ever visit
-            // also lands here (sessionToken starts null) but there is nothing
-            // stale to reset in that case.
-            const isStaleReturningDevice = sessionToken !== null && sessionToken !== res.sessionToken;
-            if (isStaleReturningDevice) {
-              setEntryDone(false);
-              setCustomerName("");
-              setCustomerPhone("");
-              setGuestCount(2);
-              setCart([]);
-              setNotes("");
-              setOrders([]);
-              setViewingMenu(false);
-              setPromotedGuestCount(null);
-            }
             setSessionToken(res.sessionToken);
             reconcileActiveOrders(table.tableId);
           }
@@ -270,7 +303,16 @@ const SelfOrder = () => {
       setRequestPending(false);
       toast.error("Request declined");
     };
-    const onRoleChanged = (payload: { role: "host"; sessionToken: string; guestCount?: number | null } | { role: "viewer" }) => {
+    const onRoleChanged = (
+      payload:
+        | { role: "host"; sessionToken: string; guestCount?: number | null; sittingGeneration: string }
+        | { role: "viewer"; sittingGeneration: string }
+    ) => {
+      // A takeover handoff is always within the SAME sitting (the server never
+      // changes sittingGeneration for this event) — just keep the locally
+      // stored value in sync, never reset local data here. A promoted device
+      // must keep whatever orders it already placed earlier in this sitting.
+      setSittingGeneration(payload.sittingGeneration);
       setRole(payload.role);
       if (payload.role === "host") {
         setSessionToken(payload.sessionToken);
@@ -298,7 +340,7 @@ const SelfOrder = () => {
       socket.off("host-request:declined", onHostRequestDeclined);
       socket.off("role:changed", onRoleChanged);
     };
-  }, [table, hydrated, sessionToken, reconcileActiveOrders]);
+  }, [table, hydrated, sessionToken, sittingGeneration, reconcileActiveOrders]);
 
   useEffect(() => {
     if (!sessionEnded || !table) return;
