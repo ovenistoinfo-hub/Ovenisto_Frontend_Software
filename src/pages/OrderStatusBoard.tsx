@@ -260,11 +260,15 @@ const OrderStatusBoard = () => {
               <Badge variant="outline" className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-background/80 border-border/60">
                 {order.type}
               </Badge>
-              {order.tableNumber && (
-                <Badge className="text-[10px] font-extrabold px-1.5 py-0.5 rounded-md bg-rose-500/90 text-white">
-                  T-{order.tableNumber}
-                </Badge>
-              )}
+              {order.tableNumber && (() => {
+                const sameTableOrders = allOrders.filter(o => o.tableNumber === order.tableNumber && o.status !== "cancelled");
+                const orderIdx = sameTableOrders.findIndex(o => o.id === order.id);
+                return (
+                  <Badge className="text-[10px] font-extrabold px-1.5 py-0.5 rounded-md bg-rose-500/90 text-white">
+                    T-{order.tableNumber}{sameTableOrders.length > 1 ? ` (${orderIdx + 1}/${sameTableOrders.length})` : ""}
+                  </Badge>
+                );
+              })()}
             </div>
             <span className="text-[10px] font-mono font-bold text-muted-foreground bg-background/80 px-2 py-0.5 rounded-full flex items-center gap-1 border border-border/50">
               <Timer className="h-3 w-3 text-amber-500" />

@@ -17,7 +17,7 @@ import { useTableEvents } from "@/hooks/use-table-events";
 import { useReservationEvents } from "@/hooks/use-reservation-events";
 import { useSelfMutationGuard } from "@/hooks/use-self-mutation-guard";
 import { getSocket } from "@/lib/socket";
-import { Search, Plus, Minus, X, ShoppingCart, FileText, Printer, ArrowLeft, Trash2, User, Users, MapPin, Phone, Flame, Check, CreditCard, Banknote, Smartphone, RotateCcw, Download, ClipboardList, AlertTriangle, UtensilsCrossed, CalendarClock, Calendar, Timer, ChefHat, Tag, Zap, History, Monitor, BookOpen, StickyNote, Eye, Building2, Crown, CircleAlert, Bell, DollarSign, Package, Ban, Truck, ShoppingBag, Utensils, AlertCircle, CheckCircle2, Clock, Loader2 } from "lucide-react";
+import { Search, Plus, Minus, X, ShoppingCart, FileText, Printer, ArrowLeft, Trash2, User, Users, MapPin, Phone, Flame, Check, CreditCard, Banknote, Smartphone, RotateCcw, Download, ClipboardList, AlertTriangle, UtensilsCrossed, CalendarClock, Calendar, Timer, ChefHat, Tag, Zap, History, Monitor, BookOpen, StickyNote, Eye, Building2, Crown, CircleAlert, Bell, DollarSign, Package, Ban, Truck, ShoppingBag, Utensils, AlertCircle, CheckCircle2, Clock, Loader2, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -515,6 +515,10 @@ const POS = () => {
       await orderService.updateOrder(orderId, { cashApproved: true });
       toast.success(`Cash approved for Order ${orderNumber}!`);
       await loadApiOrders();
+      const localMatch = localOrdersData.find(o => o.id === orderId);
+      if (localMatch) {
+        updateDataItem("orders", orderId, { ...localMatch, cashApproved: true });
+      }
     } catch (err: any) {
       toast.error(err?.message || "Failed to approve cash");
     } finally {
@@ -687,20 +691,49 @@ const POS = () => {
     };
 
     const shiftStartMs = new Date(activeShift.openedAt).getTime();
-    const isWaiterOrder = (o: any) => o.orderSource === "waiter" || (o.staff && o.staff.toLowerCase().includes("waiter"));
+    const isWaiterOrder = (o: any) => {
+      if (!o) return false;
+      const src = (o.orderSource || "").toLowerCase();
+      if (src === "waiter" || src === "self-order" || src === "table") return true;
+      if (o.tableNumber != null && o.tableNumber !== "" && !isNaN(Number(o.tableNumber))) return true;
+      const type = (o.type || "").toLowerCase();
+      if (type.includes("dine") || type.includes("self") || type.includes("waiter")) return true;
+      const staff = (o.staff || "").toLowerCase();
+      if (staff.includes("waiter")) return true;
+      return false;
+    };
     const isCashOrder = (o: any) => {
       const pm = (o.paymentMethod || "").toLowerCase().trim();
       return pm.includes("cash") && !pm.includes("jazz") && !pm.includes("easy") && !pm.includes("online") && !pm.includes("card") && !pm.includes("mobile") && !pm.includes("paisa");
     };
 
+    const getSafeOrderTimestamp = (o: any): number => {
+      if (!o) return 0;
+      if (o.createdAt) {
+        const ms = new Date(o.createdAt).getTime();
+        if (!isNaN(ms) && ms > 0) return ms;
+      }
+      if (o.updatedAt) {
+        const ms = new Date(o.updatedAt).getTime();
+        if (!isNaN(ms) && ms > 0) return ms;
+      }
+      if (o.date) {
+        const dateStr = String(o.date).split("T")[0];
+        const timeStr = o.time ? String(o.time).trim() : "";
+        if (timeStr) {
+          const ms = new Date(`${dateStr} ${timeStr}`).getTime();
+          if (!isNaN(ms) && ms > 0) return ms;
+        }
+        const ms = new Date(dateStr).getTime();
+        if (!isNaN(ms) && ms > 0) return ms;
+      }
+      return 0;
+    };
+
     const shiftOrders = allOrdersData.filter(o => {
       if (o.status === "cancelled") return false;
 
-      const orderTimeMs = Math.max(
-        o.updatedAt ? new Date(o.updatedAt).getTime() : 0,
-        o.createdAt ? new Date(o.createdAt).getTime() : 0,
-        o.date ? new Date(o.date).getTime() : 0
-      );
+      const orderTimeMs = getSafeOrderTimestamp(o);
 
       // 1. Orders created or updated during this active shift
       if (orderTimeMs >= shiftStartMs) return true;
@@ -736,7 +769,15 @@ const POS = () => {
         });
       }
 
-      if (splits.length === 0) {
+      if (splits.length > 0) {
+        const rawSum = splits.reduce((sum, s) => sum + s.amount, 0);
+        if (rawSum > 0 && Math.abs(rawSum - orderTotal) > 0.01) {
+          const ratio = orderTotal / rawSum;
+          splits.forEach(s => {
+            s.amount = Math.round(s.amount * ratio * 100) / 100;
+          });
+        }
+      } else {
         splits.push({ method: pm, amount: orderTotal });
       }
 
@@ -3467,178 +3508,237 @@ const POS = () => {
 
       {/* Register Close Dialog */}
       <Dialog open={showRegisterClose} onOpenChange={setShowRegisterClose}>
-        <DialogContent className="max-w-[95vw] sm:max-w-3xl max-h-[92vh] overflow-y-auto p-4 sm:p-6">
-          <DialogHeader className="border-b pb-3">
-            <div className="flex items-center justify-between">
-              <DialogTitle className="flex items-center gap-2 text-xl font-extrabold text-foreground">
-                <Banknote className="h-6 w-6 text-primary" />
-                Close Cash Register & Shift Reconciliation
+        <DialogContent className="max-w-[95vw] sm:max-w-4xl lg:max-w-5xl xl:max-w-6xl max-h-[92vh] overflow-y-auto p-4 sm:p-6 lg:p-8 rounded-3xl border-border/80 shadow-2xl backdrop-blur-md bg-card/95">
+          <DialogHeader className="border-b border-border/60 pb-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <DialogTitle className="flex items-center gap-2.5 text-xl sm:text-2xl font-black tracking-tight text-foreground">
+                <div className="h-10 w-10 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary shrink-0 shadow-sm">
+                  <Banknote className="h-5 w-5" />
+                </div>
+                <div>
+                  <span>Close Cash Register & Shift Reconciliation</span>
+                  <p className="text-xs font-normal text-muted-foreground mt-0.5">Review shift sales, count physical drawer cash, and reconcile differences.</p>
+                </div>
               </DialogTitle>
               {activeShift && (
-                <Badge variant="outline" className="text-xs font-bold px-3 py-1 bg-primary/10 text-primary border-primary/30">
+                <Badge variant="outline" className="self-start sm:self-auto text-xs font-bold px-3 py-1.5 bg-primary/10 text-primary border-primary/30 rounded-xl flex items-center gap-1.5 shadow-sm shrink-0">
+                  <Clock className="h-3.5 w-3.5" />
                   Shift #{activeShift.shiftNumber}
                 </Badge>
               )}
             </div>
-            <p className="text-xs text-muted-foreground mt-1">
+            <DialogDescription className="text-xs text-muted-foreground mt-2 flex items-center gap-2">
+              <User className="h-3.5 w-3.5 text-primary" />
               Opened by <strong className="text-foreground">{activeShift?.cashierName || user?.name || "Cashier"}</strong> at {activeShift?.openedAt ? new Date(activeShift.openedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "—"}
-            </p>
+            </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-5 py-2 text-sm">
+          <div className="space-y-6 py-3 text-sm">
             {/* Top Key Metrics Grid */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <Card className="p-3 bg-muted/30 border-border/70">
-                <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Opening Cash</p>
-                <p className="font-extrabold text-lg sm:text-xl text-foreground mt-0.5">{effectiveSettings.currency} {(activeShift?.openingCash || 0).toLocaleString()}</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+              <Card className="p-4 bg-muted/30 border-border/70 rounded-2xl shadow-sm hover:border-primary/30 transition-colors">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Opening Cash</span>
+                  <div className="h-8 w-8 rounded-xl bg-muted/60 border border-border/60 flex items-center justify-center text-muted-foreground">
+                    <Banknote className="h-4 w-4" />
+                  </div>
+                </div>
+                <p className="font-black text-xl sm:text-2xl text-foreground mt-2 font-mono">{effectiveSettings.currency} {(activeShift?.openingCash || 0).toLocaleString()}</p>
+                <span className="text-[10px] text-muted-foreground font-medium mt-1 block">Initial register balance</span>
               </Card>
 
-              <Card className="p-3 bg-muted/30 border-border/70">
-                <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">POS Sales ({shiftSales.pos.count})</p>
-                <p className="font-extrabold text-lg sm:text-xl text-amber-500 mt-0.5">{effectiveSettings.currency} {shiftSales.pos.total.toLocaleString()}</p>
-                <p className="text-[10px] text-muted-foreground font-medium">Cash: {effectiveSettings.currency} {shiftSales.pos.cash.toLocaleString()}</p>
+              <Card className="p-4 bg-amber-500/5 border-amber-500/20 rounded-2xl shadow-sm hover:border-amber-500/40 transition-colors">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider">POS Sales ({shiftSales.pos.count})</span>
+                  <div className="h-8 w-8 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-500">
+                    <Flame className="h-4 w-4" />
+                  </div>
+                </div>
+                <p className="font-black text-xl sm:text-2xl text-amber-600 dark:text-amber-400 mt-2 font-mono">{effectiveSettings.currency} {shiftSales.pos.total.toLocaleString()}</p>
+                <span className="text-[10px] text-amber-600/80 dark:text-amber-400/80 font-semibold mt-1 block">Cash: {effectiveSettings.currency} {shiftSales.pos.cash.toLocaleString()}</span>
               </Card>
 
-              <Card className="p-3 bg-muted/30 border-border/70">
-                <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Waiter Sales ({shiftSales.waiter.count})</p>
-                <p className="font-extrabold text-lg sm:text-xl text-blue-500 mt-0.5">{effectiveSettings.currency} {shiftSales.waiter.total.toLocaleString()}</p>
-                <p className="text-[10px] text-muted-foreground font-medium">Cash: {effectiveSettings.currency} {shiftSales.waiter.cash.toLocaleString()}</p>
+              <Card className="p-4 bg-blue-500/5 border-blue-500/20 rounded-2xl shadow-sm hover:border-blue-500/40 transition-colors">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider">Waiter Sales ({shiftSales.waiter.count})</span>
+                  <div className="h-8 w-8 rounded-xl bg-blue-500/15 border border-blue-500/30 flex items-center justify-center text-blue-500">
+                    <UtensilsCrossed className="h-4 w-4" />
+                  </div>
+                </div>
+                <p className="font-black text-xl sm:text-2xl text-blue-600 dark:text-blue-400 mt-2 font-mono">{effectiveSettings.currency} {shiftSales.waiter.total.toLocaleString()}</p>
+                <span className="text-[10px] text-blue-600/80 dark:text-blue-400/80 font-semibold mt-1 block">Cash: {effectiveSettings.currency} {shiftSales.waiter.cash.toLocaleString()}</span>
               </Card>
 
-              <Card className="p-3 bg-primary/10 border-primary/30">
-                <p className="text-[11px] font-semibold text-primary uppercase tracking-wider">Total Sales ({shiftSales.count})</p>
-                <p className="font-extrabold text-lg sm:text-xl text-primary mt-0.5">{effectiveSettings.currency} {shiftSales.total.toLocaleString()}</p>
-                <p className="text-[10px] text-primary/80 font-medium">Total Cash: {effectiveSettings.currency} {shiftSales.cash.toLocaleString()}</p>
+              <Card className="p-4 bg-emerald-500/10 border-emerald-500/30 rounded-2xl shadow-sm hover:border-emerald-500/50 transition-colors">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">Total Sales ({shiftSales.count})</span>
+                  <div className="h-8 w-8 rounded-xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-500">
+                    <DollarSign className="h-4 w-4" />
+                  </div>
+                </div>
+                <p className="font-black text-xl sm:text-2xl text-emerald-600 dark:text-emerald-400 mt-2 font-mono">{effectiveSettings.currency} {shiftSales.total.toLocaleString()}</p>
+                <span className="text-[10px] text-emerald-600/80 dark:text-emerald-400/80 font-extrabold mt-1 block">Total Cash: {effectiveSettings.currency} {shiftSales.cash.toLocaleString()}</span>
               </Card>
             </div>
 
             {/* SECTION 1: POS Sales Breakdown */}
-            <div className="space-y-3 bg-card rounded-2xl p-4 border border-border/70">
-              <div className="flex items-center justify-between border-b border-border/50 pb-2">
-                <h3 className="font-extrabold text-sm flex items-center gap-2 text-foreground">
+            <div className="space-y-4 bg-card rounded-3xl p-5 border border-border/70 shadow-sm">
+              <div className="flex items-center justify-between border-b border-border/50 pb-3">
+                <h3 className="font-black text-sm flex items-center gap-2 text-foreground uppercase tracking-wide">
                   <Flame className="h-4 w-4 text-amber-500" />
                   POS Counter Sales Breakdown
                 </h3>
-                <Badge variant="secondary" className="text-xs font-bold">{shiftSales.pos.count} orders</Badge>
+                <Badge variant="secondary" className="text-xs font-bold px-2.5 py-0.5 rounded-lg">{shiftSales.pos.count} orders</Badge>
               </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                <div className="p-2.5 rounded-xl bg-muted/40 border border-border/50">
-                  <span className="text-[10px] text-muted-foreground font-semibold block">Total POS Sales</span>
-                  <span className="font-extrabold text-sm text-foreground">{effectiveSettings.currency} {shiftSales.pos.total.toLocaleString()}</span>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="p-3 rounded-2xl bg-muted/40 border border-border/50">
+                  <span className="text-[11px] text-muted-foreground font-bold block uppercase tracking-wider">Total POS Sales</span>
+                  <span className="font-extrabold text-base text-foreground font-mono mt-0.5 block">{effectiveSettings.currency} {shiftSales.pos.total.toLocaleString()}</span>
                 </div>
-                <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
-                  <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold block">POS Cash Sales</span>
-                  <span className="font-extrabold text-sm text-emerald-600 dark:text-emerald-400">{effectiveSettings.currency} {shiftSales.pos.cash.toLocaleString()}</span>
+                <div className="p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/20">
+                  <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-bold block uppercase tracking-wider">POS Cash Sales</span>
+                  <span className="font-extrabold text-base text-emerald-600 dark:text-emerald-400 font-mono mt-0.5 block">{effectiveSettings.currency} {shiftSales.pos.cash.toLocaleString()}</span>
                 </div>
-                <div className="p-2.5 rounded-xl bg-info/10 border border-info/20">
-                  <span className="text-[10px] text-info font-semibold block">POS Card/Online</span>
-                  <span className="font-extrabold text-sm text-info">{effectiveSettings.currency} {shiftSales.pos.nonCash.toLocaleString()}</span>
+                <div className="p-3 rounded-2xl bg-info/10 border border-info/20">
+                  <span className="text-[11px] text-info font-bold block uppercase tracking-wider">POS Non-Cash</span>
+                  <span className="font-extrabold text-base text-info font-mono mt-0.5 block">{effectiveSettings.currency} {shiftSales.pos.nonCash.toLocaleString()}</span>
                 </div>
-                <div className="p-2.5 rounded-xl bg-muted/40 border border-border/50">
-                  <span className="text-[10px] text-muted-foreground font-semibold block">POS Orders</span>
-                  <span className="font-extrabold text-sm text-foreground">{shiftSales.pos.count} orders</span>
+                <div className="p-3 rounded-2xl bg-muted/40 border border-border/50">
+                  <span className="text-[11px] text-muted-foreground font-bold block uppercase tracking-wider">Order Volume</span>
+                  <span className="font-extrabold text-base text-foreground mt-0.5 block">{shiftSales.pos.count} orders</span>
                 </div>
               </div>
 
               {/* Payment Methods breakdown for POS */}
               <div>
-                <p className="text-[11px] font-extrabold text-muted-foreground uppercase tracking-wider mb-2">POS Sales by Payment Method</p>
-                <div className="flex flex-wrap gap-2">
-                  {Object.entries(shiftSales.pos.byMethod).map(([method, amount]) => (
-                    <div key={method} className="flex items-center gap-2 bg-muted/50 border border-border/60 rounded-xl px-3 py-1.5 text-xs font-semibold">
-                      <span className="text-muted-foreground">{method}:</span>
-                      <span className="font-bold text-foreground">{effectiveSettings.currency} {amount.toLocaleString()}</span>
-                    </div>
-                  ))}
+                <p className="text-[11px] font-extrabold text-muted-foreground uppercase tracking-wider mb-2.5 flex items-center gap-1.5">
+                  <CreditCard className="h-3.5 w-3.5 text-primary" />
+                  POS Sales by Payment Method
+                </p>
+                <div className="flex flex-wrap gap-2.5">
+                  {Object.entries(shiftSales.pos.byMethod).map(([method, amount]) => {
+                    const mLower = method.toLowerCase();
+                    const isCash = mLower.includes("cash") && !mLower.includes("jazz") && !mLower.includes("easy") && !mLower.includes("online") && !mLower.includes("card") && !mLower.includes("mobile") && !mLower.includes("paisa");
+                    return (
+                      <div key={method} className="flex items-center gap-2 bg-muted/50 border border-border/70 rounded-2xl px-3.5 py-2 text-xs font-bold shadow-xs">
+                        {isCash ? <Banknote className="h-3.5 w-3.5 text-emerald-500" /> : mLower.includes("card") ? <CreditCard className="h-3.5 w-3.5 text-info" /> : <Smartphone className="h-3.5 w-3.5 text-purple-500" />}
+                        <span className="text-muted-foreground">{method}:</span>
+                        <span className="font-extrabold text-foreground font-mono">{effectiveSettings.currency} {amount.toLocaleString()}</span>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             </div>
 
             {/* SECTION 2: Waiter Panel Sales Detailed View */}
-            <div className="space-y-3 bg-card rounded-2xl p-4 border border-border/70">
-              <div className="flex items-center justify-between border-b border-border/50 pb-2">
-                <h3 className="font-extrabold text-sm flex items-center gap-2 text-foreground">
+            <div className="space-y-4 bg-card rounded-3xl p-5 border border-border/70 shadow-sm">
+              <div className="flex items-center justify-between border-b border-border/50 pb-3">
+                <h3 className="font-black text-sm flex items-center gap-2 text-foreground uppercase tracking-wide">
                   <UtensilsCrossed className="h-4 w-4 text-blue-500" />
                   Waiter Panel Sales (Detailed View)
                 </h3>
-                <Badge variant="secondary" className="text-xs font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20">{shiftSales.waiter.count} orders</Badge>
+                <Badge variant="secondary" className="text-xs font-bold bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20 px-2.5 py-0.5 rounded-lg">{shiftSales.waiter.count} orders</Badge>
               </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                <div className="p-2.5 rounded-xl bg-muted/40 border border-border/50">
-                  <span className="text-[10px] text-muted-foreground font-semibold block">Total Waiter Sales</span>
-                  <span className="font-extrabold text-sm text-foreground">{effectiveSettings.currency} {shiftSales.waiter.total.toLocaleString()}</span>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="p-3 rounded-2xl bg-muted/40 border border-border/50">
+                  <span className="text-[11px] text-muted-foreground font-bold block uppercase tracking-wider">Total Waiter Sales</span>
+                  <span className="font-extrabold text-base text-foreground font-mono mt-0.5 block">{effectiveSettings.currency} {shiftSales.waiter.total.toLocaleString()}</span>
                 </div>
-                <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
-                  <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold block">Waiter Cash Collected</span>
-                  <span className="font-extrabold text-sm text-emerald-600 dark:text-emerald-400">{effectiveSettings.currency} {shiftSales.waiter.cash.toLocaleString()}</span>
+                <div className="p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/20">
+                  <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-bold block uppercase tracking-wider">Waiter Cash Collected</span>
+                  <span className="font-extrabold text-base text-emerald-600 dark:text-emerald-400 font-mono mt-0.5 block">{effectiveSettings.currency} {shiftSales.waiter.cash.toLocaleString()}</span>
                 </div>
-                <div className="p-2.5 rounded-xl bg-info/10 border border-info/20">
-                  <span className="text-[10px] text-info font-semibold block">Waiter Non-Cash</span>
-                  <span className="font-extrabold text-sm text-info">{effectiveSettings.currency} {shiftSales.waiter.nonCash.toLocaleString()}</span>
+                <div className="p-3 rounded-2xl bg-info/10 border border-info/20">
+                  <span className="text-[11px] text-info font-bold block uppercase tracking-wider">Waiter Non-Cash</span>
+                  <span className="font-extrabold text-base text-info font-mono mt-0.5 block">{effectiveSettings.currency} {shiftSales.waiter.nonCash.toLocaleString()}</span>
                 </div>
-                <div className="p-2.5 rounded-xl bg-muted/40 border border-border/50">
-                  <span className="text-[10px] text-muted-foreground font-semibold block">Waiter Orders</span>
-                  <span className="font-extrabold text-sm text-foreground">{shiftSales.waiter.count} orders</span>
+                <div className="p-3 rounded-2xl bg-muted/40 border border-border/50">
+                  <span className="text-[11px] text-muted-foreground font-bold block uppercase tracking-wider">Waiter Orders</span>
+                  <span className="font-extrabold text-base text-foreground mt-0.5 block">{shiftSales.waiter.count} orders</span>
                 </div>
               </div>
 
               {/* Payment Methods breakdown for Waiter Panel Completed Sales */}
               <div>
-                <p className="text-[11px] font-extrabold text-muted-foreground uppercase tracking-wider mb-2">Waiter Sales by Payment Method</p>
-                <div className="flex flex-wrap gap-2">
-                  {Object.entries(shiftSales.waiter.byMethod).map(([method, amount]) => (
-                    <div key={method} className="flex items-center gap-2 bg-muted/50 border border-border/60 rounded-xl px-3 py-1.5 text-xs font-semibold">
-                      <span className="text-muted-foreground">{method}:</span>
-                      <span className="font-bold text-foreground">{effectiveSettings.currency} {amount.toLocaleString()}</span>
-                    </div>
-                  ))}
+                <p className="text-[11px] font-extrabold text-muted-foreground uppercase tracking-wider mb-2.5 flex items-center gap-1.5">
+                  <CreditCard className="h-3.5 w-3.5 text-blue-500" />
+                  Waiter Sales by Payment Method
+                </p>
+                <div className="flex flex-wrap gap-2.5">
+                  {Object.entries(shiftSales.waiter.byMethod).map(([method, amount]) => {
+                    const mLower = method.toLowerCase();
+                    const isCash = mLower.includes("cash") && !mLower.includes("jazz") && !mLower.includes("easy") && !mLower.includes("online") && !mLower.includes("card") && !mLower.includes("mobile") && !mLower.includes("paisa");
+                    return (
+                      <div key={method} className="flex items-center gap-2 bg-muted/50 border border-border/70 rounded-2xl px-3.5 py-2 text-xs font-bold shadow-xs">
+                        {isCash ? <Banknote className="h-3.5 w-3.5 text-emerald-500" /> : mLower.includes("card") ? <CreditCard className="h-3.5 w-3.5 text-info" /> : <Smartphone className="h-3.5 w-3.5 text-purple-500" />}
+                        <span className="text-muted-foreground">{method}:</span>
+                        <span className="font-extrabold text-foreground font-mono">{effectiveSettings.currency} {amount.toLocaleString()}</span>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
 
               {/* Detailed Orders Table for Waiter Panel Completed Sales */}
-              <div className="mt-3 pt-2">
-                <p className="text-[11px] font-extrabold text-muted-foreground uppercase tracking-wider mb-2">Waiter Orders List ({shiftSales.waiter.orders.length})</p>
+              <div className="mt-4 pt-2">
+                <p className="text-[11px] font-extrabold text-muted-foreground uppercase tracking-wider mb-2.5 flex items-center gap-1.5">
+                  <ClipboardList className="h-3.5 w-3.5 text-primary" />
+                  Waiter Orders List ({shiftSales.waiter.orders.length})
+                </p>
                 {shiftSales.waiter.orders.length === 0 ? (
-                  <div className="p-4 text-center text-xs text-muted-foreground bg-muted/30 rounded-xl border border-dashed border-border/60">
+                  <div className="p-6 text-center text-xs text-muted-foreground bg-muted/30 rounded-2xl border border-dashed border-border/60">
                     No completed sales recorded from Waiter Panel in this shift.
                   </div>
                 ) : (
-                  <div className="max-h-48 overflow-y-auto rounded-xl border border-border/60 bg-muted/20">
-                    <Table>
-                      <TableHeader>
-                        <TableRow className="text-[10px] uppercase font-bold text-muted-foreground">
-                          <TableHead className="py-2">Order #</TableHead>
-                          <TableHead className="py-2">Table</TableHead>
-                          <TableHead className="py-2">Waiter</TableHead>
-                          <TableHead className="py-2">Method</TableHead>
-                          <TableHead className="py-2 text-center">Status</TableHead>
-                          <TableHead className="py-2 text-right">Amount</TableHead>
-                          <TableHead className="py-2 text-center">Action</TableHead>
+                  <div className="overflow-x-auto rounded-2xl border border-border/60 bg-muted/20 max-h-64 shadow-xs">
+                    <Table className="min-w-[680px]">
+                      <TableHeader className="sticky top-0 z-10 bg-card">
+                        <TableRow className="text-[10px] uppercase font-bold text-muted-foreground border-b border-border/60 bg-muted/50">
+                          <TableHead className="py-2.5 px-3 w-28">Order #</TableHead>
+                          <TableHead className="py-2.5 px-3 w-32">Table</TableHead>
+                          <TableHead className="py-2.5 px-3 w-32">Waiter</TableHead>
+                          <TableHead className="py-2.5 px-3">Method</TableHead>
+                          <TableHead className="py-2.5 px-3 text-center w-28">Status</TableHead>
+                          <TableHead className="py-2.5 px-3 text-right w-28">Amount</TableHead>
+                          <TableHead className="py-2.5 px-3 text-center w-32">Action</TableHead>
                         </TableRow>
                       </TableHeader>
-                      <TableBody className="text-xs font-medium">
+                      <TableBody className="text-xs font-medium divide-y divide-border/40">
                         {shiftSales.waiter.orders.map((o: any) => {
                           const pm = (o.paymentMethod || "").toLowerCase().trim();
                           const isCashOrder = pm.includes("cash") && !pm.includes("jazz") && !pm.includes("easy") && !pm.includes("online") && !pm.includes("card") && !pm.includes("mobile") && !pm.includes("paisa");
                           const isApproved = o.cashApproved === true || !isCashOrder;
 
                           return (
-                            <TableRow key={o.id} className="hover:bg-muted/40">
-                              <TableCell className="py-2 font-bold">{o.orderNumber}</TableCell>
-                              <TableCell className="py-2">{o.tableNumber ? `Table ${o.tableNumber}` : "—"}</TableCell>
-                              <TableCell className="py-2">{o.staff || "Waiter"}</TableCell>
-                              <TableCell className="py-2"><Badge variant="outline" className="text-[9px]">{o.paymentMethod || "Cash"}</Badge></TableCell>
-                              <TableCell className="py-2 text-center">
-                                <Badge className={cn("text-[9px] px-1.5 py-0 capitalize", isApproved ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400" : "bg-amber-500/15 text-amber-600 dark:text-amber-400")}>
+                            <TableRow key={o.id} className="hover:bg-muted/40 transition-colors">
+                              <TableCell className="py-2.5 px-3 font-bold font-mono text-foreground">{o.orderNumber}</TableCell>
+                              <TableCell className="py-2.5 px-3 font-semibold text-foreground">
+                                {o.tableNumber ? (() => {
+                                  const sameTable = shiftSales.waiter.orders.filter((w: any) => w.tableNumber === o.tableNumber);
+                                  const idx = sameTable.findIndex((w: any) => w.id === o.id);
+                                  return `Table ${o.tableNumber}${sameTable.length > 1 ? ` (${idx + 1}/${sameTable.length})` : ""}`;
+                                })() : "—"}
+                              </TableCell>
+                              <TableCell className="py-2.5 px-3 text-muted-foreground">{o.staff || "Waiter"}</TableCell>
+                              <TableCell className="py-2.5 px-3">
+                                <Badge variant="outline" className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-background/80 border-border/70 flex items-center gap-1 w-fit">
+                                  {isCashOrder ? <Banknote className="h-3 w-3 text-emerald-500" /> : <CreditCard className="h-3 w-3 text-info" />}
+                                  {o.paymentMethod || "Cash"}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="py-2.5 px-3 text-center">
+                                <Badge className={cn("text-[10px] font-bold px-2 py-0.5 rounded-lg capitalize border", isApproved ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30" : "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30")}>
                                   {isApproved ? o.status : "Pending Cash"}
                                 </Badge>
                               </TableCell>
-                              <TableCell className="py-2 text-right font-bold text-foreground">{effectiveSettings.currency} {o.total.toLocaleString()}</TableCell>
-                              <TableCell className="py-2 text-center">
+                              <TableCell className="py-2.5 px-3 text-right font-bold font-mono text-foreground">{effectiveSettings.currency} {o.total.toLocaleString()}</TableCell>
+                              <TableCell className="py-2.5 px-3 text-center">
                                 {isApproved ? (
-                                  <Badge variant="outline" className="text-[9px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 font-semibold px-2 py-0.5">
+                                  <Badge variant="outline" className="text-[10px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 font-bold px-2.5 py-1 rounded-lg flex items-center gap-1 justify-center mx-auto">
+                                    <CheckCircle2 className="h-3 w-3 text-emerald-500" />
                                     Approved
                                   </Badge>
                                 ) : (
@@ -3646,7 +3746,7 @@ const POS = () => {
                                     size="sm"
                                     disabled={approvingCashId === o.id}
                                     onClick={() => handleApproveCash(o.id, o.orderNumber)}
-                                    className="h-6.5 text-[10px] px-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold rounded-lg shadow-sm flex items-center gap-1 mx-auto"
+                                    className="h-7 text-[10px] px-3 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold rounded-lg shadow-sm flex items-center gap-1 mx-auto transition-all active:scale-95"
                                   >
                                     <Check className="h-3 w-3" />
                                     {approvingCashId === o.id ? "Approving..." : "Cash Approve"}
@@ -3664,16 +3764,19 @@ const POS = () => {
             </div>
 
             {/* SECTION 3: Overall Reconciliation & Expected Cash */}
-            <div className="space-y-3 border-t pt-3">
-              <Card className="p-4 border-primary/30 bg-primary/5 rounded-2xl space-y-2">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Expected Cash in Drawer</p>
-                    <p className="text-[10px] text-muted-foreground mt-0.5">
+            <div className="space-y-4 border-t border-border/60 pt-4">
+              <Card className="p-5 border-emerald-500/30 bg-emerald-500/10 dark:bg-emerald-950/20 rounded-3xl shadow-sm">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="space-y-1">
+                    <p className="text-xs font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider flex items-center gap-1.5">
+                      <Wallet className="h-4 w-4 text-emerald-500" />
+                      Expected Cash in Drawer
+                    </p>
+                    <p className="text-xs text-muted-foreground">
                       Opening Cash ({effectiveSettings.currency} {(activeShift?.openingCash || 0).toLocaleString()}) + POS Cash ({effectiveSettings.currency} {shiftSales.pos.cash.toLocaleString()}) + Waiter Cash ({effectiveSettings.currency} {shiftSales.waiter.cash.toLocaleString()})
                     </p>
                   </div>
-                  <p className="font-extrabold text-2xl text-primary font-mono">
+                  <p className="font-black text-2xl sm:text-3xl text-emerald-600 dark:text-emerald-400 font-mono self-start sm:self-auto">
                     {effectiveSettings.currency} {((activeShift?.openingCash || 0) + shiftSales.cash).toLocaleString()}
                   </p>
                 </div>
@@ -3681,37 +3784,53 @@ const POS = () => {
 
               {/* Combined Payment Methods Bar */}
               <div>
-                <p className="text-[11px] font-extrabold text-muted-foreground uppercase tracking-wider mb-2">Overall Shift Sales by Payment Method</p>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                  {Object.entries(shiftSales.byMethod).map(([method, amount]) => (
-                    <div key={method} className="p-2.5 rounded-xl bg-muted/40 border border-border/60 flex items-center justify-between">
-                      <span className="text-xs text-muted-foreground font-semibold">{method}</span>
-                      <span className="font-extrabold text-xs text-foreground">{effectiveSettings.currency} {amount.toLocaleString()}</span>
-                    </div>
-                  ))}
+                <p className="text-[11px] font-extrabold text-muted-foreground uppercase tracking-wider mb-2.5 flex items-center gap-1.5">
+                  <CreditCard className="h-3.5 w-3.5 text-primary" />
+                  Overall Shift Sales by Payment Method
+                </p>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  {Object.entries(shiftSales.byMethod).map(([method, amount]) => {
+                    const mLower = method.toLowerCase();
+                    const isCash = mLower.includes("cash") && !mLower.includes("jazz") && !mLower.includes("easy") && !mLower.includes("online") && !mLower.includes("card") && !mLower.includes("mobile") && !mLower.includes("paisa");
+                    return (
+                      <div key={method} className="p-3 rounded-2xl bg-muted/40 border border-border/60 flex items-center justify-between shadow-xs">
+                        <span className="text-xs text-muted-foreground font-bold flex items-center gap-1.5">
+                          {isCash ? <Banknote className="h-3.5 w-3.5 text-emerald-500" /> : mLower.includes("card") ? <CreditCard className="h-3.5 w-3.5 text-info" /> : <Smartphone className="h-3.5 w-3.5 text-purple-500" />}
+                          {method}
+                        </span>
+                        <span className="font-extrabold text-xs text-foreground font-mono">{effectiveSettings.currency} {amount.toLocaleString()}</span>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
 
               {/* Inputs */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
-                <div>
-                  <Label className="text-xs font-extrabold">Actual Closing Cash (Rs.) *</Label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-extrabold flex items-center gap-1.5">
+                    <Banknote className="h-3.5 w-3.5 text-emerald-500" />
+                    Actual Closing Cash ({effectiveSettings.currency}) *
+                  </Label>
                   <Input
                     type="number"
                     value={closingCashInput}
                     onChange={e => setClosingCashInput(e.target.value)}
                     placeholder="Count and enter physical cash in drawer"
-                    className="mt-1 h-10 text-base font-bold"
+                    className="h-11 text-base font-extrabold font-mono rounded-xl border-border/80 focus:border-primary"
                     min="0"
                   />
                 </div>
-                <div>
-                  <Label className="text-xs font-extrabold">Notes / Explanation (optional)</Label>
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-extrabold flex items-center gap-1.5">
+                    <StickyNote className="h-3.5 w-3.5 text-muted-foreground" />
+                    Notes / Explanation (optional)
+                  </Label>
                   <Input
                     value={closingNotes}
                     onChange={e => setClosingNotes(e.target.value)}
                     placeholder="Any shift notes or variance reason..."
-                    className="mt-1 h-10 text-xs"
+                    className="h-11 text-xs rounded-xl border-border/80"
                   />
                 </div>
               </div>
@@ -3719,19 +3838,34 @@ const POS = () => {
               {/* Difference Calculation Alert */}
               {closingCashInput && (
                 <div className={cn(
-                  "p-3 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-between border",
+                  "p-4 rounded-2xl text-xs sm:text-sm font-bold flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 border shadow-sm transition-all",
                   Number(closingCashInput) - ((activeShift?.openingCash || 0) + shiftSales.cash) === 0
                     ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
                     : Number(closingCashInput) - ((activeShift?.openingCash || 0) + shiftSales.cash) < 0
                     ? "bg-destructive/10 text-destructive border-destructive/30"
                     : "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30"
                 )}>
-                  <span>
-                    {Number(closingCashInput) - ((activeShift?.openingCash || 0) + shiftSales.cash) === 0 && "✔ Cash drawer matches perfectly!"}
-                    {Number(closingCashInput) - ((activeShift?.openingCash || 0) + shiftSales.cash) < 0 && "⚠ Shortage detected in cash drawer"}
-                    {Number(closingCashInput) - ((activeShift?.openingCash || 0) + shiftSales.cash) > 0 && "ℹ Excess cash detected in drawer"}
+                  <span className="flex items-center gap-2">
+                    {Number(closingCashInput) - ((activeShift?.openingCash || 0) + shiftSales.cash) === 0 && (
+                      <>
+                        <CheckCircle2 className="h-5 w-5 text-emerald-500 shrink-0" />
+                        <span>Cash drawer matches expected amount perfectly!</span>
+                      </>
+                    )}
+                    {Number(closingCashInput) - ((activeShift?.openingCash || 0) + shiftSales.cash) < 0 && (
+                      <>
+                        <AlertTriangle className="h-5 w-5 text-destructive shrink-0" />
+                        <span>Shortage detected in physical cash drawer</span>
+                      </>
+                    )}
+                    {Number(closingCashInput) - ((activeShift?.openingCash || 0) + shiftSales.cash) > 0 && (
+                      <>
+                        <AlertCircle className="h-5 w-5 text-amber-500 shrink-0" />
+                        <span>Excess cash detected in physical cash drawer</span>
+                      </>
+                    )}
                   </span>
-                  <span className="font-extrabold text-sm font-mono">
+                  <span className="font-black text-sm sm:text-base font-mono self-end sm:self-auto">
                     Difference: {effectiveSettings.currency} {(Number(closingCashInput) - ((activeShift?.openingCash || 0) + shiftSales.cash)).toLocaleString()}
                   </span>
                 </div>
@@ -3739,10 +3873,12 @@ const POS = () => {
             </div>
           </div>
 
-          <DialogFooter className="gap-2 border-t pt-3">
-            <Button variant="outline" className="h-10 text-xs rounded-xl font-bold" onClick={() => setShowRegisterClose(false)}>Continue Working</Button>
+          <DialogFooter className="gap-2.5 border-t border-border/60 pt-4 flex-col sm:flex-row">
+            <Button variant="outline" className="h-11 text-xs rounded-2xl font-bold border-border/80 hover:bg-muted/60" onClick={() => setShowRegisterClose(false)}>
+              <RotateCcw className="h-3.5 w-3.5 mr-1.5" /> Continue Working
+            </Button>
             <Button
-              className="gradient-primary text-primary-foreground h-10 text-xs sm:text-sm font-extrabold rounded-xl shadow-md hover:shadow-lg transition-all"
+              className="gradient-primary text-primary-foreground h-11 text-xs sm:text-sm font-extrabold rounded-2xl shadow-md hover:shadow-xl transition-all active:scale-95"
               disabled={!closingCashInput || !activeShift}
               onClick={async () => {
                 if (!activeShift) return;
@@ -3765,7 +3901,7 @@ const POS = () => {
                 }
               }}
             >
-              <Check className="h-4 w-4 mr-1.5" /> Close Register & Exit Shift
+              <CheckCircle2 className="h-4 w-4 mr-2" /> Close Register & Exit Shift
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -18,6 +18,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { employeeService } from "@/services/employee.service";
+import { shiftService, type ShiftRecord } from "@/services/shift.service";
+import { orderService } from "@/services/order.service";
 import type { Shift, StaffSchedule, LeaveRequest, ShiftTemplate } from "@/contexts/DataContext";
 
 const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -76,13 +78,29 @@ const Shifts = () => {
     role: e.designation,
   })), [employeesList]);
 
+  // ── API Shift queries ──
+  const { data: apiShifts = [], refetch: refetchShifts } = useQuery({
+    queryKey: ["shifts-list-api"],
+    queryFn: () => shiftService.getShifts({ limit: 100 }).then(res => res.data),
+  });
+
+  const { data: activeApiShift = null, refetch: refetchActiveShift } = useQuery({
+    queryKey: ["active-shift-api"],
+    queryFn: () => shiftService.getActiveShift(),
+  });
+
+  const { data: apiOrdersList = [] } = useQuery({
+    queryKey: ["orders-list-for-shifts"],
+    queryFn: () => orderService.getOrders({ limit: 200 }).then(res => res.data),
+  });
+
   // ── Cash Shifts State ──
   const [showOpen, setShowOpen] = useState(false);
   const [showClose, setShowClose] = useState(false);
   const [openingCash, setOpeningCash] = useState("");
   const [closingCash, setClosingCash] = useState("");
   const [cashNotes, setCashNotes] = useState("");
-  const [viewShift, setViewShift] = useState<Shift | null>(null);
+  const [viewShift, setViewShift] = useState<ShiftRecord | null>(null);
 
   // ── Schedule State ──
   const [weekOffset, setWeekOffset] = useState(0);
@@ -106,47 +124,133 @@ const Shifts = () => {
   const weekSchedules = staffSchedules.filter(s => s.weekStart === weekKey);
 
   // ── Cash Shift functions ──
-  const activeShift = shifts.find(s => s.status === "open");
-  const closedShifts = shifts.filter(s => s.status === "closed").sort((a, b) => b.openedAt.localeCompare(a.openedAt));
+  const activeShift = activeApiShift ?? apiShifts.find(s => s.status === "open");
+  const closedShifts = useMemo(() =>
+    apiShifts.filter(s => s.status === "closed").sort((a, b) => b.openedAt.localeCompare(a.openedAt)),
+    [apiShifts]
+  );
 
-  const openShift = () => {
-    if (!openingCash) { toast.error("Opening cash required"); return; }
-    const num = `SH-${String(shifts.length + 1).padStart(3, "0")}`;
-    addItem("shifts", {
-      id: crypto.randomUUID(), shiftNumber: num, cashierId: "user-1", cashierName: user?.name || "Admin",
-      openedAt: new Date().toISOString(), openingCash: Number(openingCash), status: "open",
-      totalSales: 0, totalCashSales: 0, totalCardSales: 0, totalOnlineSales: 0,
-      orderCount: 0, cancelledOrders: 0, totalExpenses: 0, expectedCash: Number(openingCash), notes: cashNotes,
-    } as Shift);
-    toast.success("Shift opened"); setShowOpen(false); setOpeningCash(""); setCashNotes("");
-  };
-
-  const closeShift = () => {
-    if (!activeShift || !closingCash) { toast.error("Closing cash required"); return; }
+  const activeShiftSales = useMemo(() => {
+    if (!activeShift) return { totalSales: 0, cashSales: 0, cardSales: 0, onlineSales: 0, orderCount: 0, cancelled: 0, expectedCash: 0 };
     const shiftStartMs = new Date(activeShift.openedAt).getTime();
-    const shiftOrders = orders.filter(o => {
-      const od = new Date(`${o.date}T${o.time?.replace(" AM", "").replace(" PM", "") || "00:00"}`).getTime();
-      const orderTimeMs = Math.max(
-        (o as any).updatedAt ? new Date((o as any).updatedAt).getTime() : 0,
-        (o as any).createdAt ? new Date((o as any).createdAt).getTime() : 0,
-        !isNaN(od) ? od : 0
-      );
+
+    const getSafeTimestamp = (o: any): number => {
+      if (!o) return 0;
+      if (o.createdAt) {
+        const ms = new Date(o.createdAt).getTime();
+        if (!isNaN(ms) && ms > 0) return ms;
+      }
+      if (o.updatedAt) {
+        const ms = new Date(o.updatedAt).getTime();
+        if (!isNaN(ms) && ms > 0) return ms;
+      }
+      if (o.date) {
+        const dateStr = String(o.date).split("T")[0];
+        const timeStr = o.time ? String(o.time).trim() : "";
+        if (timeStr) {
+          const ms = new Date(`${dateStr} ${timeStr}`).getTime();
+          if (!isNaN(ms) && ms > 0) return ms;
+        }
+        const ms = new Date(dateStr).getTime();
+        if (!isNaN(ms) && ms > 0) return ms;
+      }
+      return 0;
+    };
+
+    const allOrders = apiOrdersList.length > 0 ? apiOrdersList : orders;
+    const shiftOrders = allOrders.filter(o => {
+      const status = (o.status || "").toLowerCase();
+      if (status === "cancelled") return false;
+      const orderTimeMs = getSafeTimestamp(o);
       return orderTimeMs >= shiftStartMs;
     });
-    const totalSales = shiftOrders.filter(o => o.status === "completed").reduce((s, o) => s + o.total, 0);
-    const cashSales = shiftOrders.filter(o => o.paymentMethod === "Cash").reduce((s, o) => s + o.total, 0);
-    const cardSales = shiftOrders.filter(o => o.paymentMethod === "Card").reduce((s, o) => s + o.total, 0);
-    const onlineSales = totalSales - cashSales - cardSales;
-    const cancelled = shiftOrders.filter(o => o.status === "cancelled").length;
-    const expected = activeShift.openingCash + cashSales;
-    const diff = Number(closingCash) - expected;
-    updateItem("shifts", activeShift.id, {
-      status: "closed", closedAt: new Date().toISOString(), closingCash: Number(closingCash),
-      totalSales, totalCashSales: cashSales, totalCardSales: cardSales, totalOnlineSales: onlineSales,
-      orderCount: shiftOrders.length, cancelledOrders: cancelled, totalExpenses: 0,
-      expectedCash: expected, cashDifference: diff, notes: cashNotes,
+
+    const settledOrders = shiftOrders.filter(o => {
+      const status = (o.status || "").toLowerCase();
+      const method = (o.paymentMethod || "").toLowerCase().trim();
+      return status === "completed" || (method && method !== "pending" && method !== "unpaid");
     });
-    toast.success("Shift closed"); setShowClose(false); setClosingCash(""); setCashNotes("");
+
+    let cashSales = 0;
+    let cardSales = 0;
+    let onlineSales = 0;
+
+    settledOrders.forEach(o => {
+      const orderTotal = Number(o.total || 0);
+      const pm = (o.paymentMethod || "Cash").trim();
+      if (pm.includes(":") && (pm.includes(",") || pm.includes("Rs") || /\d+/.test(pm))) {
+        const parts = pm.split(",");
+        parts.forEach(part => {
+          const subParts = part.split(":");
+          if (subParts.length >= 2) {
+            const rawMethod = subParts[0].trim().toLowerCase();
+            const cleanedValStr = subParts[1].replace(/Rs\.?/gi, "").trim();
+            const numMatch = cleanedValStr.match(/\d+(?:\.\d+)?/);
+            if (numMatch) {
+              const val = parseFloat(numMatch[0]);
+              if (!isNaN(val) && val > 0) {
+                const isCash = rawMethod.includes("cash") && !rawMethod.includes("jazz") && !rawMethod.includes("easy") && !rawMethod.includes("online") && !rawMethod.includes("card") && !rawMethod.includes("mobile") && !rawMethod.includes("paisa");
+                if (isCash) cashSales += val;
+                else if (rawMethod.includes("card") || rawMethod.includes("bank")) cardSales += val;
+                else onlineSales += val;
+              }
+            }
+          }
+        });
+      } else {
+        const pmLower = pm.toLowerCase();
+        const isCash = pmLower.includes("cash") && !pmLower.includes("jazz") && !pmLower.includes("easy") && !pmLower.includes("online") && !pmLower.includes("card") && !pmLower.includes("mobile") && !pmLower.includes("paisa");
+        if (isCash) cashSales += orderTotal;
+        else if (pmLower.includes("card") || pmLower.includes("bank")) cardSales += orderTotal;
+        else onlineSales += orderTotal;
+      }
+    });
+
+    const totalSales = cashSales + cardSales + onlineSales;
+    const cancelled = allOrders.filter(o => (o.status || "").toLowerCase() === "cancelled" && getSafeTimestamp(o) >= shiftStartMs).length;
+    const expectedCash = Number(activeShift.openingCash) + cashSales;
+
+    return {
+      totalSales, cashSales, cardSales, onlineSales,
+      orderCount: settledOrders.length, cancelled, expectedCash
+    };
+  }, [activeShift, apiOrdersList, orders]);
+
+  const openShift = async () => {
+    if (!openingCash) { toast.error("Opening cash required"); return; }
+    try {
+      await shiftService.openShift({
+        openingCash: Number(openingCash),
+        notes: cashNotes || undefined,
+      });
+      toast.success("Shift opened successfully");
+      setShowOpen(false); setOpeningCash(""); setCashNotes("");
+      refetchShifts(); refetchActiveShift();
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to open shift");
+    }
+  };
+
+  const closeShift = async () => {
+    if (!activeShift || !closingCash) { toast.error("Closing cash required"); return; }
+    try {
+      await shiftService.closeShift(activeShift.id, {
+        closingCash:      Number(closingCash),
+        totalSales:       activeShiftSales.totalSales,
+        totalCashSales:   activeShiftSales.cashSales,
+        totalCardSales:   activeShiftSales.cardSales,
+        totalOnlineSales: activeShiftSales.onlineSales,
+        orderCount:       activeShiftSales.orderCount,
+        cancelledOrders:  activeShiftSales.cancelled,
+        totalExpenses:    0,
+        notes:            cashNotes || undefined,
+      });
+      toast.success("Shift closed successfully");
+      setShowClose(false); setClosingCash(""); setCashNotes("");
+      refetchShifts(); refetchActiveShift();
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to close shift");
+    }
   };
 
   // ── Schedule functions ──
