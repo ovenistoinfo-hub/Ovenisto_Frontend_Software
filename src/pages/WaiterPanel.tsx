@@ -875,11 +875,14 @@ const WaiterPanel = () => {
       });
       if (selectedTable && selectedTable.status !== "occupied") {
         const guests = guestsInput || selectedTable.capacity;
-        const updated = await tableService.updateTable(selectedTable.id, { 
-          status: "occupied", 
-          currentOrderId: `${Date.now()}:${guests}` 
+        const updated = await tableService.updateTable(selectedTable.id, {
+          status: "occupied",
+          currentOrderId: `${Date.now()}:${guests}`
         });
         setTables(prev => prev.map(t => t.id === selectedTable.id ? updated : t));
+        // A new sitting starts here — any self-order session left over from a
+        // previous, improperly-ended visit to this table must not leak into it.
+        tableService.notifySelfOrderSessionEnded(selectedTable.id).catch(() => {});
       }
       toast.success("Order sent to kitchen!");
       setCartItems([]);
@@ -924,11 +927,18 @@ const WaiterPanel = () => {
         }
       }
 
-      const updated = await tableService.updateTable(selectedTable.id, { 
-        status: "occupied", 
-        currentOrderId: `${Date.now()}:${guests}` 
+      const wasAlreadyOccupied = selectedTable.status === "occupied";
+      const updated = await tableService.updateTable(selectedTable.id, {
+        status: "occupied",
+        currentOrderId: `${Date.now()}:${guests}`
       });
       setTables(prev => prev.map(t => t.id === selectedTable.id ? updated : t));
+      // Only clear self-order state when this newly occupies the table (a new
+      // sitting) — not if somehow re-invoked on an already-occupied table with
+      // a possibly still-active, legitimate self-order session.
+      if (!wasAlreadyOccupied) {
+        tableService.notifySelfOrderSessionEnded(selectedTable.id).catch(() => {});
+      }
       toast.success(`Table ${selectedTable.number} session started`);
       await loadTables();
       await loadReservations();
@@ -960,7 +970,9 @@ const WaiterPanel = () => {
       }
 
       await tableService.updateTable(selectedTable.id, { status: "available", currentOrderId: null });
-      await tableService.notifySelfOrderSessionEnded(selectedTable.id).catch(() => {});
+      await tableService.notifySelfOrderSessionEnded(selectedTable.id).catch((err) => {
+        console.error("Failed to clear self-order session on End Sitting — a stale session may linger until the next sitting starts at this table", err);
+      });
       setTables(prev => prev.map(t => t.id === selectedTable.id ? { ...t, status: "available", currentOrderId: null } : t));
       setBillReqSet((p) => { const n = new Set(p); n.delete(selectedTableNum); return n; });
       if (selectedTableNum !== null) {
@@ -1045,7 +1057,13 @@ const WaiterPanel = () => {
         tableService.updateTable(selectedTable.id, { status: "available", currentOrderId: null }),
         tableService.updateTable(targetTable.id, { status: "occupied", currentOrderId: selectedTable.currentOrderId })
       ]);
-      setTables(prev => prev.map(t => 
+      // The sitting is now tied to a different physical table/QR code — the
+      // self-order session (if any) at either the vacated source table or the
+      // newly-occupied target table belongs to a different sitting and must
+      // not be reachable by a fresh scan of either.
+      tableService.notifySelfOrderSessionEnded(selectedTable.id).catch(() => {});
+      tableService.notifySelfOrderSessionEnded(targetTable.id).catch(() => {});
+      setTables(prev => prev.map(t =>
         t.id === selectedTable.id ? { ...t, status: "available", currentOrderId: null } :
         t.id === targetTable.id ? { ...t, status: "occupied", currentOrderId: selectedTable.currentOrderId } : t
       ));

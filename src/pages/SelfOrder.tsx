@@ -143,6 +143,8 @@ const SelfOrder = () => {
   const [showReceipt, setShowReceipt] = useState(false);
   const [sessionToken, setSessionToken] = useState<string | null>(null);
   const [role, setRole] = useState<"host" | "viewer" | null>(null);
+  const [joined, setJoined] = useState(false);
+  const [blocked, setBlocked] = useState(false);
   const [sessionEnded, setSessionEnded] = useState(false);
   const [requestPending, setRequestPending] = useState(false);
   const [requestTimedOut, setRequestTimedOut] = useState(false);
@@ -214,10 +216,40 @@ const SelfOrder = () => {
       socket.emit(
         "join-table",
         { tableId: table.tableId, sessionToken: sessionToken ?? undefined },
-        (res: { role: "host"; sessionToken: string } | { role: "viewer" } | { error: string }) => {
+        (
+          res:
+            | { role: "host"; sessionToken: string }
+            | { role: "viewer" }
+            | { role: "blocked"; reason: "table-occupied" }
+            | { error: string }
+        ) => {
+          setJoined(true);
           if ("error" in res) return;
+          if (res.role === "blocked") {
+            setBlocked(true);
+            return;
+          }
           setRole(res.role);
           if (res.role === "host") {
+            // The server only hands out a DIFFERENT token than the one this
+            // device already had when it has no memory of that old session
+            // (cleared on End Sitting, or invalidated by a new sitting
+            // starting at this table) — i.e. this device's persisted data
+            // belongs to a sitting that is no longer live. A first-ever visit
+            // also lands here (sessionToken starts null) but there is nothing
+            // stale to reset in that case.
+            const isStaleReturningDevice = sessionToken !== null && sessionToken !== res.sessionToken;
+            if (isStaleReturningDevice) {
+              setEntryDone(false);
+              setCustomerName("");
+              setCustomerPhone("");
+              setGuestCount(2);
+              setCart([]);
+              setNotes("");
+              setOrders([]);
+              setViewingMenu(false);
+              setPromotedGuestCount(null);
+            }
             setSessionToken(res.sessionToken);
             reconcileActiveOrders(table.tableId);
           }
@@ -272,6 +304,16 @@ const SelfOrder = () => {
     if (!sessionEnded || !table) return;
     clearPersistedSession(table.tableId);
   }, [sessionEnded, table]);
+
+  // Safety net: don't hold the customer on a spinner forever if the socket
+  // can't connect (e.g. a network that blocks websockets) — degrade to the
+  // pre-existing behavior (proceed without the occupied-table check) rather
+  // than hard-blocking someone who could otherwise still browse and order.
+  useEffect(() => {
+    if (!table || !hydrated || joined) return;
+    const timeout = setTimeout(() => setJoined(true), 5000);
+    return () => clearTimeout(timeout);
+  }, [table, hydrated, joined]);
 
   useEffect(() => {
     settingsService.getSettings().then((s) => {
@@ -517,10 +559,32 @@ const SelfOrder = () => {
       </div>
     );
   }
-  if (tableLoading) {
+  if (tableLoading || !joined) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  // ── Render: table already occupied by a staff-seated (non-self-order) sitting ──
+  if (blocked) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center p-6">
+        <div className="text-center space-y-4 max-w-sm">
+          <XCircle className="h-12 w-12 mx-auto text-muted-foreground" />
+          <h1 className="text-xl font-bold">This table is already occupied</h1>
+          <p className="text-muted-foreground">
+            Our staff is already serving this table. Please ask a team member for assistance.
+          </p>
+          <Button
+            variant="outline"
+            className="w-full h-11 rounded-xl"
+            onClick={() => window.location.reload()}
+          >
+            Check Again
+          </Button>
+        </div>
       </div>
     );
   }

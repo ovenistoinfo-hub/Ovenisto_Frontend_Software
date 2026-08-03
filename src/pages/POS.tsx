@@ -1264,10 +1264,17 @@ const POS = () => {
             const targetTable = backendTables.find((t) => Number(t.number) === tableNumber);
             if (targetTable) {
               const guests = dineInGuests || targetTable.capacity || 2;
+              const wasAlreadyOccupied = targetTable.status === "occupied";
               tableService.updateTable(targetTable.id, {
                 status: "occupied",
                 currentOrderId: `${Date.now()}:${guests}`
               }).catch(() => {});
+              // Only clear self-order state when this order newly occupies the
+              // table (a new sitting) — not on a 2nd/3rd order rung in during an
+              // already-occupied, possibly self-order-active sitting.
+              if (!wasAlreadyOccupied) {
+                tableService.notifySelfOrderSessionEnded(targetTable.id).catch(() => {});
+              }
             }
           }
           if (orderType === "Delivery" && selectedRiderId) {
