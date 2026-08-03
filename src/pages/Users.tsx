@@ -369,7 +369,7 @@ const Users = () => {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="text-sm font-medium mb-1 block">Full Name</label>
-                <Input list="usr-name-list" placeholder="Full Name" value={form.name} onChange={(e) => setForm(p => ({ ...p, name: e.target.value }))} />
+                <Input disabled={selectedEmployeeId !== "none"} list="usr-name-list" placeholder="Full Name" value={form.name} onChange={(e) => setForm(p => ({ ...p, name: e.target.value }))} />
                 <datalist id="usr-name-list">
                   {[...new Set(list.map(u => u.name).filter(Boolean))].map(n => <option key={n} value={n} />)}
                 </datalist>
@@ -377,6 +377,7 @@ const Users = () => {
               <div>
                 <label className="text-sm font-medium mb-1 block">Email</label>
                 <Input
+                  disabled={selectedEmployeeId !== "none"}
                   placeholder="Email"
                   type="email"
                   list="usr-email-list"
@@ -394,6 +395,7 @@ const Users = () => {
               <div>
                 <label className="text-sm font-medium mb-1 block">Phone</label>
                 <Input
+                  disabled={selectedEmployeeId !== "none"}
                   placeholder="Phone"
                   list="usr-phone-list"
                   value={form.phone}
@@ -414,7 +416,7 @@ const Users = () => {
               </div>
               <div>
                 <label className="text-sm font-medium mb-1 block">Role</label>
-                <Select value={form.role} onValueChange={handleRoleChange}>
+                <Select disabled={selectedEmployeeId !== "none"} value={form.role} onValueChange={handleRoleChange}>
                   <SelectTrigger><SelectValue placeholder="Role" /></SelectTrigger>
                   <SelectContent>{availableRoles.map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}</SelectContent>
                 </Select>
@@ -422,7 +424,7 @@ const Users = () => {
               {branchScopedRoles.includes(form.role) && (
                 <div>
                   <label className="text-sm font-medium mb-1 block">Outlet / Branch</label>
-                  <Select value={form.outletId} onValueChange={(val) => setForm(p => ({ ...p, outletId: val }))}>
+                  <Select disabled={selectedEmployeeId !== "none"} value={form.outletId} onValueChange={(val) => setForm(p => ({ ...p, outletId: val }))}>
                     <SelectTrigger><SelectValue placeholder="Select outlet" /></SelectTrigger>
                     <SelectContent>
                       {outlets.map(o => <SelectItem key={o.id} value={o.id}>{o.name} ({o.code})</SelectItem>)}

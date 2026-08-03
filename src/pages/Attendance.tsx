@@ -720,11 +720,6 @@ export default function AttendancePage() {
               setLeaveFrom(`${m}-01`);
               setLeaveTo(today);
             }}>This Month</Button>
-            {leaveFilter === "pending" && (
-              <span className="text-xs text-amber-600 dark:text-amber-400 font-medium pb-1.5 flex items-center gap-1">
-                ⚡ Showing all pending requests (date filter bypassed)
-              </span>
-            )}
           </div>
           <div className="flex gap-2 flex-wrap">
             {["pending", "approved", "rejected", "all"].map(f => (
@@ -895,11 +890,6 @@ export default function AttendancePage() {
               <div className="flex items-center justify-between flex-wrap gap-2">
                 <CardTitle className="text-sm flex items-center gap-1.5">
                   <Settings2 className="h-4 w-4" />Shift Timings
-                  {schedShiftFilter !== "all" && (
-                    <Badge variant="secondary" className="ml-2 text-xs font-normal">
-                      Filtering: <span className="font-semibold capitalize ml-1">{schedShiftFilter}</span>
-                    </Badge>
-                  )}
                 </CardTitle>
                 <div className="flex items-center gap-2">
                   {schedShiftFilter !== "all" && (
@@ -948,11 +938,7 @@ export default function AttendancePage() {
                       <div className="flex items-center justify-between mb-1.5">
                         <p className="text-xs font-semibold capitalize flex items-center gap-1.5">
                           {shift} Shift
-                          {isActiveFilter && <Badge className="text-[9px] h-4 px-1">Active</Badge>}
                         </p>
-                        <span className="text-[10px] opacity-75 font-medium">
-                          {isActiveFilter ? "Click to clear" : "Click to filter"}
-                        </span>
                       </div>
                       {editingShiftConfig ? (
                         <div className="space-y-1.5" onClick={e => e.stopPropagation()}>

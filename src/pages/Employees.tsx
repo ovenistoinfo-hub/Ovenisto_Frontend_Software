@@ -1,7 +1,6 @@
 import { useState, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { employeeService, type EmployeeRecord, type EmployeeInput } from "@/services/employee.service";
-import { userService, type UserRecord } from "@/services/user.service";
 import { getAccessToken } from "@/services/api";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -27,6 +26,11 @@ const PAY_FREQUENCIES = ["Weekly", "BiWeekly", "Monthly"];
 const DUTY_TYPES = ["Full Time", "Part Time"];
 const GENDERS = ["Male", "Female", "Other"];
 const MARITAL_STATUSES = ["Single", "Married", "Divorced", "Widowed"];
+const DESIGNATION_OPTIONS = [
+  "Manager", "Floor Manager", "Cashier", "Waiter",
+  "Kitchen Manager", "Kitchen Staff", "Delivery Manager", "Store Manager",
+  "Accountant", "Rider", "Customer Screen",
+];
 
 const DAYS_OF_WEEK = [
   { value: 1, label: "Monday" },
@@ -97,12 +101,6 @@ const Employees = () => {
 
   // View details modal field
   const [viewEmployee, setViewEmployee] = useState<EmployeeRecord | null>(null);
-
-  const { data: users = [] } = useQuery({
-    queryKey: ["users-for-employee-link"],
-    queryFn: () => userService.getUsers({ limit: 200 }).then(r => r.data),
-    enabled: showForm,
-  });
 
   const { data: supervisors = [] } = useQuery({
     queryKey: ["supervisor-options", editingId],
@@ -528,15 +526,6 @@ const Employees = () => {
                     )}
                   </div>
                   <div className="space-y-1.5">
-                    <Label>Linked User Account</Label>
-                    <Select value={form.userId ?? ""} onValueChange={(v) => setForm(p => ({ ...p, userId: v }))}>
-                      <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
-                      <SelectContent>
-                        {users.map((u: UserRecord) => <SelectItem key={u.id} value={u.id}>{u.name} ({u.email})</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-1.5">
                     <Label>Photograph <span className="text-destructive">*</span></Label>
                     <input type="file" accept="image/*" ref={fileInputRef} className="hidden" onChange={handleImageUpload} />
                     {uploading ? (
@@ -564,10 +553,15 @@ const Employees = () => {
                   </div>
                   <div className="space-y-1.5">
                     <Label>Designation <span className="text-destructive">*</span></Label>
-                    <Input list="employee-designation-list" value={form.designation} onChange={(e) => setForm(p => ({ ...p, designation: e.target.value }))} />
-                    <datalist id="employee-designation-list">
-                      {[...new Set(list.map(e => e.designation).filter(Boolean))].map(des => <option key={des} value={des} />)}
-                    </datalist>
+                    <Select value={form.designation ?? ""} onValueChange={(v) => setForm(p => ({ ...p, designation: v }))}>
+                      <SelectTrigger><SelectValue placeholder="Select designation" /></SelectTrigger>
+                      <SelectContent>
+                        {DESIGNATION_OPTIONS.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+                        {form.designation && !DESIGNATION_OPTIONS.includes(form.designation) && (
+                          <SelectItem value={form.designation}>{form.designation}</SelectItem>
+                        )}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div className="space-y-1.5">
                     <Label>Duty Type <span className="text-destructive">*</span></Label>
