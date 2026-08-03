@@ -48,6 +48,7 @@ export interface OrderRecord {
   isUrgent: boolean;
   customerType: string | null;
   orderSource: string | null;
+  cashApproved?: boolean;
   createdAt: string;
   updatedAt?: string;
   items: OrderItemRecord[];
@@ -92,6 +93,7 @@ export interface CreateOrderInput {
   isUrgent?: boolean;
   customerType?: string;
   orderSource?: string;
+  cashApproved?: boolean;
 }
 
 export const orderService = {

@@ -506,6 +506,21 @@ const POS = () => {
   const [openingCashInput, setOpeningCashInput] = useState("");
   const [closingCashInput, setClosingCashInput] = useState("");
   const [closingNotes, setClosingNotes] = useState("");
+  const [approvingCashId, setApprovingCashId] = useState<string | null>(null);
+
+  const handleApproveCash = async (orderId: string, orderNumber: string) => {
+    setApprovingCashId(orderId);
+    try {
+      markMine();
+      await orderService.updateOrder(orderId, { cashApproved: true });
+      toast.success(`Cash approved for Order ${orderNumber}!`);
+      await loadApiOrders();
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to approve cash");
+    } finally {
+      setApprovingCashId(null);
+    }
+  };
 
   // Order timer
   const [orderElapsed, setOrderElapsed] = useState("00:00:00");
@@ -672,13 +687,30 @@ const POS = () => {
     };
 
     const shiftStartMs = new Date(activeShift.openedAt).getTime();
+    const isWaiterOrder = (o: any) => o.orderSource === "waiter" || (o.staff && o.staff.toLowerCase().includes("waiter"));
+    const isCashOrder = (o: any) => {
+      const pm = (o.paymentMethod || "").toLowerCase().trim();
+      return pm.includes("cash") && !pm.includes("jazz") && !pm.includes("easy") && !pm.includes("online") && !pm.includes("card") && !pm.includes("mobile") && !pm.includes("paisa");
+    };
+
     const shiftOrders = allOrdersData.filter(o => {
+      if (o.status === "cancelled") return false;
+
       const orderTimeMs = Math.max(
         o.updatedAt ? new Date(o.updatedAt).getTime() : 0,
         o.createdAt ? new Date(o.createdAt).getTime() : 0,
         o.date ? new Date(o.date).getTime() : 0
       );
-      return orderTimeMs >= shiftStartMs && o.status !== "cancelled";
+
+      // 1. Orders created or updated during this active shift
+      if (orderTimeMs >= shiftStartMs) return true;
+
+      // 2. Unapproved waiter cash orders from previous shifts (carry-over until approved)
+      if (isWaiterOrder(o) && isCashOrder(o) && !o.cashApproved) {
+        return true;
+      }
+
+      return false;
     });
 
     const parsePaymentSplits = (paymentMethodStr: string, orderTotal: number) => {
@@ -767,7 +799,6 @@ const POS = () => {
       return { total, cash, card, online, nonCash: Math.max(0, total - cash), count: ordersList.length, byMethod };
     };
 
-    const isWaiterOrder = (o: any) => o.orderSource === "waiter" || (o.staff && o.staff.toLowerCase().includes("waiter"));
     const isSettledOrder = (o: any) => {
       const status = (o.status || "").toLowerCase();
       const method = (o.paymentMethod || "").toLowerCase().trim();
@@ -776,15 +807,25 @@ const POS = () => {
       return false;
     };
 
+    const isApprovedOrder = (o: any) => {
+      if (!isWaiterOrder(o)) return true;
+      if (o.cashApproved === true) return true;
+      const pm = (o.paymentMethod || "").toLowerCase().trim();
+      const isCash = pm.includes("cash") && !pm.includes("jazz") && !pm.includes("easy") && !pm.includes("online") && !pm.includes("card") && !pm.includes("mobile") && !pm.includes("paisa");
+      if (!isCash) return true;
+      return false;
+    };
+
     const allWaiterOrders = shiftOrders.filter(isWaiterOrder);
     const waiterOrders = allWaiterOrders.filter(isSettledOrder);
+    const approvedWaiterOrders = waiterOrders.filter(isApprovedOrder);
     const pendingWaiterOrders = allWaiterOrders.filter(o => !isSettledOrder(o));
 
     const posOrders = shiftOrders.filter(o => !isWaiterOrder(o) && isSettledOrder(o));
-    const settledShiftOrders = shiftOrders.filter(isSettledOrder);
+    const settledShiftOrders = shiftOrders.filter(isSettledOrder).filter(isApprovedOrder);
 
     const posGroup = processGroup(posOrders);
-    const waiterGroup = processGroup(waiterOrders);
+    const waiterGroup = processGroup(approvedWaiterOrders);
     const overallGroup = processGroup(settledShiftOrders);
 
     return {
@@ -3560,23 +3601,47 @@ const POS = () => {
                           <TableHead className="py-2">Method</TableHead>
                           <TableHead className="py-2 text-center">Status</TableHead>
                           <TableHead className="py-2 text-right">Amount</TableHead>
+                          <TableHead className="py-2 text-center">Action</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody className="text-xs font-medium">
-                        {shiftSales.waiter.orders.map((o: any) => (
-                          <TableRow key={o.id} className="hover:bg-muted/40">
-                            <TableCell className="py-2 font-bold">{o.orderNumber}</TableCell>
-                            <TableCell className="py-2">{o.tableNumber ? `Table ${o.tableNumber}` : "—"}</TableCell>
-                            <TableCell className="py-2">{o.staff || "Waiter"}</TableCell>
-                            <TableCell className="py-2"><Badge variant="outline" className="text-[9px]">{o.paymentMethod || "Cash"}</Badge></TableCell>
-                            <TableCell className="py-2 text-center">
-                              <Badge className="text-[9px] px-1.5 py-0 capitalize bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
-                                {o.status}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="py-2 text-right font-bold text-foreground">{effectiveSettings.currency} {o.total.toLocaleString()}</TableCell>
-                          </TableRow>
-                        ))}
+                        {shiftSales.waiter.orders.map((o: any) => {
+                          const pm = (o.paymentMethod || "").toLowerCase().trim();
+                          const isCashOrder = pm.includes("cash") && !pm.includes("jazz") && !pm.includes("easy") && !pm.includes("online") && !pm.includes("card") && !pm.includes("mobile") && !pm.includes("paisa");
+                          const isApproved = o.cashApproved === true || !isCashOrder;
+
+                          return (
+                            <TableRow key={o.id} className="hover:bg-muted/40">
+                              <TableCell className="py-2 font-bold">{o.orderNumber}</TableCell>
+                              <TableCell className="py-2">{o.tableNumber ? `Table ${o.tableNumber}` : "—"}</TableCell>
+                              <TableCell className="py-2">{o.staff || "Waiter"}</TableCell>
+                              <TableCell className="py-2"><Badge variant="outline" className="text-[9px]">{o.paymentMethod || "Cash"}</Badge></TableCell>
+                              <TableCell className="py-2 text-center">
+                                <Badge className={cn("text-[9px] px-1.5 py-0 capitalize", isApproved ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400" : "bg-amber-500/15 text-amber-600 dark:text-amber-400")}>
+                                  {isApproved ? o.status : "Pending Cash"}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="py-2 text-right font-bold text-foreground">{effectiveSettings.currency} {o.total.toLocaleString()}</TableCell>
+                              <TableCell className="py-2 text-center">
+                                {isApproved ? (
+                                  <Badge variant="outline" className="text-[9px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 font-semibold px-2 py-0.5">
+                                    Approved
+                                  </Badge>
+                                ) : (
+                                  <Button
+                                    size="sm"
+                                    disabled={approvingCashId === o.id}
+                                    onClick={() => handleApproveCash(o.id, o.orderNumber)}
+                                    className="h-6.5 text-[10px] px-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold rounded-lg shadow-sm flex items-center gap-1 mx-auto"
+                                  >
+                                    <Check className="h-3 w-3" />
+                                    {approvingCashId === o.id ? "Approving..." : "Cash Approve"}
+                                  </Button>
+                                )}
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
                       </TableBody>
                     </Table>
                   </div>
