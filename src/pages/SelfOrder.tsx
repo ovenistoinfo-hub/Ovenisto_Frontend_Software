@@ -103,6 +103,10 @@ function sessionStorageKey(tableId: string): string {
   return `ovenisto_self_order_session_${tableId}_${deviceId}`;
 }
 
+function sessionEndedStorageKey(tableId: string): string {
+  return `ovenisto_self_order_session_ended_${tableId}_${deviceId}`;
+}
+
 function loadPersistedSession(tableId: string): PersistedSession | null {
   try {
     const raw = localStorage.getItem(sessionStorageKey(tableId));
@@ -193,6 +197,12 @@ const SelfOrder = () => {
 
   useEffect(() => {
     if (!table || hydrated) return;
+    try {
+      if (sessionStorage.getItem(sessionEndedStorageKey(table.tableId)) === "true") {
+        setSessionEnded(true);
+        setJoined(true);
+      }
+    } catch {}
     const persisted = loadPersistedSession(table.tableId);
     if (persisted) {
       setEntryDone(persisted.entryDone);
@@ -240,7 +250,7 @@ const SelfOrder = () => {
 
   // ── Join this table's socket room ──
   useEffect(() => {
-    if (!table || !hydrated) return;
+    if (!table || !hydrated || sessionEnded) return;
     const socket = getSelfOrderSocket();
 
     const joinTable = () => {
@@ -252,10 +262,15 @@ const SelfOrder = () => {
             | { role: "host"; sessionToken: string; sittingGeneration: string }
             | { role: "viewer"; sittingGeneration: string }
             | { role: "blocked"; reason: "table-occupied" }
+            | { role: "ended" }
             | { error: string }
         ) => {
           setJoined(true);
           if ("error" in res) return;
+          if (res.role === "ended") {
+            setSessionEnded(true);
+            return;
+          }
           if (res.role === "blocked") {
             setBlocked(true);
             return;
@@ -340,11 +355,14 @@ const SelfOrder = () => {
       socket.off("host-request:declined", onHostRequestDeclined);
       socket.off("role:changed", onRoleChanged);
     };
-  }, [table, hydrated, sessionToken, sittingGeneration, reconcileActiveOrders]);
+  }, [table, hydrated, sessionEnded, sessionToken, sittingGeneration, reconcileActiveOrders]);
 
   useEffect(() => {
     if (!sessionEnded || !table) return;
     clearPersistedSession(table.tableId);
+    try {
+      sessionStorage.setItem(sessionEndedStorageKey(table.tableId), "true");
+    } catch {}
   }, [sessionEnded, table]);
 
   // Safety net: don't hold the customer on a spinner forever if the socket
