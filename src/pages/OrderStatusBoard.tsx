@@ -339,24 +339,6 @@ const OrderStatusBoard = () => {
             </div>
 
             {/* Action Button */}
-            {order.status === "pending" && (
-              <Button
-                size="sm"
-                onClick={(e) => { e.stopPropagation(); handleStatusUpdate(order.id, "preparing"); }}
-                className="w-full h-8 text-xs bg-amber-500 hover:bg-amber-600 text-white font-bold shadow-xs flex items-center justify-center gap-1.5 rounded-lg transition-all"
-              >
-                <ChefHat className="h-3.5 w-3.5" /> Start Preparing
-              </Button>
-            )}
-            {order.status === "preparing" && (
-              <Button
-                size="sm"
-                onClick={(e) => { e.stopPropagation(); handleStatusUpdate(order.id, "ready"); }}
-                className="w-full h-8 text-xs bg-sky-500 hover:bg-sky-600 text-white font-bold shadow-xs flex items-center justify-center gap-1.5 rounded-lg transition-all"
-              >
-                <CheckCircle2 className="h-3.5 w-3.5" /> Mark Ready
-              </Button>
-            )}
             {order.status === "ready" && (
               <Button
                 size="sm"
@@ -696,26 +678,6 @@ const OrderStatusBoard = () => {
 
                 <DialogFooter className="flex-col sm:flex-row gap-2 pt-3 border-t">
                   <Button variant="outline" className="w-full sm:w-auto rounded-xl font-bold" onClick={() => setSelectedOrder(null)}>Close Window</Button>
-
-                  {selectedOrder.status === "pending" && (
-                    <Button
-                      className="w-full sm:w-auto bg-amber-500 hover:bg-amber-600 text-white font-extrabold rounded-xl shadow-md"
-                      onClick={() => handleStatusUpdate(selectedOrder.id, "preparing")}
-                    >
-                      <ChefHat className="h-4 w-4 mr-1.5" />
-                      Start Preparing
-                    </Button>
-                  )}
-
-                  {selectedOrder.status === "preparing" && (
-                    <Button
-                      className="w-full sm:w-auto bg-sky-500 hover:bg-sky-600 text-white font-extrabold rounded-xl shadow-md"
-                      onClick={() => handleStatusUpdate(selectedOrder.id, "ready")}
-                    >
-                      <CheckCircle2 className="h-4 w-4 mr-1.5" />
-                      Mark Ready
-                    </Button>
-                  )}
 
                   {selectedOrder.status === "ready" && (
                     <Button
