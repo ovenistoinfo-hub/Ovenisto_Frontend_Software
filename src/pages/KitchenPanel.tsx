@@ -456,6 +456,10 @@ const KitchenPanel = () => {
                         <div className="flex items-center justify-center gap-1.5 text-xs text-amber-700 dark:text-amber-300 font-bold bg-amber-500/15 border border-amber-500/30 py-2.5 rounded-lg select-none" title="Cancellation request pending branch admin approval">
                           <Clock className="h-4 w-4 text-amber-500" /> Cancel Pending
                         </div>
+                      ) : order.status === "ready" ? (
+                        <div className="flex items-center justify-center gap-1.5 text-sm text-green-500 font-bold bg-green-500/10 border border-green-500/20 py-2.5 rounded-lg select-none">
+                          <CheckCircle2 className="h-4 w-4" /> Ready to Serve
+                        </div>
                       ) : order.status !== "completed" ? (
                         <Button
                           className={cn("w-full text-sm font-semibold rounded-lg h-11 transition-all", btnColors[order.status])}
