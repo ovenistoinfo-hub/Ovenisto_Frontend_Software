@@ -2510,8 +2510,9 @@ const POS = () => {
                 </Button>
               </div>
             </div>
+          )}
 
-            {/* Right: Summary */}
+          {/* Right: Summary */}
             <div className="space-y-3">
               <p className="text-sm font-medium">Payment Entries</p>
               {paymentEntries.length === 0 ? (
