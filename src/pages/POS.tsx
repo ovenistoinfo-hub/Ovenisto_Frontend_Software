@@ -39,6 +39,7 @@ import { generateInvoicePDF } from "@/lib/generate-invoice-pdf";
 import { useData } from "@/contexts/DataContext";
 import { useAuth } from "@/contexts/AuthContext";
 import type { Shift } from "@/contexts/DataContext";
+import { getRiderCollectAmount } from "@/utils/deliveryPayment";
 
 interface CartItem extends OrderItem {
   modifiers?: string[];
@@ -497,6 +498,12 @@ const POS = () => {
   const [loadedAdvancePayment, setLoadedAdvancePayment] = useState<number>(0);
   const [loadedAdvanceMethod, setLoadedAdvanceMethod] = useState<string>("");
   const [loadedReservationId, setLoadedReservationId] = useState<string | null>(null);
+
+  // Delivery payment mode (only active when orderType === "Delivery")
+  const [deliveryPayMode, setDeliveryPayMode] = useState<"cod" | "advance" | "prepaid">("cod");
+  const [advanceEntries, setAdvanceEntries] = useState<PaymentEntry[]>([]);
+  const [advanceMethod, setAdvanceMethod] = useState<string>("Cash");
+  const [advanceAmount, setAdvanceAmount] = useState<number>(0);
 
   // Cash Register
   const [activeShift, setActiveShift] = useState<ShiftRecord | null>(null);
@@ -1199,6 +1206,14 @@ const POS = () => {
 
   const isPaymentSufficient = (totalPaid + loadedAdvancePayment) >= total;
 
+  const isDeliveryCOD = orderType === "Delivery" && deliveryPayMode === "cod" && !loadedAdvancePayment;
+  const isDeliveryAdvance = orderType === "Delivery" && deliveryPayMode === "advance" && !loadedAdvancePayment;
+  const advanceTotal = advanceEntries.reduce((s, e) => s + e.amount, 0);
+  const deliveryBalance = Math.max(0, total - advanceTotal);
+  const isAdvanceSufficient = isDeliveryAdvance
+    ? advanceEntries.length > 0 && advanceTotal > 0 && advanceTotal < total
+    : true;
+
   const loadRunningOrder = (orderId: string) => {
     if (myPendingCancelOrderIds.has(orderId)) {
       toast.error("This order has a pending cancellation request and cannot be modified.");
@@ -1274,6 +1289,10 @@ const POS = () => {
     setGivenAmount(0);
     setPaymentEntries([]);
     setSendSMS(false);
+    setDeliveryPayMode("cod");
+    setAdvanceEntries([]);
+    setAdvanceMethod("Cash");
+    setAdvanceAmount(0);
     setShowFinalizeSale(true);
   };
 
@@ -1286,7 +1305,16 @@ const POS = () => {
   const removePaymentEntry = (id: string) => setPaymentEntries(prev => prev.filter(e => e.id !== id));
 
   const handleFinalizeSubmit = async () => {
-    if (totalPaid < netPayable) {
+    if (isDeliveryAdvance) {
+      if (advanceEntries.length === 0 || advanceTotal <= 0) {
+        toast.error("Enter advance payment amount and method");
+        return;
+      }
+      if (advanceTotal >= total) {
+        toast.error("Advance cannot equal or exceed the total. Use Full Prepaid instead.");
+        return;
+      }
+    } else if (!isDeliveryCOD && totalPaid < netPayable) {
       if (!selectedCustomer || selectedCustomer === "") {
         toast.error("Payment incomplete. Select a customer for credit or pay full amount.");
         return;
@@ -1295,11 +1323,32 @@ const POS = () => {
 
     setIsSubmitting(true);
 
-    let payMethodStr = paymentEntries.length > 0
-      ? paymentEntries.map(e => `${e.method}: Rs.${e.amount}`).join(", ")
-      : finalizeMethod;
-    if (loadedAdvancePayment > 0) {
-      payMethodStr = `Advance (${loadedAdvanceMethod}): Rs.${loadedAdvancePayment}${paymentEntries.length > 0 || finalizeMethod ? `, Net (${payMethodStr}): Rs.${totalPaid || netPayable}` : ""}`;
+    let payMethodStr: string;
+    let finalAdvancePayment: number = loadedAdvancePayment;
+
+    if (orderType === "Delivery" && !loadedAdvancePayment) {
+      if (deliveryPayMode === "cod") {
+        payMethodStr = "Cash on Delivery";
+        finalAdvancePayment = 0;
+      } else if (deliveryPayMode === "advance") {
+        payMethodStr = advanceEntries.length > 0
+          ? advanceEntries.map(e => `Advance (${e.method}): Rs.${e.amount}`).join(", ")
+          : `Advance (${advanceMethod}): Rs.0`;
+        finalAdvancePayment = advanceTotal;
+      } else {
+        payMethodStr = paymentEntries.length > 0
+          ? paymentEntries.map(e => `${e.method}: Rs.${e.amount}`).join(", ")
+          : finalizeMethod;
+        finalAdvancePayment = 0;
+      }
+    } else {
+      payMethodStr = paymentEntries.length > 0
+        ? paymentEntries.map(e => `${e.method}: Rs.${e.amount}`).join(", ")
+        : finalizeMethod;
+      if (loadedAdvancePayment > 0) {
+        payMethodStr = `Advance (${loadedAdvanceMethod}): Rs.${loadedAdvancePayment}${paymentEntries.length > 0 || finalizeMethod ? `, Net (${payMethodStr}): Rs.${totalPaid || netPayable}` : ""}`;
+      }
+      finalAdvancePayment = loadedAdvancePayment;
     }
 
     let finalOrderNumber = "";
@@ -1338,7 +1387,7 @@ const POS = () => {
             modifiers: c.modifiers || [], cookingTime: c.cookingTime || null, notes: c.notes || null,
           })),
           subtotal: itemsSubtotal, discount: orderDiscount, tax, total,
-          advancePayment: loadedAdvancePayment || undefined,
+          advancePayment: finalAdvancePayment || undefined,
           paymentMethod: payMethodStr,
           staffName: selectedStaff,
           tableNumber: orderType === "Dine In" ? tableNumber || null : null,
@@ -2301,6 +2350,96 @@ const POS = () => {
               <Badge variant="secondary" className="text-xs">⏱ {orderElapsed}</Badge>
             </DialogTitle>
           </DialogHeader>
+
+          {/* Delivery Payment Mode Selector — only shown for new delivery orders */}
+          {orderType === "Delivery" && !loadedAdvancePayment && (
+            <div className="bg-muted/40 rounded-lg p-3 space-y-2 border border-border">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Delivery Payment Mode</p>
+              <div className="grid grid-cols-3 gap-2">
+                {(["cod", "advance", "prepaid"] as const).map(mode => (
+                  <Button
+                    key={mode}
+                    size="sm"
+                    variant={deliveryPayMode === mode ? "default" : "outline"}
+                    className={cn(
+                      "text-xs h-10 flex flex-col gap-0.5",
+                      deliveryPayMode === mode && "gradient-primary text-primary-foreground"
+                    )}
+                    onClick={() => {
+                      setDeliveryPayMode(mode);
+                      setAdvanceEntries([]);
+                      setAdvanceAmount(0);
+                    }}
+                  >
+                    {mode === "cod"     && <><span>🚚</span><span>Cash on Delivery</span></>}
+                    {mode === "advance" && <><span>💰</span><span>Advance Payment</span></>}
+                    {mode === "prepaid" && <><span>✅</span><span>Full Prepaid</span></>}
+                  </Button>
+                ))}
+              </div>
+
+              {deliveryPayMode === "cod" && (
+                <div className="bg-amber-500/10 border border-amber-500/20 rounded p-2 text-xs text-amber-700 dark:text-amber-400 flex items-center gap-2">
+                  <span>🚚</span>
+                  <span>Rider will collect <strong>Rs. {total.toLocaleString()}</strong> from customer at doorstep</span>
+                </div>
+              )}
+
+              {deliveryPayMode === "advance" && (
+                <div className="space-y-2 pt-1">
+                  <div className="grid grid-cols-2 gap-2">
+                    {(effectiveSettings?.paymentMethods ?? ["Cash", "Credit Card", "Account", "JazzCash", "EasyPaisa"]).map(pm => {
+                      const IconComponent = getPaymentIcon(pm);
+                      return (
+                        <Button key={pm} size="sm" variant={advanceMethod === pm ? "default" : "outline"}
+                          className={cn("text-xs h-8", advanceMethod === pm && "gradient-primary text-primary-foreground")}
+                          onClick={() => setAdvanceMethod(pm)}>
+                          <IconComponent className="h-3 w-3 mr-1" />{pm}
+                        </Button>
+                      );
+                    })}
+                  </div>
+                  <div className="flex gap-2">
+                    <Input
+                      type="number"
+                      placeholder="Advance amount"
+                      value={advanceAmount || ""}
+                      onChange={e => setAdvanceAmount(Number(e.target.value))}
+                      className="text-sm"
+                    />
+                    <Button size="sm" onClick={() => {
+                      if (advanceAmount <= 0) { toast.error("Enter advance amount"); return; }
+                      if (advanceAmount >= total) { toast.error("Advance cannot equal or exceed total"); return; }
+                      setAdvanceEntries(prev => [...prev, { id: `adv-${Date.now()}`, method: advanceMethod, amount: advanceAmount }]);
+                      setAdvanceAmount(0);
+                    }}>Add</Button>
+                  </div>
+                  {advanceEntries.map(e => (
+                    <div key={e.id} className="flex items-center justify-between text-xs bg-muted/50 rounded px-2 py-1">
+                      <span>{e.method}</span>
+                      <div className="flex items-center gap-1">
+                        <span className="font-medium">Rs. {e.amount.toLocaleString()}</span>
+                        <button onClick={() => setAdvanceEntries(prev => prev.filter(x => x.id !== e.id))} className="text-destructive">
+                          <X className="h-3 w-3" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                  {advanceEntries.length > 0 && (
+                    <div className="bg-amber-500/10 border border-amber-500/20 rounded p-2 text-xs space-y-1">
+                      <div className="flex justify-between"><span>Total</span><span className="font-bold">Rs. {total.toLocaleString()}</span></div>
+                      <div className="flex justify-between text-emerald-600 dark:text-emerald-400"><span>Advance Paid</span><span className="font-bold">- Rs. {advanceTotal.toLocaleString()}</span></div>
+                      <Separator />
+                      <div className="flex justify-between text-amber-700 dark:text-amber-400 font-extrabold">
+                        <span>Rider Collects</span><span>Rs. {deliveryBalance.toLocaleString()}</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             {/* Left: Order Info */}
             <div className="space-y-3">
@@ -2341,7 +2480,8 @@ const POS = () => {
             </div>
 
             {/* Center: Payment Methods */}
-            <div className="space-y-3">
+            {!(orderType === "Delivery" && (deliveryPayMode === "cod" || deliveryPayMode === "advance") && !loadedAdvancePayment) && (
+              <div className="space-y-3">
               <p className="text-sm font-medium">Payment Method</p>
               <div className="grid grid-cols-2 gap-2">
                 {(effectiveSettings?.paymentMethods ?? ["Cash", "Credit Card", "Account", "JazzCash", "EasyPaisa"]).map(pm => {
@@ -2410,14 +2550,17 @@ const POS = () => {
                 <Checkbox checked={sendSMS} onCheckedChange={(c) => setSendSMS(!!c)} />
                 <Label className="text-xs">Send SMS to customer</Label>
               </div>
-              {!isPaymentSufficient && totalPaid < netPayable && (
+              {!isDeliveryCOD && !isDeliveryAdvance && !isPaymentSufficient && totalPaid < netPayable && (
                 <p className="text-xs text-warning">⚠ Payment is less than net payable. Customer credit will be recorded.</p>
+              )}
+              {isDeliveryAdvance && advanceEntries.length === 0 && (
+                <p className="text-xs text-warning">⚠ Enter at least one advance payment entry</p>
               )}
             </div>
           </div>
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => setShowFinalizeSale(false)} disabled={isSubmitting}>Cancel</Button>
-            <Button className="gradient-primary text-primary-foreground min-w-[150px]" onClick={handleFinalizeSubmit} disabled={isSubmitting}>
+            <Button className="gradient-primary text-primary-foreground min-w-[150px]" onClick={handleFinalizeSubmit} disabled={isSubmitting || (isDeliveryAdvance && !isAdvanceSufficient)}>
               {isSubmitting
                 ? <><span className="h-4 w-4 mr-2 border-2 border-white/30 border-t-white rounded-full animate-spin inline-block" />Processing...</>
                 : <><Check className="h-4 w-4 mr-1" />Confirm Payment</>}
