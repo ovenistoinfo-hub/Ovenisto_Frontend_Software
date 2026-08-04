@@ -15,6 +15,7 @@ import { useVisiblePolling } from "@/hooks/use-visible-polling";
 import { useData } from "@/contexts/DataContext";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { getDeliveryPaymentMode, getRiderCollectAmount } from "@/utils/deliveryPayment";
 
 const STATUS_COLORS: Record<string, string> = {
   pending:    "bg-warning/10 text-warning",
@@ -29,6 +30,52 @@ const RIDER_STATUS_COLORS: Record<string, string> = {
   on_delivery: "bg-primary/10 text-primary",
   offline:     "bg-muted text-muted-foreground",
 };
+
+/** Small badge showing payment mode for a delivery order card */
+function PaymentBadge({ paymentMethod, advancePayment, total, currency }: {
+  paymentMethod: string | null | undefined;
+  advancePayment: number;
+  total: number;
+  currency: string;
+}) {
+  const mode = getDeliveryPaymentMode(paymentMethod, advancePayment);
+  const toCollect = getRiderCollectAmount(total, advancePayment, mode);
+
+  if (mode === "cod") return (
+    <div className="text-xs mt-1 space-y-0.5">
+      <span className="inline-flex items-center gap-1 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 border border-amber-300/50 rounded px-1.5 py-0.5 font-semibold">
+        🚚 COD
+      </span>
+      <p className="text-muted-foreground">Collect: <strong>{currency} {toCollect.toLocaleString()}</strong></p>
+    </div>
+  );
+
+  if (mode === "advance") return (
+    <div className="text-xs mt-1 space-y-0.5">
+      <span className="inline-flex items-center gap-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 border border-blue-300/50 rounded px-1.5 py-0.5 font-semibold">
+        💰 ADVANCE
+      </span>
+      <p className="text-muted-foreground">Adv: <strong>{currency} {advancePayment.toLocaleString()}</strong> | Collect: <strong>{currency} {toCollect.toLocaleString()}</strong></p>
+    </div>
+  );
+
+  if (mode === "collected") return (
+    <div className="text-xs mt-1">
+      <span className="inline-flex items-center gap-1 bg-success/10 text-success border border-success/20 rounded px-1.5 py-0.5 font-semibold">
+        ✅ COLLECTED
+      </span>
+    </div>
+  );
+
+  return (
+    <div className="text-xs mt-1 space-y-0.5">
+      <span className="inline-flex items-center gap-1 bg-success/10 text-success border border-success/20 rounded px-1.5 py-0.5 font-semibold">
+        ✅ PREPAID
+      </span>
+      <p className="text-muted-foreground">No collection needed</p>
+    </div>
+  );
+}
 
 const Delivery = () => {
   const { settings } = useData();
@@ -169,6 +216,12 @@ const Delivery = () => {
                             <p className="text-xs text-muted-foreground flex items-center gap-1"><MapPin className="h-3 w-3" />{o.deliveryAddress || "—"}</p>
                             <p className="text-xs text-muted-foreground flex items-center gap-1"><Phone className="h-3 w-3" />{o.phone || "—"}</p>
                             <p className="font-bold text-primary">{currency} {o.total?.toLocaleString()}</p>
+                            <PaymentBadge
+                              paymentMethod={(o as any).paymentMethod}
+                              advancePayment={Number((o as any).advancePayment ?? 0)}
+                              total={o.total ?? 0}
+                              currency={currency}
+                            />
                           </div>
                           <Button size="sm" className="w-full gradient-primary text-primary-foreground" onClick={() => openAssignDialog(o.id)}>
                             <Bike className="h-3.5 w-3.5 mr-1.5" />Assign Rider
@@ -195,6 +248,12 @@ const Delivery = () => {
                             <p className="text-xs text-muted-foreground flex items-center gap-1"><MapPin className="h-3 w-3" />{a.customerAddress || "—"}</p>
                             <p className="text-xs text-muted-foreground flex items-center gap-1"><Phone className="h-3 w-3" />{a.customerPhone || "—"}</p>
                             <p className="font-bold text-primary">{currency} {a.order?.total?.toLocaleString()}</p>
+                            <PaymentBadge
+                              paymentMethod={a.order?.paymentMethod}
+                              advancePayment={Number(a.order?.advancePayment ?? 0)}
+                              total={a.order?.total ?? 0}
+                              currency={currency}
+                            />
                           </div>
                           <div className="text-xs space-y-1 border-t pt-2">
                             <p><Bike className="h-3 w-3 inline mr-1" />Rider: <strong>{a.rider?.name}</strong></p>
@@ -283,6 +342,20 @@ const Delivery = () => {
       <Dialog open={!!showAssign} onOpenChange={() => setShowAssign(null)}>
         <DialogContent>
           <DialogHeader><DialogTitle>Assign Rider</DialogTitle></DialogHeader>
+          {(() => {
+            const order = pendingOrders.find(o => o.id === showAssign);
+            if (!order) return null;
+            const mode = getDeliveryPaymentMode((order as any).paymentMethod, Number((order as any).advancePayment ?? 0));
+            const toCollect = getRiderCollectAmount(order.total ?? 0, Number((order as any).advancePayment ?? 0), mode);
+            return (
+              <div className="bg-muted/40 rounded p-2 text-xs space-y-1 mb-2">
+                <p className="font-semibold">Order {order.orderNumber} — {currency} {order.total?.toLocaleString()}</p>
+                {mode === "cod"     && <p className="text-amber-600 dark:text-amber-400 font-medium">🚚 Cash on Delivery — rider collects {currency} {toCollect.toLocaleString()}</p>}
+                {mode === "advance" && <p className="text-blue-600 dark:text-blue-400 font-medium">💰 Advance {currency} {Number((order as any).advancePayment).toLocaleString()} paid — rider collects {currency} {toCollect.toLocaleString()}</p>}
+                {mode === "prepaid" && <p className="text-success font-medium">✅ Fully prepaid — no cash collection needed</p>}
+              </div>
+            );
+          })()}
           <div className="space-y-3">
             <div>
               <Label>Available Rider</Label>
