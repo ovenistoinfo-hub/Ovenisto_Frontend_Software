@@ -71,6 +71,11 @@ const OnlineOrders = () => {
   const todayRevenue = todayOrders.filter(o => o.status === "completed").reduce((s: number, o: any) => s + o.total, 0);
 
   const updateStatus = async (id: string, status: string, msg: string) => {
+    const target = onlineOrders.find(o => o.id === id);
+    if (target?.hasPendingCancellationRequest) {
+      toast.error("Cannot update status while a cancellation request is pending approval.");
+      return;
+    }
     setApiOrders(prev => prev.map(o => o.id === id ? { ...o, status } : o));
     try { await orderService.updateOrderStatus(id, status); toast.success(msg); }
     catch { loadOrders(); toast.error("Update failed"); }

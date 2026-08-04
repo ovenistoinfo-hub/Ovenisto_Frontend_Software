@@ -509,15 +509,22 @@ const POS = () => {
   const [approvingCashId, setApprovingCashId] = useState<string | null>(null);
 
   const handleApproveCash = async (orderId: string, orderNumber: string) => {
+    const targetOrder = (apiOrders as any[]).find(o => o.id === orderId) || (localOrdersData as any[]).find(o => o.id === orderId);
+    if (targetOrder?.hasPendingCancellationRequest) {
+      toast.error("Cannot approve cash while a cancellation request is pending approval.");
+      return;
+    }
     setApprovingCashId(orderId);
     try {
       markMine();
+      const nowIso = new Date().toISOString();
       await orderService.updateOrder(orderId, { cashApproved: true });
       toast.success(`Cash approved for Order ${orderNumber}!`);
+      setApiOrders(prev => prev.map(o => o.id === orderId ? { ...o, cashApproved: true, updatedAt: nowIso } : o));
       await loadApiOrders();
       const localMatch = localOrdersData.find(o => o.id === orderId);
       if (localMatch) {
-        updateDataItem("orders", orderId, { ...localMatch, cashApproved: true });
+        updateDataItem("orders", orderId, { ...localMatch, cashApproved: true, updatedAt: nowIso });
       }
     } catch (err: any) {
       toast.error(err?.message || "Failed to approve cash");
@@ -709,14 +716,17 @@ const POS = () => {
 
     const getSafeOrderTimestamp = (o: any): number => {
       if (!o) return 0;
+      let maxMs = 0;
       if (o.createdAt) {
         const ms = new Date(o.createdAt).getTime();
-        if (!isNaN(ms) && ms > 0) return ms;
+        if (!isNaN(ms) && ms > maxMs) maxMs = ms;
       }
       if (o.updatedAt) {
         const ms = new Date(o.updatedAt).getTime();
-        if (!isNaN(ms) && ms > 0) return ms;
+        if (!isNaN(ms) && ms > maxMs) maxMs = ms;
       }
+      if (maxMs > 0) return maxMs;
+
       if (o.date) {
         const dateStr = String(o.date).split("T")[0];
         const timeStr = o.time ? String(o.time).trim() : "";
@@ -1293,6 +1303,14 @@ const POS = () => {
     }
 
     let finalOrderNumber = "";
+
+    if (loadedOrderId) {
+      const loadedOrder = (allOrdersData as any[]).find((o) => o.id === loadedOrderId);
+      if (loadedOrder?.hasPendingCancellationRequest) {
+        toast.error("Cannot pay for or update order while a cancellation request is pending approval.");
+        return;
+      }
+    }
 
     try {
       markMine();
@@ -3730,13 +3748,25 @@ const POS = () => {
                                 </Badge>
                               </TableCell>
                               <TableCell className="py-2.5 px-3 text-center">
-                                <Badge className={cn("text-[10px] font-bold px-2 py-0.5 rounded-lg capitalize border", isApproved ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30" : "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30")}>
-                                  {isApproved ? o.status : "Pending Cash"}
-                                </Badge>
+                                {o.hasPendingCancellationRequest ? (
+                                  <Badge className="text-[10px] font-bold px-2 py-0.5 rounded-lg border bg-amber-500/20 text-amber-700 dark:text-amber-300 border-amber-500/40 flex items-center gap-1 mx-auto w-fit">
+                                    <Clock className="h-3 w-3" />
+                                    Cancel Pending
+                                  </Badge>
+                                ) : (
+                                  <Badge className={cn("text-[10px] font-bold px-2 py-0.5 rounded-lg capitalize border", isApproved ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30" : "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30")}>
+                                    {isApproved ? o.status : "Pending Cash"}
+                                  </Badge>
+                                )}
                               </TableCell>
                               <TableCell className="py-2.5 px-3 text-right font-bold font-mono text-foreground">{effectiveSettings.currency} {o.total.toLocaleString()}</TableCell>
                               <TableCell className="py-2.5 px-3 text-center">
-                                {isApproved ? (
+                                {o.hasPendingCancellationRequest ? (
+                                  <Badge variant="outline" className="text-[10px] bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30 font-bold px-2.5 py-1 rounded-lg flex items-center gap-1 justify-center mx-auto" title="Cancellation request pending branch admin approval">
+                                    <Clock className="h-3 w-3 text-amber-500" />
+                                    Cancel Pending
+                                  </Badge>
+                                ) : isApproved ? (
                                   <Badge variant="outline" className="text-[10px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 font-bold px-2.5 py-1 rounded-lg flex items-center gap-1 justify-center mx-auto">
                                     <CheckCircle2 className="h-3 w-3 text-emerald-500" />
                                     Approved

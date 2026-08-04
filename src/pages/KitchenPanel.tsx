@@ -28,6 +28,7 @@ interface KitchenOrder {
   preparingAt: Date | null;
   status: KitchenOrderStatus;
   maxCookingTime: number;
+  hasPendingCancellationRequest?: boolean;
 }
 
 const typeColors = ORDER_TYPE_COLORS;
@@ -112,12 +113,13 @@ const KitchenPanel = () => {
           type: o.type,
           items: relevantItems,
           placedAt: placedAtMap.current[o.id],
-          preparingAt: preparingAtMap.current[o.id] ?? null,
+          preparingAt: o.status === "preparing" || o.status === "ready" ? preparingAtMap.current[o.id] ?? placedAtMap.current[o.id] : null,
           status: mapApiStatusToKitchen(o.status),
           maxCookingTime,
+          hasPendingCancellationRequest: !!o.hasPendingCancellationRequest,
         } as KitchenOrder;
       })
-      .filter(Boolean) as KitchenOrder[];
+      .filter((o): o is KitchenOrder => o !== null);
   }, []);
 
   const load = useCallback(async () => {
@@ -374,9 +376,17 @@ const KitchenPanel = () => {
                         </div>
                         <span className="text-lg font-bold tracking-tight text-foreground">{order.orderNumber}</span>
                       </div>
-                      <Badge variant="secondary" className={cn("text-[10px] font-semibold rounded-full px-2.5 border", (typeColors as any)[order.type] ?? "")}>
-                        {order.type}
-                      </Badge>
+                      <div className="flex items-center gap-1.5">
+                        {order.hasPendingCancellationRequest && (
+                          <Badge className="bg-amber-500/20 text-amber-700 dark:text-amber-300 border-amber-500/40 text-[10px] font-bold px-2 py-0.5 flex items-center gap-1">
+                            <Clock className="h-3 w-3 text-amber-500" />
+                            Cancel Pending
+                          </Badge>
+                        )}
+                        <Badge variant="secondary" className={cn("text-[10px] font-semibold rounded-full px-2.5 border", (typeColors as any)[order.type] ?? "")}>
+                          {order.type}
+                        </Badge>
+                      </div>
                     </div>
 
                     {/* Timer Row */}
@@ -443,7 +453,11 @@ const KitchenPanel = () => {
 
                     {/* Action Button */}
                     <div className="p-3">
-                      {order.status === "ready" ? (
+                      {order.hasPendingCancellationRequest ? (
+                        <div className="flex items-center justify-center gap-1.5 text-xs text-amber-700 dark:text-amber-300 font-bold bg-amber-500/15 border border-amber-500/30 py-2.5 rounded-lg select-none" title="Cancellation request pending branch admin approval">
+                          <Clock className="h-4 w-4 text-amber-500" /> Cancel Pending
+                        </div>
+                      ) : order.status === "ready" ? (
                         <div className="flex items-center justify-center gap-1.5 text-sm text-green-500 font-bold bg-green-500/10 border border-green-500/20 py-2.5 rounded-lg select-none">
                           <CheckCircle2 className="h-4 w-4" /> Ready to Serve
                         </div>

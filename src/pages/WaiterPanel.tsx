@@ -436,15 +436,16 @@ const WaiterPanel = () => {
   const getTableStatus = (tableNum: number): TableStatus => {
     const activeOrders = orders.filter((o) => o.tableNumber === tableNum && ACTIVE_STATUSES.includes(o.status));
     const hasUnpaidOnTable = activeOrders.some(isOrderUnpaid);
+    const hasPendingCancel = activeOrders.some((o) => o.hasPendingCancellationRequest);
 
-    if (billReqSet.has(tableNum) && (activeOrders.length === 0 || hasUnpaidOnTable)) return "bill-requested";
+    if (billReqSet.has(tableNum) && (activeOrders.length === 0 || hasUnpaidOnTable) && !hasPendingCancel) return "bill-requested";
     const t = tables.find((tbl) => Number(tbl.number) === tableNum);
-    if (t && t.status === "bill-requested" && (activeOrders.length === 0 || hasUnpaidOnTable)) return "bill-requested";
+    if (t && t.status === "bill-requested" && (activeOrders.length === 0 || hasUnpaidOnTable) && !hasPendingCancel) return "bill-requested";
 
     if (activeOrders.length > 0) {
-      // If food is ready AND there is an unpaid order, mark table as bill-requested
+      // If food is ready AND there is an unpaid order AND NO cancellation pending, mark table as bill-requested
       const allReady = activeOrders.every((o) => o.status === "ready");
-      if (allReady && hasUnpaidOnTable) return "bill-requested";
+      if (allReady && hasUnpaidOnTable && !hasPendingCancel) return "bill-requested";
       return "occupied";
     }
 
@@ -487,9 +488,10 @@ const WaiterPanel = () => {
   const hasUnpaid = unpaidOrders.length > 0;
   const isSessionPaid = activeTableOrders.length > 0 && !hasUnpaid;
 
+  const hasPendingCancellationOnTable = activeTableOrders.some((o) => o.hasPendingCancellationRequest);
   const hasPendingOrPreparing = unpaidOrders.some(o => o.status === "pending" || o.status === "preparing");
   const hasReady = unpaidOrders.some(o => o.status === "ready" || o.status === "served");
-  const canPayBill = hasUnpaid && !hasPendingOrPreparing && (hasReady || activeTableOrders.every(o => o.status === "ready" || o.status === "served"));
+  const canPayBill = hasUnpaid && !hasPendingCancellationOnTable && !hasPendingOrPreparing && (hasReady || activeTableOrders.every(o => o.status === "ready" || o.status === "served"));
 
   const confirmedReservations = useMemo(() => {
     const pkt = new Date(Date.now() + 5 * 60 * 60 * 1000);
@@ -954,6 +956,10 @@ const WaiterPanel = () => {
 
   const endSitting = async () => {
     if (!selectedTable || selectedTableNum === null) return;
+    if (activeTableOrders.some(o => o.hasPendingCancellationRequest)) {
+      toast.warning("Cannot end sitting session while an order cancellation request is pending approval.");
+      return;
+    }
     if (hasUnpaid) {
       toast.warning("Please settle all active orders before ending the sitting session.");
       return;
@@ -1655,6 +1661,13 @@ const WaiterPanel = () => {
                         </div>
                       );
                     })()}
+
+                    {hasPendingCancellationOnTable && (
+                      <div className="bg-amber-500/15 border border-amber-500/30 text-amber-500 rounded-xl p-3 text-center text-xs font-extrabold flex items-center justify-center gap-1.5 select-none mb-2 animate-pulse">
+                        <Clock className="h-4 w-4 text-amber-500 shrink-0" />
+                        Cancellation Request Pending Approval — Payable Bill Locked
+                      </div>
+                    )}
 
                     {/* Actions Grid */}
                     <div className="grid grid-cols-2 gap-2">

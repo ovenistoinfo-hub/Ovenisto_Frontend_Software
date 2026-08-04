@@ -223,6 +223,11 @@ const OrderStatusBoard = () => {
   };
 
   const handleStatusUpdate = async (orderId: string, newStatus: string) => {
+    const targetOrder = allOrders.find(o => o.id === orderId);
+    if (targetOrder?.hasPendingCancellationRequest) {
+      toast.error("Cannot update status while a cancellation request is pending approval.");
+      return;
+    }
     try {
       await orderService.updateOrderStatus(orderId, newStatus);
       setAllOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: newStatus } : o));
@@ -230,8 +235,8 @@ const OrderStatusBoard = () => {
         setSelectedOrder(prev => prev ? { ...prev, status: newStatus } : null);
       }
       toast.success(`Order #${orderId.slice(-4)} updated to ${newStatus}`);
-    } catch {
-      toast.error("Failed to update order status");
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to update order status");
     }
   };
 
