@@ -10,6 +10,7 @@ import { useData } from "@/contexts/DataContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { getDeliveryPaymentMode, getRiderCollectAmount } from "@/utils/deliveryPayment";
 
 const STATUS_COLORS: Record<string, string> = {
   pending:    "bg-warning/10 text-warning border-warning/20",
@@ -172,13 +173,58 @@ const RiderPortal = () => {
                   )}
                 </div>
 
-                <div className="flex items-center justify-between pt-1 border-t">
-                  <div>
-                    <p className="text-xs text-muted-foreground">Collect from Customer</p>
-                    <p className="font-bold text-primary text-lg">{currency} {(a.amountToCollect ?? a.order?.total ?? 0).toLocaleString()}</p>
-                  </div>
-                  <Banknote className="h-6 w-6 text-primary/30" />
-                </div>
+                {/* Contextual payment block */}
+                {(() => {
+                  const payMethod  = a.order?.paymentMethod;
+                  const advPaid    = Number(a.order?.advancePayment ?? 0);
+                  const orderTotal = Number(a.order?.total ?? 0);
+                  const mode       = getDeliveryPaymentMode(payMethod, advPaid);
+                  const toCollect  = Number(a.amountToCollect ?? getRiderCollectAmount(orderTotal, advPaid, mode));
+
+                  if (mode === "prepaid" || mode === "collected") return (
+                    <div className="flex items-center justify-between pt-1 border-t">
+                      <div>
+                        <p className="text-xs text-muted-foreground">Payment</p>
+                        <p className="text-sm font-semibold text-success">✅ Fully Paid — No collection needed</p>
+                      </div>
+                      <Banknote className="h-6 w-6 text-success/30" />
+                    </div>
+                  );
+
+                  if (mode === "advance") return (
+                    <div className="pt-1 border-t space-y-1">
+                      <p className="text-xs font-semibold text-muted-foreground">Payment Summary</p>
+                      <div className="text-xs space-y-0.5">
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Total</span>
+                          <span className="font-medium">{currency} {orderTotal.toLocaleString()}</span>
+                        </div>
+                        <div className="flex justify-between text-emerald-600 dark:text-emerald-400">
+                          <span>Advance Paid</span>
+                          <span className="font-medium">- {currency} {advPaid.toLocaleString()}</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between bg-amber-500/10 border border-amber-500/20 rounded px-2 py-1.5">
+                        <div>
+                          <p className="text-xs text-amber-700 dark:text-amber-400 font-medium">💰 Collect from Customer</p>
+                          <p className="font-bold text-amber-700 dark:text-amber-400 text-lg">{currency} {toCollect.toLocaleString()}</p>
+                        </div>
+                        <Banknote className="h-6 w-6 text-amber-500/50" />
+                      </div>
+                    </div>
+                  );
+
+                  // COD — full amount
+                  return (
+                    <div className="flex items-center justify-between pt-1 border-t bg-amber-500/10 border border-amber-500/20 rounded px-2 py-1.5 mt-1">
+                      <div>
+                        <p className="text-xs text-amber-700 dark:text-amber-400 font-medium">🚚 Collect from Customer (COD)</p>
+                        <p className="font-bold text-amber-700 dark:text-amber-400 text-lg">{currency} {toCollect.toLocaleString()}</p>
+                      </div>
+                      <Banknote className="h-6 w-6 text-amber-500/50" />
+                    </div>
+                  );
+                })()}
 
                 <div className="flex gap-2 pt-1">
                   {a.status === "pending" && (
