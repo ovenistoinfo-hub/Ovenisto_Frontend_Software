@@ -70,12 +70,14 @@ const KitchenPanel = () => {
   // preparingAt: when "Accept Order" was clicked (timer starts here)
   const preparingAtMap = useRef<Record<string, Date>>({});
 
+  const loadSeq = useRef(0);
+
   const buildKitchenOrders = useCallback((orders: OrderRecord[], kitch: KitchenRecord) => {
     const cats = kitch.assignedCategories ?? [];
     const hasFilter = cats.length > 0;
 
     return orders
-      .filter((o) => o.status !== "completed" && o.status !== "cancelled")
+      .filter((o) => o.status !== "completed" && o.status !== "cancelled" && o.status !== "ready")
       // Exclude self-orders that are still pending AND not yet accepted by a waiter —
       // once accepted (acceptedById set) it behaves exactly like any other pending order.
       .filter((o) => !(o.type === "Self Order" && o.status === "pending" && !o.acceptedById))
@@ -123,11 +125,13 @@ const KitchenPanel = () => {
   }, []);
 
   const load = useCallback(async () => {
+    const seq = ++loadSeq.current;
     try {
       const [kitchens, { data: orders }] = await Promise.all([
         orderService.getKitchens(),
         orderService.getOrders({ limit: 100 }),
       ]);
+      if (seq !== loadSeq.current) return; // a newer load() started since this one fired — discard stale response
 
       const kitch = id ? kitchens.find(k => k.id === id) : kitchens[0];
       if (!kitch) { setLoading(false); return; }
@@ -135,9 +139,9 @@ const KitchenPanel = () => {
       setKitchen(kitch);
       setKitchenOrders(buildKitchenOrders(orders, kitch));
     } catch {
-      toast.error("Failed to load kitchen data");
+      if (seq === loadSeq.current) toast.error("Failed to load kitchen data");
     } finally {
-      setLoading(false);
+      if (seq === loadSeq.current) setLoading(false);
     }
   }, [id, buildKitchenOrders]);
 
@@ -276,7 +280,7 @@ const KitchenPanel = () => {
         <div className="flex items-center gap-5">
           {/* Status Filter Buttons */}
           <div className="flex gap-1.5 bg-muted/50 p-1 rounded-xl">
-            {(["all", "new", "preparing", "ready"] as const).map((s) => (
+            {(["all", "new", "preparing"] as const).map((s) => (
               <Button
                 key={s}
                 variant={statusFilter === s ? "default" : "ghost"}
@@ -428,11 +432,6 @@ const KitchenPanel = () => {
                             />
                           )}
                         </>
-                      ) : order.status === "ready" ? (
-                        <div className="flex items-center justify-center gap-1.5 text-sm px-2.5 py-1 rounded-lg bg-success/10 text-success font-semibold">
-                          <CheckCircle2 className="h-3.5 w-3.5" />
-                          <span className="text-xs">Ready to serve</span>
-                        </div>
                       ) : null}
                     </div>
 
@@ -456,10 +455,6 @@ const KitchenPanel = () => {
                       {order.hasPendingCancellationRequest ? (
                         <div className="flex items-center justify-center gap-1.5 text-xs text-amber-700 dark:text-amber-300 font-bold bg-amber-500/15 border border-amber-500/30 py-2.5 rounded-lg select-none" title="Cancellation request pending branch admin approval">
                           <Clock className="h-4 w-4 text-amber-500" /> Cancel Pending
-                        </div>
-                      ) : order.status === "ready" ? (
-                        <div className="flex items-center justify-center gap-1.5 text-sm text-green-500 font-bold bg-green-500/10 border border-green-500/20 py-2.5 rounded-lg select-none">
-                          <CheckCircle2 className="h-4 w-4" /> Ready to Serve
                         </div>
                       ) : order.status !== "completed" ? (
                         <Button
