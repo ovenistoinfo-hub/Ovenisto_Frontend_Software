@@ -2344,17 +2344,30 @@ const POS = () => {
       {/* Finalize Sale Dialog */}
       <Dialog open={showFinalizeSale} onOpenChange={setShowFinalizeSale}>
         <DialogContent className="max-w-[95vw] sm:max-w-3xl max-h-[95vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center justify-between">
-              <span>Finalize Sale</span>
-              <Badge variant="secondary" className="text-xs">⏱ {orderElapsed}</Badge>
+          <DialogHeader className="pb-2 border-b border-border/40">
+            <DialogTitle className="flex items-center justify-between text-lg">
+              <div className="flex items-center gap-2">
+                <Wallet className="h-5 w-5 text-primary" />
+                <span>Finalize Sale</span>
+              </div>
+              <Badge variant="outline" className="text-xs font-mono gap-1 border-muted-foreground/30">
+                <Clock className="h-3 w-3 text-muted-foreground" />
+                <span>{orderElapsed}</span>
+              </Badge>
             </DialogTitle>
           </DialogHeader>
 
           {/* Delivery Payment Mode Selector — only shown for new delivery orders */}
           {orderType === "Delivery" && !loadedAdvancePayment && (
-            <div className="bg-muted/40 rounded-lg p-3 space-y-2 border border-border">
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Delivery Payment Mode</p>
+            <div className="bg-muted/30 rounded-xl p-3.5 space-y-2.5 border border-border/60">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                  <Truck className="h-3.5 w-3.5 text-primary" />
+                  Delivery Payment Mode
+                </p>
+                <span className="text-[11px] text-muted-foreground">Select how order will be settled</span>
+              </div>
+
               <div className="grid grid-cols-3 gap-2">
                 {(["cod", "advance", "prepaid"] as const).map(mode => (
                   <Button
@@ -2362,8 +2375,10 @@ const POS = () => {
                     size="sm"
                     variant={deliveryPayMode === mode ? "default" : "outline"}
                     className={cn(
-                      "text-xs h-10 flex flex-col gap-0.5",
-                      deliveryPayMode === mode && "gradient-primary text-primary-foreground"
+                      "text-xs h-11 flex items-center justify-center gap-2 font-medium transition-all",
+                      deliveryPayMode === mode
+                        ? "gradient-primary text-primary-foreground shadow-sm font-semibold"
+                        : "hover:bg-muted/80"
                     )}
                     onClick={() => {
                       setDeliveryPayMode(mode);
@@ -2371,67 +2386,78 @@ const POS = () => {
                       setAdvanceAmount(0);
                     }}
                   >
-                    {mode === "cod"     && <><span>🚚</span><span>Cash on Delivery</span></>}
-                    {mode === "advance" && <><span>💰</span><span>Advance Payment</span></>}
-                    {mode === "prepaid" && <><span>✅</span><span>Full Prepaid</span></>}
+                    {mode === "cod"     && <><Truck className="h-4 w-4 shrink-0" /><span>Cash on Delivery</span></>}
+                    {mode === "advance" && <><Wallet className="h-4 w-4 shrink-0" /><span>Advance Payment</span></>}
+                    {mode === "prepaid" && <><CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" /><span>Full Prepaid</span></>}
                   </Button>
                 ))}
               </div>
 
+              {/* COD banner */}
               {deliveryPayMode === "cod" && (
-                <div className="bg-amber-500/10 border border-amber-500/20 rounded p-2 text-xs text-amber-700 dark:text-amber-400 flex items-center gap-2">
-                  <span>🚚</span>
-                  <span>Rider will collect <strong>Rs. {total.toLocaleString()}</strong> from customer at doorstep</span>
+                <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-2.5 text-xs text-amber-700 dark:text-amber-400 flex items-center gap-2.5">
+                  <Truck className="h-4 w-4 shrink-0 text-amber-500" />
+                  <span>Doorstep Collection: Rider will collect <strong className="font-mono font-bold text-amber-600 dark:text-amber-300">Rs. {total.toLocaleString()}</strong> from customer at delivery.</span>
                 </div>
               )}
 
+              {/* Advance input panel */}
               {deliveryPayMode === "advance" && (
-                <div className="space-y-2 pt-1">
-                  <div className="grid grid-cols-2 gap-2">
-                    {(effectiveSettings?.paymentMethods ?? ["Cash", "Credit Card", "Account", "JazzCash", "EasyPaisa"]).map(pm => {
+                <div className="space-y-2.5 pt-1.5 border-t border-border/40">
+                  <p className="text-xs font-semibold text-muted-foreground">Select Advance Payment Method & Amount</p>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                    {(effectiveSettings?.paymentMethods ?? ["Cash", "Credit Card", "JazzCash", "EasyPaisa"]).map(pm => {
                       const IconComponent = getPaymentIcon(pm);
                       return (
                         <Button key={pm} size="sm" variant={advanceMethod === pm ? "default" : "outline"}
-                          className={cn("text-xs h-8", advanceMethod === pm && "gradient-primary text-primary-foreground")}
+                          className={cn("text-xs h-8 gap-1.5", advanceMethod === pm && "gradient-primary text-primary-foreground font-semibold")}
                           onClick={() => setAdvanceMethod(pm)}>
-                          <IconComponent className="h-3 w-3 mr-1" />{pm}
+                          <IconComponent className="h-3.5 w-3.5" />{pm}
                         </Button>
                       );
                     })}
                   </div>
+
                   <div className="flex gap-2">
                     <Input
                       type="number"
-                      placeholder="Advance amount"
+                      placeholder="Advance amount (Rs.)"
                       value={advanceAmount || ""}
                       onChange={e => setAdvanceAmount(Number(e.target.value))}
-                      className="text-sm"
+                      className="text-sm h-9"
                     />
-                    <Button size="sm" onClick={() => {
+                    <Button size="sm" className="h-9 px-4 gap-1" onClick={() => {
                       if (advanceAmount <= 0) { toast.error("Enter advance amount"); return; }
                       if (advanceAmount >= total) { toast.error("Advance cannot equal or exceed total"); return; }
                       setAdvanceEntries(prev => [...prev, { id: `adv-${Date.now()}`, method: advanceMethod, amount: advanceAmount }]);
                       setAdvanceAmount(0);
-                    }}>Add</Button>
+                    }}>
+                      <Plus className="h-3.5 w-3.5" />Add Advance
+                    </Button>
                   </div>
+
                   {advanceEntries.map(e => (
-                    <div key={e.id} className="flex items-center justify-between text-xs bg-muted/50 rounded px-2 py-1">
-                      <span>{e.method}</span>
-                      <div className="flex items-center gap-1">
-                        <span className="font-medium">Rs. {e.amount.toLocaleString()}</span>
-                        <button onClick={() => setAdvanceEntries(prev => prev.filter(x => x.id !== e.id))} className="text-destructive">
-                          <X className="h-3 w-3" />
+                    <div key={e.id} className="flex items-center justify-between text-xs bg-muted/60 border border-border/40 rounded-lg px-2.5 py-1.5">
+                      <span className="font-medium flex items-center gap-1.5">
+                        <Wallet className="h-3 w-3 text-primary" />{e.method}
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono font-bold">Rs. {e.amount.toLocaleString()}</span>
+                        <button onClick={() => setAdvanceEntries(prev => prev.filter(x => x.id !== e.id))} className="text-destructive hover:text-destructive/80 transition-colors">
+                          <X className="h-3.5 w-3.5" />
                         </button>
                       </div>
                     </div>
                   ))}
+
                   {advanceEntries.length > 0 && (
-                    <div className="bg-amber-500/10 border border-amber-500/20 rounded p-2 text-xs space-y-1">
-                      <div className="flex justify-between"><span>Total</span><span className="font-bold">Rs. {total.toLocaleString()}</span></div>
-                      <div className="flex justify-between text-emerald-600 dark:text-emerald-400"><span>Advance Paid</span><span className="font-bold">- Rs. {advanceTotal.toLocaleString()}</span></div>
-                      <Separator />
-                      <div className="flex justify-between text-amber-700 dark:text-amber-400 font-extrabold">
-                        <span>Rider Collects</span><span>Rs. {deliveryBalance.toLocaleString()}</span>
+                    <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-2.5 text-xs space-y-1">
+                      <div className="flex justify-between text-muted-foreground"><span>Total Order Amount</span><span className="font-mono font-bold text-foreground">Rs. {total.toLocaleString()}</span></div>
+                      <div className="flex justify-between text-emerald-600 dark:text-emerald-400 font-semibold"><span>Advance Deposit Received</span><span className="font-mono">- Rs. {advanceTotal.toLocaleString()}</span></div>
+                      <Separator className="my-1 bg-amber-500/20" />
+                      <div className="flex justify-between text-amber-700 dark:text-amber-300 font-extrabold text-sm">
+                        <span className="flex items-center gap-1"><Truck className="h-3.5 w-3.5" />Rider Collects at Doorstep</span>
+                        <span className="font-mono">Rs. {deliveryBalance.toLocaleString()}</span>
                       </div>
                     </div>
                   )}
@@ -2440,131 +2466,241 @@ const POS = () => {
             </div>
           )}
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            {/* Left: Order Info */}
-            <div className="space-y-3">
-              <div className="text-sm space-y-1">
-                <p className="text-muted-foreground">Customer: <strong>{selectedCustomerData?.name || "Walk-in"}</strong></p>
-                <p className="text-muted-foreground">Type: <strong>{orderType}</strong></p>
-                {tableNumber && <p className="text-muted-foreground">Table: <strong>#{tableNumber}</strong></p>}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-1">
+            {/* Left: Order Info & Cart Overview */}
+            <div className="space-y-3 bg-muted/20 p-3 rounded-xl border border-border/50">
+              <div className="text-xs space-y-1.5">
+                <p className="text-muted-foreground flex justify-between">
+                  <span>Customer:</span>
+                  <strong className="text-foreground font-semibold">{selectedCustomerData?.name || "Walk-in"}</strong>
+                </p>
+                <p className="text-muted-foreground flex justify-between">
+                  <span>Order Type:</span>
+                  <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 uppercase font-semibold">{orderType}</Badge>
+                </p>
+                {tableNumber && (
+                  <p className="text-muted-foreground flex justify-between">
+                    <span>Table:</span>
+                    <strong className="text-foreground">#{tableNumber}</strong>
+                  </p>
+                )}
+                {deliveryAddress && orderType === "Delivery" && (
+                  <p className="text-muted-foreground text-[11px] truncate">
+                    <span>Address: </span><strong className="text-foreground">{deliveryAddress}</strong>
+                  </p>
+                )}
               </div>
-              <Separator />
-              <Button variant="ghost" size="sm" className="text-xs" onClick={() => setShowCartDetails(!showCartDetails)}>
-                {showCartDetails ? "Hide" : "Show"} Cart Details ({cart.length} items)
+
+              <Separator className="bg-border/60" />
+
+              <Button variant="ghost" size="sm" className="text-xs w-full justify-between h-7 text-muted-foreground hover:text-foreground" onClick={() => setShowCartDetails(!showCartDetails)}>
+                <span>Cart Details ({cart.length} items)</span>
+                <span>{showCartDetails ? "Hide" : "Show"}</span>
               </Button>
+
               {showCartDetails && (
-                <div className="text-xs space-y-1 max-h-32 overflow-y-auto">
+                <div className="text-xs space-y-1.5 max-h-32 overflow-y-auto pr-1 bg-background/50 p-2 rounded-lg border border-border/40">
                   {cart.map(item => (
-                    <div key={item.id} className="flex justify-between">
-                      <span>{item.qty}x {item.name}</span>
-                      <span>Rs. {((item.price * item.qty) - item.discount).toLocaleString()}</span>
+                    <div key={item.id} className="flex justify-between text-muted-foreground">
+                      <span className="truncate pr-2">{item.qty}x {item.name}</span>
+                      <span className="font-mono font-medium text-foreground">Rs. {((item.price * item.qty) - item.discount).toLocaleString()}</span>
                     </div>
                   ))}
                 </div>
               )}
-              <Separator />
-              <div className="space-y-1 text-sm">
-                <div className="flex justify-between"><span className="text-muted-foreground">Subtotal</span><span>Rs. {subtotal.toLocaleString()}</span></div>
-                {orderDiscount > 0 && <div className="flex justify-between"><span className="text-muted-foreground">Discount</span><span className="text-destructive">-Rs. {orderDiscount.toLocaleString()}</span></div>}
-                <div className="flex justify-between"><span className="text-muted-foreground">Tax</span><span>Rs. {tax.toLocaleString()}</span></div>
-                <Separator />
-                <div className="flex justify-between font-bold text-base"><span>Gross Total</span><span>Rs. {total.toLocaleString()}</span></div>
+
+              <Separator className="bg-border/60" />
+
+              {/* Left Column Bill Breakdown */}
+              <div className="space-y-1.5 text-xs">
+                <div className="flex justify-between text-muted-foreground"><span>Subtotal</span><span className="font-mono">Rs. {subtotal.toLocaleString()}</span></div>
+                {orderDiscount > 0 && <div className="flex justify-between text-destructive"><span>Discount</span><span className="font-mono">-Rs. {orderDiscount.toLocaleString()}</span></div>}
+                <div className="flex justify-between text-muted-foreground"><span>Tax</span><span className="font-mono">Rs. {tax.toLocaleString()}</span></div>
+                <Separator className="my-1 bg-border/60" />
+                <div className="flex justify-between font-bold text-sm text-foreground pt-0.5">
+                  <span>Gross Order Total</span>
+                  <span className="font-mono text-primary">Rs. {total.toLocaleString()}</span>
+                </div>
                 {loadedAdvancePayment > 0 && (
                   <>
-                    <div className="flex justify-between text-emerald-600 dark:text-emerald-400 text-xs font-semibold"><span>Advance Deposit ({loadedAdvanceMethod})</span><span>- Rs. {loadedAdvancePayment.toLocaleString()}</span></div>
-                    <Separator />
-                    <div className="flex justify-between font-extrabold text-lg text-primary"><span>Net Payable</span><span>Rs. {netPayable.toLocaleString()}</span></div>
+                    <div className="flex justify-between text-emerald-600 dark:text-emerald-400 font-semibold text-xs pt-1">
+                      <span>Advance Deposit ({loadedAdvanceMethod})</span>
+                      <span className="font-mono">- Rs. {loadedAdvancePayment.toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between font-extrabold text-sm pt-1 text-primary">
+                      <span>Net Payable</span>
+                      <span className="font-mono">Rs. {netPayable.toLocaleString()}</span>
+                    </div>
                   </>
                 )}
               </div>
             </div>
 
-            {/* Center: Payment Methods */}
-            {!(orderType === "Delivery" && (deliveryPayMode === "cod" || deliveryPayMode === "advance") && !loadedAdvancePayment) && (
-              <div className="space-y-3">
-              <p className="text-sm font-medium">Payment Method</p>
-              <div className="grid grid-cols-2 gap-2">
-                {(effectiveSettings?.paymentMethods ?? ["Cash", "Credit Card", "Account", "JazzCash", "EasyPaisa"]).map(pm => {
-                  const IconComponent = getPaymentIcon(pm);
-                  return (
-                    <Button key={pm} variant={finalizeMethod === pm ? "default" : "outline"} size="sm"
-                      className={cn("text-xs h-9", finalizeMethod === pm && "gradient-primary text-primary-foreground")}
-                      onClick={() => setFinalizeMethod(pm)}>
-                      <IconComponent className="h-3 w-3 mr-1" />{pm}
-                    </Button>
-                  );
-                })}
-              </div>
-              <Separator />
-              <div className="space-y-2">
-                <p className="text-xs font-medium">Enter Amount</p>
-                <Input type="number" value={givenAmount || ""} onChange={(e) => setGivenAmount(Number(e.target.value))} placeholder="0" className="text-lg text-center" />
-                <div className="grid grid-cols-3 gap-1">
-                  {quickDenominations.map(d => (
-                    <Button key={d} variant="outline" size="sm" className="text-xs" onClick={() => setGivenAmount(prev => prev + d)}>+{d}</Button>
-                  ))}
+            {/* Center: Counter Payment Entry (Hidden for Delivery COD & Delivery Advance) */}
+            {!(orderType === "Delivery" && (deliveryPayMode === "cod" || deliveryPayMode === "advance") && !loadedAdvancePayment) ? (
+              <div className="space-y-3 bg-muted/20 p-3 rounded-xl border border-border/50">
+                <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Select Payment Method</p>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {(effectiveSettings?.paymentMethods ?? ["Cash", "Credit Card", "Account", "JazzCash", "EasyPaisa"]).map(pm => {
+                    const IconComponent = getPaymentIcon(pm);
+                    return (
+                      <Button key={pm} variant={finalizeMethod === pm ? "default" : "outline"} size="sm"
+                        className={cn("text-xs h-8 gap-1", finalizeMethod === pm && "gradient-primary text-primary-foreground font-semibold")}
+                        onClick={() => setFinalizeMethod(pm)}>
+                        <IconComponent className="h-3.5 w-3.5" />{pm}
+                      </Button>
+                    );
+                  })}
                 </div>
-                <Button className="w-full" size="sm" onClick={addPaymentEntry}>Add Payment Entry</Button>
-                <Button variant="outline" className="w-full text-xs" size="sm" onClick={() => { setGivenAmount(netPayable); setPaymentEntries([]); }}>
-                  Exact Amount
-                </Button>
+                <Separator className="bg-border/60" />
+                <div className="space-y-2">
+                  <p className="text-xs font-medium text-muted-foreground">Enter Cash / Amount</p>
+                  <Input type="number" value={givenAmount || ""} onChange={(e) => setGivenAmount(Number(e.target.value))} placeholder="0" className="text-lg text-center font-mono font-bold h-10" />
+                  <div className="grid grid-cols-3 gap-1">
+                    {quickDenominations.map(d => (
+                      <Button key={d} variant="outline" size="sm" className="text-xs font-mono h-7" onClick={() => setGivenAmount(prev => prev + d)}>+{d}</Button>
+                    ))}
+                  </div>
+                  <Button className="w-full h-8 text-xs font-semibold gap-1" size="sm" onClick={addPaymentEntry}>
+                    <Plus className="h-3.5 w-3.5" />Add Payment Entry
+                  </Button>
+                  <Button variant="outline" className="w-full text-xs h-7" size="sm" onClick={() => { setGivenAmount(netPayable); setPaymentEntries([]); }}>
+                    Exact Amount (Rs. {netPayable.toLocaleString()})
+                  </Button>
+                </div>
               </div>
-            </div>
-          )}
-
-          {/* Right: Summary */}
-            <div className="space-y-3">
-              <p className="text-sm font-medium">Payment Entries</p>
-              {paymentEntries.length === 0 ? (
-                <p className="text-xs text-muted-foreground">No entries yet</p>
-              ) : (
-                <div className="space-y-1">
-                  {paymentEntries.map(e => (
-                    <div key={e.id} className="flex items-center justify-between text-sm bg-muted/50 rounded px-2 py-1">
-                      <span className="text-xs">{e.method}</span>
-                      <div className="flex items-center gap-1">
-                        <span className="font-medium">Rs. {e.amount.toLocaleString()}</span>
-                        <button onClick={() => removePaymentEntry(e.id)} className="text-destructive"><X className="h-3 w-3" /></button>
-                      </div>
+            ) : (
+              /* Hero Info Banner in Middle Column when COD or Advance is selected */
+              <div className="bg-muted/20 p-4 rounded-xl border border-border/50 flex flex-col items-center justify-center text-center space-y-2">
+                {deliveryPayMode === "cod" ? (
+                  <>
+                    <div className="p-3 bg-amber-500/10 rounded-full text-amber-500">
+                      <Truck className="h-8 w-8" />
                     </div>
-                  ))}
-                </div>
-              )}
-              <Separator />
-              <div className="space-y-1 text-sm">
-                <div className="flex justify-between"><span>Gross Total</span><span className="font-bold">Rs. {total.toLocaleString()}</span></div>
-                {loadedAdvancePayment > 0 && (
-                  <div className="flex justify-between text-emerald-600 dark:text-emerald-400 font-semibold text-xs"><span>Advance Deposit</span><span className="font-bold">- Rs. {loadedAdvancePayment.toLocaleString()}</span></div>
+                    <p className="text-sm font-bold text-foreground">Cash on Delivery</p>
+                    <p className="text-xs text-muted-foreground max-w-[200px]">
+                      Customer will pay cash directly to the rider at delivery. No payment entry needed now.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <div className="p-3 bg-blue-500/10 rounded-full text-blue-500">
+                      <Wallet className="h-8 w-8" />
+                    </div>
+                    <p className="text-sm font-bold text-foreground">Advance Payment Mode</p>
+                    <p className="text-xs text-muted-foreground max-w-[200px]">
+                      Enter advance deposit in the top panel. Remaining balance will be collected by rider at doorstep.
+                    </p>
+                  </>
                 )}
-                <div className="flex justify-between"><span>Net Payable</span><span className="font-extrabold text-primary">Rs. {netPayable.toLocaleString()}</span></div>
-                <div className="flex justify-between"><span>Total Collected</span><span className={cn("font-bold", totalPaid >= netPayable ? "text-success" : "text-destructive")}>Rs. {totalPaid.toLocaleString()}</span></div>
-                {totalPaid > netPayable && <div className="flex justify-between text-success"><span>Change</span><span className="font-bold">Rs. {(totalPaid - netPayable).toLocaleString()}</span></div>}
-                {totalPaid < netPayable && <div className="flex justify-between text-destructive"><span>Remaining Due</span><span className="font-bold">Rs. {(netPayable - totalPaid).toLocaleString()}</span></div>}
               </div>
-              {finalizeChange > 0 && givenAmount > 0 && (
-                <div className="bg-success/10 text-success p-2 rounded text-center text-sm font-bold">
-                  Change: Rs. {finalizeChange.toLocaleString()}
+            )}
+
+            {/* Right: Settlement & Payment Entries Summary */}
+            <div className="space-y-3 bg-muted/20 p-3 rounded-xl border border-border/50 flex flex-col justify-between">
+              <div className="space-y-2.5">
+                <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Payment Summary</p>
+
+                {/* Show entries depending on mode */}
+                {orderType === "Delivery" && deliveryPayMode === "advance" && !loadedAdvancePayment ? (
+                  <div className="space-y-1 bg-background/60 p-2 rounded-lg border border-border/40">
+                    <p className="text-[11px] font-semibold text-muted-foreground">Advance Entries ({advanceEntries.length})</p>
+                    {advanceEntries.length === 0 ? (
+                      <p className="text-xs text-muted-foreground italic py-1">No advance entries added</p>
+                    ) : (
+                      advanceEntries.map(e => (
+                        <div key={e.id} className="flex items-center justify-between text-xs py-0.5">
+                          <span className="font-medium">{e.method}</span>
+                          <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">Rs. {e.amount.toLocaleString()}</span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                ) : orderType === "Delivery" && deliveryPayMode === "cod" && !loadedAdvancePayment ? (
+                  <div className="bg-amber-500/10 border border-amber-500/20 p-2.5 rounded-lg text-xs space-y-1">
+                    <div className="flex justify-between text-amber-700 dark:text-amber-400 font-semibold">
+                      <span>Payment Type:</span>
+                      <span>COD Doorstep</span>
+                    </div>
+                    <div className="flex justify-between font-bold text-foreground pt-0.5">
+                      <span>Rider Collects:</span>
+                      <span className="font-mono">Rs. {total.toLocaleString()}</span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-1 bg-background/60 p-2 rounded-lg border border-border/40">
+                    <p className="text-[11px] font-semibold text-muted-foreground">Counter Payment Entries ({paymentEntries.length})</p>
+                    {paymentEntries.length === 0 ? (
+                      <p className="text-xs text-muted-foreground italic py-1">No entries yet</p>
+                    ) : (
+                      paymentEntries.map(e => (
+                        <div key={e.id} className="flex items-center justify-between text-xs py-0.5">
+                          <span className="font-medium">{e.method}</span>
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-mono font-bold">Rs. {e.amount.toLocaleString()}</span>
+                            <button onClick={() => removePaymentEntry(e.id)} className="text-destructive hover:text-destructive/80">
+                              <X className="h-3 w-3" />
+                            </button>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
+
+                <Separator className="bg-border/60" />
+
+                {/* Single Authoritative Balance Summary — No Duplication! */}
+                <div className="space-y-1 text-xs">
+                  {orderType === "Delivery" && deliveryPayMode === "cod" && !loadedAdvancePayment ? (
+                    <div className="flex justify-between font-bold text-foreground text-sm">
+                      <span>Doorstep Cash Due</span>
+                      <span className="font-mono text-amber-600 dark:text-amber-400">Rs. {total.toLocaleString()}</span>
+                    </div>
+                  ) : orderType === "Delivery" && deliveryPayMode === "advance" && !loadedAdvancePayment ? (
+                    <>
+                      <div className="flex justify-between text-muted-foreground"><span>Total Advance Paid</span><span className="font-mono font-semibold text-emerald-600 dark:text-emerald-400">Rs. {advanceTotal.toLocaleString()}</span></div>
+                      <div className="flex justify-between font-bold text-foreground text-sm pt-1 border-t border-border/40"><span>Rider Collects</span><span className="font-mono text-amber-600 dark:text-amber-400">Rs. {deliveryBalance.toLocaleString()}</span></div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="flex justify-between text-muted-foreground"><span>Net Payable</span><span className="font-mono font-semibold">Rs. {netPayable.toLocaleString()}</span></div>
+                      <div className="flex justify-between text-muted-foreground"><span>Total Collected</span><span className={cn("font-mono font-bold", totalPaid >= netPayable ? "text-emerald-600 dark:text-emerald-400" : "text-destructive")}>Rs. {totalPaid.toLocaleString()}</span></div>
+                      {totalPaid > netPayable && <div className="flex justify-between text-emerald-600 font-bold pt-1 border-t border-border/40"><span>Change Return</span><span className="font-mono">Rs. {(totalPaid - netPayable).toLocaleString()}</span></div>}
+                      {totalPaid < netPayable && <div className="flex justify-between text-destructive font-bold pt-1 border-t border-border/40"><span>Remaining Balance</span><span className="font-mono">Rs. {(netPayable - totalPaid).toLocaleString()}</span></div>}
+                    </>
+                  )}
                 </div>
-              )}
-              <Separator />
-              <div className="flex items-center gap-2">
-                <Checkbox checked={sendSMS} onCheckedChange={(c) => setSendSMS(!!c)} />
-                <Label className="text-xs">Send SMS to customer</Label>
               </div>
-              {!isDeliveryCOD && !isDeliveryAdvance && !isPaymentSufficient && totalPaid < netPayable && (
-                <p className="text-xs text-warning">⚠ Payment is less than net payable. Customer credit will be recorded.</p>
-              )}
-              {isDeliveryAdvance && advanceEntries.length === 0 && (
-                <p className="text-xs text-warning">⚠ Enter at least one advance payment entry</p>
-              )}
+
+              <div className="space-y-2 pt-2">
+                <div className="flex items-center gap-2">
+                  <Checkbox id="sendSMS" checked={sendSMS} onCheckedChange={(c) => setSendSMS(!!c)} />
+                  <Label htmlFor="sendSMS" className="text-xs cursor-pointer text-muted-foreground hover:text-foreground">Send SMS receipt to customer</Label>
+                </div>
+
+                {!isDeliveryCOD && !isDeliveryAdvance && !isPaymentSufficient && totalPaid < netPayable && (
+                  <p className="text-[11px] text-amber-600 dark:text-amber-400 flex items-center gap-1 font-medium bg-amber-500/10 p-1.5 rounded border border-amber-500/20">
+                    <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                    Partial payment. Remaining recorded as customer credit.
+                  </p>
+                )}
+                {isDeliveryAdvance && advanceEntries.length === 0 && (
+                  <p className="text-[11px] text-amber-600 dark:text-amber-400 flex items-center gap-1 font-medium bg-amber-500/10 p-1.5 rounded border border-amber-500/20">
+                    <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                    Enter at least one advance payment entry above.
+                  </p>
+                )}
+              </div>
             </div>
           </div>
-          <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setShowFinalizeSale(false)} disabled={isSubmitting}>Cancel</Button>
-            <Button className="gradient-primary text-primary-foreground min-w-[150px]" onClick={handleFinalizeSubmit} disabled={isSubmitting || (isDeliveryAdvance && !isAdvanceSufficient)}>
+
+          <DialogFooter className="gap-2 pt-3 border-t border-border/40">
+            <Button variant="outline" size="sm" onClick={() => setShowFinalizeSale(false)} disabled={isSubmitting}>Cancel</Button>
+            <Button className="gradient-primary text-primary-foreground min-w-[160px] h-9 font-semibold gap-1.5" onClick={handleFinalizeSubmit} disabled={isSubmitting || (isDeliveryAdvance && !isAdvanceSufficient)}>
               {isSubmitting
-                ? <><span className="h-4 w-4 mr-2 border-2 border-white/30 border-t-white rounded-full animate-spin inline-block" />Processing...</>
-                : <><Check className="h-4 w-4 mr-1" />Confirm Payment</>}
+                ? <><Loader2 className="h-4 w-4 animate-spin" />Processing...</>
+                : <><Check className="h-4 w-4" />Confirm Payment</>}
             </Button>
           </DialogFooter>
         </DialogContent>

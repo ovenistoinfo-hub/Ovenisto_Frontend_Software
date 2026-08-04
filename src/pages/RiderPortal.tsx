@@ -1,5 +1,4 @@
-import { useState, useCallback } from "react";
-import { Bike, MapPin, Phone, Clock, CheckCircle2, Truck, RotateCcw, RefreshCw, Package, TrendingUp, Banknote } from "lucide-react";
+import { Bike, MapPin, Phone, Clock, CheckCircle2, Truck, RotateCcw, RefreshCw, Package, TrendingUp, Banknote, Wallet } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -185,7 +184,9 @@ const RiderPortal = () => {
                     <div className="flex items-center justify-between pt-1 border-t">
                       <div>
                         <p className="text-xs text-muted-foreground">Payment</p>
-                        <p className="text-sm font-semibold text-success">✅ Fully Paid — No collection needed</p>
+                        <p className="text-sm font-semibold text-success flex items-center gap-1">
+                          <CheckCircle2 className="h-4 w-4" /> Fully Paid — No collection needed
+                        </p>
                       </div>
                       <Banknote className="h-6 w-6 text-success/30" />
                     </div>
@@ -206,7 +207,9 @@ const RiderPortal = () => {
                       </div>
                       <div className="flex items-center justify-between bg-amber-500/10 border border-amber-500/20 rounded px-2 py-1.5">
                         <div>
-                          <p className="text-xs text-amber-700 dark:text-amber-400 font-medium">💰 Collect from Customer</p>
+                          <p className="text-xs text-amber-700 dark:text-amber-400 font-medium flex items-center gap-1">
+                            <Wallet className="h-3.5 w-3.5" /> Collect from Customer
+                          </p>
                           <p className="font-bold text-amber-700 dark:text-amber-400 text-lg">{currency} {toCollect.toLocaleString()}</p>
                         </div>
                         <Banknote className="h-6 w-6 text-amber-500/50" />
@@ -218,7 +221,9 @@ const RiderPortal = () => {
                   return (
                     <div className="flex items-center justify-between pt-1 border-t bg-amber-500/10 border border-amber-500/20 rounded px-2 py-1.5 mt-1">
                       <div>
-                        <p className="text-xs text-amber-700 dark:text-amber-400 font-medium">🚚 Collect from Customer (COD)</p>
+                        <p className="text-xs text-amber-700 dark:text-amber-400 font-medium flex items-center gap-1">
+                          <Truck className="h-3.5 w-3.5" /> Collect from Customer (COD)
+                        </p>
                         <p className="font-bold text-amber-700 dark:text-amber-400 text-lg">{currency} {toCollect.toLocaleString()}</p>
                       </div>
                       <Banknote className="h-6 w-6 text-amber-500/50" />

@@ -1,5 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
-import { Bike, MapPin, Phone, Clock, Users, TrendingUp, Banknote, RefreshCw, Package, CheckCircle2 } from "lucide-react";
+import { Bike, MapPin, Phone, Clock, Users, TrendingUp, Banknote, RefreshCw, Package, CheckCircle2, Truck, Wallet } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -44,7 +43,7 @@ function PaymentBadge({ paymentMethod, advancePayment, total, currency }: {
   if (mode === "cod") return (
     <div className="text-xs mt-1 space-y-0.5">
       <span className="inline-flex items-center gap-1 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 border border-amber-300/50 rounded px-1.5 py-0.5 font-semibold">
-        🚚 COD
+        <Truck className="h-3 w-3" /> COD
       </span>
       <p className="text-muted-foreground">Collect: <strong>{currency} {toCollect.toLocaleString()}</strong></p>
     </div>
@@ -53,7 +52,7 @@ function PaymentBadge({ paymentMethod, advancePayment, total, currency }: {
   if (mode === "advance") return (
     <div className="text-xs mt-1 space-y-0.5">
       <span className="inline-flex items-center gap-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 border border-blue-300/50 rounded px-1.5 py-0.5 font-semibold">
-        💰 ADVANCE
+        <Wallet className="h-3 w-3" /> ADVANCE
       </span>
       <p className="text-muted-foreground">Adv: <strong>{currency} {advancePayment.toLocaleString()}</strong> | Collect: <strong>{currency} {toCollect.toLocaleString()}</strong></p>
     </div>
@@ -62,7 +61,7 @@ function PaymentBadge({ paymentMethod, advancePayment, total, currency }: {
   if (mode === "collected") return (
     <div className="text-xs mt-1">
       <span className="inline-flex items-center gap-1 bg-success/10 text-success border border-success/20 rounded px-1.5 py-0.5 font-semibold">
-        ✅ COLLECTED
+        <CheckCircle2 className="h-3 w-3" /> COLLECTED
       </span>
     </div>
   );
@@ -70,7 +69,7 @@ function PaymentBadge({ paymentMethod, advancePayment, total, currency }: {
   return (
     <div className="text-xs mt-1 space-y-0.5">
       <span className="inline-flex items-center gap-1 bg-success/10 text-success border border-success/20 rounded px-1.5 py-0.5 font-semibold">
-        ✅ PREPAID
+        <CheckCircle2 className="h-3 w-3" /> PREPAID
       </span>
       <p className="text-muted-foreground">No collection needed</p>
     </div>
@@ -350,9 +349,9 @@ const Delivery = () => {
             return (
               <div className="bg-muted/40 rounded p-2 text-xs space-y-1 mb-2">
                 <p className="font-semibold">Order {order.orderNumber} — {currency} {order.total?.toLocaleString()}</p>
-                {mode === "cod"     && <p className="text-amber-600 dark:text-amber-400 font-medium">🚚 Cash on Delivery — rider collects {currency} {toCollect.toLocaleString()}</p>}
-                {mode === "advance" && <p className="text-blue-600 dark:text-blue-400 font-medium">💰 Advance {currency} {Number((order as any).advancePayment).toLocaleString()} paid — rider collects {currency} {toCollect.toLocaleString()}</p>}
-                {mode === "prepaid" && <p className="text-success font-medium">✅ Fully prepaid — no cash collection needed</p>}
+                {mode === "cod"     && <p className="text-amber-600 dark:text-amber-400 font-medium flex items-center gap-1"><Truck className="h-3.5 w-3.5 shrink-0" />Cash on Delivery — rider collects {currency} {toCollect.toLocaleString()}</p>}
+                {mode === "advance" && <p className="text-blue-600 dark:text-blue-400 font-medium flex items-center gap-1"><Wallet className="h-3.5 w-3.5 shrink-0" />Advance {currency} {Number((order as any).advancePayment).toLocaleString()} paid — rider collects {currency} {toCollect.toLocaleString()}</p>}
+                {mode === "prepaid" && <p className="text-success font-medium flex items-center gap-1"><CheckCircle2 className="h-3.5 w-3.5 shrink-0" />Fully prepaid — no cash collection needed</p>}
               </div>
             );
           })()}
