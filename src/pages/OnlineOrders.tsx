@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
-import { Globe, Check, X, CheckCircle } from "lucide-react";
+import { Globe, Check, X } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -83,8 +83,6 @@ const OnlineOrders = () => {
 
   const accept = (id: string) => updateStatus(id, "preparing", "Order accepted");
   const reject = (id: string) => updateStatus(id, "cancelled", "Order rejected");
-  const markReady = (id: string) => updateStatus(id, "ready", "Marked ready");
-  const markComplete = (id: string) => updateStatus(id, "completed", "Completed");
 
   const tabs = [
     { key: "All", label: "All" },
@@ -119,8 +117,6 @@ const OnlineOrders = () => {
               <div className="text-xs text-muted-foreground">Type: {o.type} · Staff: {o.staff}{o.tableNumber ? ` · Table #${o.tableNumber}` : ""}</div>
               <div className="flex gap-2">
                 {o.status === "pending" && <><Button size="sm" className="flex-1 gradient-primary text-primary-foreground" onClick={() => accept(o.id)}><Check className="h-4 w-4 mr-1" />Accept</Button><Button size="sm" variant="destructive" className="flex-1" onClick={() => reject(o.id)}><X className="h-4 w-4 mr-1" />Reject</Button></>}
-                {o.status === "preparing" && <Button size="sm" className="w-full gradient-primary text-primary-foreground" onClick={() => markReady(o.id)}><Check className="h-4 w-4 mr-1" />Mark Ready</Button>}
-                {o.status === "ready" && <Button size="sm" className="w-full gradient-primary text-primary-foreground" onClick={() => markComplete(o.id)}><CheckCircle className="h-4 w-4 mr-1" />Complete</Button>}
               </div>
             </CardContent>
           </Card>
