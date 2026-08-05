@@ -965,6 +965,13 @@ const WaiterPanel = () => {
     try {
       markMine();
 
+      const uncompletedOrders = activeTableOrders.filter(o => o.status !== "completed");
+      if (uncompletedOrders.length > 0) {
+        await Promise.all(
+          uncompletedOrders.map(o => orderService.updateOrderStatus(o.id, "completed").catch(() => {}))
+        );
+      }
+
       if (activeReservationForTable && activeReservationForTable.status !== "completed") {
         await reservationService.update(activeReservationForTable.id, { status: "completed" }).catch(() => {});
       }
@@ -1011,11 +1018,6 @@ const WaiterPanel = () => {
         const isCashMethod = mLower.includes("cash") && !mLower.includes("jazz") && !mLower.includes("easy");
         const shouldBeApproved = !isCashMethod || isReservationDineIn;
 
-        await Promise.all(
-          unpaidOrders.map((o) =>
-            orderService.updateOrderStatus(o.id, "completed")
-          )
-        );
         await Promise.all(
           unpaidOrders.map((o) =>
             orderService.updateOrder(o.id, { paymentMethod, cashApproved: shouldBeApproved })
