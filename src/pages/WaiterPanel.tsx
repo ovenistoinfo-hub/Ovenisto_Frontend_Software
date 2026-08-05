@@ -961,15 +961,29 @@ const WaiterPanel = () => {
       toast.warning("Please settle all active orders before ending the sitting session.");
       return;
     }
+    const hasUnservedFood = activeTableOrders.some(o => o.status === "pending" || o.status === "preparing");
+    if (hasUnservedFood) {
+      const confirmed = window.confirm(
+        `${activeTableOrders.filter(o => o.status === "pending" || o.status === "preparing").length} order(s) at this table are still being prepared. End sitting anyway? They will be marked completed and may not reach the kitchen.`
+      );
+      if (!confirmed) return;
+    }
     setEndingSitting(true);
     try {
       markMine();
 
       const uncompletedOrders = activeTableOrders.filter(o => o.status !== "completed");
       if (uncompletedOrders.length > 0) {
-        await Promise.all(
-          uncompletedOrders.map(o => orderService.updateOrderStatus(o.id, "completed").catch(() => {}))
+        const results = await Promise.allSettled(
+          uncompletedOrders.map(o => orderService.updateOrderStatus(o.id, "completed"))
         );
+        const failed = results
+          .map((r, i) => ({ r, order: uncompletedOrders[i] }))
+          .filter(({ r }) => r.status === "rejected");
+        if (failed.length > 0) {
+          console.error("Failed to complete orders during End Sitting:", failed.map(f => f.order.orderNumber));
+          toast.warning(`Table released, but ${failed.length} order(s) could not be marked completed — check Order Monitor.`);
+        }
       }
 
       if (activeReservationForTable && activeReservationForTable.status !== "completed") {
