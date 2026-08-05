@@ -1343,11 +1343,7 @@ const POS = () => {
       // ── Payment-only mode: just update payment + mark completed, NO re-send to kitchen ──
       if (paymentOnlyMode && loadedOrderId) {
         const updated = await orderService.updateOrder(loadedOrderId, { paymentMethod: payMethodStr });
-        // If order was ready, mark it completed now that payment is collected
         const existingOrder = allOrdersData.find((o) => o.id === loadedOrderId);
-        if (existingOrder && (existingOrder.status === "ready" || existingOrder.status === "preparing")) {
-          await orderService.updateOrderStatus(loadedOrderId, "completed");
-        }
         finalOrderNumber = updated.orderNumber || existingOrder?.orderNumber || "Updated";
         toast.success(`Payment collected for ${finalOrderNumber}!`);
       } else {
