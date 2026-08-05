@@ -421,7 +421,6 @@ const WaiterPanel = () => {
   // ── Derived ──
 
   const isOrderUnpaid = (o: any) => {
-    if (o.status === "completed") return false;
     if (!o.paymentMethod || o.paymentMethod === "Pending" || o.paymentMethod === "Unpaid") return true;
 
     const total = Number(o.total || 0);
@@ -489,9 +488,7 @@ const WaiterPanel = () => {
   const isSessionPaid = activeTableOrders.length > 0 && !hasUnpaid;
 
   const hasPendingCancellationOnTable = activeTableOrders.some((o) => o.hasPendingCancellationRequest);
-  const hasPendingOrPreparing = unpaidOrders.some(o => o.status === "pending" || o.status === "preparing");
-  const hasReady = unpaidOrders.some(o => o.status === "ready" || o.status === "served");
-  const canPayBill = hasUnpaid && !hasPendingCancellationOnTable && !hasPendingOrPreparing && (hasReady || activeTableOrders.every(o => o.status === "ready" || o.status === "served"));
+  const canPayBill = hasUnpaid && !hasPendingCancellationOnTable;
 
   const confirmedReservations = useMemo(() => {
     const pkt = new Date(Date.now() + 5 * 60 * 60 * 1000);
@@ -967,12 +964,6 @@ const WaiterPanel = () => {
     setEndingSitting(true);
     try {
       markMine();
-      const uncompletedPaidOrders = activeTableOrders.filter(o => o.status !== "completed" && !isOrderUnpaid(o));
-      if (uncompletedPaidOrders.length > 0) {
-        await Promise.all(
-          uncompletedPaidOrders.map(o => orderService.updateOrderStatus(o.id, "completed").catch(() => {}))
-        );
-      }
 
       if (activeReservationForTable && activeReservationForTable.status !== "completed") {
         await reservationService.update(activeReservationForTable.id, { status: "completed" }).catch(() => {});
