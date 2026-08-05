@@ -125,7 +125,6 @@ const POS = () => {
   // per-order gate that keeps a filed order's "Cancel" button locked without
   // touching every other order's (each order's request state is independent).
   const [myPendingCancelOrderIds, setMyPendingCancelOrderIds] = useState<Set<string>>(new Set());
-  const [completingOrderIds, setCompletingOrderIds] = useState<Set<string>>(new Set());
 
   // Prefer API settings; fall back to localStorage settings
   const effectiveSettings = apiSettings ?? settings;
@@ -627,28 +626,6 @@ const POS = () => {
     setShowDealDialog(false);
     setSelectedDeal(null);
     toast.success(`${selectedDeal.name} added to cart`);
-  };
-
-  const handleMarkOrderCompleted = async (orderId: string, orderNumber: string) => {
-    setCompletingOrderIds(prev => new Set(prev).add(orderId));
-    try {
-      markMine();
-      await orderService.updateOrderStatus(orderId, "completed");
-      toast.success(`Order ${orderNumber} marked as completed & handed over!`);
-      await loadApiOrders();
-      const localMatch = localOrdersData.find(o => o.id === orderId);
-      if (localMatch) {
-        updateDataItem("orders", orderId, { ...localMatch, status: "completed" });
-      }
-    } catch (err: any) {
-      toast.error(err?.message || "Failed to update order status");
-    } finally {
-      setCompletingOrderIds(prev => {
-        const next = new Set(prev);
-        next.delete(orderId);
-        return next;
-      });
-    }
   };
 
   const runningOrders = allOrdersData.filter((o) => o.status === "preparing" || o.status === "pending");
@@ -3097,24 +3074,9 @@ const POS = () => {
                           ) : (
                             <div className="space-y-2 pt-1">
                               {status === "ready" && order.type === "Take Away" && (
-                                <Button
-                                  size="sm"
-                                  disabled={completingOrderIds.has(order.id)}
-                                  className="w-full h-9 text-xs font-bold gradient-primary text-primary-foreground shadow-xs rounded-xl flex items-center justify-center gap-1.5 cursor-pointer hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-75"
-                                  onClick={() => handleMarkOrderCompleted(order.id, order.orderNumber)}
-                                >
-                                  {completingOrderIds.has(order.id) ? (
-                                    <>
-                                      <Loader2 className="h-4 w-4 animate-spin shrink-0" />
-                                      <span>Completing...</span>
-                                    </>
-                                  ) : (
-                                    <>
-                                      <CheckCircle2 className="h-4 w-4 shrink-0" />
-                                      <span>Complete / Handed Over</span>
-                                    </>
-                                  )}
-                                </Button>
+                                <div className="w-full flex items-center justify-center gap-1.5 text-xs text-emerald-500 font-bold bg-emerald-500/10 border border-emerald-500/20 py-2 rounded-xl">
+                                  <CheckCircle2 className="h-4 w-4" /> Ready — Complete via Order Monitor
+                                </div>
                               )}
 
                               <div className="flex gap-2">
