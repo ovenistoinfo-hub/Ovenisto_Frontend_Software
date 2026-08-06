@@ -63,6 +63,7 @@ export interface OrderRecord {
   createdAt: string;
   updatedAt?: string;
   items: OrderItemRecord[];
+  kitchenProgress?: { kitchenId: string; status: string }[];
 }
 
 export interface KitchenRecord {
@@ -146,6 +147,11 @@ export const orderService = {
 
   async updateOrderStatus(id: string, status: string): Promise<OrderRecord> {
     const res = await api.put<{ success: boolean; data: OrderRecord }>(`/orders/${id}/status`, { status });
+    return res.data;
+  },
+
+  async updateOrderKitchenStatus(id: string, kitchenId: string, status: string): Promise<OrderRecord> {
+    const res = await api.put<{ success: boolean; data: OrderRecord }>(`/orders/${id}/kitchen-status`, { kitchenId, status });
     return res.data;
   },
 
