@@ -1,5 +1,5 @@
 import { useState, useCallback } from "react";
-import { Bike, MapPin, Phone, Clock, Users, TrendingUp, Banknote, RefreshCw, Package, CheckCircle2, Truck, Wallet } from "lucide-react";
+import { Bike, MapPin, Phone, Clock, Users, TrendingUp, Banknote, RefreshCw, Package, CheckCircle2, Truck, Wallet, Loader2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,6 +12,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PageHeader } from "@/components/ui/page-header";
 import { deliveryService, type RiderRecord, type AssignmentRecord, type PendingDeliveryOrder } from "@/services/delivery.service";
 import { useVisiblePolling } from "@/hooks/use-visible-polling";
+import { useOrderEvents } from "@/hooks/use-order-events";
+import { useDeliveryEvents } from "@/hooks/use-delivery-events";
 import { useData } from "@/contexts/DataContext";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -92,6 +94,13 @@ const Delivery = () => {
   const [allRiders, setAllRiders]       = useState<RiderRecord[]>([]);
   const [selectedRider, setSelectedRider] = useState("");
   const [estTime, setEstTime]           = useState("30");
+  const [assigning, setAssigning]       = useState(false);
+
+  // Order detail dialog
+  const [detailItem, setDetailItem] = useState<{
+    order: PendingDeliveryOrder | null;
+    assignment: AssignmentRecord | null;
+  } | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -106,9 +115,10 @@ const Delivery = () => {
     finally { setLoading(false); }
   }, []);
 
-  // Refresh dashboard every 60s while visible (was 20s, ungated). A backgrounded
-  // manager tab now stops re-running the aggregation query, letting the DB idle.
-  useVisiblePolling(load, 60000);
+  // Real-time socket events
+  useOrderEvents(load);
+  useDeliveryEvents(load);
+  useVisiblePolling(load, 120_000);
 
   const openAssignDialog = async (orderId: string) => {
     setShowAssign(orderId);
@@ -120,12 +130,14 @@ const Delivery = () => {
 
   const handleAssign = async () => {
     if (!showAssign || !selectedRider) return;
+    setAssigning(true);
     try {
       await deliveryService.assignRider({ orderId: showAssign, riderId: selectedRider, estimatedTime: Number(estTime) });
       toast.success("Rider assigned");
       setShowAssign(null); setSelectedRider(""); setEstTime("30");
       load();
     } catch (err: any) { toast.error(err?.message || "Assignment failed"); }
+    finally { setAssigning(false); }
   };
 
   const handleCollect = async (assignmentId: string) => {
@@ -205,7 +217,8 @@ const Delivery = () => {
                   </h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {pendingOrders.map(o => (
-                      <Card key={o.id} className="shadow-sm border-warning/30">
+                      <Card key={o.id} className="shadow-sm border-warning/30 cursor-pointer hover:shadow-md hover:border-warning/60 transition-all"
+                        onClick={() => setDetailItem({ order: o, assignment: null })}>
                         <CardContent className="p-4 space-y-3">
                           <div className="flex items-center justify-between">
                             <span className="font-bold text-sm">{o.orderNumber}</span>
@@ -223,7 +236,8 @@ const Delivery = () => {
                               currency={currency}
                             />
                           </div>
-                          <Button size="sm" className="w-full gradient-primary text-primary-foreground" onClick={() => openAssignDialog(o.id)}>
+                          <Button size="sm" className="w-full gradient-primary text-primary-foreground"
+                            onClick={e => { e.stopPropagation(); openAssignDialog(o.id); }}>
                             <Bike className="h-3.5 w-3.5 mr-1.5" />Assign Rider
                           </Button>
                         </CardContent>
@@ -237,7 +251,8 @@ const Delivery = () => {
                   <h3 className="text-sm font-semibold text-muted-foreground mb-3">In Progress ({activeAssignments.length})</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {activeAssignments.map(a => (
-                      <Card key={a.id} className="shadow-sm">
+                      <Card key={a.id} className="shadow-sm cursor-pointer hover:shadow-md transition-all"
+                        onClick={() => setDetailItem({ order: a.order as unknown as PendingDeliveryOrder, assignment: a })}>
                         <CardContent className="p-4 space-y-3">
                           <div className="flex items-center justify-between">
                             <span className="font-bold text-sm">{a.order?.orderNumber}</span>
@@ -373,7 +388,93 @@ const Delivery = () => {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowAssign(null)}>Cancel</Button>
-            <Button className="gradient-primary text-primary-foreground" disabled={!selectedRider} onClick={handleAssign}>Assign</Button>
+            <Button className="gradient-primary text-primary-foreground" disabled={!selectedRider || assigning} onClick={handleAssign}>
+              {assigning ? <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />Assigning...</> : "Assign"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Order Detail Dialog */}
+      <Dialog open={!!detailItem} onOpenChange={() => setDetailItem(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Package className="h-4 w-4" />
+              Order #{detailItem?.order?.orderNumber}
+              {detailItem?.assignment && (
+                <Badge variant="secondary" className={STATUS_COLORS[detailItem.assignment.status]}>
+                  {detailItem.assignment.status}
+                </Badge>
+              )}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            {/* Customer info */}
+            <div className="space-y-1.5">
+              <p className="text-sm font-semibold">{detailItem?.order?.customerName || "Customer"}</p>
+              <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+                <MapPin className="h-3 w-3 shrink-0" />{(detailItem?.order as any)?.deliveryAddress || "—"}
+              </p>
+              <a href={`tel:${(detailItem?.order as any)?.phone}`} className="text-xs text-primary flex items-center gap-1.5">
+                <Phone className="h-3 w-3 shrink-0" />{(detailItem?.order as any)?.phone || "—"}
+              </a>
+            </div>
+
+            {/* Items list */}
+            {(() => {
+              const items = (detailItem?.order as any)?.items;
+              if (!items?.length) return null;
+              return (
+                <div>
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Order Items</p>
+                  <div className="space-y-1">
+                    {items.map((item: any) => (
+                      <div key={item.id} className="flex items-center justify-between text-xs py-1 border-b border-border/50">
+                        <span className="flex-1">{item.name} <span className="text-muted-foreground">×{item.quantity}</span></span>
+                        <span className="font-medium">{currency} {(Number(item.price) * item.quantity).toLocaleString()}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex justify-between text-sm font-bold mt-2 pt-2 border-t">
+                    <span>Total</span>
+                    <span className="text-primary">{currency} {detailItem?.order?.total?.toLocaleString()}</span>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Payment info */}
+            {detailItem?.order && (
+              <PaymentBadge
+                paymentMethod={(detailItem.order as any).paymentMethod}
+                advancePayment={Number((detailItem.order as any).advancePayment ?? 0)}
+                total={detailItem.order.total ?? 0}
+                currency={currency}
+              />
+            )}
+
+            {/* Rider info if assigned */}
+            {detailItem?.assignment?.rider && (
+              <div className="bg-muted/40 rounded p-2 text-xs space-y-0.5">
+                <p className="flex items-center gap-1.5"><Bike className="h-3 w-3" /> <strong>{detailItem.assignment.rider.name}</strong></p>
+                {detailItem.assignment.estimatedTime && (
+                  <p className="text-muted-foreground flex items-center gap-1.5"><Clock className="h-3 w-3" /> Est. {detailItem.assignment.estimatedTime} min</p>
+                )}
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            {!detailItem?.assignment && detailItem?.order && (
+              <Button className="gradient-primary text-primary-foreground" onClick={() => {
+                const orderId = detailItem.order!.id;
+                setDetailItem(null);
+                openAssignDialog(orderId);
+              }}>
+                <Bike className="h-3.5 w-3.5 mr-1.5" />Assign Rider
+              </Button>
+            )}
+            <Button variant="outline" onClick={() => setDetailItem(null)}>Close</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -33,6 +33,11 @@ function invalidateCacheForEvents(eventsList: string[]): void {
       api.clearCache("/purchases");
     } else if (evt.startsWith("reservation:")) {
       api.clearCache("/reservations");
+    } else if (evt.startsWith("delivery:")) {
+      api.clearCache("/delivery/dashboard");
+      api.clearCache("/delivery/my-assignments");
+      api.clearCache("/delivery/my-stats");
+      api.clearCache("/orders");
     }
   });
 }

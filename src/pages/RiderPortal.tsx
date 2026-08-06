@@ -1,11 +1,13 @@
 import { useState, useCallback } from "react";
-import { Bike, MapPin, Phone, Clock, CheckCircle2, Truck, RotateCcw, RefreshCw, Package, TrendingUp, Banknote, Wallet } from "lucide-react";
+import { Bike, MapPin, Phone, Clock, CheckCircle2, Truck, RotateCcw, RefreshCw, Package, TrendingUp, Banknote, Wallet, Bell } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { deliveryService, type RiderRecord, type AssignmentRecord } from "@/services/delivery.service";
+import { deliveryService, type RiderRecord, type AssignmentRecord, type PendingDeliveryOrder } from "@/services/delivery.service";
 import { useVisiblePolling } from "@/hooks/use-visible-polling";
+import { useOrderEvents } from "@/hooks/use-order-events";
+import { useDeliveryEvents } from "@/hooks/use-delivery-events";
 import { useData } from "@/contexts/DataContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
@@ -27,19 +29,22 @@ const RiderPortal = () => {
 
   const [rider, setRider]             = useState<RiderRecord | null>(null);
   const [assignments, setAssignments] = useState<AssignmentRecord[]>([]);
+  const [pendingOrders, setPendingOrders] = useState<PendingDeliveryOrder[]>([]);
   const [stats, setStats]             = useState<{ todayOrders: number; todaySales: number; totalOrders: number; totalSales: number; pendingCash: number } | null>(null);
   const [loading, setLoading]         = useState(true);
   const [actionIds, setActionIds]     = useState<Set<string>>(new Set());
 
   const loadData = useCallback(async () => {
     try {
-      const [assignRes, statsRes] = await Promise.all([
+      const [assignRes, statsRes, pending] = await Promise.all([
         deliveryService.getMyAssignments(),
         deliveryService.getMyStats(),
+        deliveryService.getPendingDeliveryOrders(),
       ]);
       setRider(assignRes.rider);
       setAssignments(assignRes.assignments);
       setStats(statsRes);
+      setPendingOrders(pending);
     } catch (err: any) {
       if (err?.message?.includes('rider profile')) {
         toast.error("No rider profile linked to your account. Ask your manager to set it up.", { duration: 8000 });
@@ -49,7 +54,10 @@ const RiderPortal = () => {
     } finally { setLoading(false); }
   }, []);
 
-  useVisiblePolling(loadData, 45000);
+  // Real-time: react to delivery events rather than polling
+  useOrderEvents(loadData);    // fires when POS creates a new delivery order
+  useDeliveryEvents(loadData); // fires when assignment/status/collection changes
+  useVisiblePolling(loadData, 120000); // 2-min safety-net fallback
 
   const doAction = async (assignmentId: string, status: AssignmentRecord['status']) => {
     setActionIds(prev => new Set([...prev, assignmentId]));
@@ -135,7 +143,31 @@ const RiderPortal = () => {
 
         {/* Active Assignments */}
         <TabsContent value="active" className="mt-4 space-y-3">
-          {assignments.length === 0 ? (
+          {/* Incoming unassigned orders — shown when rider has no active assignments */}
+          {pendingOrders.length > 0 && assignments.length === 0 && (
+            <div className="mb-2">
+              <div className="flex items-center gap-2 mb-2">
+                <Bell className="h-3.5 w-3.5 text-warning" />
+                <p className="text-xs font-bold text-warning uppercase tracking-wider">Incoming Orders ({pendingOrders.length})</p>
+              </div>
+              <div className="space-y-2">
+                {pendingOrders.slice(0, 3).map((o: any) => (
+                  <div key={o.id} className="bg-muted/40 border border-warning/20 rounded-xl p-3 space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-black">#{o.orderNumber}</span>
+                      <Badge variant="secondary" className="bg-warning/10 text-warning text-[10px]">Unassigned</Badge>
+                    </div>
+                    <p className="text-xs text-muted-foreground flex items-center gap-1">
+                      <MapPin className="h-3 w-3" />{o.deliveryAddress || "—"}
+                    </p>
+                    <p className="text-xs font-bold text-primary">{currency} {Number(o.total).toLocaleString()}</p>
+                    <p className="text-[10px] text-muted-foreground">Your manager will assign this order</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {assignments.length === 0 && pendingOrders.length === 0 ? (
             <div className="text-center py-16 space-y-3">
               <Package className="h-12 w-12 text-muted-foreground/40 mx-auto" />
               <p className="text-muted-foreground">No active assignments</p>
