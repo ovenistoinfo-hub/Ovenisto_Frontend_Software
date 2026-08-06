@@ -213,7 +213,7 @@ const WaiterPanel = () => {
 
   // ── Local UI state ──
   const [selectedReservationForSitting, setSelectedReservationForSitting] = useState<string | null>(null);
-  const [statusFilter, setStatusFilter] = useState<"all" | "available" | "occupied" | "bill" | "reservations">("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | "available" | "occupied" | "reservations">("all");
   const [floorFilter,  setFloorFilter]  = useState<string>("all");
   const [billReqSet,    setBillReqSet]    = useState<Set<number>>(new Set());
   const [acceptingId,   setAcceptingId]   = useState<string | null>(null);
@@ -432,32 +432,48 @@ const WaiterPanel = () => {
     return false;
   };
 
-  const getTableStatus = (tableNum: number): TableStatus => {
-    const activeOrders = orders.filter((o) => o.tableNumber === tableNum && ACTIVE_STATUSES.includes(o.status));
-    const hasUnpaidOnTable = activeOrders.some(isOrderUnpaid);
-    const hasPendingCancel = activeOrders.some((o) => o.hasPendingCancellationRequest);
-
-    if (billReqSet.has(tableNum) && (activeOrders.length === 0 || hasUnpaidOnTable) && !hasPendingCancel) return "bill-requested";
+  const getTableOrders = (tableNum: number) => {
     const t = tables.find((tbl) => Number(tbl.number) === tableNum);
-    if (t && t.status === "bill-requested" && (activeOrders.length === 0 || hasUnpaidOnTable) && !hasPendingCancel) return "bill-requested";
+    const isOccupied = t ? (t.status === "occupied" || t.status === "bill-requested") : false;
+    const sessionStartStr = t?.currentOrderId;
+    const sessionStart = sessionStartStr ? Number(sessionStartStr.split(":")[0]) : NaN;
 
-    if (activeOrders.length > 0) {
-      // If food is ready AND there is an unpaid order AND NO cancellation pending, mark table as bill-requested
-      const allReady = activeOrders.every((o) => o.status === "ready");
-      if (allReady && hasUnpaidOnTable && !hasPendingCancel) return "bill-requested";
+    return orders.filter((o) => {
+      if (o.tableNumber !== tableNum) return false;
+      if (ACTIVE_STATUSES.includes(o.status)) return true;
+
+      if (isOccupied && o.status === "completed") {
+        const orderTime = new Date(o.createdAt).getTime();
+        const ageMs = Date.now() - orderTime;
+        if (!isNaN(sessionStart)) {
+          return orderTime >= sessionStart - 60000 && ageMs < 12 * 60 * 60 * 1000;
+        } else {
+          return ageMs < 4 * 60 * 60 * 1000;
+        }
+      }
+      return false;
+    });
+  };
+
+  const getTableStatus = (tableNum: number): TableStatus => {
+    const tableOrders = getTableOrders(tableNum);
+    const activeKitchenOrders = tableOrders.filter((o) => ACTIVE_STATUSES.includes(o.status));
+    const t = tables.find((tbl) => Number(tbl.number) === tableNum);
+
+    if (activeKitchenOrders.length > 0) {
+      return "occupied";
+    }
+
+    if (tableOrders.length > 0 || (t && t.status === "occupied")) {
       return "occupied";
     }
 
     if (t) {
-      if (t.status === "occupied") return "occupied";
       if (t.status === "reserved") return "reserved";
       if (t.status === "maintenance") return "maintenance";
     }
     return "available";
   };
-
-  const getTableOrders = (tableNum: number) =>
-    orders.filter((o) => o.tableNumber === tableNum && ACTIVE_STATUSES.includes(o.status));
 
   const pendingSelfOrders = orders.filter(
     (o) => o.type === "Self Order" && o.status === "pending" && !o.acceptedById
@@ -466,22 +482,7 @@ const WaiterPanel = () => {
   const selectedTable    = tables.find((t) => t.id === selectedTableId) ?? null;
   const selectedTableNum = selectedTable ? Number(selectedTable.number) : null;
   const tableStatus: TableStatus = selectedTable ? getTableStatus(Number(selectedTable.number)) : "available";
-  const activeTableOrders = selectedTableNum !== null ? orders.filter((o) => {
-    if (o.tableNumber !== selectedTableNum) return false;
-    if (ACTIVE_STATUSES.includes(o.status)) return true;
-    const isTableOccupied = tables.some(t => Number(t.number) === selectedTableNum && (t.status === "occupied" || t.status === "bill-requested"));
-    const matchingTable = tables.find(t => Number(t.number) === selectedTableNum);
-    const sessionStartStr = matchingTable?.currentOrderId;
-    if (isTableOccupied && o.status === "completed" && sessionStartStr) {
-      const sessionStart = Number(sessionStartStr);
-      const orderTime = new Date(o.createdAt).getTime();
-      if (!isNaN(sessionStart) && orderTime >= sessionStart) {
-        const ageMs = Date.now() - new Date(o.updatedAt || o.createdAt).getTime();
-        return ageMs < 4 * 60 * 60 * 1000;
-      }
-    }
-    return false;
-  }) : [];
+  const activeTableOrders = selectedTableNum !== null ? getTableOrders(selectedTableNum) : [];
 
   const unpaidOrders = activeTableOrders.filter(isOrderUnpaid);
   const hasUnpaid = unpaidOrders.length > 0;
@@ -520,7 +521,6 @@ const WaiterPanel = () => {
   const stats = {
     available: tables.filter((t) => getTableStatus(Number(t.number)) === "available").length,
     occupied:  tables.filter((t) => getTableStatus(Number(t.number)) === "occupied").length,
-    bill:      tables.filter((t) => getTableStatus(Number(t.number)) === "bill-requested").length,
   };
 
   const floorsList = useMemo(() => {
@@ -535,11 +535,10 @@ const WaiterPanel = () => {
       if (floorFilter !== "all" && fl !== floorFilter) return false;
       if (statusFilter === "available") return st === "available";
       if (statusFilter === "occupied") return st === "occupied";
-      if (statusFilter === "bill") return st === "bill-requested";
       if (statusFilter === "reservations") return reservedTableNums.has(tNum) || t.status === "reserved";
       return true;
     });
-  }, [tables, statusFilter, floorFilter, reservedTableNums, billReqSet, orders]);
+  }, [tables, statusFilter, floorFilter, reservedTableNums, orders]);
 
   const categoryNames = ["All", ...cats.map((c) => c.name)];
   const filteredMenu   = menuItems.filter(
@@ -1287,11 +1286,10 @@ const WaiterPanel = () => {
           </Button>
         ) : (
           <div className="flex justify-center flex-1 max-w-4xl">
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 w-full">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 w-full">
               {[
                 { key: "available",    count: stats.available,        label: "Available",          color: "text-emerald-500", bg: "bg-emerald-500/10", border: "border-emerald-500/30", Icon: CircleDot },
                 { key: "occupied",     count: stats.occupied,         label: "Occupied",           color: "text-orange-500",  bg: "bg-orange-500/10",  border: "border-orange-500/30",  Icon: Users },
-                { key: "bill",         count: stats.bill,             label: "Bill Req.",          color: "text-red-500",     bg: "bg-red-500/10",     border: "border-red-500/30",     Icon: Receipt },
                 { key: "reservations", count: todayReservationsCount, label: "Today Reservations", color: "text-amber-500",   bg: "bg-amber-500/10",   border: "border-amber-500/30",   Icon: BookOpen },
               ].map(({ key, count, label, color, bg, border, Icon }) => {
                 const isActive = statusFilter === key;
@@ -1477,7 +1475,7 @@ const WaiterPanel = () => {
                       tableStatus === "reserved" && "bg-warning/10 text-warning hover:bg-warning/10",
                       tableStatus === "maintenance" && "bg-muted text-muted-foreground hover:bg-muted",
                     )}>
-                      {tableStatus === "bill-requested" ? "Bill Req" : tableStatus === "available" ? "Free" : tableStatus}
+                      {tableStatus === "available" ? "Free" : tableStatus}
                     </Badge>
                     <Button
                       variant="ghost"
@@ -1612,8 +1610,9 @@ const WaiterPanel = () => {
                                     o.status === "pending" && "bg-amber-500",
                                     o.status === "preparing" && "bg-sky-500",
                                     o.status === "ready" && "bg-green-500 animate-pulse",
+                                    o.status === "completed" && "bg-emerald-600 text-white font-black",
                                   )}>
-                                    {o.status}
+                                    {o.status === "completed" ? "SERVED" : o.status}
                                   </Badge>
                                 </div>
                                 
@@ -1636,6 +1635,12 @@ const WaiterPanel = () => {
                                 {o.status === "ready" && (
                                   <p className="text-[11px] font-bold text-green-500 flex items-center gap-1">
                                     <Check className="h-3 w-3" /> Ready to serve
+                                  </p>
+                                )}
+
+                                {o.status === "completed" && (
+                                  <p className="text-[11px] font-bold text-emerald-500 flex items-center gap-1">
+                                    <CheckCircle2 className="h-3 w-3" /> Food served to table
                                   </p>
                                 )}
                               </div>
@@ -1848,29 +1853,24 @@ const WaiterPanel = () => {
                       const statusDotColor =
                         status === "available" ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)]" :
                         status === "occupied" ? "bg-orange-500 shadow-[0_0_8px_rgba(249,115,22,0.6)]" :
-                        status === "bill-requested" ? "bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.8)]" :
                         "bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.6)]";
 
                       const statusBorderClass =
                         status === "available" ? "border-emerald-500/50" :
                         status === "occupied" ? "border-orange-500/50" :
-                        status === "bill-requested" ? "border-red-500/80" :
                         "border-amber-500/50";
 
                       const cardStatusClass =
-                        status === "bill-requested"
-                          ? "border-red-500/80 bg-red-950/20 shadow-[0_0_12px_rgba(239,68,68,0.25)] animate-pulse border-2 ring-1 ring-red-500/40"
-                          : status === "occupied"
+                        status === "occupied"
                           ? "border-orange-500/50 bg-orange-950/10 hover:border-orange-400 dark:bg-orange-950/20"
                           : "border-emerald-500/50 bg-emerald-950/10 hover:border-emerald-400 dark:bg-emerald-950/20";
 
                       const chairBgClass =
                         status === "available" ? "bg-emerald-500/60" :
                         status === "occupied" ? "bg-orange-500/60" :
-                        status === "bill-requested" ? "bg-red-500 animate-pulse" :
                         "bg-emerald-500/60";
 
-                      const isOccupiedState = status === "occupied" || status === "bill-requested";
+                      const isOccupiedState = status === "occupied";
                       const elapsedStr = isOccupiedState && oldest ? getElapsed(oldest) : "";
                       const centerText = isOccupiedState ? (elapsedStr || "") : "";
                       const centerTextClass = "font-black text-xs text-primary tracking-tight leading-none text-center px-1";
@@ -1890,7 +1890,6 @@ const WaiterPanel = () => {
                               <div className="flex items-center gap-2">
                                 <span className={cn(
                                   "h-2.5 w-2.5 rounded-full",
-                                  status === "bill-requested" && "animate-ping",
                                   statusDotColor
                                 )} />
                                 <span className="text-sm font-black uppercase tracking-wider text-foreground">Table {t.number}</span>
