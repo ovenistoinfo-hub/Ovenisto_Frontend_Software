@@ -78,6 +78,7 @@ const KitchenPanel = () => {
   const [loading, setLoading] = useState(true);
   const [clock, setClock] = useState(new Date());
   const [statusFilter, setStatusFilter] = useState<"all" | KitchenOrderStatus>("all");
+  const [updatingOrderId, setUpdatingOrderId] = useState<string | null>(null);
 
   // placedAt: when the order was received (display only)
   const placedAtMap = useRef<Record<string, Date>>({});
@@ -233,6 +234,8 @@ const KitchenPanel = () => {
         : o
     ));
 
+    setUpdatingOrderId(orderId);
+
     try {
       markMine();
       await orderService.updateOrderKitchenStatus(orderId, kitchen.id, newApiStatus);
@@ -242,6 +245,8 @@ const KitchenPanel = () => {
       setKitchenOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: order.status, preparingAt: order.preparingAt } : o));
       if (order.status === "new") delete preparingAtMap.current[orderId];
       toast.error("Failed to update order status");
+    } finally {
+      setUpdatingOrderId(null);
     }
   };
 
@@ -481,12 +486,21 @@ const KitchenPanel = () => {
                         </div>
                       ) : order.status !== "completed" ? (
                         <Button
+                          disabled={updatingOrderId === order.id}
                           className={cn("w-full text-sm font-semibold rounded-lg h-11 transition-all", btnColors[order.status])}
                           onClick={() => advanceStatus(order.id)}
                         >
-                          {order.status === "new" && <Bell className="h-4 w-4 mr-1.5" />}
-                          {order.status === "preparing" && <Flame className="h-4 w-4 mr-1.5" />}
-                          {btnLabel[order.status]}
+                          {updatingOrderId === order.id ? (
+                            <>
+                              <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> Processing...
+                            </>
+                          ) : (
+                            <>
+                              {order.status === "new" && <Bell className="h-4 w-4 mr-1.5" />}
+                              {order.status === "preparing" && <Flame className="h-4 w-4 mr-1.5" />}
+                              {btnLabel[order.status]}
+                            </>
+                          )}
                         </Button>
                       ) : (
                         <div className="flex items-center justify-center gap-1.5 text-sm text-muted-foreground font-medium py-2">

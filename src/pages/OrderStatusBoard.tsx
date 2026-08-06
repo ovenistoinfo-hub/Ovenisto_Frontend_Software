@@ -200,8 +200,6 @@ const OrderStatusBoard = () => {
 
   // ── Helpers ──
   const isPaid = (o: any) => !!o.paymentMethod && o.paymentMethod !== "Pending" && o.paymentMethod !== "Unpaid";
-  const needsPayment = (o: any) =>
-    !isPaid(o) && o.status !== "cancelled" && o.status !== "completed" && o.status !== "scheduled";
 
   const isItemReady = useCallback((item: any, order: any) => {
     if (order.status === "ready" || order.status === "completed") return true;
@@ -267,10 +265,6 @@ const OrderStatusBoard = () => {
     } finally {
       setUpdatingOrderId(null);
     }
-  };
-
-  const handleLoadToPOS = (order: any) => {
-    navigate("/pos", { state: { loadOrderId: order.id, paymentOnly: true } });
   };
 
   // ── Render Individual Order Card ──
@@ -647,7 +641,6 @@ const OrderStatusBoard = () => {
           {selectedOrder && (() => {
             const cfg = statusConfig[selectedOrder.status as FilterStatus] ?? statusConfig.pending;
             const paid = isPaid(selectedOrder);
-            const showLoadToPOS = needsPayment(selectedOrder);
 
             return (
               <>
@@ -771,16 +764,6 @@ const OrderStatusBoard = () => {
                           <Check className="h-4 w-4 mr-1.5" /> Mark Completed
                         </>
                       )}
-                    </Button>
-                  )}
-
-                  {showLoadToPOS && (
-                    <Button
-                      className="w-full sm:w-auto gradient-primary text-primary-foreground font-extrabold rounded-xl shadow-md"
-                      onClick={() => { setSelectedOrder(null); handleLoadToPOS(selectedOrder); }}
-                    >
-                      <Receipt className="h-4 w-4 mr-2" />
-                      Collect Payment in POS
                     </Button>
                   )}
                 </DialogFooter>
