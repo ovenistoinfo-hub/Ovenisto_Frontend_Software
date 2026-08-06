@@ -222,28 +222,26 @@ const KitchenPanel = () => {
     const newKitchenStatus = nextStatusMap[order.status];
     const newApiStatus = mapKitchenStatusToApi(order.status);
 
-    // Record the exact moment preparation begins
-    if (order.status === "new") {
-      preparingAtMap.current[orderId] = new Date();
-    }
-
-    // Optimistic update
-    setKitchenOrders(prev => prev.map(o =>
-      o.id === orderId
-        ? { ...o, status: newKitchenStatus, preparingAt: order.status === "new" ? preparingAtMap.current[orderId] : o.preparingAt }
-        : o
-    ));
-
     setUpdatingOrderId(orderId);
 
     try {
       markMine();
       await orderService.updateOrderKitchenStatus(orderId, kitchen.id, newApiStatus);
+
+      // Record preparation start timestamp upon successful backend confirmation
+      if (order.status === "new" && !preparingAtMap.current[orderId]) {
+        preparingAtMap.current[orderId] = new Date();
+      }
+
+      // Synchronized update: update card status & fire toast together after backend success
+      setKitchenOrders(prev => prev.map(o =>
+        o.id === orderId
+          ? { ...o, status: newKitchenStatus, preparingAt: order.status === "new" ? (preparingAtMap.current[orderId] || new Date()) : o.preparingAt }
+          : o
+      ));
+
       toast.success(`Order ${order.orderNumber} moved to ${newKitchenStatus}`);
     } catch {
-      // Revert on error
-      setKitchenOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: order.status, preparingAt: order.preparingAt } : o));
-      if (order.status === "new") delete preparingAtMap.current[orderId];
       toast.error("Failed to update order status");
     } finally {
       setUpdatingOrderId(null);
