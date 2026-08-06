@@ -54,6 +54,20 @@ const mapKitchenStatusToApi = (status: KitchenOrderStatus): string => {
   return "completed";
 };
 
+/**
+ * Resolves what THIS kitchen's own status is for an order — from its
+ * OrderKitchenProgress row, not the order's shared status field. Falls back to the
+ * order's own status for orders created before this feature existed (no progress
+ * rows), so historic orders don't break.
+ */
+const getKitchenItemStatus = (order: OrderRecord, kitchenId: string): "pending" | "preparing" | "ready" => {
+  const progress = order.kitchenProgress?.find((p) => p.kitchenId === kitchenId);
+  if (progress) return progress.status as "pending" | "preparing" | "ready";
+  if (order.status === "preparing") return "preparing";
+  if (order.status === "ready" || order.status === "completed") return "ready";
+  return "pending";
+};
+
 const KitchenPanel = () => {
   const { id } = useParams();
   const { user } = useAuth();
@@ -77,7 +91,7 @@ const KitchenPanel = () => {
     const hasFilter = cats.length > 0;
 
     return orders
-      .filter((o) => o.status !== "completed" && o.status !== "cancelled" && o.status !== "ready")
+      .filter((o) => o.status !== "cancelled")
       // Exclude self-orders that are still pending AND not yet accepted by a waiter —
       // once accepted (acceptedById set) it behaves exactly like any other pending order.
       .filter((o) => !(o.type === "Self Order" && o.status === "pending" && !o.acceptedById))
@@ -96,6 +110,11 @@ const KitchenPanel = () => {
 
         if (!relevantItems.length) return null;
 
+        const kitchenItemStatus = getKitchenItemStatus(o, kitch.id);
+        // Hide once THIS kitchen's own portion is ready — another kitchen on the same
+        // order finishing first (or being slower) no longer affects this kitchen's view.
+        if (kitchenItemStatus === "ready") return null;
+
         const maxCookingTime = Math.max(...relevantItems.map(i => i.cookingTime || 0), 0);
 
         // placedAt: first time we see this order
@@ -104,7 +123,7 @@ const KitchenPanel = () => {
         }
 
         // preparingAt: if already "preparing" when loaded and not yet tracked, use updatedAt as best estimate
-        if ((o.status === "preparing" || o.status === "ready") && !preparingAtMap.current[o.id]) {
+        if (kitchenItemStatus === "preparing" && !preparingAtMap.current[o.id]) {
           // Use updatedAt if available, otherwise createdAt
           preparingAtMap.current[o.id] = new Date((o as any).updatedAt || o.createdAt || Date.now());
         }
@@ -115,8 +134,8 @@ const KitchenPanel = () => {
           type: o.type,
           items: relevantItems,
           placedAt: placedAtMap.current[o.id],
-          preparingAt: o.status === "preparing" || o.status === "ready" ? preparingAtMap.current[o.id] ?? placedAtMap.current[o.id] : null,
-          status: mapApiStatusToKitchen(o.status),
+          preparingAt: kitchenItemStatus === "preparing" ? preparingAtMap.current[o.id] ?? placedAtMap.current[o.id] : null,
+          status: mapApiStatusToKitchen(kitchenItemStatus),
           maxCookingTime,
           hasPendingCancellationRequest: !!o.hasPendingCancellationRequest,
         } as KitchenOrder;
@@ -191,12 +210,12 @@ const KitchenPanel = () => {
 
   const advanceStatus = async (orderId: string) => {
     const order = kitchenOrders.find(o => o.id === orderId);
-    if (!order) return;
+    if (!order || !kitchen) return;
 
     const nextStatusMap: Record<KitchenOrderStatus, KitchenOrderStatus> = {
       new: "preparing",
       preparing: "ready",
-      ready: "completed",
+      ready: "ready",
       completed: "completed",
     };
     const newKitchenStatus = nextStatusMap[order.status];
@@ -216,7 +235,7 @@ const KitchenPanel = () => {
 
     try {
       markMine();
-      await orderService.updateOrderStatus(orderId, newApiStatus);
+      await orderService.updateOrderKitchenStatus(orderId, kitchen.id, newApiStatus);
       toast.success(`Order ${order.orderNumber} moved to ${newKitchenStatus}`);
     } catch {
       // Revert on error
