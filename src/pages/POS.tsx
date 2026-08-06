@@ -4390,25 +4390,12 @@ const POS = () => {
                     );
                   })()}
 
-                  {/* Kitchen Action Buttons */}
+                  {/* Kitchen Status (view-only — progression happens on Kitchen Panel) */}
                   <div className="flex gap-2 pt-1">
-                    {order.status === "pending" && (
-                      <Button
-                        size="sm"
-                        onClick={() => handleOrderStatusUpdate(order.id, "preparing")}
-                        className="w-full h-9 text-xs font-bold bg-info hover:bg-info/90 text-info-foreground rounded-xl flex items-center justify-center gap-1.5 shadow-xs"
-                      >
-                        <ChefHat className="h-4 w-4" /> Start Preparing Order
-                      </Button>
-                    )}
                     {order.status === "preparing" && (
-                      <Button
-                        size="sm"
-                        onClick={() => handleOrderStatusUpdate(order.id, "ready")}
-                        className="w-full h-9 text-xs font-bold bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl flex items-center justify-center gap-1.5 shadow-xs"
-                      >
-                        <CheckCircle2 className="h-4 w-4" /> Mark Order Ready
-                      </Button>
+                      <div className="w-full flex items-center justify-center gap-1.5 text-xs text-sky-500 font-bold bg-sky-500/10 border border-sky-500/20 py-2 rounded-xl">
+                        <ChefHat className="h-4 w-4" /> Preparing in Kitchen
+                      </div>
                     )}
                     {order.status === "ready" && (
                       <div className="w-full flex items-center justify-center gap-1.5 text-xs text-emerald-500 font-bold bg-emerald-500/10 border border-emerald-500/20 py-2 rounded-xl">
