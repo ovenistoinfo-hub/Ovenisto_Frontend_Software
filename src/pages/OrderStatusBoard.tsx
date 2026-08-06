@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import {
   ArrowLeft, RefreshCw, Bell, Clock, BarChart3, TrendingUp, ShoppingBag,
   AlertCircle, ChefHat, CheckCircle2, Timer, UtensilsCrossed,
-  ShoppingCart, Truck, CreditCard, Banknote, Receipt, Check,
+  ShoppingCart, Truck, CreditCard, Banknote, Receipt, Check, Loader2,
   Columns, LayoutGrid, Sparkles, User
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -18,7 +18,7 @@ import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useData } from "@/contexts/DataContext";
-import { orderService } from "@/services/order.service";
+import { orderService, KitchenRecord } from "@/services/order.service";
 import { useVisiblePolling } from "@/hooks/use-visible-polling";
 import { useOrderEvents } from "@/hooks/use-order-events";
 
@@ -140,7 +140,12 @@ const OrderStatusBoard = () => {
   const [time, setTime] = useState(new Date());
   const [autoRefresh] = useState(true);
   const [soundAlert, setSoundAlert] = useState(false);
-  const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
+  const [kitchens, setKitchens] = useState<KitchenRecord[]>([]);
+  const [updatingOrderId, setUpdatingOrderId] = useState<string | null>(null);
+
+  useEffect(() => {
+    orderService.getKitchens().then(setKitchens).catch(() => {});
+  }, []);
 
   const loadOrders = useCallback(async () => {
     try {
@@ -197,6 +202,26 @@ const OrderStatusBoard = () => {
   const needsPayment = (o: any) =>
     !isPaid(o) && o.status !== "cancelled" && o.status !== "completed" && o.status !== "scheduled";
 
+  const isItemReady = useCallback((item: any, order: any) => {
+    if (order.status === "ready" || order.status === "completed") return true;
+
+    const categoryName = item.categoryName || foodMenuItems.find((fi: any) => fi.name === item.name)?.category?.name || (item.category as any)?.name;
+
+    if (!categoryName) return false;
+
+    const assignedKitchen = kitchens.find(k => (k.status === "active" || !k.status) && k.assignedCategories?.includes(categoryName));
+
+    // If no kitchen is assigned to this category (e.g. drinks/beverages), auto-ready!
+    if (!assignedKitchen) return true;
+
+    if (order.kitchenProgress && Array.isArray(order.kitchenProgress)) {
+      const prog = order.kitchenProgress.find((p: any) => p.kitchenId === assignedKitchen.id);
+      if (prog) return prog.status === "ready";
+    }
+
+    return false;
+  }, [kitchens, foodMenuItems]);
+
   const getElapsed = (order: any) => {
     try {
       const created = new Date(order.createdAt || order.date);
@@ -214,8 +239,8 @@ const OrderStatusBoard = () => {
     }), 0);
     if (maxCookTime <= 0) return null;
     try {
-      const created = new Date(order.createdAt || order.date);
-      const elapsedMin = Math.max(0, Math.floor((time.getTime() - created.getTime()) / 60000));
+      const prepStart = order.status === "preparing" && order.updatedAt ? new Date(order.updatedAt) : new Date(order.createdAt || order.date);
+      const elapsedMin = Math.max(0, Math.floor((time.getTime() - prepStart.getTime()) / 60000));
       const remainingMin = Math.max(0, maxCookTime - elapsedMin);
       const progress = Math.min(100, (elapsedMin / maxCookTime) * 100);
       return { maxCookTime, elapsedMin, remainingMin, progress, isOverdue: elapsedMin > maxCookTime };
@@ -228,6 +253,7 @@ const OrderStatusBoard = () => {
       toast.error("Cannot update status while a cancellation request is pending approval.");
       return;
     }
+    setUpdatingOrderId(orderId);
     try {
       await orderService.updateOrderStatus(orderId, newStatus);
       setAllOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: newStatus } : o));
@@ -237,6 +263,8 @@ const OrderStatusBoard = () => {
       toast.success(`Order #${orderId.slice(-4)} updated to ${newStatus}`);
     } catch (err: any) {
       toast.error(err?.message || "Failed to update order status");
+    } finally {
+      setUpdatingOrderId(null);
     }
   };
 
@@ -298,30 +326,49 @@ const OrderStatusBoard = () => {
 
             {/* Items List Snippet */}
             <div className="bg-muted/30 rounded-lg p-2.5 space-y-1 border border-border/40">
-              {order.items.slice(0, 3).map((item: any, i: number) => (
-                <div key={i} className="flex items-center justify-between text-xs">
-                  <span className="text-muted-foreground truncate font-medium">
-                    <span className="font-extrabold text-foreground mr-1">{item.qty}×</span> {item.name}
-                  </span>
-                  <span className="font-mono text-[11px] font-semibold text-foreground/80">Rs.{(item.price * item.qty).toLocaleString()}</span>
-                </div>
-              ))}
+              {order.items.slice(0, 3).map((item: any, i: number) => {
+                const itemReady = isItemReady(item, order);
+                return (
+                  <div key={i} className="flex items-center justify-between text-xs gap-1.5">
+                    <span className="text-muted-foreground truncate font-medium flex items-center gap-1.5 min-w-0">
+                      {itemReady ? (
+                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+                      ) : (
+                        <ChefHat className="h-3.5 w-3.5 text-sky-500/70 shrink-0" />
+                      )}
+                      <span className="font-extrabold text-foreground shrink-0">{item.qty}×</span>
+                      <span className="truncate">{item.name}</span>
+                    </span>
+                    <span className="font-mono text-[11px] font-semibold text-foreground/80 shrink-0">Rs.{(item.price * item.qty).toLocaleString()}</span>
+                  </div>
+                );
+              })}
               {order.items.length > 3 && (
                 <p className="text-[10px] text-primary font-bold pt-0.5 text-right">+{order.items.length - 3} more items</p>
               )}
             </div>
 
-            {/* Cooking Progress Bar if applicable */}
-            {(order.status === "pending" || order.status === "preparing") && cookInfo && (
+            {/* Cooking Progress Bar for Preparing Orders */}
+            {order.status === "preparing" && cookInfo && (
               <div className="space-y-1 pt-0.5">
                 <div className="flex items-center justify-between text-[10px]">
-                  <span className={cn("font-bold flex items-center gap-1", cookInfo.isOverdue ? "text-destructive" : cookInfo.remainingMin <= 2 ? "text-amber-500" : "text-muted-foreground")}>
+                  <span className={cn("font-bold flex items-center gap-1", cookInfo.isOverdue ? "text-destructive" : cookInfo.remainingMin <= 2 ? "text-amber-500" : "text-sky-500")}>
                     <ChefHat className="h-3 w-3" />
                     {cookInfo.isOverdue ? `Overdue +${cookInfo.elapsedMin - cookInfo.maxCookTime}m` : `${cookInfo.remainingMin}m left`}
                   </span>
                   <span className="text-muted-foreground font-mono">{cookInfo.maxCookTime}m max</span>
                 </div>
                 <Progress value={cookInfo.progress} className={cn("h-1.5 rounded-full", cookInfo.isOverdue && "[&>div]:bg-destructive", !cookInfo.isOverdue && cookInfo.progress > 75 && "[&>div]:bg-amber-500")} />
+              </div>
+            )}
+
+            {/* Pending Status Info (Waiting for kitchen start) */}
+            {order.status === "pending" && (
+              <div className="flex items-center justify-between text-[10px] bg-amber-500/10 border border-amber-500/20 px-2 py-1 rounded-md text-amber-500 font-bold">
+                <span className="flex items-center gap-1">
+                  <AlertCircle className="h-3 w-3" /> In Queue
+                </span>
+                <span className="font-mono">{getElapsed(order)} wait</span>
               </div>
             )}
 
@@ -342,10 +389,19 @@ const OrderStatusBoard = () => {
             {order.status === "ready" && (
               <Button
                 size="sm"
+                disabled={updatingOrderId === order.id}
                 onClick={(e) => { e.stopPropagation(); handleStatusUpdate(order.id, "completed"); }}
                 className="w-full h-8 text-xs bg-emerald-500 hover:bg-emerald-600 text-white font-bold shadow-xs flex items-center justify-center gap-1.5 rounded-lg transition-all"
               >
-                <Check className="h-3.5 w-3.5" /> Complete Order
+                {updatingOrderId === order.id ? (
+                  <>
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" /> Completing...
+                  </>
+                ) : (
+                  <>
+                    <Check className="h-3.5 w-3.5" /> Complete Order
+                  </>
+                )}
               </Button>
             )}
           </div>
@@ -643,20 +699,40 @@ const OrderStatusBoard = () => {
                       <TableHeader className="bg-muted/60">
                         <TableRow>
                           <TableHead className="text-xs font-bold">Item Description</TableHead>
+                          <TableHead className="text-xs font-bold text-center">Status</TableHead>
                           <TableHead className="text-xs font-bold text-center">Qty</TableHead>
                           <TableHead className="text-xs font-bold text-right">Price</TableHead>
                           <TableHead className="text-xs font-bold text-right">Total</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {selectedOrder.items.map((item: any, i: number) => (
-                          <TableRow key={i} className="hover:bg-muted/30">
-                            <TableCell className="text-xs font-semibold py-2">{item.name}</TableCell>
-                            <TableCell className="text-xs font-bold text-center py-2">{item.qty}</TableCell>
-                            <TableCell className="text-xs font-mono text-right py-2">Rs. {item.price.toLocaleString()}</TableCell>
-                            <TableCell className="text-xs font-mono font-bold text-right py-2">Rs. {((item.price * item.qty) - (item.discount || 0)).toLocaleString()}</TableCell>
-                          </TableRow>
-                        ))}
+                        {selectedOrder.items.map((item: any, i: number) => {
+                          const itemReady = isItemReady(item, selectedOrder);
+                          return (
+                            <TableRow key={i} className="hover:bg-muted/30">
+                              <TableCell className="text-xs font-semibold py-2">
+                                <div className="flex items-center gap-1.5">
+                                  {itemReady ? (
+                                    <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+                                  ) : (
+                                    <ChefHat className="h-4 w-4 text-sky-500/70 shrink-0" />
+                                  )}
+                                  <span>{item.name}</span>
+                                </div>
+                              </TableCell>
+                              <TableCell className="text-xs text-center py-2">
+                                {itemReady ? (
+                                  <Badge className="text-[10px] bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 px-1.5 py-0 font-bold">Ready</Badge>
+                                ) : (
+                                  <Badge variant="outline" className="text-[10px] text-sky-500 border-sky-500/30 bg-sky-500/10 px-1.5 py-0 font-bold">Preparing</Badge>
+                                )}
+                              </TableCell>
+                              <TableCell className="text-xs font-bold text-center py-2">{item.qty}</TableCell>
+                              <TableCell className="text-xs font-mono text-right py-2">Rs. {item.price.toLocaleString()}</TableCell>
+                              <TableCell className="text-xs font-mono font-bold text-right py-2">Rs. {((item.price * item.qty) - (item.discount || 0)).toLocaleString()}</TableCell>
+                            </TableRow>
+                          );
+                        })}
                       </TableBody>
                     </Table>
                   </div>
@@ -681,11 +757,19 @@ const OrderStatusBoard = () => {
 
                   {selectedOrder.status === "ready" && (
                     <Button
-                      className="w-full sm:w-auto bg-emerald-500 hover:bg-emerald-600 text-white font-extrabold rounded-xl shadow-md"
+                      disabled={updatingOrderId === selectedOrder.id}
+                      className="w-full sm:w-auto bg-emerald-500 hover:bg-emerald-600 text-white font-extrabold rounded-xl shadow-md flex items-center justify-center gap-1.5"
                       onClick={() => handleStatusUpdate(selectedOrder.id, "completed")}
                     >
-                      <Check className="h-4 w-4 mr-1.5" />
-                      Mark Completed
+                      {updatingOrderId === selectedOrder.id ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin mr-1" /> Completing...
+                        </>
+                      ) : (
+                        <>
+                          <Check className="h-4 w-4 mr-1.5" /> Mark Completed
+                        </>
+                      )}
                     </Button>
                   )}
 
