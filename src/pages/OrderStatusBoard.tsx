@@ -390,7 +390,7 @@ const OrderStatusBoard = () => {
               >
                 {updatingOrderId === order.id ? (
                   <>
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" /> Completing...
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" /> Completing Order...
                   </>
                 ) : (
                   <>
@@ -757,7 +757,7 @@ const OrderStatusBoard = () => {
                     >
                       {updatingOrderId === selectedOrder.id ? (
                         <>
-                          <Loader2 className="h-4 w-4 animate-spin mr-1" /> Completing...
+                          <Loader2 className="h-4 w-4 animate-spin mr-1" /> Completing Order...
                         </>
                       ) : (
                         <>
