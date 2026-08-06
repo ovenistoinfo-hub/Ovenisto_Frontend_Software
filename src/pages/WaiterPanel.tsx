@@ -964,7 +964,7 @@ const WaiterPanel = () => {
     const hasUnservedFood = activeTableOrders.some(o => o.status === "pending" || o.status === "preparing");
     if (hasUnservedFood) {
       const confirmed = window.confirm(
-        `${activeTableOrders.filter(o => o.status === "pending" || o.status === "preparing").length} order(s) at this table are still being prepared. End sitting anyway? They will be marked completed and may not reach the kitchen.`
+        `${activeTableOrders.filter(o => o.status === "pending" || o.status === "preparing").length} order(s) at this table are still being prepared. End sitting anyway? They will be marked completed and will disappear from the Kitchen Panel before being finished.`
       );
       if (!confirmed) return;
     }

@@ -1340,7 +1340,7 @@ const POS = () => {
 
     try {
       markMine();
-      // ── Payment-only mode: just update payment + mark completed, NO re-send to kitchen ──
+      // ── Payment-only mode: just record payment, NO status change, NO re-send to kitchen ──
       if (paymentOnlyMode && loadedOrderId) {
         const updated = await orderService.updateOrder(loadedOrderId, { paymentMethod: payMethodStr });
         const existingOrder = allOrdersData.find((o) => o.id === loadedOrderId);
