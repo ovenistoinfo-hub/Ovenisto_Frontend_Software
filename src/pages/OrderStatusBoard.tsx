@@ -142,6 +142,7 @@ const OrderStatusBoard = () => {
   const [soundAlert, setSoundAlert] = useState(false);
   const [kitchens, setKitchens] = useState<KitchenRecord[]>([]);
   const [updatingOrderId, setUpdatingOrderId] = useState<string | null>(null);
+  const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
 
   useEffect(() => {
     orderService.getKitchens().then(setKitchens).catch(() => {});
