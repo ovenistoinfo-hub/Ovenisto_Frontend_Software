@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useQuery, useQueries, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
-  Calendar, Clock, FileText, LogIn, LogOut, Plus, X, Timer, DollarSign, AlertTriangle
+  Calendar, Clock, FileText, LogIn, LogOut, Plus, X, Timer, DollarSign, AlertTriangle, Wallet, Info
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PageHeader } from "@/components/ui/page-header";
 import { useAuth } from "@/contexts/AuthContext";
+import { useData } from "@/contexts/DataContext";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { attendanceService, type AttendanceRecord } from "@/services/attendance.service";
@@ -25,6 +26,9 @@ import { shiftService, type ShiftRecord } from "@/services/shift.service";
 import { employeeService } from "@/services/employee.service";
 import { settingsService } from "@/services/settings.service";
 import { penaltyService } from "@/services/penalty.service";
+import { cashSettlementService } from "@/services/cashSettlement.service";
+import { useModuleEvents } from "@/hooks/use-module-events";
+import { useVisiblePolling } from "@/hooks/use-visible-polling";
 
 const LEAVE_TYPE_COLORS: Record<string, string> = {
   sick:      "bg-destructive/10 text-destructive",
@@ -130,6 +134,9 @@ function ElapsedTimer({ clockIn }: { clockIn: string }) {
 
 export default function EmployeePortal() {
   const { user } = useAuth();
+  const { settings } = useData();
+  const currency = settings?.currency || "Rs.";
+  const configuredMethods = settings?.paymentMethods && settings.paymentMethods.length > 0 ? settings.paymentMethods : ["Cash", "Credit Card", "Account", "JazzCash", "EasyPaisa"];
   const qc = useQueryClient();
 
   const today = todayPKT();
@@ -157,12 +164,12 @@ export default function EmployeePortal() {
   const [viewLeave, setViewLeave] = useState<LeaveRequest | null>(null);
 
   // Settings for shift config
-  const { data: settings } = useQuery({
+  const { data: appSettings } = useQuery({
     queryKey: ["settings"],
     queryFn: () => settingsService.getSettings(),
   });
-  const shiftConfig: ShiftConfig = settings?.shiftConfig && Object.keys(settings.shiftConfig).length > 0
-    ? parseShiftConfig(settings.shiftConfig)
+  const shiftConfig: ShiftConfig = appSettings?.shiftConfig && Object.keys(appSettings.shiftConfig).length > 0
+    ? parseShiftConfig(appSettings.shiftConfig)
     : DEFAULT_SHIFT_CONFIG;
 
   // Linked Employee profile for pay/penalty — accessible to any role
@@ -171,6 +178,26 @@ export default function EmployeePortal() {
     queryFn: () => employeeService.getMe(),
     enabled: !!user?.id,
   });
+
+  // Active Cash Balance for staff member
+  const { data: myActiveCash, refetch: refetchActiveCash } = useQuery({
+    queryKey: ["my-active-cash", user?.id],
+    queryFn: () => cashSettlementService.getStaffActiveBalance(user!.id),
+    enabled: !!user?.id,
+  });
+
+  // Settlement History for staff member
+  const { data: mySettlementHistory } = useQuery({
+    queryKey: ["my-settlement-history", user?.id],
+    queryFn: () => cashSettlementService.getHistory({ staffId: user!.id, limit: 100 }),
+    enabled: !!user?.id,
+  });
+
+  useModuleEvents(["cashSettlement:created"], () => {
+    refetchActiveCash();
+    qc.invalidateQueries({ queryKey: ["my-settlement-history", user?.id] });
+  });
+  useVisiblePolling(refetchActiveCash, 60000);
 
   // Per-incident penalties (e.g. order-cancellation responsibility) — same treatment
   // as the absence penalty below, additive on top of it.
@@ -445,6 +472,7 @@ export default function EmployeePortal() {
           <TabsTrigger value="schedule"    className="gap-1.5"><Calendar className="h-3.5 w-3.5" />Schedule</TabsTrigger>
           <TabsTrigger value="attendance"  className="gap-1.5"><Clock    className="h-3.5 w-3.5" />Attendance</TabsTrigger>
           <TabsTrigger value="leaves"      className="gap-1.5"><FileText className="h-3.5 w-3.5" />Leaves</TabsTrigger>
+          <TabsTrigger value="cash-settlements" className="gap-1.5"><Wallet className="h-3.5 w-3.5" />My Cash & Settlements</TabsTrigger>
           {user?.role === "Cashier" && (
             <TabsTrigger value="cash-shifts" className="gap-1.5"><Timer className="h-3.5 w-3.5" />Cash Shifts</TabsTrigger>
           )}
@@ -900,6 +928,102 @@ export default function EmployeePortal() {
             </Card>
           </TabsContent>
         )}
+
+        {/* ── MY CASH & SETTLEMENTS ── */}
+        <TabsContent value="cash-settlements" className="mt-4 space-y-4">
+          {/* Active Uncleared Balance Card */}
+          <Card className="shadow-sm border-emerald-500/30 bg-emerald-500/5">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base flex items-center justify-between">
+                <span className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400">
+                  <Wallet className="h-5 w-5" />
+                  Active Uncleared Balance
+                </span>
+                <Badge className="bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border-emerald-500/30">
+                  {myActiveCash?.orderCount || 0} Active Orders
+                </Badge>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex flex-wrap gap-3 text-center justify-center">
+                {configuredMethods.map((m) => {
+                  const val = myActiveCash?.byMethod?.[m] ?? (m.toLowerCase() === 'cash' ? (myActiveCash?.expectedCash || 0) : m.toLowerCase().includes('card') ? (myActiveCash?.expectedCard || 0) : 0);
+                  return (
+                    <div key={m} className="p-3 rounded-xl bg-card border border-border flex-1 min-w-[90px]">
+                      <span className="text-xs text-muted-foreground font-medium block uppercase truncate">{m}</span>
+                      <span className="text-lg font-bold text-foreground font-mono">
+                        {currency} {val.toLocaleString()}
+                      </span>
+                    </div>
+                  );
+                })}
+                <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex-1 min-w-[110px]">
+                  <span className="text-xs text-emerald-600 dark:text-emerald-400 font-bold block uppercase">Total Expected</span>
+                  <span className="text-xl font-black text-emerald-600 dark:text-emerald-400 font-mono">
+                    {currency} {(myActiveCash?.totalExpected || 0).toLocaleString()}
+                  </span>
+                </div>
+              </div>
+              <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs text-amber-700 dark:text-amber-300 flex items-center gap-2">
+                <Info className="h-4 w-4 shrink-0" />
+                <span>Hand this cash over to the Manager to clear your balance.</span>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Past Settlements History Table */}
+          <Card className="shadow-sm">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm">Past Approved Settlements</CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-muted/50 hover:bg-muted/50">
+                    <TableHead>Date / Time</TableHead>
+                    <TableHead>Settlement #</TableHead>
+                    <TableHead>Manager Name</TableHead>
+                    <TableHead className="text-right">Expected</TableHead>
+                    <TableHead className="text-right">Actual</TableHead>
+                    <TableHead className="text-right">Difference</TableHead>
+                    <TableHead>Notes</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {mySettlementHistory?.data && mySettlementHistory.data.length > 0 ? (
+                    mySettlementHistory.data.map((rec) => (
+                      <TableRow key={rec.id} className="hover:bg-muted/20">
+                        <TableCell className="text-xs font-medium">
+                          {new Date(rec.createdAt).toLocaleString("en-PK", { dateStyle: "short", timeStyle: "short" })}
+                        </TableCell>
+                        <TableCell className="text-xs font-mono font-bold">{rec.settlementNo}</TableCell>
+                        <TableCell className="text-xs">{rec.settledByName}</TableCell>
+                        <TableCell className="text-xs text-right font-mono">
+                          Rs. {rec.totalExpected.toLocaleString()}
+                        </TableCell>
+                        <TableCell className="text-xs text-right font-mono font-semibold text-emerald-600 dark:text-emerald-400">
+                          Rs. {rec.totalActual.toLocaleString()}
+                        </TableCell>
+                        <TableCell className={cn("text-xs text-right font-mono font-bold", rec.cashDifference < 0 ? "text-destructive" : rec.cashDifference > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground")}>
+                          {rec.cashDifference > 0 ? "+" : ""}Rs. {rec.cashDifference.toLocaleString()}
+                        </TableCell>
+                        <TableCell className="text-xs text-muted-foreground max-w-[150px] truncate">
+                          {rec.notes || "—"}
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  ) : (
+                    <TableRow>
+                      <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
+                        No past settlement records found.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
       </Tabs>
 
       <Dialog open={!!viewLeave} onOpenChange={() => setViewLeave(null)}>
