@@ -18,7 +18,7 @@ const rolePermissions: Record<string, string[]> = {
     "warehouse-dashboard",
     "sales", "customers", "purchases", "purchase-requests", "suppliers", "supplier-dues",
     "expenses", "transfers", "demands", "attendance", "employees", "reports", "sms",
-    "settings", "my-portal", "cancellation-requests", "table-layout", "online-orders",
+    "settings", "my-portal", "cancellation-requests", "table-layout",
   ],
   "Floor Manager": [
     "dashboard", "waiter", "order-status", "customer-display", "customers",
@@ -28,7 +28,7 @@ const rolePermissions: Record<string, string[]> = {
   "Waiter": ["waiter", "my-portal"],
   "Kitchen Manager": ["kitchens", "order-status", "items", "production", "stock", "warehouse-dashboard", "transfers", "demands", "my-portal"],
   "Kitchen Staff": ["kitchens", "my-portal"],
-  "Delivery Manager": ["delivery", "online-orders", "order-status", "sales", "my-portal"],
+  "Delivery Manager": ["delivery", "order-status", "sales", "my-portal"],
   "Store Manager": [
     "items", "stock", "warehouses", "warehouse-dashboard", "production", "purchases", "suppliers",
     "transfers", "demands", "employees", "my-portal",
@@ -166,7 +166,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         "customer-display",  // branch customer display screen
         "cancellation-requests", // branch order cancellations
         "table-layout",      // branch floor table layout
-        "online-orders",     // branch online orders panel
         // "order-status" is intentionally NOT excluded — Super Admin can monitor chain-wide orders
       ];
       if (superAdminExcluded.includes(module)) return false;

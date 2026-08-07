@@ -39,7 +39,6 @@ const navSections = [
     { title: "Table Layout", url: "/table-layout", icon: LayoutGrid, module: "table-layout" },
     { title: "Order Monitor", url: "/order-status", icon: BarChart3, module: "order-status" },
     { title: "Customer Display", url: "/customer-display", icon: Globe, module: "customer-display" },
-    { title: "Online Orders", url: "/online-orders", icon: Globe, module: "online-orders" },
     { title: "Cancellation Requests", url: "/cancellation-requests", icon: Ban, module: "cancellation-requests" },
   ]},
   { label: "Outlets", items: [{ title: "Outlets", url: "/outlets", icon: Store, module: "outlets" }]},

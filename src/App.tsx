@@ -61,7 +61,6 @@ const NotFound = lazy(() => import("./pages/NotFound"));
 // New pages
 const SelfOrder = lazy(() => import("./pages/SelfOrder"));
 const Delivery = lazy(() => import("./pages/Delivery"));
-const OnlineOrders = lazy(() => import("./pages/OnlineOrders"));
 const Reservations = lazy(() => import("./pages/Reservations"));
 const TableLayout = lazy(() => import("./pages/TableLayout"));
 const EmployeePortal = lazy(() => import("./pages/EmployeePortal"));
@@ -159,7 +158,6 @@ function AppRoutes() {
       <Route path="/customers/:id" element={<ProtectedRoute module="customers"><AppLayout><CustomerDetail /></AppLayout></ProtectedRoute>} />
       <Route path="/delivery" element={<ProtectedRoute module="sales"><AppLayout><Delivery /></AppLayout></ProtectedRoute>} />
       <Route path="/reservations" element={<ProtectedRoute module="customers"><AppLayout><Reservations /></AppLayout></ProtectedRoute>} />
-      <Route path="/online-orders" element={<ProtectedRoute module="sales"><AppLayout><OnlineOrders /></AppLayout></ProtectedRoute>} />
       <Route path="/purchase-requests" element={<ProtectedRoute module="purchase-requests"><AppLayout><PurchaseRequests /></AppLayout></ProtectedRoute>} />
       <Route path="/purchases" element={<ProtectedRoute module="purchases"><AppLayout><Purchases /></AppLayout></ProtectedRoute>} />
       <Route path="/suppliers" element={<ProtectedRoute module="suppliers"><AppLayout><Suppliers /></AppLayout></ProtectedRoute>} />
