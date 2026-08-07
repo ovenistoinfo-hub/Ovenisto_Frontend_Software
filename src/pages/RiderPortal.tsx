@@ -34,6 +34,8 @@ const RiderPortal = () => {
   const [loading, setLoading]             = useState(true);
   const [actionIds, setActionIds]         = useState<Set<string>>(new Set());
 
+  const [claimingId, setClaimingId]         = useState<string | null>(null);
+
   const loadData = useCallback(async () => {
     try {
       const [assignRes, statsRes, pending] = await Promise.all([
@@ -58,6 +60,30 @@ const RiderPortal = () => {
   useOrderEvents(loadData);
   useDeliveryEvents(loadData);
   useVisiblePolling(loadData, 120_000);
+
+  const claimOrder = async (orderId: string, orderNumber: string) => {
+    if (!rider) {
+      toast.error("No rider profile linked to your account. Ask your manager to set it up.");
+      return;
+    }
+    setClaimingId(orderId);
+    try {
+      const assignment = await deliveryService.assignRider({
+        orderId,
+        riderId: rider.id,
+        estimatedTime: 30,
+      });
+      if (assignment?.id) {
+        await deliveryService.updateStatus(assignment.id, "accepted");
+      }
+      toast.success(`Order #${orderNumber} claimed & accepted!`);
+      await loadData();
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to claim order");
+    } finally {
+      setClaimingId(null);
+    }
+  };
 
   const doAction = async (assignmentId: string, status: AssignmentRecord['status']) => {
     setActionIds(prev => new Set([...prev, assignmentId]));
@@ -168,29 +194,42 @@ const RiderPortal = () => {
         <TabsContent value="active" className="mt-3 space-y-4">
 
           {/* Incoming Unassigned Notification for Riders */}
-          {pendingOrders.length > 0 && assignments.length === 0 && (
+          {pendingOrders.length > 0 && (
             <div className="bg-amber-500/10 border-2 border-amber-500/30 rounded-2xl p-4 space-y-3">
               <div className="flex items-center gap-2">
                 <Bell className="h-5 w-5 text-amber-500 animate-bounce" />
                 <div>
                   <h4 className="text-sm font-extrabold text-amber-500 uppercase tracking-wide">
-                    New Orders in Kitchen ({pendingOrders.length})
+                    Unassigned Kitchen Orders ({pendingOrders.length})
                   </h4>
-                  <p className="text-xs text-muted-foreground">Manager will assign your next delivery run shortly</p>
+                  <p className="text-xs text-muted-foreground">Tap below to claim and accept any order yourself!</p>
                 </div>
               </div>
 
-              <div className="space-y-2 pt-1">
-                {pendingOrders.slice(0, 3).map((o) => (
-                  <div key={o.id} className="bg-card border border-amber-500/20 rounded-xl p-3 flex items-center justify-between text-xs">
-                    <div>
-                      <span className="font-black text-sm text-foreground">#{o.orderNumber}</span>
-                      <p className="text-muted-foreground flex items-center gap-1 mt-0.5">
-                        <MapPin className="h-3 w-3 text-amber-500" />
-                        <span className="truncate max-w-[180px]">{o.deliveryAddress || "Walk-in"}</span>
+              <div className="space-y-2.5 pt-1">
+                {pendingOrders.map((o) => (
+                  <div key={o.id} className="bg-card border border-amber-500/30 rounded-xl p-3 space-y-2 text-xs shadow-sm">
+                    <div className="flex items-center justify-between">
+                      <span className="font-black text-base text-foreground">#{o.orderNumber}</span>
+                      <span className="font-extrabold text-amber-500 text-sm">{currency} {Number(o.total).toLocaleString()}</span>
+                    </div>
+
+                    <div className="space-y-1">
+                      <p className="font-semibold text-foreground">{o.customerName || "Walk-in Customer"}</p>
+                      <p className="text-muted-foreground flex items-center gap-1">
+                        <MapPin className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+                        <span className="truncate">{o.deliveryAddress || "No delivery address listed"}</span>
                       </p>
                     </div>
-                    <span className="font-extrabold text-amber-500 text-sm">{currency} {Number(o.total).toLocaleString()}</span>
+
+                    <Button
+                      size="sm"
+                      className="w-full bg-amber-500 hover:bg-amber-600 text-black font-extrabold text-xs h-10 gap-1.5 shadow-md active:scale-95 transition-all mt-1"
+                      disabled={claimingId === o.id}
+                      onClick={() => claimOrder(o.id, o.orderNumber)}>
+                      {claimingId === o.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                      {claimingId === o.id ? "CLAIMING ORDER..." : "⚡ ACCEPT & CLAIM THIS ORDER"}
+                    </Button>
                   </div>
                 ))}
               </div>
