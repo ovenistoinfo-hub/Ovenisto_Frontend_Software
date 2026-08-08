@@ -2411,7 +2411,13 @@ const POS = () => {
                     />
                     <Button size="sm" className="h-9 px-4 gap-1" onClick={() => {
                       if (advanceAmount <= 0) { toast.error("Enter advance amount"); return; }
-                      if (advanceAmount >= total) { toast.error("Advance cannot equal or exceed total"); return; }
+                      if (advanceAmount >= total) {
+                        toast.info("Advance deposit equals or exceeds total — converted to Full Prepaid mode");
+                        setDeliveryPayMode("prepaid");
+                        setPaymentEntries([{ id: `pay-${Date.now()}`, method: advanceMethod, amount: advanceAmount }]);
+                        setAdvanceAmount(0);
+                        return;
+                      }
                       setAdvanceEntries(prev => [...prev, { id: `adv-${Date.now()}`, method: advanceMethod, amount: advanceAmount }]);
                       setAdvanceAmount(0);
                     }}>
@@ -2662,10 +2668,10 @@ const POS = () => {
                   <Label htmlFor="sendSMS" className="text-xs cursor-pointer text-muted-foreground hover:text-foreground">Send SMS receipt to customer</Label>
                 </div>
 
-                {!isDeliveryCOD && !isDeliveryAdvance && !isPaymentSufficient && totalPaid < netPayable && (
-                  <p className="text-[11px] text-amber-600 dark:text-amber-400 flex items-center gap-1 font-medium bg-amber-500/10 p-1.5 rounded border border-amber-500/20">
-                    <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-                    Partial payment. Remaining recorded as customer credit.
+                {isDeliveryPrepaid && totalPaid < netPayable && (
+                  <p className="text-[11px] text-destructive font-medium bg-destructive/10 p-1.5 rounded border border-destructive/30 flex items-center gap-1">
+                    <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-destructive" />
+                    Full Prepaid requires complete payment (Rs. {netPayable.toLocaleString()}). Enter full payment or switch mode.
                   </p>
                 )}
                 {isDeliveryAdvance && advanceEntries.length === 0 && (
@@ -2674,13 +2680,19 @@ const POS = () => {
                     Enter at least one advance payment entry above.
                   </p>
                 )}
+                {!isDeliveryCOD && !isDeliveryAdvance && !isDeliveryPrepaid && !isPaymentSufficient && totalPaid < netPayable && (
+                  <p className="text-[11px] text-amber-600 dark:text-amber-400 flex items-center gap-1 font-medium bg-amber-500/10 p-1.5 rounded border border-amber-500/20">
+                    <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                    Partial payment. Remaining recorded as customer credit.
+                  </p>
+                )}
               </div>
             </div>
           </div>
 
           <DialogFooter className="gap-2 pt-3 border-t border-border/40">
             <Button variant="outline" size="sm" onClick={() => setShowFinalizeSale(false)} disabled={isSubmitting}>Cancel</Button>
-            <Button className="gradient-primary text-primary-foreground min-w-[160px] h-9 font-semibold gap-1.5" onClick={handleFinalizeSubmit} disabled={isSubmitting || (isDeliveryAdvance && !isAdvanceSufficient)}>
+            <Button className="gradient-primary text-primary-foreground min-w-[160px] h-9 font-semibold gap-1.5" onClick={handleFinalizeSubmit} disabled={isSubmitting || (isDeliveryAdvance && !isAdvanceSufficient) || (isDeliveryPrepaid && totalPaid < netPayable)}>
               {isSubmitting
                 ? <><Loader2 className="h-4 w-4 animate-spin" />Processing...</>
                 : <><Check className="h-4 w-4" />Confirm Payment</>}
