@@ -772,7 +772,7 @@ const CashHub = () => {
           if (!open) setViewHistoryRecord(null);
         }}
       >
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <FileText className="h-5 w-5 text-primary" />
@@ -784,7 +784,7 @@ const CashHub = () => {
           </DialogHeader>
 
           {viewHistoryRecord && (
-            <div className="space-y-4 py-2 text-xs">
+            <div className="space-y-4 py-2 text-xs max-h-[75vh] overflow-y-auto pr-1">
               <div className="grid grid-cols-2 gap-2 bg-muted/40 p-3 rounded-lg border">
                 <div>
                   <span className="text-muted-foreground block">Staff Member:</span>
@@ -856,6 +856,55 @@ const CashHub = () => {
                 <p className="p-2.5 bg-muted/40 rounded-md border text-muted-foreground italic">
                   {viewHistoryRecord.notes || "No notes provided for this settlement."}
                 </p>
+              </div>
+
+              {/* Included Orders Section */}
+              <div className="space-y-2 pt-2 border-t">
+                <span className="font-bold text-foreground block">
+                  Included Orders ({viewHistoryRecord.orders?.length || 0})
+                </span>
+                {(!viewHistoryRecord.orders || viewHistoryRecord.orders.length === 0) ? (
+                  <div className="text-center p-4 text-muted-foreground text-xs italic bg-muted/20 rounded-lg border">
+                    No order logs linked to this settlement record.
+                  </div>
+                ) : (
+                  <div className="max-h-56 overflow-y-auto border rounded-lg">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="bg-muted/50">
+                          <TableHead className="text-xs">Order #</TableHead>
+                          <TableHead className="text-xs">Type</TableHead>
+                          <TableHead className="text-xs">Customer</TableHead>
+                          <TableHead className="text-xs">Method</TableHead>
+                          <TableHead className="text-right text-xs">Amount</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {viewHistoryRecord.orders.map((ord: any, idx: number) => (
+                          <TableRow key={ord.id || idx}>
+                            <TableCell className="font-mono text-xs font-semibold">
+                              #{ord.orderNumber || ord.orderNo || ord.id?.substring(0, 8)}
+                            </TableCell>
+                            <TableCell className="text-xs">
+                              <Badge variant="outline" className="text-[10px] uppercase font-bold">
+                                {ord.type || ord.orderType || "Dine In"}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-xs">
+                              {ord.customerName || ord.customer?.name || "Walk-in"}
+                            </TableCell>
+                            <TableCell className="text-xs font-medium">
+                              {ord.paymentMethod || "Cash"}
+                            </TableCell>
+                            <TableCell className="text-right font-bold text-xs">
+                              {currency} {(Number(ord.total || ord.totalAmount || 0)).toLocaleString()}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
               </div>
             </div>
           )}

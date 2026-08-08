@@ -973,12 +973,10 @@ const WaiterPanel = () => {
       toast.warning("Please settle all active orders before ending the sitting session.");
       return;
     }
-    const hasUnservedFood = activeTableOrders.some(o => o.status === "pending" || o.status === "preparing");
-    if (hasUnservedFood) {
-      const confirmed = window.confirm(
-        `${activeTableOrders.filter(o => o.status === "pending" || o.status === "preparing").length} order(s) at this table are still being prepared. End sitting anyway? They will be marked completed and will disappear from the Kitchen Panel before being finished.`
-      );
-      if (!confirmed) return;
+    const unservedOrders = activeTableOrders.filter(o => o.status === "pending" || o.status === "preparing");
+    if (unservedOrders.length > 0) {
+      toast.warning(`Cannot end sitting session while ${unservedOrders.length} order(s) are still being prepared in the kitchen. Please wait until food is Ready!`);
+      return;
     }
     setEndingSitting(true);
     try {

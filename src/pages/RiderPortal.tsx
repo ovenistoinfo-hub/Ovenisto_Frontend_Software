@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { deliveryService, type RiderRecord, type AssignmentRecord, type PendingDeliveryOrder } from "@/services/delivery.service";
 import { useQuery } from "@tanstack/react-query";
 import { cashSettlementService } from "@/services/cashSettlement.service";
@@ -37,7 +38,16 @@ const RiderPortal = () => {
   const [loading, setLoading]             = useState(true);
   const [actionIds, setActionIds]         = useState<Set<string>>(new Set());
 
-  const [claimingId, setClaimingId]         = useState<string | null>(null);
+  const [claimingId, setClaimingId]       = useState<string | null>(null);
+
+  const [deliveryConfirmModalItem, setDeliveryConfirmModalItem] = useState<{
+    assignmentId: string;
+    orderNumber: string;
+    customerName: string;
+    address: string;
+    amountToCollect: number;
+  } | null>(null);
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string>("Cash");
 
   // Cash Hub / Active balance for logged in rider
   const { data: myActiveCash, refetch: refetchActiveCash } = useQuery({
@@ -97,10 +107,10 @@ const RiderPortal = () => {
     }
   };
 
-  const doAction = async (assignmentId: string, status: AssignmentRecord['status']) => {
+  const doAction = async (assignmentId: string, status: AssignmentRecord['status'], paymentMethod?: string) => {
     setActionIds(prev => new Set([...prev, assignmentId]));
     try {
-      await deliveryService.updateStatus(assignmentId, status);
+      await deliveryService.updateStatus(assignmentId, status, paymentMethod);
       const labels: Record<string, string> = {
         accepted: "Order accepted!",
         dispatched: "Dispatched! You are on the way",
@@ -407,7 +417,20 @@ const RiderPortal = () => {
                           <Button
                             className="w-full h-14 bg-emerald-500 hover:bg-emerald-600 text-black font-black text-base rounded-2xl shadow-lg gap-2 active:scale-95 transition-all"
                             disabled={isActionLoading}
-                            onClick={() => doAction(a.id, "delivered")}>
+                            onClick={() => {
+                              if (toCollect > 0) {
+                                setDeliveryConfirmModalItem({
+                                  assignmentId: a.id,
+                                  orderNumber: a.order?.orderNumber || "",
+                                  customerName: a.order?.customerName || "Walk-in Guest",
+                                  address: a.customerAddress || a.order?.deliveryAddress || "No address provided",
+                                  amountToCollect: toCollect,
+                                });
+                                setSelectedPaymentMethod("Cash");
+                              } else {
+                                doAction(a.id, "delivered");
+                              }
+                            }}>
                             {isActionLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : <CheckCircle2 className="h-6 w-6" />}
                             {isActionLoading ? "COMPLETING..." : "MARK AS DELIVERED"}
                           </Button>
@@ -490,6 +513,111 @@ const RiderPortal = () => {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Delivery Confirmation Dialog */}
+      <Dialog
+        open={!!deliveryConfirmModalItem}
+        onOpenChange={(open) => {
+          if (!open) setDeliveryConfirmModalItem(null);
+        }}>
+        <DialogContent className="sm:max-w-md bg-card border-border">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-black text-foreground">
+              Order #{deliveryConfirmModalItem?.orderNumber} — Confirm Delivery
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              Verify customer details and confirm cash/payment collection.
+            </DialogDescription>
+          </DialogHeader>
+
+          {deliveryConfirmModalItem && (
+            <div className="space-y-4 py-2 text-sm">
+              <div className="bg-muted/50 border border-border rounded-xl p-3.5 space-y-2">
+                <div>
+                  <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Customer Name</p>
+                  <p className="font-extrabold text-foreground">{deliveryConfirmModalItem.customerName}</p>
+                </div>
+                <div>
+                  <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Delivery Address</p>
+                  <p className="font-semibold text-foreground flex items-center gap-1.5">
+                    <MapPin className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+                    {deliveryConfirmModalItem.address}
+                  </p>
+                </div>
+                <div className="pt-2 border-t border-border/60">
+                  <p className="text-base font-black text-amber-500">
+                    COD Amount to Collect: {currency} {deliveryConfirmModalItem.amountToCollect.toLocaleString()}
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <p className="text-xs font-extrabold text-foreground uppercase tracking-wider">
+                  Payment Method Received
+                </p>
+                <div className="grid grid-cols-2 gap-2">
+                  {(settings?.paymentMethods && settings.paymentMethods.length > 0
+                    ? settings.paymentMethods
+                    : ["Cash", "JazzCash", "EasyPaisa", "Credit Card"]
+                  ).map((pm) => {
+                    const isSelected = selectedPaymentMethod === pm;
+                    return (
+                      <Button
+                        key={pm}
+                        type="button"
+                        variant="outline"
+                        className={cn(
+                          "h-12 text-xs font-bold rounded-xl border-2 transition-all justify-start px-3 gap-2",
+                          isSelected
+                            ? "border-amber-500 bg-amber-500/15 text-amber-500 shadow-sm"
+                            : "border-border/80 bg-background text-muted-foreground hover:bg-muted"
+                        )}
+                        onClick={() => setSelectedPaymentMethod(pm)}>
+                        <div
+                          className={cn(
+                            "h-3.5 w-3.5 rounded-full border-2 shrink-0 flex items-center justify-center",
+                            isSelected ? "border-amber-500 bg-amber-500" : "border-muted-foreground/40"
+                          )}>
+                          {isSelected && <div className="h-1.5 w-1.5 rounded-full bg-black" />}
+                        </div>
+                        <span className="truncate">{pm}</span>
+                      </Button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              type="button"
+              variant="outline"
+              className="rounded-xl font-bold text-xs h-11"
+              onClick={() => setDeliveryConfirmModalItem(null)}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              className="rounded-xl bg-emerald-500 hover:bg-emerald-600 text-black font-extrabold text-xs h-11 gap-1.5 shadow-md"
+              disabled={!deliveryConfirmModalItem || actionIds.has(deliveryConfirmModalItem.assignmentId)}
+              onClick={() => {
+                if (deliveryConfirmModalItem) {
+                  const item = deliveryConfirmModalItem;
+                  setDeliveryConfirmModalItem(null);
+                  doAction(item.assignmentId, "delivered", selectedPaymentMethod);
+                }
+              }}>
+              {deliveryConfirmModalItem && actionIds.has(deliveryConfirmModalItem.assignmentId) ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <CheckCircle2 className="h-4 w-4" />
+              )}
+              Confirm & Complete Delivery
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

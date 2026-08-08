@@ -88,8 +88,8 @@ export const deliveryService = {
     return res.data;
   },
 
-  async updateStatus(assignmentId: string, status: AssignmentRecord['status']): Promise<AssignmentRecord> {
-    const res = await api.put<{ success: boolean; data: AssignmentRecord }>(`/delivery/assignments/${assignmentId}/status`, { status });
+  async updateStatus(assignmentId: string, status: AssignmentRecord['status'], paymentMethod?: string): Promise<AssignmentRecord> {
+    const res = await api.put<{ success: boolean; data: AssignmentRecord }>(`/delivery/assignments/${assignmentId}/status`, { status, paymentMethod });
     return res.data;
   },
 

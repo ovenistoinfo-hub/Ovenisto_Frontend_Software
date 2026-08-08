@@ -35,6 +35,8 @@ export interface CashSettlementRecord {
   paymentBreakdown?: any;
   notes?: string;
   createdAt: string;
+  orderCount?: number;
+  orders?: any[];
 }
 
 export interface CreateSettlementPayload {
