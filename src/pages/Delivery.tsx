@@ -19,6 +19,33 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { getDeliveryPaymentMode, getRiderCollectAmount } from "@/utils/deliveryPayment";
 
+/** Kitchen Status Badge for delivery cards */
+function KitchenStatusBadge({ status }: { status?: string }) {
+  const st = (status || "pending").toLowerCase();
+  if (st === "ready" || st === "completed") {
+    return (
+      <Badge variant="outline" className="bg-emerald-500/10 text-emerald-400 border-emerald-500/30 text-[10px] font-extrabold gap-1">
+        <CheckCircle2 className="h-3 w-3 text-emerald-400" />
+        Kitchen: Food Ready
+      </Badge>
+    );
+  }
+  if (st === "preparing") {
+    return (
+      <Badge variant="outline" className="bg-amber-500/10 text-amber-400 border-amber-500/30 text-[10px] font-extrabold gap-1 animate-pulse">
+        <Clock className="h-3 w-3 text-amber-400" />
+        Kitchen: Preparing
+      </Badge>
+    );
+  }
+  return (
+    <Badge variant="outline" className="bg-muted/80 text-muted-foreground border-border text-[10px] font-bold gap-1">
+      <Clock className="h-3 w-3" />
+      Kitchen: Pending
+    </Badge>
+  );
+}
+
 const STATUS_CONFIG: Record<string, { label: string; class: string }> = {
   pending:    { label: "Pending",     class: "bg-amber-500/10 text-amber-500 border-amber-500/20" },
   accepted:   { label: "Accepted",    class: "bg-blue-500/10 text-blue-500 border-blue-500/20" },
@@ -266,9 +293,12 @@ const Delivery = () => {
                             <div className="flex items-center gap-2">
                               <span className="font-black text-base text-foreground group-hover:text-amber-500 transition-colors">#{o.orderNumber}</span>
                             </div>
-                            <Badge variant="outline" className="bg-amber-500/10 text-amber-500 border-amber-500/30 font-bold">
-                              Unassigned
-                            </Badge>
+                            <div className="flex items-center gap-1.5">
+                              <KitchenStatusBadge status={(o as any).status} />
+                              <Badge variant="outline" className="bg-amber-500/10 text-amber-500 border-amber-500/30 font-bold">
+                                Unassigned
+                              </Badge>
+                            </div>
                           </div>
 
                           <div className="space-y-1.5 text-xs">
@@ -326,9 +356,12 @@ const Delivery = () => {
                           <CardContent className="p-4 space-y-3">
                             <div className="flex items-center justify-between">
                               <span className="font-black text-base group-hover:text-amber-500 transition-colors">#{a.order?.orderNumber}</span>
-                              <Badge variant="outline" className={cn("font-bold text-xs", statusInfo.class)}>
-                                {statusInfo.label}
-                              </Badge>
+                              <div className="flex items-center gap-1.5">
+                                <KitchenStatusBadge status={(a.order as any)?.status} />
+                                <Badge variant="outline" className={cn("font-bold text-xs", statusInfo.class)}>
+                                  {statusInfo.label}
+                                </Badge>
+                              </div>
                             </div>
 
                             <div className="space-y-1.5 text-xs">

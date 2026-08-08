@@ -310,6 +310,35 @@ const RiderPortal = () => {
                       </Badge>
                     </div>
 
+                    {/* Kitchen Food Readiness Banner */}
+                    {(() => {
+                      const kStatus = ((a.order as any)?.status || "pending").toLowerCase();
+                      const isFoodReady = kStatus === "ready" || kStatus === "completed";
+                      return (
+                        <div className="rounded-xl overflow-hidden">
+                          {isFoodReady ? (
+                            <div className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 p-2.5 flex items-center justify-between text-xs font-bold rounded-xl">
+                              <span className="flex items-center gap-1.5">
+                                <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
+                                Kitchen Status: FOOD READY FOR PICKUP
+                              </span>
+                              <Badge className="bg-emerald-500 text-black text-[10px] font-extrabold uppercase">Ready</Badge>
+                            </div>
+                          ) : (
+                            <div className="bg-amber-500/10 border border-amber-500/30 text-amber-400 p-2.5 flex items-center justify-between text-xs font-bold rounded-xl animate-pulse">
+                              <span className="flex items-center gap-1.5">
+                                <Clock className="h-4 w-4 text-amber-400 shrink-0" />
+                                Kitchen Status: {kStatus === "preparing" ? "FOOD PREPARING..." : "PENDING KITCHEN"}
+                              </span>
+                              <Badge variant="outline" className="border-amber-500/40 text-amber-400 text-[10px] font-extrabold uppercase">
+                                {kStatus === "preparing" ? "Preparing" : "Pending"}
+                              </Badge>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
+
                     {/* Customer & Address Card with Quick Action Buttons */}
                     <div className="bg-muted/50 border border-border/60 rounded-xl p-3.5 space-y-3">
                       <div className="flex items-start justify-between">
@@ -402,15 +431,30 @@ const RiderPortal = () => {
                         </Button>
                       )}
 
-                      {a.status === "accepted" && (
-                        <Button
-                          className="w-full h-14 bg-blue-600 hover:bg-blue-700 text-white font-black text-base rounded-2xl shadow-lg gap-2 active:scale-95 transition-all"
-                          disabled={isActionLoading}
-                          onClick={() => doAction(a.id, "dispatched")}>
-                          {isActionLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Truck className="h-5 w-5" />}
-                          {isActionLoading ? "DISPATCHING..." : "START DELIVERY (ON THE WAY)"}
-                        </Button>
-                      )}
+                      {a.status === "accepted" && (() => {
+                        const kStatus = ((a.order as any)?.status || "pending").toLowerCase();
+                        const isFoodReady = kStatus === "ready" || kStatus === "completed";
+                        return (
+                          <Button
+                            className={cn(
+                              "w-full h-14 font-black text-base rounded-2xl shadow-lg gap-2 active:scale-95 transition-all",
+                              isFoodReady
+                                ? "bg-blue-600 hover:bg-blue-700 text-white"
+                                : "bg-muted/80 text-muted-foreground border border-border cursor-not-allowed opacity-80"
+                            )}
+                            disabled={isActionLoading}
+                            onClick={() => {
+                              if (!isFoodReady) {
+                                toast.warning("Cannot start delivery run: Food is still being prepared in the kitchen. Please wait until food is Ready!");
+                                return;
+                              }
+                              doAction(a.id, "dispatched");
+                            }}>
+                            {isActionLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Truck className="h-5 w-5" />}
+                            {isActionLoading ? "DISPATCHING..." : isFoodReady ? "START DELIVERY (ON THE WAY)" : "WAITING FOR KITCHEN (FOOD PREPARING)"}
+                          </Button>
+                        );
+                      })()}
 
                       {a.status === "dispatched" && (
                         <div className="space-y-2">
