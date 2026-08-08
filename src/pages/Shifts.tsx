@@ -157,10 +157,26 @@ const Shifts = () => {
       return 0;
     };
 
+    // Cash Hub reconciles Waiter table sales and Delivery Rider COD separately —
+    // this register must only count cash that actually lands in the counter drawer.
+    const isWaiterOrRiderOrder = (o: any): boolean => {
+      if (!o) return false;
+      if (o.riderId) return true;
+      const src = (o.orderSource || "").toLowerCase();
+      if (src === "pos") return false;
+      if (src === "waiter" || src === "self-order" || src === "table") return true;
+      const staffRole = (o.staffRole || o.staff?.role || "").toLowerCase();
+      if (staffRole.includes("waiter")) return true;
+      const staff = (o.staff || "").toLowerCase();
+      if (staff.includes("waiter")) return true;
+      return false;
+    };
+
     const allOrders = apiOrdersList.length > 0 ? apiOrdersList : orders;
     const shiftOrders = allOrders.filter(o => {
       const status = (o.status || "").toLowerCase();
       if (status === "cancelled") return false;
+      if (isWaiterOrRiderOrder(o)) return false;
       const orderTimeMs = getSafeTimestamp(o);
       return orderTimeMs >= shiftStartMs;
     });
@@ -422,7 +438,7 @@ const Shifts = () => {
                   <div><p className="text-muted-foreground">Cashier</p><p className="font-medium">{activeShift.cashierName}</p></div>
                   <div><p className="text-muted-foreground">Opened</p><p className="font-medium">{new Date(activeShift.openedAt).toLocaleTimeString()}</p></div>
                   <div><p className="text-muted-foreground">Opening Cash</p><p className="font-medium">{currency} {activeShift.openingCash.toLocaleString()}</p></div>
-                  <div><p className="text-muted-foreground">Expected Cash</p><p className="font-medium">{currency} {activeShift.expectedCash.toLocaleString()}</p></div>
+                  <div><p className="text-muted-foreground">Expected Counter Drawer Cash (Direct POS Sales)</p><p className="font-medium">{currency} {activeShiftSales.expectedCash.toLocaleString()}</p></div>
                 </div>
                 <Button className="gradient-primary text-primary-foreground" onClick={() => setShowClose(true)}><Clock className="h-4 w-4 mr-2" />Close Shift</Button>
               </CardContent>
@@ -723,9 +739,36 @@ const Shifts = () => {
         <DialogFooter><Button variant="outline" onClick={() => setShowOpen(false)}>Cancel</Button><Button className="gradient-primary text-primary-foreground" onClick={openShift}>Open Shift</Button></DialogFooter></DialogContent></Dialog>
 
       {/* Close Shift Dialog */}
-      <Dialog open={showClose} onOpenChange={setShowClose}><DialogContent><DialogHeader><DialogTitle>Close Shift</DialogTitle></DialogHeader>
-        <div className="space-y-3"><div><Label>Closing Cash in Drawer ({currency})</Label><Input type="number" min="0" value={closingCash} onChange={e => setClosingCash(e.target.value)} /></div><div><Label>Notes (optional)</Label><Textarea value={cashNotes} onChange={e => setCashNotes(e.target.value)} /></div></div>
-        <DialogFooter><Button variant="outline" onClick={() => setShowClose(false)}>Cancel</Button><Button className="gradient-primary text-primary-foreground" onClick={closeShift}>Confirm Close</Button></DialogFooter></DialogContent></Dialog>
+      <Dialog open={showClose} onOpenChange={setShowClose}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Close Shift</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="p-3 rounded-xl bg-blue-500/10 border border-blue-500/20 text-xs text-blue-600 dark:text-blue-400 font-medium">
+              ℹ️ <strong>Cash Drawer Scope:</strong> This register shift reconciles direct counter POS cash sales and opening drawer float. Waiter table sales and Delivery Rider COD cash are reconciled separately in <strong>Cash Hub (/cash-hub)</strong>.
+            </div>
+            <div className="rounded-lg bg-muted/50 p-3 text-sm space-y-1">
+              <div className="flex justify-between text-muted-foreground">
+                <span>Expected Counter Drawer Cash (Direct POS Sales)</span>
+                <span className="font-semibold text-foreground">{currency} {activeShiftSales.expectedCash.toLocaleString()}</span>
+              </div>
+            </div>
+            <div>
+              <Label>Closing Cash in Drawer ({currency})</Label>
+              <Input type="number" min="0" value={closingCash} onChange={e => setClosingCash(e.target.value)} />
+            </div>
+            <div>
+              <Label>Notes (optional)</Label>
+              <Textarea value={cashNotes} onChange={e => setCashNotes(e.target.value)} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowClose(false)}>Cancel</Button>
+            <Button className="gradient-primary text-primary-foreground" onClick={closeShift}>Confirm Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* View Shift Summary Dialog */}
       <Dialog open={!!viewShift} onOpenChange={() => setViewShift(null)}><DialogContent className="max-w-md"><DialogHeader><DialogTitle>Shift {viewShift?.shiftNumber} Summary</DialogTitle></DialogHeader>
@@ -739,7 +782,7 @@ const Shifts = () => {
             <div className="text-muted-foreground">Cancelled</div><div className="text-destructive">{viewShift.cancelledOrders}</div>
             <div className="text-muted-foreground">Opening</div><div>{currency} {viewShift.openingCash.toLocaleString()}</div>
             <div className="text-muted-foreground">Closing</div><div>{currency} {viewShift.closingCash?.toLocaleString()}</div>
-            <div className="text-muted-foreground">Expected</div><div>{currency} {viewShift.expectedCash.toLocaleString()}</div>
+            <div className="text-muted-foreground">Expected Counter Drawer Cash (Direct POS Sales)</div><div>{currency} {viewShift.expectedCash.toLocaleString()}</div>
             <div className="text-muted-foreground font-medium">Difference</div>
             <div className={`font-bold ${viewShift.cashDifference && viewShift.cashDifference !== 0 ? (viewShift.cashDifference > 0 ? "text-success" : "text-destructive") : ""}`}>
               {currency} {viewShift.cashDifference !== undefined ? `${viewShift.cashDifference > 0 ? "+" : ""}${viewShift.cashDifference.toLocaleString()}` : "0"}

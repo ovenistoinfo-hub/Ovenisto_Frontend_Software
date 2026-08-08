@@ -40,6 +40,7 @@ const navSections = [
     { title: "Order Monitor", url: "/order-status", icon: BarChart3, module: "order-status" },
     { title: "Customer Display", url: "/customer-display", icon: Globe, module: "customer-display" },
     { title: "Cancellation Requests", url: "/cancellation-requests", icon: Ban, module: "cancellation-requests" },
+    { title: "Cash Hub", url: "/cash-hub", icon: Coins, module: "cash-hub" },
   ]},
   { label: "Outlets", items: [{ title: "Outlets", url: "/outlets", icon: Store, module: "outlets" }]},
   { label: "Settings", items: [

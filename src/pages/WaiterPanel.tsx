@@ -14,18 +14,21 @@ import {
   Receipt, CircleDot, ChevronDown, ChevronUp, Bell, Check, Loader2, Trash2,
   Play, Power, Eye, CreditCard, Percent, CornerUpRight, Printer, ArrowLeft, Search,
   Coins, Wallet, Smartphone, BookOpen, User, History, Building2, Crown, Phone, MapPin, Calendar, Timer, DollarSign, CalendarCheck,
-  AlertCircle, XCircle, CheckCircle2, Utensils
+  AlertCircle, XCircle, CheckCircle2, Utensils, Info
 } from "lucide-react";
 import { toast } from "sonner";
 import { useData } from "@/contexts/DataContext";
 import { useAuth } from "@/contexts/AuthContext";
-import { orderService, type OrderRecord } from "@/services/order.service";
+import { useQuery } from "@tanstack/react-query";
+import { cashSettlementService } from "@/services/cashSettlement.service";
+import { useModuleEvents } from "@/hooks/use-module-events";
 import { useVisiblePolling } from "@/hooks/use-visible-polling";
 import { useOrderEvents } from "@/hooks/use-order-events";
 import { useTableEvents } from "@/hooks/use-table-events";
 import { useReservationEvents } from "@/hooks/use-reservation-events";
 import { useSelfMutationGuard } from "@/hooks/use-self-mutation-guard";
 import { getSocket } from "@/lib/socket";
+import { orderService, type OrderRecord } from "@/services/order.service";
 import { menuService, type MenuItemRecord, type CategoryRecord, type ModifierRecord, type MenuItemVariant } from "@/services/menu.service";
 import { tableService, type TableRecord } from "@/services/table.service";
 import { reservationService, type Reservation } from "@/services/reservation.service";
@@ -170,6 +173,16 @@ const WaiterPanel = () => {
   const { user } = useAuth();
   const currency = settings.currency || "Rs.";
   const { markMine, isLikelyOwnEcho } = useSelfMutationGuard();
+
+  // Cash Hub / Active balance for logged in waiter
+  const [showMyCollectionDialog, setShowMyCollectionDialog] = useState(false);
+  const { data: myActiveCash, refetch: refetchMyCash } = useQuery({
+    queryKey: ["my-active-cash", user?.id],
+    queryFn: () => cashSettlementService.getStaffActiveBalance(user!.id),
+    enabled: !!user?.id,
+  });
+  useModuleEvents(["cashSettlement:created"], () => refetchMyCash());
+  useVisiblePolling(refetchMyCash, 60000);
 
   // Dynamic ticking clock for live order countdown/wait timers
   const [clock, setClock] = useState(new Date());
@@ -889,8 +902,8 @@ const WaiterPanel = () => {
       setCartItems([]);
       setIsOrderingMode(false);
       await loadOrders();
-    } catch {
-      toast.error("Failed to send order");
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to send order");
     } finally {
       setPlacingOrder(false);
     }
@@ -1278,6 +1291,12 @@ const WaiterPanel = () => {
             icon={<UtensilsCrossed className="h-5 w-5" />}
             title="Waiter Panel"
             subtitle="Manage tables and take orders"
+            actions={
+              <Button variant="outline" size="sm" className="h-9 px-3 rounded-xl border-emerald-500/30 text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 font-bold gap-1.5" onClick={() => setShowMyCollectionDialog(true)}>
+                <Wallet className="h-4 w-4 text-emerald-500" />
+                <span>🍽️ My Collection: {currency} {(myActiveCash?.totalExpected || 0).toLocaleString()}</span>
+              </Button>
+            }
           />
         </div>
         {isOrderingMode ? (
@@ -3081,6 +3100,82 @@ const WaiterPanel = () => {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowTodayReservationsDialog(false)} className="rounded-xl">
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* My Collection Dialog */}
+      <Dialog open={showMyCollectionDialog} onOpenChange={setShowMyCollectionDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400">
+              <Wallet className="h-5 w-5" />
+              My Collection & Active Balance
+            </DialogTitle>
+            <DialogDescription>
+              Active table sales collected under your account.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            {/* Total Card */}
+            <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-center">
+              <span className="text-xs text-muted-foreground uppercase tracking-wider font-semibold block">Total Expected Collection</span>
+              <span className="text-2xl font-black text-emerald-600 dark:text-emerald-400 font-mono">
+                {currency} {(myActiveCash?.totalExpected || 0).toLocaleString()}
+              </span>
+            </div>
+
+            {/* Sales Breakdown */}
+            <div className="flex flex-wrap gap-2 text-center text-xs justify-center">
+              {(settings?.paymentMethods && settings.paymentMethods.length > 0 ? settings.paymentMethods : ['Cash', 'Credit Card', 'Account', 'JazzCash', 'EasyPaisa']).map((m) => {
+                const val = myActiveCash?.byMethod?.[m] ?? (m.toLowerCase() === 'cash' ? (myActiveCash?.expectedCash || 0) : m.toLowerCase().includes('card') ? (myActiveCash?.expectedCard || 0) : 0);
+                return (
+                  <div key={m} className="p-2 rounded-lg bg-card border border-border flex-1 min-w-[75px]">
+                    <span className="text-muted-foreground block text-[10px] uppercase truncate">{m}</span>
+                    <span className="font-bold text-foreground font-mono">{currency} {val.toLocaleString()}</span>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Orders List */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-xs font-semibold text-muted-foreground">
+                <span>Active Orders ({myActiveCash?.orderCount || 0})</span>
+              </div>
+              <div className="max-h-48 overflow-y-auto space-y-1.5 pr-1">
+                {myActiveCash?.orders && myActiveCash.orders.length > 0 ? (
+                  myActiveCash.orders.map((ord: any) => (
+                    <div key={ord.id} className="p-2 rounded-lg bg-card border border-border/60 flex items-center justify-between text-xs">
+                      <div>
+                        <span className="font-bold font-mono">#{ord.orderNo || ord.orderNumber || ord.id.slice(-6)}</span>
+                        <span className="text-muted-foreground ml-2">({ord.paymentMethod || 'Cash'})</span>
+                      </div>
+                      <span className="font-bold font-mono text-emerald-600 dark:text-emerald-400">
+                        {currency} {(Number(ord.total) || 0).toLocaleString()}
+                      </span>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-center py-4 text-xs text-muted-foreground">
+                    No active uncleared orders found.
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Manager Notice */}
+            <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs text-amber-700 dark:text-amber-300 flex items-start gap-2">
+              <Info className="h-4 w-4 shrink-0 mt-0.5" />
+              <span>Hand this cash over to the Manager to clear your balance.</span>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowMyCollectionDialog(false)}>
               Close
             </Button>
           </DialogFooter>

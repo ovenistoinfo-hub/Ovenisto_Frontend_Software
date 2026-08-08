@@ -445,17 +445,6 @@ const Delivery = () => {
 
                         <TableCell className="text-right">
                           <div className="flex items-center justify-end gap-2">
-                            {pendingCash > 0 && (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="h-8 text-xs font-bold gap-1.5 border-amber-500/40 text-amber-500 hover:bg-amber-500 hover:text-black transition-all"
-                                onClick={() => handleCollectAllFromRider(r.id)}>
-                                <Banknote className="h-3.5 w-3.5" />
-                                Collect {currency} {pendingCash.toLocaleString()}
-                              </Button>
-                            )}
-
                             {r.status === "on_delivery" && (
                               <Button
                                 size="sm"
@@ -715,18 +704,6 @@ const Delivery = () => {
       </Dialog>
     </div>
   );
-
-  async function handleCollectAllFromRider(riderId: string) {
-    try {
-      const today = new Date().toISOString().split("T")[0];
-      const assignments = await deliveryService.getAssignments({ riderId, status: "delivered", date: today });
-      const uncollected = assignments.filter(a => !a.collectedAt);
-      if (uncollected.length === 0) { toast.info("No pending cash for this rider"); return; }
-      await Promise.all(uncollected.map(a => deliveryService.collectAmount(a.id)));
-      toast.success(`Collected cash from ${uncollected.length} delivery order(s)`);
-      load();
-    } catch (err: any) { toast.error(err?.message || "Collection failed"); }
-  }
 };
 
 export default Delivery;

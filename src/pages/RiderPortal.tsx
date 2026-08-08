@@ -5,6 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { deliveryService, type RiderRecord, type AssignmentRecord, type PendingDeliveryOrder } from "@/services/delivery.service";
+import { useQuery } from "@tanstack/react-query";
+import { cashSettlementService } from "@/services/cashSettlement.service";
+import { useModuleEvents } from "@/hooks/use-module-events";
 import { useVisiblePolling } from "@/hooks/use-visible-polling";
 import { useOrderEvents } from "@/hooks/use-order-events";
 import { useDeliveryEvents } from "@/hooks/use-delivery-events";
@@ -35,6 +38,15 @@ const RiderPortal = () => {
   const [actionIds, setActionIds]         = useState<Set<string>>(new Set());
 
   const [claimingId, setClaimingId]         = useState<string | null>(null);
+
+  // Cash Hub / Active balance for logged in rider
+  const { data: myActiveCash, refetch: refetchActiveCash } = useQuery({
+    queryKey: ["my-active-cash", user?.id],
+    queryFn: () => cashSettlementService.getStaffActiveBalance(user!.id),
+    enabled: !!user?.id,
+  });
+  useModuleEvents(["cashSettlement:created"], () => refetchActiveCash());
+  useVisiblePolling(refetchActiveCash, 60000);
 
   const loadData = useCallback(async () => {
     try {
@@ -141,9 +153,31 @@ const RiderPortal = () => {
         </Button>
       </div>
 
+      {/* COD Cash in Hand Summary Card */}
+      <Card className="border border-emerald-500/30 bg-emerald-500/10 shadow-sm">
+        <CardContent className="p-3.5 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-xl bg-emerald-500/20 flex items-center justify-center text-emerald-500 shrink-0">
+              <Wallet className="h-5 w-5" />
+            </div>
+            <div>
+              <p className="text-xs font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">
+                🏍️ COD Cash in Hand
+              </p>
+              <p className="text-xl font-black text-foreground font-mono">
+                {currency} {(myActiveCash?.totalExpected || 0).toLocaleString()}
+              </p>
+              <p className="text-[11px] text-muted-foreground">
+                {myActiveCash?.orderCount || 0} orders collected • Hand this cash over to the Manager to settle in Cash Hub.
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Mobile Ergonomic Quick Stats */}
       {stats && (
-        <div className="grid grid-cols-3 gap-2.5">
+        <div className="grid grid-cols-2 gap-2.5">
           <Card className="shadow-sm border-border bg-card">
             <CardContent className="p-3 text-center space-y-0.5">
               <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Today</p>
@@ -157,16 +191,6 @@ const RiderPortal = () => {
               <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Sales</p>
               <p className="text-lg font-black text-emerald-500">{currency} {stats.todaySales.toLocaleString()}</p>
               <p className="text-[10px] text-muted-foreground font-medium">Earned</p>
-            </CardContent>
-          </Card>
-
-          <Card className="shadow-sm border-border bg-card">
-            <CardContent className="p-3 text-center space-y-0.5">
-              <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Cash to Hand</p>
-              <p className={cn("text-lg font-black", stats.pendingCash > 0 ? "text-amber-500 animate-pulse" : "text-muted-foreground")}>
-                {currency} {stats.pendingCash.toLocaleString()}
-              </p>
-              <p className="text-[10px] text-muted-foreground font-medium">To Manager</p>
             </CardContent>
           </Card>
         </div>

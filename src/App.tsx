@@ -66,6 +66,7 @@ const TableLayout = lazy(() => import("./pages/TableLayout"));
 const EmployeePortal = lazy(() => import("./pages/EmployeePortal"));
 const RiderPortal = lazy(() => import("./pages/RiderPortal"));
 const WarehouseDashboard = lazy(() => import("./pages/WarehouseDashboard"));
+const CashHub = lazy(() => import("./pages/CashHub"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -167,6 +168,7 @@ function AppRoutes() {
       <Route path="/users" element={<ProtectedRoute module="users"><AppLayout><Users /></AppLayout></ProtectedRoute>} />
       <Route path="/attendance" element={<ProtectedRoute module="attendance"><AppLayout><Attendance /></AppLayout></ProtectedRoute>} />
       <Route path="/cancellation-requests" element={<ProtectedRoute module="cancellation-requests"><AppLayout><CancellationRequests /></AppLayout></ProtectedRoute>} />
+      <Route path="/cash-hub" element={<ProtectedRoute module="cash-hub"><AppLayout><CashHub /></AppLayout></ProtectedRoute>} />
       <Route path="/employees" element={<ProtectedRoute module="employees"><AppLayout><Employees /></AppLayout></ProtectedRoute>} />
       <Route path="/payroll" element={<ProtectedRoute module="payroll"><AppLayout><Payroll /></AppLayout></ProtectedRoute>} />
       <Route path="/rider-portal" element={<ProtectedRoute module="rider-portal"><AppLayout><RiderPortal /></AppLayout></ProtectedRoute>} />

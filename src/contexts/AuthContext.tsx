@@ -18,17 +18,17 @@ const rolePermissions: Record<string, string[]> = {
     "warehouse-dashboard",
     "sales", "customers", "purchases", "purchase-requests", "suppliers", "supplier-dues",
     "expenses", "transfers", "demands", "attendance", "employees", "reports", "sms",
-    "settings", "my-portal", "cancellation-requests", "table-layout",
+    "settings", "my-portal", "cancellation-requests", "table-layout", "cash-hub",
   ],
   "Floor Manager": [
     "dashboard", "waiter", "order-status", "customer-display", "customers",
-    "reservations", "table-layout", "my-portal",
+    "reservations", "table-layout", "my-portal", "cash-hub",
   ],
   "Cashier": ["dashboard", "pos", "sales", "customers", "my-portal"],
   "Waiter": ["waiter", "my-portal"],
   "Kitchen Manager": ["kitchens", "order-status", "items", "production", "stock", "warehouse-dashboard", "transfers", "demands", "my-portal"],
   "Kitchen Staff": ["kitchens", "my-portal"],
-  "Delivery Manager": ["delivery", "order-status", "sales", "my-portal"],
+  "Delivery Manager": ["delivery", "order-status", "sales", "my-portal", "cash-hub"],
   "Store Manager": [
     "items", "stock", "warehouses", "warehouse-dashboard", "production", "purchases", "suppliers",
     "transfers", "demands", "employees", "my-portal",
@@ -166,6 +166,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         "customer-display",  // branch customer display screen
         "cancellation-requests", // branch order cancellations
         "table-layout",      // branch floor table layout
+        "cash-hub",          // branch cash hub settlement panel
         // "order-status" is intentionally NOT excluded — Super Admin can monitor chain-wide orders
       ];
       if (superAdminExcluded.includes(module)) return false;
