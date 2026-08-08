@@ -1607,6 +1607,12 @@ const POS = () => {
     );
   }
 
+  const isDeliveryCOD     = orderType === "Delivery" && deliveryPayMode === "cod"     && !loadedAdvancePayment;
+  const isDeliveryAdvance = orderType === "Delivery" && deliveryPayMode === "advance" && !loadedAdvancePayment;
+  const isDeliveryPrepaid = orderType === "Delivery" && deliveryPayMode === "prepaid" && !loadedAdvancePayment;
+  const advanceTotal      = advanceEntries.reduce((sum, e) => sum + e.amount, 0);
+  const isAdvanceSufficient = advanceTotal > 0;
+
   return (
     <div className="fixed inset-0 z-50 bg-background flex flex-col print:static print:z-auto">
       {/* POS Header */}
