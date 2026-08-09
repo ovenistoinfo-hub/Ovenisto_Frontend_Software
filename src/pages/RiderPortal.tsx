@@ -53,11 +53,24 @@ const RiderPortal = () => {
   // Cash Hub / Active balance for logged in rider
   const { data: myActiveCash, refetch: refetchActiveCash } = useQuery({
     queryKey: ["my-active-cash", user?.id],
-    queryFn: () => cashSettlementService.getStaffActiveBalance(user!.id),
+    queryFn: async () => {
+      if (user?.id) {
+        api.clearCache(`/cash-settlements/staff/${user.id}/active`);
+      }
+      return cashSettlementService.getStaffActiveBalance(user!.id);
+    },
     enabled: !!user?.id,
   });
-  useModuleEvents(["cashSettlement:created"], () => refetchActiveCash());
-  useVisiblePolling(refetchActiveCash, 60000);
+
+  const refetchMyActiveCash = () => {
+    if (user?.id) {
+      api.clearCache(`/cash-settlements/staff/${user.id}/active`);
+      refetchActiveCash();
+    }
+  };
+
+  useModuleEvents(["cashSettlement:created", "order:created", "order:updated", "delivery:status_updated", "delivery:assigned"], refetchMyActiveCash);
+  useVisiblePolling(refetchMyActiveCash, 30000);
 
   const loadData = useCallback(async () => {
     // Clear delivery endpoint caches before fetching so that order:updated socket

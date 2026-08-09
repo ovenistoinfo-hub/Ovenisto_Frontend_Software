@@ -178,11 +178,25 @@ const WaiterPanel = () => {
   const [showMyCollectionDialog, setShowMyCollectionDialog] = useState(false);
   const { data: myActiveCash, refetch: refetchMyCash } = useQuery({
     queryKey: ["my-active-cash", user?.id],
-    queryFn: () => cashSettlementService.getStaffActiveBalance(user!.id),
+    queryFn: async () => {
+      if (user?.id) {
+        api.clearCache(`/cash-settlements/staff/${user.id}/active`);
+      }
+      return cashSettlementService.getStaffActiveBalance(user!.id);
+    },
     enabled: !!user?.id,
   });
-  useModuleEvents(["cashSettlement:created"], () => refetchMyCash());
-  useVisiblePolling(refetchMyCash, 60000);
+
+  const refetchMyActiveCash = () => {
+    if (user?.id) {
+      api.clearCache(`/cash-settlements/staff/${user.id}/active`);
+      refetchMyCash();
+    }
+  };
+
+  useModuleEvents(["cashSettlement:created", "order:created", "order:updated", "table:updated"], refetchMyActiveCash);
+  useOrderEvents(refetchMyActiveCash);
+  useVisiblePolling(refetchMyActiveCash, 30000);
 
   // Dynamic ticking clock for live order countdown/wait timers
   const [clock, setClock] = useState(new Date());

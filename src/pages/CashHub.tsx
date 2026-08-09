@@ -48,6 +48,9 @@ import { useModuleEvents } from "@/hooks/use-module-events";
 import { useVisiblePolling } from "@/hooks/use-visible-polling";
 import { api } from "@/services/api";
 
+import { useOrderEvents } from "@/hooks/use-order-events";
+import { useDeliveryEvents } from "@/hooks/use-delivery-events";
+
 const CashHub = () => {
   const { user } = useAuth();
   const { settings } = useData();
@@ -112,14 +115,18 @@ const CashHub = () => {
 
   // Socket event & Polling refetch handler
   const refetchAll = () => {
+    api.clearCache("/cash-settlements/active-balances");
+    api.clearCache("/cash-settlements/history");
     refetchActive();
     refetchHistory();
     queryClient.invalidateQueries({ queryKey: ["active-cash-balances"] });
     queryClient.invalidateQueries({ queryKey: ["cash-settlement-history"] });
   };
 
-  useModuleEvents(["cashSettlement:created"], refetchAll);
-  useVisiblePolling(refetchAll, 60000);
+  useModuleEvents(["cashSettlement:created", "order:created", "order:updated", "delivery:status_updated", "delivery:assigned"], refetchAll);
+  useOrderEvents(refetchAll);
+  useDeliveryEvents(refetchAll);
+  useVisiblePolling(refetchAll, 30000);
 
   // Stats Calculations
   const totalUnclearedCash = activeBalances.reduce((sum, item) => sum + (item.totalExpected || 0), 0);

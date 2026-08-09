@@ -133,11 +133,24 @@ const POS = () => {
   const [showCashHeldDialog, setShowCashHeldDialog] = useState(false);
   const { data: myActiveCash, refetch: refetchActiveCash } = useQuery({
     queryKey: ["my-active-cash", user?.id],
-    queryFn: () => cashSettlementService.getStaffActiveBalance(user!.id),
+    queryFn: async () => {
+      if (user?.id) {
+        api.clearCache(`/cash-settlements/staff/${user.id}/active`);
+      }
+      return cashSettlementService.getStaffActiveBalance(user!.id);
+    },
     enabled: !!user?.id,
   });
-  useModuleEvents(["cashSettlement:created"], () => refetchActiveCash());
-  useVisiblePolling(refetchActiveCash, 60000);
+
+  const refetchMyActiveCash = () => {
+    if (user?.id) {
+      api.clearCache(`/cash-settlements/staff/${user.id}/active`);
+      refetchActiveCash();
+    }
+  };
+
+  useModuleEvents(["cashSettlement:created", "order:created", "order:updated", "delivery:status_updated"], refetchMyActiveCash);
+  useVisiblePolling(refetchMyActiveCash, 30000);
 
   // Prefer API settings; fall back to localStorage settings
   const effectiveSettings = apiSettings ?? settings;

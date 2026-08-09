@@ -182,7 +182,12 @@ export default function EmployeePortal() {
   // Active Cash Balance for staff member
   const { data: myActiveCash, refetch: refetchActiveCash } = useQuery({
     queryKey: ["my-active-cash", user?.id],
-    queryFn: () => cashSettlementService.getStaffActiveBalance(user!.id),
+    queryFn: async () => {
+      if (user?.id) {
+        api.clearCache(`/cash-settlements/staff/${user.id}/active`);
+      }
+      return cashSettlementService.getStaffActiveBalance(user!.id);
+    },
     enabled: !!user?.id,
   });
 
@@ -193,11 +198,16 @@ export default function EmployeePortal() {
     enabled: !!user?.id,
   });
 
-  useModuleEvents(["cashSettlement:created"], () => {
-    refetchActiveCash();
-    qc.invalidateQueries({ queryKey: ["my-settlement-history", user?.id] });
-  });
-  useVisiblePolling(refetchActiveCash, 60000);
+  const refetchMyActiveCash = () => {
+    if (user?.id) {
+      api.clearCache(`/cash-settlements/staff/${user.id}/active`);
+      refetchActiveCash();
+      qc.invalidateQueries({ queryKey: ["my-settlement-history", user?.id] });
+    }
+  };
+
+  useModuleEvents(["cashSettlement:created", "order:created", "order:updated", "delivery:status_updated"], refetchMyActiveCash);
+  useVisiblePolling(refetchMyActiveCash, 30000);
 
   // Per-incident penalties (e.g. order-cancellation responsibility) — same treatment
   // as the absence penalty below, additive on top of it.
