@@ -142,6 +142,10 @@ const CashHub = () => {
 
   // Open Settlement Modal
   const handleOpenSettlement = (staff: ActiveStaffBalance) => {
+    if (!staff.accountLinked) {
+      toast.error(`${staff.staffName} has no linked login account — link one before settling their cash.`);
+      return;
+    }
     setSelectedStaffForSettlement(staff);
     const initialInputs: Record<string, string> = {};
     configuredMethods.forEach((m) => {
@@ -363,7 +367,12 @@ const CashHub = () => {
             </Card>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {activeBalances.map((item) => (
+              {activeBalances.map((item) => {
+                const oldestAgeHours = item.oldestOrderAt
+                  ? (Date.now() - new Date(item.oldestOrderAt).getTime()) / 3_600_000
+                  : 0;
+                const isStale = oldestAgeHours >= 24;
+                return (
                 <Card key={item.staffId} className="flex flex-col justify-between shadow-sm border-border hover:border-primary/50 transition-colors">
                   <CardHeader className="pb-3">
                     <div className="flex items-start justify-between">
@@ -373,9 +382,22 @@ const CashHub = () => {
                         </div>
                         <div>
                           <CardTitle className="text-base">{item.staffName}</CardTitle>
-                          <Badge variant="outline" className="mt-1 text-xs">
-                            {item.staffRole}
-                          </Badge>
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            <Badge variant="outline" className="text-xs">
+                              {item.staffRole}
+                            </Badge>
+                            {!item.accountLinked && (
+                              <Badge variant="outline" className="text-xs bg-destructive/10 text-destructive border-destructive/30">
+                                No login linked
+                              </Badge>
+                            )}
+                            {isStale && (
+                              <Badge variant="outline" className="text-xs bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30">
+                                <Clock className="h-3 w-3 mr-1" />
+                                {Math.floor(oldestAgeHours / 24)}+ day{Math.floor(oldestAgeHours / 24) === 1 ? "" : "s"} old
+                              </Badge>
+                            )}
+                          </div>
                         </div>
                       </div>
                       <Badge variant="secondary" className="text-xs">
@@ -419,13 +441,16 @@ const CashHub = () => {
                     <Button
                       size="sm"
                       onClick={() => handleOpenSettlement(item)}
+                      disabled={!item.accountLinked}
+                      title={item.accountLinked ? undefined : "This staff member has no linked login account — link one before settling their cash"}
                       className="w-full text-xs"
                     >
                       Settle Cash
                     </Button>
                   </div>
                 </Card>
-              ))}
+                );
+              })}
             </div>
           )}
         </TabsContent>

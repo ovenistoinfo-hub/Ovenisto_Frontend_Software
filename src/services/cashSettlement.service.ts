@@ -5,6 +5,8 @@ export interface ActiveStaffBalance {
   staffName: string;
   staffRole: string;
   avatar?: string;
+  accountLinked: boolean;
+  oldestOrderAt: string | null;
   expectedCash: number;
   expectedCard: number;
   expectedOnline: number;

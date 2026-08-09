@@ -93,11 +93,6 @@ export const deliveryService = {
     return res.data;
   },
 
-  async collectAmount(assignmentId: string): Promise<AssignmentRecord> {
-    const res = await api.put<{ success: boolean; data: AssignmentRecord }>(`/delivery/assignments/${assignmentId}/collect`, {});
-    return res.data;
-  },
-
   async getDashboard(): Promise<{ riderStats: RiderRecord[]; activeAssignments: AssignmentRecord[] }> {
     const res = await api.get<{ success: boolean; data: { riderStats: RiderRecord[]; activeAssignments: AssignmentRecord[] } }>('/delivery/dashboard');
     return res.data;
