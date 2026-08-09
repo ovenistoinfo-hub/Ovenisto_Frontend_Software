@@ -17,6 +17,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { getDeliveryPaymentMode, getRiderCollectAmount } from "@/utils/deliveryPayment";
+import { api } from "@/services/api";
 
 const STATUS_CONFIG: Record<string, { label: string; class: string; border: string }> = {
   pending:    { label: "NEW ASSIGNMENT", class: "bg-amber-500/15 text-amber-400 border-amber-500/30", border: "border-l-amber-500" },
@@ -59,6 +60,12 @@ const RiderPortal = () => {
   useVisiblePolling(refetchActiveCash, 60000);
 
   const loadData = useCallback(async () => {
+    // Clear delivery endpoint caches before fetching so that order:updated socket
+    // events (e.g. kitchen changes food status to Ready) always yield fresh data.
+    // useOrderEvents only clears /orders; /delivery/my-assignments is a separate
+    // cache key that must be invalidated here.
+    api.clearCache('/delivery/my-assignments');
+    api.clearCache('/delivery/my-stats');
     try {
       const [assignRes, statsRes, pending] = await Promise.all([
         deliveryService.getMyAssignments(),

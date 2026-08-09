@@ -747,7 +747,7 @@ const CashHub = () => {
                           {ord.paymentMethod || "Cash"}
                         </TableCell>
                         <TableCell className="text-right font-semibold text-xs">
-                          {currency} {(Number(ord.totalAmount || ord.total || 0)).toLocaleString()}
+                          {currency} {(Number(ord.staffAmount ?? ord.totalAmount ?? ord.total ?? 0)).toLocaleString()}
                         </TableCell>
                       </TableRow>
                     ))}

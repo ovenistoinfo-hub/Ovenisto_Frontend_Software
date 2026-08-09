@@ -790,10 +790,27 @@ const POS = () => {
       const byMethod = createMethodMap();
 
       ordersList.forEach(o => {
-        const orderAmt = Number(o.total || 0);
+        const pm = o.paymentMethod || '';
+        const hasAdvancePM = /advance\s*\(/i.test(pm);
+        const hasCODBalancePM = /cod balance\s*\(/i.test(pm);
+
+        // For advance delivery orders, only count what the cashier actually collected at the POS counter.
+        // The remaining COD balance is the rider's responsibility, not the POS register's.
+        let orderAmt = Number(o.total || 0);
+        if (hasAdvancePM) {
+          const advancePaid = Number(o.advancePayment || 0);
+          if (advancePaid > 0) {
+            orderAmt = advancePaid;
+          } else {
+            // Fallback: parse advance amount directly from PM string
+            // e.g. "Advance (JazzCash): Rs.485" → 485
+            const amtMatch = pm.match(/Rs\.?\s*(\d+(?:\.\d+)?)/i);
+            if (amtMatch) orderAmt = parseFloat(amtMatch[1]);
+          }
+        }
         total += orderAmt;
 
-        const splits = parsePaymentSplits(o.paymentMethod, orderAmt);
+        const splits = parsePaymentSplits(pm, orderAmt);
 
         splits.forEach(({ method, amount }) => {
           const mLower = method.toLowerCase();
@@ -842,6 +859,9 @@ const POS = () => {
       const status = (o.status || "").toLowerCase();
       const method = (o.paymentMethod || "").toLowerCase().trim();
       if (status === "completed") return true;
+      if (method === "cash on delivery" || method === "cod" || method === "cash-on-delivery") {
+        return Number(o.advancePayment || 0) > 0;
+      }
       if (method && method !== "pending" && method !== "unpaid") return true;
       return false;
     };
@@ -860,7 +880,7 @@ const POS = () => {
     const approvedWaiterOrders = waiterOrders.filter(isApprovedOrder);
     const pendingWaiterOrders = allWaiterOrders.filter(o => !isSettledOrder(o));
 
-    const posOrders = shiftOrders.filter(o => !isWaiterOrder(o) && !o.riderId && isSettledOrder(o));
+    const posOrders = shiftOrders.filter(o => !isWaiterOrder(o) && isSettledOrder(o));
     const settledShiftOrders = shiftOrders.filter(isSettledOrder).filter(isApprovedOrder);
 
     const posGroup = processGroup(posOrders);
@@ -1187,10 +1207,11 @@ const POS = () => {
 
   const isPaymentSufficient = (totalPaid + loadedAdvancePayment) >= total;
 
-  const isDeliveryCOD = orderType === "Delivery" && deliveryPayMode === "cod" && !loadedAdvancePayment;
+  const isDeliveryCOD     = orderType === "Delivery" && deliveryPayMode === "cod"     && !loadedAdvancePayment;
   const isDeliveryAdvance = orderType === "Delivery" && deliveryPayMode === "advance" && !loadedAdvancePayment;
-  const advanceTotal = advanceEntries.reduce((s, e) => s + e.amount, 0);
-  const deliveryBalance = Math.max(0, total - advanceTotal);
+  const isDeliveryPrepaid = orderType === "Delivery" && deliveryPayMode === "prepaid" && !loadedAdvancePayment;
+  const advanceTotal      = advanceEntries.reduce((s, e) => s + e.amount, 0);
+  const deliveryBalance   = Math.max(0, total - advanceTotal);
   const isAdvanceSufficient = isDeliveryAdvance
     ? advanceEntries.length > 0 && advanceTotal > 0 && advanceTotal < total
     : true;
@@ -1255,7 +1276,17 @@ const POS = () => {
   const validateOrder = () => {
     if (cart.length === 0) { toast.error("Add items to order first"); return false; }
     if (orderType === "Dine In" && !tableNumber) { toast.error("Select a table number"); return false; }
-    if (orderType === "Delivery" && !deliveryAddress.trim()) { toast.error("Enter delivery address"); return false; }
+    if (orderType === "Delivery") {
+      const activePhone = (selectedCustomerData as any)?.phone || deliveryPhone;
+      if (!deliveryAddress || !deliveryAddress.trim()) {
+        toast.error("Delivery address is required!");
+        return false;
+      }
+      if (!activePhone || !activePhone.trim()) {
+        toast.error("Customer phone number is required!");
+        return false;
+      }
+    }
     return true;
   };
 
@@ -1286,6 +1317,18 @@ const POS = () => {
   const removePaymentEntry = (id: string) => setPaymentEntries(prev => prev.filter(e => e.id !== id));
 
   const handleFinalizeSubmit = async () => {
+    if (orderType === "Delivery" && !paymentOnlyMode) {
+      const activePhone = (selectedCustomerData as any)?.phone || deliveryPhone;
+      if (!deliveryAddress || !deliveryAddress.trim()) {
+        toast.error("Delivery address is required!");
+        return;
+      }
+      if (!activePhone || !activePhone.trim()) {
+        toast.error("Customer phone number is required!");
+        return;
+      }
+    }
+
     if (isDeliveryAdvance) {
       if (advanceEntries.length === 0 || advanceTotal <= 0) {
         toast.error("Enter advance payment amount and method");
@@ -1589,9 +1632,9 @@ const POS = () => {
     const actualId = customerId === "walk-in" ? "" : customerId;
     setSelectedCustomer(actualId);
     const cust = effectiveCustomers.find((c) => c.id === actualId);
-    if (cust && orderType === "Delivery") {
-      setDeliveryAddress(cust.address);
-      setDeliveryPhone(cust.phone);
+    if (cust) {
+      if (cust.address) setDeliveryAddress(cust.address);
+      if (cust.phone) setDeliveryPhone(cust.phone);
     }
   };
 
@@ -1606,12 +1649,6 @@ const POS = () => {
       </div>
     );
   }
-
-  const isDeliveryCOD     = orderType === "Delivery" && deliveryPayMode === "cod"     && !loadedAdvancePayment;
-  const isDeliveryAdvance = orderType === "Delivery" && deliveryPayMode === "advance" && !loadedAdvancePayment;
-  const isDeliveryPrepaid = orderType === "Delivery" && deliveryPayMode === "prepaid" && !loadedAdvancePayment;
-  const advanceTotal      = advanceEntries.reduce((sum, e) => sum + e.amount, 0);
-  const isAdvanceSufficient = advanceTotal > 0;
 
   return (
     <div className="fixed inset-0 z-50 bg-background flex flex-col print:static print:z-auto">
@@ -1665,9 +1702,9 @@ const POS = () => {
           <Button variant="outline" size="sm" className="h-8 text-xs rounded-lg gap-1 shrink-0 px-2" asChild>
             <Link to="/customer-display" target="_blank"><Monitor className="h-3.5 w-3.5" /><span className="hidden xl:inline">Customer Screen</span></Link>
           </Button>
-          <Button variant="outline" size="sm" className="h-8 text-xs rounded-lg gap-1 shrink-0 px-2" onClick={() => setShowRegisterClose(true)}>
+          <Button variant="outline" size="sm" className="h-8 text-xs rounded-lg gap-1 shrink-0 px-2" onClick={() => activeShift ? setShowRegisterClose(true) : setShowRegisterOpen(true)}>
             <DollarSign className="h-3.5 w-3.5" />
-            <span className="hidden xl:inline">Cash Register</span>
+            <span className="hidden xl:inline">{activeShift ? "Cash Register" : "Open Register"}</span>
           </Button>
           {(myActiveCash?.totalExpected ?? 0) > 0 && (
             <Button variant="outline" size="sm" className="h-8 text-xs rounded-lg gap-1 shrink-0 px-2 border-amber-500/40 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10" onClick={() => setShowCashHeldDialog(true)}>
@@ -1923,11 +1960,11 @@ const POS = () => {
             <div className="p-2 sm:p-3 border-b border-border bg-muted/30 space-y-2 print:hidden">
               <div className="flex items-center gap-2">
                 <MapPin className="h-4 w-4 text-muted-foreground shrink-0" />
-                <Input value={deliveryAddress} onChange={(e) => setDeliveryAddress(e.target.value)} placeholder="Delivery address" className="h-7 sm:h-8 text-xs" />
+                <Input value={deliveryAddress} onChange={(e) => setDeliveryAddress(e.target.value)} placeholder="Delivery address *" className={cn("h-7 sm:h-8 text-xs", !deliveryAddress.trim() && "border-amber-500/40 focus:border-amber-500")} />
               </div>
               <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
                 <Phone className="h-4 w-4 text-muted-foreground shrink-0" />
-                <Input value={deliveryPhone} onChange={(e) => setDeliveryPhone(e.target.value)} placeholder="Phone number" className="h-7 sm:h-8 text-xs flex-1" />
+                <Input value={deliveryPhone} onChange={(e) => setDeliveryPhone(e.target.value)} placeholder="Phone number *" className={cn("h-7 sm:h-8 text-xs flex-1", !((selectedCustomerData as any)?.phone || deliveryPhone.trim()) && "border-amber-500/40 focus:border-amber-500")} />
                 <Select value={selectedRiderId || "none"} onValueChange={val => {
                   if (val === "none") { setSelectedRiderId(""); setRider("Self Pickup"); return; }
                   const r = apiRiders.find(r => r.id === val);
@@ -3759,7 +3796,7 @@ const POS = () => {
       </Dialog>
 
       {/* Register Open Dialog */}
-      <Dialog open={showRegisterOpen && !activeShift} onOpenChange={() => {}}>
+      <Dialog open={showRegisterOpen && !activeShift} onOpenChange={setShowRegisterOpen}>
         <DialogContent className="max-w-sm" onPointerDownOutside={(e) => e.preventDefault()} onEscapeKeyDown={(e) => e.preventDefault()}>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2"><Banknote className="h-5 w-5 text-primary" />Open Cash Register</DialogTitle>
