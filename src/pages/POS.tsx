@@ -38,6 +38,7 @@ import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
 import { Link, useLocation } from "react-router-dom";
 import { cn, formatPakistaniPhone } from "@/lib/utils";
+import { api } from "@/services/api";
 import { generateInvoicePDF } from "@/lib/generate-invoice-pdf";
 import { useData } from "@/contexts/DataContext";
 import { useAuth } from "@/contexts/AuthContext";

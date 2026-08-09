@@ -21,6 +21,7 @@ import { useData } from "@/contexts/DataContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQuery } from "@tanstack/react-query";
 import { cashSettlementService } from "@/services/cashSettlement.service";
+import { api } from "@/services/api";
 import { useModuleEvents } from "@/hooks/use-module-events";
 import { useVisiblePolling } from "@/hooks/use-visible-polling";
 import { useOrderEvents } from "@/hooks/use-order-events";
