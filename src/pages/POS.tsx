@@ -661,7 +661,7 @@ const POS = () => {
   useEffect(() => {
     if (orderType === "Delivery") {
       deliveryService.getRiders()
-        .then(riders => setApiRiders(riders.filter(r => r.isAvailable || r.status === "available")))
+        .then(riders => setApiRiders(riders.filter(r => r.status !== "off_duty" && (r.activeDeliveries || 0) < 5)))
         .catch(() => {});
     }
   }, [orderType]);

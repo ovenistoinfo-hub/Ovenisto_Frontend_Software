@@ -155,7 +155,7 @@ const Delivery = () => {
     setShowAssign(orderId);
     try {
       const riders = await deliveryService.getRiders();
-      setAllRiders(riders.filter(r => r.isAvailable));
+      setAllRiders(riders.filter(r => r.status !== "off_duty" && (r.activeDeliveries || 0) < 5));
     } catch { toast.error("Failed to load riders"); }
   };
 
