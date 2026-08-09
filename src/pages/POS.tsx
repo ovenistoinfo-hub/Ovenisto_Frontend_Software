@@ -1723,7 +1723,7 @@ const POS = () => {
           {(myActiveCash?.totalExpected ?? 0) > 0 && (
             <Button variant="outline" size="sm" className="h-8 text-xs rounded-lg gap-1 shrink-0 px-2 border-amber-500/40 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10" onClick={() => setShowCashHeldDialog(true)}>
               <Coins className="h-3.5 w-3.5" />
-              <span className="hidden lg:inline">Cash Held:</span> {effectiveSettings.currency} {myActiveCash!.totalExpected.toLocaleString()}
+              <span className="hidden lg:inline">Collections Held:</span> {effectiveSettings.currency} {myActiveCash!.totalExpected.toLocaleString()}
             </Button>
           )}
           {lowStockItems.length > 0 && (
@@ -3847,7 +3847,7 @@ const POS = () => {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Coins className="h-5 w-5 text-amber-500" />
-              Cash In Hand
+              Collections In Hand
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-3 py-1 text-sm">
@@ -3868,7 +3868,7 @@ const POS = () => {
               </div>
             )}
             <p className="text-[11px] text-muted-foreground text-center pt-1">
-              {myActiveCash?.orderCount || 0} unsettled order(s) — hand this cash to your manager to settle in Cash Hub.
+              {myActiveCash?.orderCount || 0} unsettled order(s) — hand over these collections to your manager to settle in Cash Hub.
             </p>
           </div>
         </DialogContent>

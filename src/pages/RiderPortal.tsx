@@ -192,13 +192,13 @@ const RiderPortal = () => {
             </div>
             <div>
               <p className="text-xs font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">
-                🏍️ COD Cash in Hand
+                🏍️ Delivery Collections in Hand
               </p>
               <p className="text-xl font-black text-foreground font-mono">
                 {currency} {(myActiveCash?.totalExpected || 0).toLocaleString()}
               </p>
               <p className="text-[11px] text-muted-foreground">
-                {myActiveCash?.orderCount || 0} orders collected • Hand this cash over to the Manager to settle in Cash Hub.
+                {myActiveCash?.orderCount || 0} orders collected • Hand over these collections to the Manager to settle in Cash Hub.
               </p>
             </div>
           </div>

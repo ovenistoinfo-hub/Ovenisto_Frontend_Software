@@ -13,7 +13,7 @@ import {
   Plus, Minus, X, ShoppingCart, UtensilsCrossed, Clock, Users,
   Receipt, CircleDot, ChevronDown, ChevronUp, Bell, Check, Loader2, Trash2,
   Play, Power, Eye, CreditCard, Percent, CornerUpRight, Printer, ArrowLeft, Search,
-  Coins, Wallet, Smartphone, BookOpen, User, History, Building2, Crown, Phone, MapPin, Calendar, Timer, DollarSign, CalendarCheck,
+  Coins, Wallet, Smartphone, BookOpen, User, UserCheck, History, Building2, Crown, Phone, MapPin, Calendar, Timer, DollarSign, CalendarCheck,
   AlertCircle, XCircle, CheckCircle2, Utensils, Info
 } from "lucide-react";
 import { toast } from "sonner";
@@ -448,6 +448,12 @@ const WaiterPanel = () => {
 
   // ── Derived ──
 
+  const getGuestsCount = (t: TableRecord) => {
+    if (!t?.currentOrderId) return t?.capacity || 0;
+    const parts = t.currentOrderId.split(":");
+    return parts[1] && !isNaN(Number(parts[1])) ? Number(parts[1]) : (t.capacity || 0);
+  };
+
   const isOrderUnpaid = (o: any) => {
     if (!o.paymentMethod || o.paymentMethod === "Pending" || o.paymentMethod === "Unpaid") return true;
 
@@ -519,6 +525,10 @@ const WaiterPanel = () => {
   const hasPendingCancellationOnTable = activeTableOrders.some((o) => o.hasPendingCancellationRequest);
   const canPayBill = hasUnpaid && !hasPendingCancellationOnTable;
 
+  const hasSelectedTableFoodReady = selectedTableNum !== null && activeTableOrders.length > 0 && activeTableOrders.some(
+    (o) => o.status === "ready" || o.kitchenStatus === "ready" || (o.items && o.items.some((i: any) => i.status === "ready" || i.kitchenStatus === "ready"))
+  );
+
   const confirmedReservations = useMemo(() => {
     const pkt = new Date(Date.now() + 5 * 60 * 60 * 1000);
     const todayStr = pkt.toISOString().split("T")[0];
@@ -550,6 +560,16 @@ const WaiterPanel = () => {
     available: tables.filter((t) => getTableStatus(Number(t.number)) === "available").length,
     occupied:  tables.filter((t) => getTableStatus(Number(t.number)) === "occupied").length,
   };
+
+  const totalFloorCapacity = useMemo(() => {
+    return tables.reduce((sum, t) => sum + Number(t.capacity || 0), 0);
+  }, [tables]);
+
+  const totalOccupiedPax = useMemo(() => {
+    return tables
+      .filter((t) => getTableStatus(Number(t.number)) === "occupied" || getTableStatus(Number(t.number)) === "bill-requested")
+      .reduce((sum, t) => sum + getGuestsCount(t), 0);
+  }, [tables, orders]);
 
   const floorsList = useMemo(() => {
     return Array.from(new Set(tables.map((t) => t.floor || "Main Hall").filter(Boolean)));
@@ -815,12 +835,6 @@ const WaiterPanel = () => {
   };
 
   // ── Place order ──
-
-  const getGuestsCount = (t: TableRecord) => {
-    if (!t.currentOrderId) return t.capacity;
-    const parts = t.currentOrderId.split(":");
-    return parts[1] && !isNaN(Number(parts[1])) ? Number(parts[1]) : t.capacity;
-  };
 
   // Pre-fills the Guests dialog (pax + linked reservation + customer) from a table's active
   // reservation, so the waiter sees the booked party size immediately instead of the table's
@@ -1318,11 +1332,12 @@ const WaiterPanel = () => {
           </Button>
         ) : (
           <div className="flex justify-center flex-1 max-w-4xl">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 w-full">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 w-full">
               {[
-                { key: "available",    count: stats.available,        label: "Available",          color: "text-emerald-500", bg: "bg-emerald-500/10", border: "border-emerald-500/30", Icon: CircleDot },
-                { key: "occupied",     count: stats.occupied,         label: "Occupied",           color: "text-orange-500",  bg: "bg-orange-500/10",  border: "border-orange-500/30",  Icon: Users },
-                { key: "reservations", count: todayReservationsCount, label: "Today Reservations", color: "text-amber-500",   bg: "bg-amber-500/10",   border: "border-amber-500/30",   Icon: BookOpen },
+                { key: "available",    count: stats.available,                              label: "Available",          color: "text-emerald-500", bg: "bg-emerald-500/10", border: "border-emerald-500/30", Icon: CircleDot },
+                { key: "occupied",     count: stats.occupied,                               label: "Occupied",           color: "text-orange-500",  bg: "bg-orange-500/10",  border: "border-orange-500/30",  Icon: Users },
+                { key: "capacity_pax", count: `${totalFloorCapacity} / ${totalOccupiedPax}`, label: "Total / Seated Pax", color: "text-amber-400",   bg: "bg-amber-500/10",   border: "border-amber-500/30",   Icon: UserCheck },
+                { key: "reservations", count: todayReservationsCount,                       label: "Today Reservations", color: "text-sky-400",     bg: "bg-sky-500/10",     border: "border-sky-500/30",     Icon: BookOpen },
               ].map(({ key, count, label, color, bg, border, Icon }) => {
                 const isActive = statusFilter === key;
                 return (
@@ -1331,6 +1346,9 @@ const WaiterPanel = () => {
                     onClick={() => {
                       if (key === "reservations") {
                         setShowTodayReservationsDialog(true);
+                        return;
+                      }
+                      if (key === "capacity_pax") {
                         return;
                       }
                       setStatusFilter(prev => prev === key ? "all" : (key as any));
@@ -1344,9 +1362,9 @@ const WaiterPanel = () => {
                       <div className={cn("h-8 w-8 rounded-lg flex items-center justify-center shrink-0", bg)}>
                         <Icon className={cn("h-4 w-4", color)} />
                       </div>
-                      <div className="min-w-0">
+                      <div className="min-w-0 flex-1">
                         <p className={cn("text-xl font-black tracking-tight leading-none", color)}>{count}</p>
-                        <p className="text-[11px] text-muted-foreground font-semibold truncate mt-0.5">{label}</p>
+                        <p className="text-[11px] text-muted-foreground font-semibold truncate mt-1">{label}</p>
                       </div>
                     </CardContent>
                   </Card>
@@ -1869,9 +1887,7 @@ const WaiterPanel = () => {
                     {filteredTables.map((t) => {
                       const tNum    = Number(t.number);
                       const status  = getTableStatus(tNum);
-                      const cfg     = statusConfig[status];
                       const tOrders = getTableOrders(tNum);
-                      const isReservedToday = reservedTableNums.has(tNum) || t.status === "reserved";
                       
                       const oldest = tOrders.length > 0 
                         ? tOrders[tOrders.length - 1].createdAt 
@@ -1882,9 +1898,16 @@ const WaiterPanel = () => {
                             return !isNaN(ts) ? new Date(ts).toISOString() : null;
                           })();
 
+                      const isOccupiedState = status === "occupied" || status === "bill-requested" || tOrders.length > 0;
+
+                      const hasFoodReady = isOccupiedState && tOrders.length > 0 && tOrders.some(
+                        (o) => o.status === "ready" || o.kitchenStatus === "ready" || (o.items && o.items.some((i: any) => i.status === "ready" || i.kitchenStatus === "ready"))
+                      );
+
                       const statusDotColor =
+                        status === "bill-requested" ? "bg-destructive animate-ping shadow-[0_0_8px_rgba(239,68,68,0.8)]" :
                         status === "available" ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)]" :
-                        status === "occupied" ? "bg-orange-500 shadow-[0_0_8px_rgba(249,115,22,0.6)]" :
+                        status === "occupied" ? (hasFoodReady ? "bg-orange-400 animate-ping shadow-[0_0_8px_rgba(249,115,22,0.8)]" : "bg-orange-500 shadow-[0_0_8px_rgba(249,115,22,0.6)]") :
                         "bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.6)]";
 
                       const statusBorderClass =
@@ -1893,8 +1916,13 @@ const WaiterPanel = () => {
                         "border-amber-500/50";
 
                       const cardStatusClass =
-                        status === "occupied"
-                          ? "border-orange-500/50 bg-orange-950/10 hover:border-orange-400 dark:bg-orange-950/20"
+                        status === "bill-requested"
+                          ? "border-destructive/80 bg-destructive/10 hover:border-destructive animate-pulse ring-2 ring-destructive/40 shadow-[0_0_16px_rgba(239,68,68,0.4)]"
+                          : isOccupiedState
+                          ? cn(
+                              "border-orange-500/50 bg-orange-950/10 hover:border-orange-400 dark:bg-orange-950/20",
+                              hasFoodReady && "animate-pulse ring-2 ring-orange-500/80 shadow-[0_0_18px_rgba(249,115,22,0.5)]"
+                            )
                           : "border-emerald-500/50 bg-emerald-950/10 hover:border-emerald-400 dark:bg-emerald-950/20";
 
                       const chairBgClass =
@@ -1902,7 +1930,6 @@ const WaiterPanel = () => {
                         status === "occupied" ? "bg-orange-500/60" :
                         "bg-emerald-500/60";
 
-                      const isOccupiedState = status === "occupied";
                       const elapsedStr = isOccupiedState && oldest ? getElapsed(oldest) : "";
                       const centerText = isOccupiedState ? (elapsedStr || "") : "";
                       const centerTextClass = "font-black text-xs text-primary tracking-tight leading-none text-center px-1";
@@ -1926,6 +1953,11 @@ const WaiterPanel = () => {
                                 )} />
                                 <span className="text-sm font-black uppercase tracking-wider text-foreground">Table {t.number}</span>
                               </div>
+                              {status === "bill-requested" && (
+                                <Badge className="bg-destructive text-destructive-foreground font-extrabold text-[10px] animate-pulse gap-1 px-1.5 py-0.5 shadow-sm border-none">
+                                  <Receipt className="h-3 w-3" /> Bill Req.
+                                </Badge>
+                              )}
                             </div>
 
                             {/* Middle Area: Graphical Table Blueprint Diagram */}
