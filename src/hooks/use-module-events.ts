@@ -18,6 +18,9 @@ function invalidateCacheForEvents(eventsList: string[]): void {
       api.clearCache("/customers");
     } else if (evt.startsWith("order:")) {
       api.clearCache("/orders");
+      api.clearCache("/delivery/dashboard");
+      api.clearCache("/delivery/my-assignments");
+    }
     } else if (evt.startsWith("table:")) {
       api.clearCache("/tables");
     } else if (evt.startsWith("cancellationRequest:")) {
