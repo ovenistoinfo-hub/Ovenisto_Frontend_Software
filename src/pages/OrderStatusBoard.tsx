@@ -9,7 +9,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
 import { Separator } from "@/components/ui/separator";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -682,6 +682,7 @@ const OrderStatusBoard = () => {
                       {cfg.label}
                     </Badge>
                   </DialogTitle>
+                  <DialogDescription className="sr-only">Detailed breakdown of order items and statuses</DialogDescription>
                 </DialogHeader>
 
                 <div className="space-y-4 text-sm pt-2">
