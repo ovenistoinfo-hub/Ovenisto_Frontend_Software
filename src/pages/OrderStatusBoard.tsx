@@ -276,11 +276,12 @@ const OrderStatusBoard = () => {
     try {
       const prepStart = order.status === "preparing" && order.updatedAt ? new Date(order.updatedAt) : new Date(order.createdAt || order.date);
       const elapsedMin = Math.max(0, Math.floor((time.getTime() - prepStart.getTime()) / 60000));
-      const remainingMin = Math.max(0, cookTime - elapsedMin);
+      const remainingMin = cookTime - elapsedMin;
       const isOverdue = cookTime > 0 && elapsedMin > cookTime;
-      return { cookTime, elapsedMin, remainingMin, isOverdue };
+      const overdueMin = isOverdue ? elapsedMin - cookTime : 0;
+      return { cookTime, elapsedMin, remainingMin, isOverdue, overdueMin };
     } catch {
-      return { cookTime: 0, elapsedMin: 0, remainingMin: 0, isOverdue: false };
+      return { cookTime: 0, elapsedMin: 0, remainingMin: 0, isOverdue: false, overdueMin: 0 };
     }
   }, [foodMenuItems, time]);
 
@@ -384,7 +385,7 @@ const OrderStatusBoard = () => {
                       <span className="truncate font-extrabold text-foreground text-xs">{item.name}</span>
                     </div>
 
-                    {/* Right side: High Contrast Bold Timer Pill */}
+                    {/* Right side: High Contrast Countdown Timer Pill */}
                     <div className="shrink-0">
                       {itemStatus === "ready" ? (
                         <span className="font-mono text-xs font-black text-emerald-400 dark:text-emerald-300 bg-emerald-500/20 px-2 py-0.5 rounded-md border border-emerald-500/40 flex items-center gap-1 shadow-xs">
@@ -397,8 +398,22 @@ const OrderStatusBoard = () => {
                             ? "text-white bg-destructive border-destructive shadow-md animate-pulse"
                             : "text-sky-300 dark:text-sky-200 bg-sky-500/25 border-sky-400/60"
                         )}>
-                          <Clock className="h-3.5 w-3.5" />
-                          {itemCook.cookTime > 0 ? `${itemCook.elapsedMin}m / ${itemCook.cookTime}m` : `${itemCook.elapsedMin}m`}
+                          {itemCook.isOverdue ? (
+                            <>
+                              <AlertCircle className="h-3.5 w-3.5 text-white" />
+                              +{itemCook.overdueMin}m overdue
+                            </>
+                          ) : itemCook.cookTime > 0 ? (
+                            <>
+                              <Clock className="h-3.5 w-3.5 animate-pulse" />
+                              {itemCook.remainingMin}m left
+                            </>
+                          ) : (
+                            <>
+                              <Clock className="h-3.5 w-3.5" />
+                              {itemCook.elapsedMin}m
+                            </>
+                          )}
                         </span>
                       ) : (
                         <span className="font-mono text-xs font-black text-amber-300 dark:text-amber-200 bg-amber-500/25 px-2 py-0.5 rounded-md border border-amber-400/60 flex items-center gap-1 shadow-xs">
