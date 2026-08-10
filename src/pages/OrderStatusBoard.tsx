@@ -357,51 +357,52 @@ const OrderStatusBoard = () => {
               )}
             </div>
 
-            {/* Items List Snippet */}
-            <div className="bg-muted/30 rounded-lg p-2.5 space-y-1.5 border border-border/40">
+            {/* Items List Snippet — High Contrast & Ultra-Readable */}
+            <div className="bg-background/80 dark:bg-muted/20 rounded-xl p-2 space-y-1.5 border border-border/60 shadow-xs">
               {order.items.slice(0, 3).map((item: any, i: number) => {
                 const itemStatus = getItemKitchenStatus(item, order);
                 const itemCook = getItemCookingInfo(item, order);
 
                 return (
-                  <div key={i} className="flex items-center justify-between text-xs gap-2 py-0.5 border-b border-border/20 last:border-0">
+                  <div key={i} className="flex items-center justify-between text-xs gap-2 p-1.5 rounded-lg bg-card border border-border/40 hover:border-primary/30 transition-all">
+                    {/* Left: Status Badge + Qty + Name */}
                     <div className="flex items-center gap-1.5 truncate min-w-0">
                       {itemStatus === "ready" ? (
-                        <span className="px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-emerald-500/15 text-emerald-500 border border-emerald-500/30 shrink-0 flex items-center gap-1">
-                          <CheckCircle2 className="h-3 w-3" /> Ready
+                        <span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider bg-emerald-500/25 text-emerald-400 dark:text-emerald-300 border border-emerald-500/40 shrink-0 flex items-center gap-1">
+                          <CheckCircle2 className="h-3 w-3 text-emerald-400" /> Ready
                         </span>
                       ) : itemStatus === "preparing" ? (
-                        <span className="px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-sky-500/15 text-sky-500 border border-sky-500/30 shrink-0 flex items-center gap-1">
-                          <ChefHat className="h-3 w-3 animate-pulse text-sky-400" /> Preparing
+                        <span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider bg-sky-500/25 text-sky-300 dark:text-sky-200 border border-sky-500/40 shrink-0 flex items-center gap-1">
+                          <ChefHat className="h-3 w-3 animate-pulse text-sky-300" /> Prep
                         </span>
                       ) : (
-                        <span className="px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-amber-500/15 text-amber-500 border border-amber-500/30 shrink-0 flex items-center gap-1">
-                          <AlertCircle className="h-3 w-3 text-amber-400" /> Pending
+                        <span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider bg-amber-500/25 text-amber-300 dark:text-amber-200 border border-amber-500/40 shrink-0 flex items-center gap-1">
+                          <AlertCircle className="h-3 w-3 text-amber-400" /> Pend
                         </span>
                       )}
-                      <span className="font-extrabold text-foreground shrink-0">{item.qty}×</span>
-                      <span className="truncate font-semibold text-foreground/90">{item.name}</span>
+                      <span className="font-black text-xs text-foreground shrink-0">{item.qty}×</span>
+                      <span className="truncate font-extrabold text-foreground text-xs">{item.name}</span>
                     </div>
 
-                    {/* Right side: Live Item Countdown/Time replacing price */}
+                    {/* Right side: High Contrast Bold Timer Pill */}
                     <div className="shrink-0">
                       {itemStatus === "ready" ? (
-                        <span className="font-mono text-[10px] font-bold text-emerald-500 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20 flex items-center gap-1">
-                          <Check className="h-3 w-3" /> Done
+                        <span className="font-mono text-xs font-black text-emerald-400 dark:text-emerald-300 bg-emerald-500/20 px-2 py-0.5 rounded-md border border-emerald-500/40 flex items-center gap-1 shadow-xs">
+                          <Check className="h-3.5 w-3.5 stroke-[3]" /> Done
                         </span>
                       ) : itemStatus === "preparing" ? (
                         <span className={cn(
-                          "font-mono text-[10px] font-bold px-1.5 py-0.5 rounded border flex items-center gap-1",
+                          "font-mono text-xs font-black px-2 py-0.5 rounded-md border flex items-center gap-1 shadow-xs",
                           itemCook.isOverdue
-                            ? "text-destructive bg-destructive/10 border-destructive/30 animate-pulse font-extrabold"
-                            : "text-sky-500 bg-sky-500/10 border-sky-500/20"
+                            ? "text-white bg-destructive border-destructive shadow-md animate-pulse"
+                            : "text-sky-300 dark:text-sky-200 bg-sky-500/25 border-sky-400/60"
                         )}>
-                          <Clock className="h-3 w-3" />
+                          <Clock className="h-3.5 w-3.5" />
                           {itemCook.cookTime > 0 ? `${itemCook.elapsedMin}m / ${itemCook.cookTime}m` : `${itemCook.elapsedMin}m`}
                         </span>
                       ) : (
-                        <span className="font-mono text-[10px] font-bold text-amber-500/90 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20 flex items-center gap-1">
-                          <Timer className="h-3 w-3" />
+                        <span className="font-mono text-xs font-black text-amber-300 dark:text-amber-200 bg-amber-500/25 px-2 py-0.5 rounded-md border border-amber-400/60 flex items-center gap-1 shadow-xs">
+                          <Timer className="h-3.5 w-3.5" />
                           {itemCook.cookTime > 0 ? `${itemCook.cookTime}m est` : "In Queue"}
                         </span>
                       )}
@@ -410,7 +411,7 @@ const OrderStatusBoard = () => {
                 );
               })}
               {order.items.length > 3 && (
-                <p className="text-[10px] text-primary font-bold pt-0.5 text-right">+{order.items.length - 3} more items</p>
+                <p className="text-[10px] text-primary font-black pt-0.5 text-right uppercase tracking-wider">+{order.items.length - 3} more items</p>
               )}
             </div>
 
