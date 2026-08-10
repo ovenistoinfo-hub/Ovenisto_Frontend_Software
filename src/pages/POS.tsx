@@ -1352,11 +1352,9 @@ const POS = () => {
         toast.error("Advance cannot equal or exceed the total. Use Full Prepaid instead.");
         return;
       }
-    } else if (!isDeliveryCOD && totalPaid < netPayable) {
-      if (!selectedCustomer || selectedCustomer === "") {
-        toast.error("Payment incomplete. Select a customer for credit or pay full amount.");
-        return;
-      }
+    } else if (orderType !== "Delivery" && totalPaid < netPayable) {
+      toast.error(`Full payment required (Rs. ${netPayable.toLocaleString()}). Remaining balance must be 0.`);
+      return;
     }
 
     setIsSubmitting(true);
@@ -2737,10 +2735,10 @@ const POS = () => {
                     Enter at least one advance payment entry above.
                   </p>
                 )}
-                {!isDeliveryCOD && !isDeliveryAdvance && !isDeliveryPrepaid && !isPaymentSufficient && totalPaid < netPayable && (
-                  <p className="text-[11px] text-amber-600 dark:text-amber-400 flex items-center gap-1 font-medium bg-amber-500/10 p-1.5 rounded border border-amber-500/20">
-                    <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-                    Partial payment. Remaining recorded as customer credit.
+                {orderType !== "Delivery" && totalPaid < netPayable && (
+                  <p className="text-[11px] text-destructive font-medium bg-destructive/10 p-1.5 rounded border border-destructive/30 flex items-center gap-1">
+                    <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-destructive" />
+                    Full payment required (Rs. {netPayable.toLocaleString()}). Remaining balance must be 0 to confirm.
                   </p>
                 )}
               </div>
@@ -2749,7 +2747,7 @@ const POS = () => {
 
           <DialogFooter className="gap-2 pt-3 border-t border-border/40">
             <Button variant="outline" size="sm" onClick={() => setShowFinalizeSale(false)} disabled={isSubmitting}>Cancel</Button>
-            <Button className="gradient-primary text-primary-foreground min-w-[160px] h-9 font-semibold gap-1.5" onClick={handleFinalizeSubmit} disabled={isSubmitting || (isDeliveryAdvance && !isAdvanceSufficient) || (isDeliveryPrepaid && totalPaid < netPayable)}>
+            <Button className="gradient-primary text-primary-foreground min-w-[160px] h-9 font-semibold gap-1.5" onClick={handleFinalizeSubmit} disabled={isSubmitting || (orderType !== "Delivery" && totalPaid < netPayable) || (isDeliveryAdvance && !isAdvanceSufficient) || (isDeliveryPrepaid && totalPaid < netPayable)}>
               {isSubmitting
                 ? <><Loader2 className="h-4 w-4 animate-spin" />Processing...</>
                 : <><Check className="h-4 w-4" />Confirm Payment</>}
