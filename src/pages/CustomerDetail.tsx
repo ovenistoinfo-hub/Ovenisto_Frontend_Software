@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, ShoppingCart, DollarSign, TrendingUp, CreditCard, Pencil, User, Loader2 } from "lucide-react";
+import { ArrowLeft, ShoppingCart, DollarSign, TrendingUp, CreditCard, Pencil, User, Loader2, Heart } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { formatPakistaniPhone } from "@/lib/utils";
@@ -62,6 +62,22 @@ const CustomerDetail = () => {
       return matchName || matchPhone;
     });
   }, [customer, ordersResp?.data]);
+
+  const favoriteItems = useMemo(() => {
+    if (!customerOrders.length) return [];
+    const itemMap: Record<string, number> = {};
+    customerOrders.forEach((o) => {
+      if (o.status === "cancelled") return;
+      (o.items || []).forEach((i: any) => {
+        const name = i.name || i.title || "Item";
+        const qty = Number(i.quantity || i.qty || 1);
+        itemMap[name] = (itemMap[name] || 0) + qty;
+      });
+    });
+    return Object.entries(itemMap)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 8);
+  }, [customerOrders]);
 
   const openEdit = () => {
     if (!customer) return;
@@ -154,8 +170,37 @@ const CustomerDetail = () => {
         <Card className="shadow-sm"><CardContent className="p-5"><div className="flex items-center gap-4"><div className="h-11 w-11 rounded-xl bg-info/10 flex items-center justify-center shrink-0"><ShoppingCart className="h-5 w-5 text-info" /></div><div><p className="text-sm text-muted-foreground">Total Orders</p><p className="text-2xl font-bold tracking-tight">{totalOrdersCount}</p></div></div></CardContent></Card>
         <Card className="shadow-sm"><CardContent className="p-5"><div className="flex items-center gap-4"><div className="h-11 w-11 rounded-xl bg-success/10 flex items-center justify-center shrink-0"><DollarSign className="h-5 w-5 text-success" /></div><div><p className="text-sm text-muted-foreground">Total Spent</p><p className="text-2xl font-bold tracking-tight">{currency} {totalSpentVal.toLocaleString()}</p></div></div></CardContent></Card>
         <Card className="shadow-sm"><CardContent className="p-5"><div className="flex items-center gap-4"><div className="h-11 w-11 rounded-xl bg-primary/10 flex items-center justify-center shrink-0"><TrendingUp className="h-5 w-5 text-primary" /></div><div><p className="text-sm text-muted-foreground">Avg Order</p><p className="text-2xl font-bold tracking-tight">{currency} {avgOrderVal.toLocaleString()}</p></div></div></CardContent></Card>
-        <Card className={`shadow-sm ${outstandingDueVal > 0 ? "border-destructive/30" : "border-success/30"}`}><CardContent className="p-5"><div className="flex items-center gap-4"><div className={`h-11 w-11 rounded-xl flex items-center justify-center shrink-0 ${outstandingDueVal > 0 ? "bg-destructive/10" : "bg-success/10"}`}><CreditCard className={`h-5 w-5 ${outstandingDueVal > 0 ? "text-destructive" : "text-success"}`} /></div><div><p className="text-sm text-muted-foreground">Outstanding Due</p><p className={`text-2xl font-bold tracking-tight ${outstandingDueVal > 0 ? "text-destructive" : "text-success"}`}>{currency} {outstandingDueVal.toLocaleString()}</p></div></div></CardContent></Card>
       </div>
+
+      {/* Favorite Items Section */}
+      {favoriteItems.length > 0 && (
+        <Card className="shadow-sm border border-border/80">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base font-bold flex items-center gap-2 text-foreground">
+              <Heart className="h-4.5 w-4.5 text-rose-500 fill-rose-500" />
+              Favorite Items
+              <Badge variant="secondary" className="text-[10px] font-semibold bg-rose-500/10 text-rose-500 border border-rose-500/20">
+                Most Ordered
+              </Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-wrap gap-2">
+              {favoriteItems.map(([name, qty]) => (
+                <div
+                  key={name}
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-muted/40 border border-border/80 shadow-2xs hover:border-primary/40 transition-all"
+                >
+                  <span className="text-xs font-semibold text-foreground">{name}</span>
+                  <Badge className="text-[10px] font-extrabold bg-primary/15 text-primary border border-primary/30 px-1.5 py-0.5 rounded-md">
+                    {qty}x
+                  </Badge>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <Card className="shadow-sm">
         <CardHeader><CardTitle className="text-base">Order History</CardTitle></CardHeader>
