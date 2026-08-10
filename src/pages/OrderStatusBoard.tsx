@@ -144,7 +144,7 @@ const OrderStatusBoard = () => {
   const navigate = useNavigate();
   const { foodMenuItems } = useData();
   const [allOrders, setAllOrders] = useState<any[]>([]);
-  const [activeStatus, setActiveStatus] = useState<FilterStatus>("pending");
+  const [activeStatus, setActiveStatus] = useState<FilterStatus>("active");
   const [viewMode, setViewMode] = useState<"columns" | "grid">("columns");
   const [time, setTime] = useState(new Date());
   const [autoRefresh] = useState(true);
