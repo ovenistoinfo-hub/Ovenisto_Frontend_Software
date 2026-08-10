@@ -158,8 +158,29 @@ const OrderStatusBoard = () => {
     } catch {}
   }, []);
 
+  const handleOrderEvent = useCallback((payload?: any) => {
+    if (payload && typeof payload === "object" && payload.id) {
+      const norm = normalize(payload);
+      const isUnacceptedSelfOrder =
+        norm.type === "Self Order" && norm.status === "pending" && !norm.acceptedById;
+
+      setAllOrders((prev) => {
+        if (isUnacceptedSelfOrder || norm.status === "cancelled") {
+          return prev.filter((o) => o.id !== norm.id);
+        }
+        const exists = prev.some((o) => o.id === norm.id);
+        if (exists) {
+          return prev.map((o) => (o.id === norm.id ? norm : o));
+        }
+        return [norm, ...prev];
+      });
+    } else {
+      loadOrders();
+    }
+  }, [loadOrders]);
+
   useEffect(() => { const t = setInterval(() => setTime(new Date()), 1000); return () => clearInterval(t); }, []);
-  useOrderEvents(loadOrders);
+  useOrderEvents(handleOrderEvent);
   useVisiblePolling(loadOrders, 60000, autoRefresh);
 
   // ── Status Filter Counts ──
@@ -328,6 +349,8 @@ const OrderStatusBoard = () => {
                     <span className="text-muted-foreground truncate font-medium flex items-center gap-1.5 min-w-0">
                       {itemReady ? (
                         <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+                      ) : order.status === "pending" ? (
+                        <AlertCircle className="h-3.5 w-3.5 text-amber-500/70 shrink-0" />
                       ) : (
                         <ChefHat className="h-3.5 w-3.5 text-sky-500/70 shrink-0" />
                       )}
@@ -717,6 +740,8 @@ const OrderStatusBoard = () => {
                               <TableCell className="text-xs text-center py-2">
                                 {itemReady ? (
                                   <Badge className="text-[10px] bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 px-1.5 py-0 font-bold">Ready</Badge>
+                                ) : selectedOrder.status === "pending" ? (
+                                  <Badge variant="outline" className="text-[10px] text-amber-500 border-amber-500/30 bg-amber-500/10 px-1.5 py-0 font-bold">Pending</Badge>
                                 ) : (
                                   <Badge variant="outline" className="text-[10px] text-sky-500 border-sky-500/30 bg-sky-500/10 px-1.5 py-0 font-bold">Preparing</Badge>
                                 )}

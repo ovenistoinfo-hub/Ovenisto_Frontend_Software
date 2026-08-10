@@ -223,7 +223,10 @@ async function cachedGet<T>(endpoint: string, options?: RequestInit): Promise<T>
 
   // Make the request and cache the promise for deduplication
   const promise = request<T>(endpoint, options).then(data => {
-    cache.set(key, { data, timestamp: Date.now() });
+    // Only save to cache if this request key wasn't invalidated while in-flight
+    if (cache.has(key)) {
+      cache.set(key, { data, timestamp: Date.now() });
+    }
     return data;
   }).catch(err => {
     // Remove failed entry
