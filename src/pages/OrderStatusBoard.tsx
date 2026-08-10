@@ -222,24 +222,27 @@ const OrderStatusBoard = () => {
   // ── Helpers ──
   const isPaid = (o: any) => !!o.paymentMethod && o.paymentMethod !== "Pending" && o.paymentMethod !== "Unpaid";
 
-  const isItemReady = useCallback((item: any, order: any) => {
-    if (order.status === "ready" || order.status === "completed") return true;
+  const getItemKitchenStatus = useCallback((item: any, order: any): "pending" | "preparing" | "ready" => {
+    if (order.status === "ready" || order.status === "completed") return "ready";
 
     const categoryName = item.categoryName || foodMenuItems.find((fi: any) => fi.name === item.name)?.category?.name || (item.category as any)?.name;
 
-    if (!categoryName) return false;
+    if (!categoryName) {
+      return order.status === "preparing" ? "preparing" : "pending";
+    }
 
     const assignedKitchen = kitchens.find(k => (k.status === "active" || !k.status) && k.assignedCategories?.includes(categoryName));
 
     // If no kitchen is assigned to this category (e.g. drinks/beverages), auto-ready!
-    if (!assignedKitchen) return true;
+    if (!assignedKitchen) return "ready";
 
     if (order.kitchenProgress && Array.isArray(order.kitchenProgress)) {
       const prog = order.kitchenProgress.find((p: any) => p.kitchenId === assignedKitchen.id);
-      if (prog) return prog.status === "ready";
+      if (prog) return prog.status as "pending" | "preparing" | "ready";
     }
 
-    return false;
+    if (order.status === "preparing") return "preparing";
+    return "pending";
   }, [kitchens, foodMenuItems]);
 
   const getElapsed = (order: any) => {
@@ -343,16 +346,16 @@ const OrderStatusBoard = () => {
             {/* Items List Snippet */}
             <div className="bg-muted/30 rounded-lg p-2.5 space-y-1 border border-border/40">
               {order.items.slice(0, 3).map((item: any, i: number) => {
-                const itemReady = isItemReady(item, order);
+                const itemStatus = getItemKitchenStatus(item, order);
                 return (
                   <div key={i} className="flex items-center justify-between text-xs gap-1.5">
                     <span className="text-muted-foreground truncate font-medium flex items-center gap-1.5 min-w-0">
-                      {itemReady ? (
+                      {itemStatus === "ready" ? (
                         <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
-                      ) : order.status === "pending" ? (
-                        <AlertCircle className="h-3.5 w-3.5 text-amber-500/70 shrink-0" />
-                      ) : (
+                      ) : itemStatus === "preparing" ? (
                         <ChefHat className="h-3.5 w-3.5 text-sky-500/70 shrink-0" />
+                      ) : (
+                        <AlertCircle className="h-3.5 w-3.5 text-amber-500/70 shrink-0" />
                       )}
                       <span className="font-extrabold text-foreground shrink-0">{item.qty}×</span>
                       <span className="truncate">{item.name}</span>
@@ -724,26 +727,28 @@ const OrderStatusBoard = () => {
                       </TableHeader>
                       <TableBody>
                         {selectedOrder.items.map((item: any, i: number) => {
-                          const itemReady = isItemReady(item, selectedOrder);
+                          const itemStatus = getItemKitchenStatus(item, selectedOrder);
                           return (
                             <TableRow key={i} className="hover:bg-muted/30">
                               <TableCell className="text-xs font-semibold py-2">
                                 <div className="flex items-center gap-1.5">
-                                  {itemReady ? (
+                                  {itemStatus === "ready" ? (
                                     <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
-                                  ) : (
+                                  ) : itemStatus === "preparing" ? (
                                     <ChefHat className="h-4 w-4 text-sky-500/70 shrink-0" />
+                                  ) : (
+                                    <AlertCircle className="h-4 w-4 text-amber-500/70 shrink-0" />
                                   )}
                                   <span>{item.name}</span>
                                 </div>
                               </TableCell>
                               <TableCell className="text-xs text-center py-2">
-                                {itemReady ? (
+                                {itemStatus === "ready" ? (
                                   <Badge className="text-[10px] bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 px-1.5 py-0 font-bold">Ready</Badge>
-                                ) : selectedOrder.status === "pending" ? (
-                                  <Badge variant="outline" className="text-[10px] text-amber-500 border-amber-500/30 bg-amber-500/10 px-1.5 py-0 font-bold">Pending</Badge>
-                                ) : (
+                                ) : itemStatus === "preparing" ? (
                                   <Badge variant="outline" className="text-[10px] text-sky-500 border-sky-500/30 bg-sky-500/10 px-1.5 py-0 font-bold">Preparing</Badge>
+                                ) : (
+                                  <Badge variant="outline" className="text-[10px] text-amber-500 border-amber-500/30 bg-amber-500/10 px-1.5 py-0 font-bold">Pending</Badge>
                                 )}
                               </TableCell>
                               <TableCell className="text-xs font-bold text-center py-2">{item.qty}</TableCell>
