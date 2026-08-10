@@ -270,6 +270,20 @@ const OrderStatusBoard = () => {
     } catch { return null; }
   };
 
+  const getItemCookingInfo = useCallback((item: any, order: any) => {
+    const mi = foodMenuItems.find((fi: any) => fi.name === item.name);
+    const cookTime = item.cookingTime || (mi as any)?.cookingTime || 0;
+    try {
+      const prepStart = order.status === "preparing" && order.updatedAt ? new Date(order.updatedAt) : new Date(order.createdAt || order.date);
+      const elapsedMin = Math.max(0, Math.floor((time.getTime() - prepStart.getTime()) / 60000));
+      const remainingMin = Math.max(0, cookTime - elapsedMin);
+      const isOverdue = cookTime > 0 && elapsedMin > cookTime;
+      return { cookTime, elapsedMin, remainingMin, isOverdue };
+    } catch {
+      return { cookTime: 0, elapsedMin: 0, remainingMin: 0, isOverdue: false };
+    }
+  }, [foodMenuItems, time]);
+
   const handleStatusUpdate = async (orderId: string, newStatus: string) => {
     const targetOrder = allOrders.find(o => o.id === orderId);
     if (targetOrder?.hasPendingCancellationRequest) {
@@ -344,23 +358,54 @@ const OrderStatusBoard = () => {
             </div>
 
             {/* Items List Snippet */}
-            <div className="bg-muted/30 rounded-lg p-2.5 space-y-1 border border-border/40">
+            <div className="bg-muted/30 rounded-lg p-2.5 space-y-1.5 border border-border/40">
               {order.items.slice(0, 3).map((item: any, i: number) => {
                 const itemStatus = getItemKitchenStatus(item, order);
+                const itemCook = getItemCookingInfo(item, order);
+
                 return (
-                  <div key={i} className="flex items-center justify-between text-xs gap-1.5">
-                    <span className="text-muted-foreground truncate font-medium flex items-center gap-1.5 min-w-0">
+                  <div key={i} className="flex items-center justify-between text-xs gap-2 py-0.5 border-b border-border/20 last:border-0">
+                    <div className="flex items-center gap-1.5 truncate min-w-0">
                       {itemStatus === "ready" ? (
-                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+                        <span className="px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-emerald-500/15 text-emerald-500 border border-emerald-500/30 shrink-0 flex items-center gap-1">
+                          <CheckCircle2 className="h-3 w-3" /> Ready
+                        </span>
                       ) : itemStatus === "preparing" ? (
-                        <ChefHat className="h-3.5 w-3.5 text-sky-500/70 shrink-0" />
+                        <span className="px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-sky-500/15 text-sky-500 border border-sky-500/30 shrink-0 flex items-center gap-1">
+                          <ChefHat className="h-3 w-3 animate-pulse text-sky-400" /> Preparing
+                        </span>
                       ) : (
-                        <AlertCircle className="h-3.5 w-3.5 text-amber-500/70 shrink-0" />
+                        <span className="px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-amber-500/15 text-amber-500 border border-amber-500/30 shrink-0 flex items-center gap-1">
+                          <AlertCircle className="h-3 w-3 text-amber-400" /> Pending
+                        </span>
                       )}
                       <span className="font-extrabold text-foreground shrink-0">{item.qty}×</span>
-                      <span className="truncate">{item.name}</span>
-                    </span>
-                    <span className="font-mono text-[11px] font-semibold text-foreground/80 shrink-0">Rs.{(item.price * item.qty).toLocaleString()}</span>
+                      <span className="truncate font-semibold text-foreground/90">{item.name}</span>
+                    </div>
+
+                    {/* Right side: Live Item Countdown/Time replacing price */}
+                    <div className="shrink-0">
+                      {itemStatus === "ready" ? (
+                        <span className="font-mono text-[10px] font-bold text-emerald-500 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20 flex items-center gap-1">
+                          <Check className="h-3 w-3" /> Done
+                        </span>
+                      ) : itemStatus === "preparing" ? (
+                        <span className={cn(
+                          "font-mono text-[10px] font-bold px-1.5 py-0.5 rounded border flex items-center gap-1",
+                          itemCook.isOverdue
+                            ? "text-destructive bg-destructive/10 border-destructive/30 animate-pulse font-extrabold"
+                            : "text-sky-500 bg-sky-500/10 border-sky-500/20"
+                        )}>
+                          <Clock className="h-3 w-3" />
+                          {itemCook.cookTime > 0 ? `${itemCook.elapsedMin}m / ${itemCook.cookTime}m` : `${itemCook.elapsedMin}m`}
+                        </span>
+                      ) : (
+                        <span className="font-mono text-[10px] font-bold text-amber-500/90 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20 flex items-center gap-1">
+                          <Timer className="h-3 w-3" />
+                          {itemCook.cookTime > 0 ? `${itemCook.cookTime}m est` : "In Queue"}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 );
               })}
