@@ -4,7 +4,7 @@ import {
   ArrowLeft, RefreshCw, Bell, Clock, BarChart3, TrendingUp, ShoppingBag,
   AlertCircle, ChefHat, CheckCircle2, Timer, UtensilsCrossed,
   ShoppingCart, Truck, CreditCard, Banknote, Receipt, Check, Loader2,
-  Columns, LayoutGrid, Sparkles, User
+  Columns, LayoutGrid, Sparkles, User, Flame
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -24,7 +24,7 @@ import { useOrderEvents } from "@/hooks/use-order-events";
 
 // ─── Status Definitions & Professional Theme Config ───────────────────────
 
-type FilterStatus = "pending" | "preparing" | "ready" | "completed";
+type FilterStatus = "active" | "pending" | "preparing" | "ready" | "completed";
 
 interface StatusConfigItem {
   label: string;
@@ -37,6 +37,15 @@ interface StatusConfigItem {
 }
 
 const statusConfig: Record<FilterStatus, StatusConfigItem> = {
+  active: {
+    label: "All Active",
+    bgActive: "bg-primary/10 border-primary/50 shadow-sm",
+    text: "text-primary dark:text-primary",
+    borderActive: "border-primary/50",
+    iconBg: "bg-primary/15 text-primary",
+    icon: Flame,
+    pill: "bg-primary/15 text-primary border-primary/30",
+  },
   pending: {
     label: "Pending",
     bgActive: "bg-amber-500/10 border-amber-500/50 shadow-sm",
@@ -185,6 +194,7 @@ const OrderStatusBoard = () => {
 
   // ── Status Filter Counts ──
   const statusCounts: Record<FilterStatus, number> = useMemo(() => ({
+    active: allOrders.filter((o) => o.status === "pending" || o.status === "preparing" || o.status === "ready").length,
     pending: allOrders.filter((o) => o.status === "pending").length,
     preparing: allOrders.filter((o) => o.status === "preparing").length,
     ready: allOrders.filter((o) => o.status === "ready").length,
@@ -193,6 +203,9 @@ const OrderStatusBoard = () => {
 
   // Active status orders list
   const activeStatusOrders = useMemo(() => {
+    if (activeStatus === "active") {
+      return allOrders.filter((o) => o.status === "pending" || o.status === "preparing" || o.status === "ready");
+    }
     return allOrders.filter((o) => o.status === activeStatus);
   }, [allOrders, activeStatus]);
 
@@ -570,10 +583,10 @@ const OrderStatusBoard = () => {
         </div>
       </header>
 
-      {/* ════════════ TOP 4 HERO STATUS CARDS (NO ALL ORDERS CARD) ════════════ */}
+      {/* ════════════ TOP HERO STATUS CARDS (ALL ACTIVE + STATUSES) ════════════ */}
       <div className="px-4 sm:px-6 py-3 bg-card/60 border-b border-border/60 shrink-0">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 w-full">
-          {(["pending", "preparing", "ready", "completed"] as FilterStatus[]).map((statusKey) => {
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 w-full">
+          {(["active", "pending", "preparing", "ready", "completed"] as FilterStatus[]).map((statusKey) => {
             const cfg = statusConfig[statusKey];
             const Icon = cfg.icon;
             const count = statusCounts[statusKey];
