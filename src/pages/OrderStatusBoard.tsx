@@ -274,7 +274,20 @@ const OrderStatusBoard = () => {
     const mi = foodMenuItems.find((fi: any) => fi.name === item.name);
     const cookTime = item.cookingTime || (mi as any)?.cookingTime || 0;
     try {
-      const prepStart = order.status === "preparing" && order.updatedAt ? new Date(order.updatedAt) : new Date(order.createdAt || order.date);
+      const categoryName = item.categoryName || mi?.category?.name || (item.category as any)?.name;
+      const assignedKitchen = categoryName ? kitchens.find(k => (k.status === "active" || !k.status) && k.assignedCategories?.includes(categoryName)) : null;
+      const prog = (assignedKitchen && order.kitchenProgress && Array.isArray(order.kitchenProgress))
+        ? order.kitchenProgress.find((p: any) => p.kitchenId === assignedKitchen.id)
+        : null;
+
+      // Start elapsed calculation ONLY from when THIS kitchen accepted the order (prog.updatedAt).
+      // Fallback to order.updatedAt (if order is preparing) or current time (so 0m elapsed if no timestamp exists).
+      // Crucially, NEVER fall back to order.createdAt / order.date when calculating item prep time,
+      // so time spent waiting in Pending is never counted against the item's prep timer!
+      const prepStart = (prog && prog.updatedAt && prog.status === "preparing")
+        ? new Date(prog.updatedAt)
+        : (order.status === "preparing" && order.updatedAt ? new Date(order.updatedAt) : new Date(time.getTime()));
+
       const elapsedMin = Math.max(0, Math.floor((time.getTime() - prepStart.getTime()) / 60000));
       const remainingMin = cookTime - elapsedMin;
       const isOverdue = cookTime > 0 && elapsedMin > cookTime;
@@ -283,7 +296,7 @@ const OrderStatusBoard = () => {
     } catch {
       return { cookTime: 0, elapsedMin: 0, remainingMin: 0, isOverdue: false, overdueMin: 0 };
     }
-  }, [foodMenuItems, time]);
+  }, [foodMenuItems, kitchens, time]);
 
   const handleStatusUpdate = async (orderId: string, newStatus: string) => {
     const targetOrder = allOrders.find(o => o.id === orderId);
