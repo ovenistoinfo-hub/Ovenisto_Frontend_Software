@@ -19,6 +19,7 @@ export interface EmployeeRecord {
   hireDate: string;
   rateType: 'Hourly' | 'Daily' | 'Monthly' | 'PerShift';
   rate: number;
+  commissionPerDelivery?: number;
   payFrequency: string | null;
   penaltyFee: number | null;
   defaultOffDay?: number | null;
@@ -59,6 +60,7 @@ export interface EmployeeInput {
   hireDate: string;
   rateType: 'Hourly' | 'Daily' | 'Monthly' | 'PerShift';
   rate: number;
+  commissionPerDelivery?: number;
   payFrequency?: string | null;
   penaltyFee?: number | null;
   defaultOffDay?: number | null;

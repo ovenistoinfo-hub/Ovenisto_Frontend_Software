@@ -46,7 +46,7 @@ const emptyForm: EmployeeInput = {
   firstName: "", lastName: "", email: "@ovenisto.com", phone: "", photoUrl: "",
   userId: "", supervisorId: "",
   division: "", designation: "", dutyType: "", hireDate: "",
-  rateType: "Hourly", rate: 0, payFrequency: "", penaltyFee: null, defaultOffDay: 1,
+  rateType: "Hourly", rate: 0, commissionPerDelivery: 0, payFrequency: "", penaltyFee: null, defaultOffDay: 1,
   dateOfBirth: "", gender: "", maritalStatus: "", cnic: "",
   emergencyContactName: "", emergencyContactRelation: "", emergencyContactPhone: "",
 };
@@ -119,6 +119,7 @@ const Employees = () => {
       photoUrl: e.photoUrl ?? "", userId: e.userId ?? "", supervisorId: e.supervisorId ?? "",
       division: e.division ?? "", designation: e.designation, dutyType: e.dutyType ?? "",
       hireDate: e.hireDate.slice(0, 10), rateType: e.rateType, rate: e.rate,
+      commissionPerDelivery: e.commissionPerDelivery ?? 0,
       payFrequency: e.payFrequency ?? "", penaltyFee: e.penaltyFee, defaultOffDay: e.defaultOffDay ?? 1,
       dateOfBirth: e.dateOfBirth ? e.dateOfBirth.slice(0, 10) : "", gender: e.gender ?? "",
       maritalStatus: e.maritalStatus ?? "", cnic: e.cnic ?? "",
@@ -582,6 +583,16 @@ const Employees = () => {
                     />
                   </div>
                   <div className="space-y-1.5">
+                    <Label>Delivery Commission (PKR / Ride)</Label>
+                    <Input
+                      type="number"
+                      min="0"
+                      placeholder="0"
+                      value={form.commissionPerDelivery || ""}
+                      onChange={(e) => setForm(p => ({ ...p, commissionPerDelivery: e.target.value ? Number(e.target.value) : 0 }))}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
                     <Label>Pay Frequency <span className="text-destructive">*</span></Label>
                     <Select value={form.payFrequency ?? ""} onValueChange={(v) => setForm(p => ({ ...p, payFrequency: v }))}>
                       <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
@@ -959,6 +970,12 @@ const Employees = () => {
                     <div className="flex justify-between border-b pb-1.5"><span className="text-muted-foreground">Duty Type:</span> <span className="font-medium">{viewEmployee.dutyType || "—"}</span></div>
                     <div className="flex justify-between border-b pb-1.5"><span className="text-muted-foreground">Supervisor:</span> <span className="font-medium">{viewEmployee.supervisor ? `${viewEmployee.supervisor.firstName} ${viewEmployee.supervisor.lastName ?? ""}` : "—"}</span></div>
                     <div className="flex justify-between border-b pb-1.5"><span className="text-muted-foreground">Rate:</span> <span className="font-medium">Rs. {viewEmployee.rate} ({viewEmployee.rateType})</span></div>
+                    {(viewEmployee.designation === "Rider" || (viewEmployee.commissionPerDelivery ?? 0) > 0) && (
+                      <div className="flex justify-between border-b pb-1.5">
+                        <span className="text-muted-foreground">Commission:</span>
+                        <Badge variant="secondary" className="bg-primary/10 text-primary text-xs font-semibold">Rs. {viewEmployee.commissionPerDelivery ?? 0}/ride</Badge>
+                      </div>
+                    )}
                     <div className="flex justify-between border-b pb-1.5"><span className="text-muted-foreground">Pay Frequency:</span> <span className="font-medium">{viewEmployee.payFrequency || "—"}</span></div>
                   </div>
                 </div>
