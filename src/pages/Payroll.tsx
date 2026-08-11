@@ -85,6 +85,10 @@ interface EmployeePayrollRow {
   periodEnd: string;
   latestPaidThrough: string | null; // last date already covered by a payment this month, if any
   penaltyIds: string[]; // unpaid StaffPenalty ids (order-cancellation etc.) folded into `penalties`
+  isRider: boolean;
+  completedDeliveries?: number;
+  commissionRate?: number;
+  totalDeliveryCommissions?: number;
 }
 
 interface EmployeeLedgerRow {
@@ -117,6 +121,7 @@ const Payroll = () => {
   const [search, setSearch] = useState("");
   const [rewardsState, setRewardsState] = useState<Record<string, { rewards: number; note: string }>>({});
   const [penaltiesState, setPenaltiesState] = useState<Record<string, number>>({});
+  const [commissionsState, setCommissionsState] = useState<Record<string, number>>({});
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [processingBatch, setProcessingBatch] = useState(false);
   const [activeTab, setActiveTab] = useState("calculate");
@@ -179,6 +184,23 @@ const Payroll = () => {
   const { data: staffPenalties = [] } = useQuery({
     queryKey: ["payroll-penalties", startDate, effectiveMonthEnd],
     queryFn: () => penaltyService.list({ startDate, endDate: effectiveMonthEnd, unpaidOnly: true }),
+  });
+
+  const { data: commissionsData = {} } = useQuery({
+    queryKey: ["payroll-commissions", startDate, endDate],
+    queryFn: async () => {
+      const activeRiders = (employees || []).filter(e => e.status === "active" && e.designation === "Rider");
+      const results: Record<string, any> = {};
+      for (const rider of activeRiders) {
+        try {
+          results[rider.id] = await payrollService.getCommissions(rider.id, startDate, endDate);
+        } catch (e) {
+          console.error(e);
+        }
+      }
+      return results;
+    },
+    enabled: !!employees.length
   });
 
   const attendanceRecords = attendancePage?.data || [];
@@ -299,13 +321,18 @@ const Payroll = () => {
       // Advance Deduction from Final Pay
       const advanceDeducted = isPaid ? (paidLog?.advanceAmount ?? advancePaidThisMonth) : advancePaidThisMonth;
 
+      const isRider = emp.designation === "Rider";
+      const fetchedCommission = commissionsData[emp.id];
+      const defaultCommission = fetchedCommission?.totalDeliveryCommissions || 0;
+      const commissionOverride = commissionsState[emp.id] !== undefined ? commissionsState[emp.id] : defaultCommission;
+
       // Final Pay calculation
       const displayBasePay = isPaid ? (paidLog?.basePay ?? basePay) : basePay;
       const displayPenalties = isPaid ? (paidLog?.penalties ?? penaltyOverride) : penaltyOverride;
       const displayRewards = isPaid ? (paidLog?.rewards ?? rewardOverride) : rewardOverride;
       const finalPay = isPaid
         ? (paidLog?.finalPay ?? 0)
-        : Math.max(0, parseFloat((basePay + rewardOverride - penaltyOverride - advanceDeducted).toFixed(2)));
+        : Math.max(0, parseFloat((basePay + rewardOverride + commissionOverride - penaltyOverride - advanceDeducted).toFixed(2)));
 
       return {
         employee: emp,
@@ -328,6 +355,10 @@ const Payroll = () => {
         periodEnd,
         latestPaidThrough: regularLogsThisMonth.length > 0 ? regularLogsThisMonth[0].endDate : null,
         penaltyIds: isPaid ? [] : userPenaltyRecords.map(p => p.id),
+        isRider,
+        completedDeliveries: fetchedCommission?.completedDeliveries || 0,
+        commissionRate: fetchedCommission?.commissionRate || 0,
+        totalDeliveryCommissions: commissionOverride,
       };
     });
 
@@ -398,6 +429,13 @@ const Payroll = () => {
 
   const handlePenaltyChange = (empId: string, value: number) => {
     setPenaltiesState(prev => ({
+      ...prev,
+      [empId]: value,
+    }));
+  };
+
+  const handleCommissionChange = (empId: string, value: number) => {
+    setCommissionsState(prev => ({
       ...prev,
       [empId]: value,
     }));
@@ -474,6 +512,10 @@ const Payroll = () => {
           : row.checkInCount,
         absentDays: row.absentCount,
         penaltyIds: row.penaltyIds,
+        ...(row.isRider ? {
+          completedDeliveries: row.completedDeliveries,
+          totalDeliveryCommissions: row.totalDeliveryCommissions,
+        } : {})
       };
 
       await payrollService.payIndividual(payout);
@@ -486,6 +528,11 @@ const Payroll = () => {
         return copy;
       });
       setPenaltiesState(prev => {
+        const copy = { ...prev };
+        delete copy[row.employee.id];
+        return copy;
+      });
+      setCommissionsState(prev => {
         const copy = { ...prev };
         delete copy[row.employee.id];
         return copy;
@@ -526,6 +573,10 @@ const Payroll = () => {
           : row.checkInCount,
         absentDays: row.absentCount,
         penaltyIds: row.penaltyIds,
+        ...(row.isRider ? {
+          completedDeliveries: row.completedDeliveries,
+          totalDeliveryCommissions: row.totalDeliveryCommissions,
+        } : {})
       }));
 
       await payrollService.payBatch(payouts);
@@ -534,6 +585,7 @@ const Payroll = () => {
       // Reset input fields
       setRewardsState({});
       setPenaltiesState({});
+      setCommissionsState({});
       api.clearCache("/payroll");
       queryClient.invalidateQueries({ queryKey: ["payroll-logs"] });
       queryClient.invalidateQueries({ queryKey: ["payroll-all-logs"] });
@@ -674,7 +726,8 @@ const Payroll = () => {
                     </TableHeader>
                     <TableBody>
                       {filteredRows.map(row => (
-                        <TableRow key={row.employee.id} className="hover:bg-muted/30 transition-colors">
+                        <React.Fragment key={row.employee.id}>
+                        <TableRow className="hover:bg-muted/30 transition-colors">
                           <TableCell className="font-medium">
                             <div className="flex items-center gap-2.5">
                               <Avatar className="h-8 w-8">
@@ -814,6 +867,38 @@ const Payroll = () => {
                             </div>
                           </TableCell>
                         </TableRow>
+                        {row.isRider && (
+                          <TableRow className="bg-muted/10">
+                            <TableCell colSpan={10} className="p-3">
+                              <Card className="border-border bg-card/50 w-full max-w-xl mx-auto shadow-sm">
+                                <CardContent className="p-4 grid grid-cols-3 gap-4">
+                                  <div className="flex flex-col space-y-1">
+                                    <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Completed Deliveries</span>
+                                    <span className="text-sm font-semibold">{row.completedDeliveries} Rides</span>
+                                  </div>
+                                  <div className="flex flex-col space-y-1">
+                                    <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Per-Ride Rate</span>
+                                    <span className="text-sm font-semibold">Rs. {row.commissionRate} / Ride</span>
+                                  </div>
+                                  <div className="flex flex-col space-y-1">
+                                    <span className="text-[10px] uppercase font-bold text-emerald-600 dark:text-emerald-400 tracking-wider">Total Commissions</span>
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="text-xs text-emerald-500 font-bold">Rs.</span>
+                                      <Input
+                                        type="number"
+                                        value={row.totalDeliveryCommissions}
+                                        onChange={(e) => handleCommissionChange(row.employee.id, Math.max(0, parseFloat(e.target.value) || 0))}
+                                        className="h-7 text-xs px-2 w-24 border-emerald-500/30 bg-emerald-500/[0.02]"
+                                        disabled={row.isPaid}
+                                      />
+                                    </div>
+                                  </div>
+                                </CardContent>
+                              </Card>
+                            </TableCell>
+                          </TableRow>
+                        )}
+                        </React.Fragment>
                       ))}
                     </TableBody>
                   </Table>

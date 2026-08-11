@@ -213,25 +213,39 @@ const RiderPortal = () => {
       </Card>
 
       {/* Mobile Ergonomic Quick Stats */}
-      {stats && (
-        <div className="grid grid-cols-2 gap-2.5">
-          <Card className="shadow-sm border-border bg-card">
-            <CardContent className="p-3 text-center space-y-0.5">
-              <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Today</p>
-              <p className="text-2xl font-black text-amber-500">{stats.todayOrders}</p>
-              <p className="text-[10px] text-muted-foreground font-medium">Deliveries</p>
-            </CardContent>
-          </Card>
+      {stats && (() => {
+        const completedAssignmentsToday = assignments.filter(a => a.status === 'delivered');
+        const todayCommissions = completedAssignmentsToday.reduce(
+          (sum, a) => sum + Number(a.commissionEarned ?? 0), 0
+        );
 
-          <Card className="shadow-sm border-border bg-card">
-            <CardContent className="p-3 text-center space-y-0.5">
-              <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Sales</p>
-              <p className="text-lg font-black text-emerald-500">{currency} {stats.todaySales.toLocaleString()}</p>
-              <p className="text-[10px] text-muted-foreground font-medium">Earned</p>
-            </CardContent>
-          </Card>
-        </div>
-      )}
+        return (
+          <div className="grid grid-cols-2 gap-2.5">
+            <Card className="shadow-sm border-border bg-card">
+              <CardContent className="p-3 text-center space-y-0.5">
+                <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Today</p>
+                <p className="text-2xl font-black text-amber-500">{stats.todayOrders}</p>
+                <p className="text-[10px] text-muted-foreground font-medium">Deliveries</p>
+              </CardContent>
+            </Card>
+
+            <Card className="shadow-sm border-border bg-card">
+              <CardContent className="p-3 text-center space-y-0.5">
+                <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Sales</p>
+                <p className="text-lg font-black text-emerald-500">{currency} {stats.todaySales.toLocaleString()}</p>
+                <p className="text-[10px] text-muted-foreground font-medium">Earned</p>
+              </CardContent>
+            </Card>
+
+            <Card className="shadow-sm border-border bg-card col-span-2">
+              <CardContent className="p-3 text-center space-y-0.5">
+                <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">🏍️ Today's Earned Commissions</p>
+                <p className="text-xl font-black text-emerald-500">{currency} {todayCommissions.toLocaleString()}</p>
+              </CardContent>
+            </Card>
+          </div>
+        );
+      })()}
 
       {/* Tabs */}
       <Tabs defaultValue="active" className="w-full">
@@ -520,11 +534,16 @@ const RiderPortal = () => {
                       )}
 
                       {a.status === "delivered" && (
-                        <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-3 text-center">
+                        <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-3 text-center space-y-1">
                           <p className="text-xs font-bold text-emerald-400 flex items-center justify-center gap-1.5">
                             <CheckCircle2 className="h-4 w-4" />
                             Delivery Run Completed
                           </p>
+                          {(a.commissionEarned ?? 0) > 0 && (
+                            <p className="text-xs font-bold text-emerald-500">
+                              + {currency} {a.commissionEarned} Commission
+                            </p>
+                          )}
                         </div>
                       )}
                     </div>

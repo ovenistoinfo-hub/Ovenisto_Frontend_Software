@@ -44,6 +44,8 @@ export interface AssignmentRecord {
   collectedAt: string | null;
   collectedBy: string | null;
   notes: string | null;
+  commissionEarned?: number;
+  commissionRate?: number;
   order?: { id: string; orderNumber: string; total: number; advancePayment: number; paymentMethod: string | null; customerName: string | null; deliveryAddress: string | null; phone?: string | null };
   rider?: RiderRecord;
 }

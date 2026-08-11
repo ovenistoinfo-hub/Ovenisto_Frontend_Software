@@ -44,6 +44,8 @@ export interface PayoutInput {
   unitsWorked?: number;
   absentDays?: number;
   penaltyIds?: string[];
+  completedDeliveries?: number;
+  totalDeliveryCommissions?: number;
 }
 
 export const payrollService = {
@@ -65,4 +67,10 @@ export const payrollService = {
     const res = await api.get<{ success: boolean; data: PaymentLogRecord[] }>(`/payroll/logs?${q}`);
     return res.data;
   },
+
+  async getCommissions(employeeId: string, startDate: string, endDate: string): Promise<{ completedDeliveries: number; commissionRate: number; totalDeliveryCommissions: number }> {
+    const q = new URLSearchParams({ employeeId, startDate, endDate });
+    const res = await api.get<{ success: boolean; data: { completedDeliveries: number; commissionRate: number; totalDeliveryCommissions: number } }>(`/payroll/calculate-commissions?${q}`);
+    return res.data;
+  }
 };
