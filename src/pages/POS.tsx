@@ -1724,9 +1724,9 @@ const POS = () => {
             <span className="hidden xl:inline">{activeShift ? "Cash Register" : "Open Register"}</span>
           </Button>
           {(myActiveCash?.totalExpected ?? 0) > 0 && (
-            <Button variant="outline" size="sm" className="h-8 text-xs rounded-lg gap-1 shrink-0 px-2 border-amber-500/40 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10" onClick={() => setShowCashHeldDialog(true)}>
-              <Coins className="h-3.5 w-3.5" />
-              <span className="hidden lg:inline">Collections Held:</span> {effectiveSettings.currency} {myActiveCash!.totalExpected.toLocaleString()}
+            <Button variant="outline" size="sm" className="h-8 text-xs rounded-lg gap-1 shrink-0 px-2 border-emerald-500/30 text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 font-bold" onClick={() => setShowCashHeldDialog(true)}>
+              <Wallet className="h-3.5 w-3.5 text-emerald-500" />
+              <span className="hidden lg:inline">🧾 My Collection:</span> {effectiveSettings.currency} {myActiveCash!.totalExpected.toLocaleString()}
             </Button>
           )}
           {lowStockItems.length > 0 && (
@@ -3846,34 +3846,84 @@ const POS = () => {
 
       {/* Cash Held Dialog — my own uncleared collections, settled via Cash Hub by a manager */}
       <Dialog open={showCashHeldDialog} onOpenChange={setShowCashHeldDialog}>
-        <DialogContent className="max-w-sm">
+        <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Coins className="h-5 w-5 text-amber-500" />
-              Collections In Hand
+            <DialogTitle className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400">
+              <Wallet className="h-5 w-5" />
+              My Collection & Active Balance
             </DialogTitle>
+            <DialogDescription>
+              Active POS counter sales collected under your account.
+            </DialogDescription>
           </DialogHeader>
-          <div className="space-y-3 py-1 text-sm">
-            <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between">
-              <span className="text-xs font-semibold text-muted-foreground">Total Uncleared</span>
-              <span className="text-xl font-black text-amber-600 dark:text-amber-400 font-mono">
+
+          <div className="space-y-4 py-2">
+            {/* Total Card */}
+            <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-center">
+              <span className="text-xs text-muted-foreground uppercase tracking-wider font-semibold block">Total Expected Collection</span>
+              <span className="text-2xl font-black text-emerald-600 dark:text-emerald-400 font-mono">
                 {effectiveSettings.currency} {(myActiveCash?.totalExpected || 0).toLocaleString()}
               </span>
             </div>
-            {myActiveCash?.byMethod && (
-              <div className="space-y-1.5">
-                {Object.entries(myActiveCash.byMethod).filter(([, v]) => Number(v) > 0).map(([method, amount]) => (
-                  <div key={method} className="flex justify-between text-xs px-1">
-                    <span className="text-muted-foreground">{method}</span>
-                    <span className="font-semibold">{effectiveSettings.currency} {Number(amount).toLocaleString()}</span>
+
+            {/* Sales Breakdown */}
+            <div className="flex flex-wrap gap-2 text-center text-xs justify-center">
+              {(effectiveSettings?.paymentMethods && effectiveSettings.paymentMethods.length > 0 ? effectiveSettings.paymentMethods : ['Cash', 'Credit Card', 'Account', 'JazzCash', 'EasyPaisa']).map((m) => {
+                const val = myActiveCash?.byMethod?.[m] ?? (m.toLowerCase() === 'cash' ? (myActiveCash?.expectedCash || 0) : m.toLowerCase().includes('card') ? (myActiveCash?.expectedCard || 0) : 0);
+                return (
+                  <div key={m} className="p-2 rounded-lg bg-card border border-border flex-1 min-w-[75px]">
+                    <span className="text-muted-foreground block text-[10px] uppercase truncate">{m}</span>
+                    <span className="font-bold text-foreground font-mono">{effectiveSettings.currency} {val.toLocaleString()}</span>
                   </div>
-                ))}
+                );
+              })}
+            </div>
+
+            {/* Orders List */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-xs font-semibold text-muted-foreground">
+                <span>Active Orders ({myActiveCash?.orderCount || 0})</span>
               </div>
-            )}
-            <p className="text-[11px] text-muted-foreground text-center pt-1">
-              {myActiveCash?.orderCount || 0} unsettled order(s) — hand over these collections to your manager to settle in Cash Hub.
-            </p>
+              <div className="max-h-48 overflow-y-auto space-y-1.5 pr-1">
+                {myActiveCash?.orders && myActiveCash.orders.length > 0 ? (
+                  myActiveCash.orders.map((ord: any) => (
+                    <div key={ord.id} className="p-2 rounded-lg bg-card border border-border/60 flex items-center justify-between text-xs gap-2">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="font-bold font-mono">#{ord.orderNo || ord.orderNumber || ord.id?.slice(-6)}</span>
+                          {ord.channel && (
+                            <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 font-semibold border-emerald-500/30 text-emerald-600 dark:text-emerald-400">
+                              {ord.channel}
+                            </Badge>
+                          )}
+                        </div>
+                        <span className="text-muted-foreground">({ord.paymentMethod || 'Cash'})</span>
+                      </div>
+                      <span className="font-bold font-mono text-emerald-600 dark:text-emerald-400 shrink-0">
+                        {effectiveSettings.currency} {(Number(ord.staffAmount ?? ord.total ?? 0)).toLocaleString()}
+                      </span>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-center py-4 text-xs text-muted-foreground">
+                    No active uncleared orders found.
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Manager Notice */}
+            <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs text-amber-700 dark:text-amber-300 flex items-start gap-2">
+              <Info className="h-4 w-4 shrink-0 mt-0.5" />
+              <span>Hand this cash over to the Manager to clear your balance.</span>
+            </div>
           </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowCashHeldDialog(false)}>
+              Close
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

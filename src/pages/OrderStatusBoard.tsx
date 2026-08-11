@@ -138,6 +138,17 @@ const normalize = (o: any) => ({
   items: (o.items || []).map((i: any) => ({ ...i, price: Number(i.price) })),
 });
 
+// PKT-aware date string — Pakistan is UTC+5 and the browser/server clock may be on a
+// different timezone, so any "is this the same calendar day" comparison must shift by
+// +5h before taking the ISO date (root CLAUDE.md's "PKT Timezone Pattern"), not rely on
+// raw local/UTC Date methods.
+const pktDateStr = (input?: string | number | Date): string => {
+  if (!input) return "";
+  const d = new Date(input);
+  if (isNaN(d.getTime())) return "";
+  return new Date(d.getTime() + 5 * 60 * 60 * 1000).toISOString().split("T")[0];
+};
+
 // ─── Main Component ─────────────────────────────────────────────────────────
 
 const OrderStatusBoard = () => {
@@ -192,17 +203,13 @@ const OrderStatusBoard = () => {
   useOrderEvents(handleOrderEvent);
   useVisiblePolling(loadOrders, 60000, autoRefresh);
 
+  // "Is this order from today" — the single source of truth for "today" on this page,
+  // used for both the Completed status count/filter AND the footer's Today's
+  // Orders/Revenue KPIs (previously two independent, disagreeing checks; see pktDateStr
+  // above for why the comparison must be PKT-aware).
   const isTodayOrder = useCallback((o: any) => {
-    const todayStr = new Date().toLocaleDateString("en-CA");
-    let dStr = "";
-    if (o.date) {
-      const d = new Date(o.date);
-      if (!isNaN(d.getTime())) dStr = d.toLocaleDateString("en-CA");
-    }
-    if (!dStr && o.createdAt) {
-      const d = new Date(o.createdAt);
-      if (!isNaN(d.getTime())) dStr = d.toLocaleDateString("en-CA");
-    }
+    const todayStr = pktDateStr(Date.now());
+    const dStr = pktDateStr(o.createdAt) || pktDateStr(o.date);
     return dStr === todayStr;
   }, []);
 
@@ -245,12 +252,28 @@ const OrderStatusBoard = () => {
     return map;
   }, [activeStatusOrders]);
 
-  const todayStr = new Date().toISOString().split("T")[0];
-  const todayOrders = useMemo(() => allOrders.filter((o) => o.date === todayStr), [allOrders, todayStr]);
-  const todayRevenue = useMemo(() => todayOrders.reduce((s: number, o: any) => s + o.total, 0), [todayOrders]);
+  const todayOrders = useMemo(() => allOrders.filter(isTodayOrder), [allOrders, isTodayOrder]);
+  // Cancelled orders never count toward revenue (matches Shifts.tsx / POS.tsx shiftSales).
+  const todayRevenue = useMemo(
+    () => todayOrders
+      .filter((o: any) => (o.status || "").toLowerCase() !== "cancelled")
+      .reduce((s: number, o: any) => s + o.total, 0),
+    [todayOrders]
+  );
 
   // ── Helpers ──
-  const isPaid = (o: any) => !!o.paymentMethod && o.paymentMethod !== "Pending" && o.paymentMethod !== "Unpaid";
+  // A bare "Cash on Delivery" order only counts as paid once an advance was actually
+  // collected at the counter (Number(advancePayment) > 0) — otherwise no money has
+  // changed hands yet. Mirrors the COD rule inside POS.tsx / Shifts.tsx's isSettledOrder.
+  const isPaid = (o: any) => {
+    if (!o.paymentMethod) return false;
+    const method = String(o.paymentMethod).toLowerCase().trim();
+    if (method === "pending" || method === "unpaid") return false;
+    if (method === "cash on delivery" || method === "cod" || method === "cash-on-delivery") {
+      return Number(o.advancePayment || 0) > 0;
+    }
+    return true;
+  };
 
   const getItemKitchenStatus = useCallback((item: any, order: any): "pending" | "preparing" | "ready" => {
     if (order.status === "ready" || order.status === "completed") return "ready";

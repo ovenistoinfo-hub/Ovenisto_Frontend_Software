@@ -13,12 +13,13 @@ import { PageHeader } from "@/components/ui/page-header";
 import { useQuery } from "@tanstack/react-query";
 import { reportService } from "@/services/report.service";
 import { outletService } from "@/services/outlet.service";
+import { orderService } from "@/services/order.service";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const pieColors = ["hsl(var(--primary))", "hsl(var(--accent))", "hsl(var(--info))", "hsl(var(--gold))", "hsl(var(--success))", "hsl(var(--warning))"];
 
 const Reports = () => {
-  const { orders, expenses, suppliers, purchases, wasteRecords, users, settings } = useData();
+  const { orders, expenses, suppliers, purchases, wasteRecords, settings } = useData();
   const currency = settings.currency || "Rs.";
   const [dateFrom, setDateFrom] = useState<Date | undefined>(new Date(2026, 2, 1));
   const [dateTo, setDateTo] = useState<Date | undefined>(new Date(2026, 2, 8));
@@ -48,6 +49,14 @@ const Reports = () => {
     queryKey: ["report-stock", reportParams],
     queryFn: () => reportService.getStock(reportParams),
   });
+  // Staff tab: no dedicated /api/reports/staff endpoint yet, so pull live orders
+  // (same live source the rest of this page already uses) and aggregate per-staff
+  // revenue client-side instead of the old stale DataContext "orders"/"users" arrays,
+  // which nothing populates from the API and were always empty in practice.
+  const { data: staffOrdersResp } = useQuery({
+    queryKey: ["report-staff-orders"],
+    queryFn: () => orderService.getOrders({ limit: 1000 }),
+  });
 
   const setPreset = (preset: string) => {
     const now = new Date();
@@ -70,10 +79,21 @@ const Reports = () => {
   const expenseByCategory = Object.entries(filteredExpenses.reduce((acc, e) => { acc[e.category] = (acc[e.category] || 0) + e.amount; return acc; }, {} as Record<string, number>)).map(([name, value]) => ({ name, value }));
 
   const supplierSpending = suppliers.map(s => ({ name: s.name.substring(0, 12), amount: s.totalPurchases }));
-  const staffOrders = users.filter(u => u.role === "Cashier" || u.role === "Waiter").map(u => {
-    const staffOrd = filteredOrders.filter(o => o.staff === u.name);
-    return { name: u.name.split(" ")[0], orders: staffOrd.length, revenue: staffOrd.reduce((s, o) => s + o.total, 0) };
+
+  // Per-staff revenue for the Staff tab, aggregated from live orders (see the
+  // staffOrdersResp query above) filtered to the selected date range, grouped by
+  // OrderRecord.staffName — replaces the old lookup that matched stale DataContext
+  // "orders" against a stale DataContext "users" roster (both always empty).
+  const staffOrdersMap = new Map<string, { orders: number; revenue: number }>();
+  (staffOrdersResp?.data ?? []).filter(o => dateFilter(o.date)).forEach(o => {
+    const name = o.staffName?.trim();
+    if (!name) return;
+    const cur = staffOrdersMap.get(name) ?? { orders: 0, revenue: 0 };
+    cur.orders += 1;
+    cur.revenue += o.total;
+    staffOrdersMap.set(name, cur);
   });
+  const staffOrders = [...staffOrdersMap.entries()].map(([name, v]) => ({ name: name.split(" ")[0], orders: v.orders, revenue: v.revenue }));
 
   const wasteByReason = useMemo(() => {
     const reasons: Record<string, number> = {};

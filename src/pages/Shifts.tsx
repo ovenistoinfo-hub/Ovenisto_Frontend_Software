@@ -134,16 +134,24 @@ const Shifts = () => {
     if (!activeShift) return { totalSales: 0, cashSales: 0, cardSales: 0, onlineSales: 0, orderCount: 0, cancelled: 0, expectedCash: 0 };
     const shiftStartMs = new Date(activeShift.openedAt).getTime();
 
+    // Matches POS.tsx's getSafeOrderTimestamp exactly: takes the LATER of createdAt/updatedAt,
+    // not just createdAt. An order created before this shift opened but paid/updated during it
+    // (e.g. via Order Monitor or POS's Collect Payment, well after creation) must still land in
+    // this shift's window the same way it does in POS.tsx's own register-close calculation —
+    // otherwise the two pages disagree on expectedCash for any shift with a late-paid order.
     const getSafeTimestamp = (o: any): number => {
       if (!o) return 0;
+      let maxMs = 0;
       if (o.createdAt) {
         const ms = new Date(o.createdAt).getTime();
-        if (!isNaN(ms) && ms > 0) return ms;
+        if (!isNaN(ms) && ms > maxMs) maxMs = ms;
       }
       if (o.updatedAt) {
         const ms = new Date(o.updatedAt).getTime();
-        if (!isNaN(ms) && ms > 0) return ms;
+        if (!isNaN(ms) && ms > maxMs) maxMs = ms;
       }
+      if (maxMs > 0) return maxMs;
+
       if (o.date) {
         const dateStr = String(o.date).split("T")[0];
         const timeStr = o.time ? String(o.time).trim() : "";
@@ -157,11 +165,14 @@ const Shifts = () => {
       return 0;
     };
 
-    // Cash Hub reconciles Waiter table sales and Delivery Rider COD separately —
+    // Mirrors POS.tsx's `shiftSales.pos` bucket exactly (isWaiterOrder / isSettledOrder /
+    // parsePaymentSplits / the advance-vs-pure-COD orderAmt scoping), so the two entry
+    // points that can close the same register shift — this admin page and POS's own
+    // Close Register modal — always compute the identical "Expected Counter Drawer Cash"
+    // figure. Cash Hub reconciles Waiter table sales and Delivery Rider COD separately;
     // this register must only count cash that actually lands in the counter drawer.
-    const isWaiterOrRiderOrder = (o: any): boolean => {
+    const isWaiterOrder = (o: any): boolean => {
       if (!o) return false;
-      if (o.riderId) return true;
       const src = (o.orderSource || "").toLowerCase();
       if (src === "pos") return false;
       if (src === "waiter" || src === "self-order" || src === "table") return true;
@@ -172,54 +183,102 @@ const Shifts = () => {
       return false;
     };
 
-    const allOrders = apiOrdersList.length > 0 ? apiOrdersList : orders;
-    const shiftOrders = allOrders.filter(o => {
-      const status = (o.status || "").toLowerCase();
-      if (status === "cancelled") return false;
-      if (isWaiterOrRiderOrder(o)) return false;
-      const orderTimeMs = getSafeTimestamp(o);
-      return orderTimeMs >= shiftStartMs;
-    });
-
-    const settledOrders = shiftOrders.filter(o => {
+    const isSettledOrder = (o: any): boolean => {
       const status = (o.status || "").toLowerCase();
       const method = (o.paymentMethod || "").toLowerCase().trim();
-      return status === "completed" || (method && method !== "pending" && method !== "unpaid");
-    });
+      if (status === "completed") return true;
+      if (method === "cash on delivery" || method === "cod" || method === "cash-on-delivery") {
+        // Pure COD not yet delivered — no money collected by anyone yet, unless an
+        // advance was already paid at the counter.
+        return Number(o.advancePayment || 0) > 0;
+      }
+      if (method && method !== "pending" && method !== "unpaid") return true;
+      return false;
+    };
 
-    let cashSales = 0;
-    let cardSales = 0;
-    let onlineSales = 0;
+    const parsePaymentSplits = (paymentMethodStr: string, orderTotal: number) => {
+      const pm = (paymentMethodStr || "Cash").trim();
+      const splits: { method: string; amount: number }[] = [];
 
-    settledOrders.forEach(o => {
-      const orderTotal = Number(o.total || 0);
-      const pm = (o.paymentMethod || "Cash").trim();
       if (pm.includes(":") && (pm.includes(",") || pm.includes("Rs") || /\d+/.test(pm))) {
         const parts = pm.split(",");
-        parts.forEach(part => {
+        parts.forEach((part) => {
           const subParts = part.split(":");
           if (subParts.length >= 2) {
-            const rawMethod = subParts[0].trim().toLowerCase();
+            const rawMethod = subParts[0].trim();
+            // Remove currency symbols (e.g. "Rs." or "Rs") before matching number
             const cleanedValStr = subParts[1].replace(/Rs\.?/gi, "").trim();
             const numMatch = cleanedValStr.match(/\d+(?:\.\d+)?/);
             if (numMatch) {
               const val = parseFloat(numMatch[0]);
               if (!isNaN(val) && val > 0) {
-                const isCash = rawMethod.includes("cash") && !rawMethod.includes("jazz") && !rawMethod.includes("easy") && !rawMethod.includes("online") && !rawMethod.includes("card") && !rawMethod.includes("mobile") && !rawMethod.includes("paisa");
-                if (isCash) cashSales += val;
-                else if (rawMethod.includes("card") || rawMethod.includes("bank")) cardSales += val;
-                else onlineSales += val;
+                splits.push({ method: rawMethod, amount: val });
               }
             }
           }
         });
-      } else {
-        const pmLower = pm.toLowerCase();
-        const isCash = pmLower.includes("cash") && !pmLower.includes("jazz") && !pmLower.includes("easy") && !pmLower.includes("online") && !pmLower.includes("card") && !pmLower.includes("mobile") && !pmLower.includes("paisa");
-        if (isCash) cashSales += orderTotal;
-        else if (pmLower.includes("card") || pmLower.includes("bank")) cardSales += orderTotal;
-        else onlineSales += orderTotal;
       }
+
+      if (splits.length > 0) {
+        const rawSum = splits.reduce((sum, s) => sum + s.amount, 0);
+        if (rawSum > 0 && Math.abs(rawSum - orderTotal) > 0.01) {
+          const ratio = orderTotal / rawSum;
+          splits.forEach(s => {
+            s.amount = Math.round(s.amount * ratio * 100) / 100;
+          });
+        }
+      } else {
+        splits.push({ method: pm, amount: orderTotal });
+      }
+
+      return splits;
+    };
+
+    const allOrders = apiOrdersList.length > 0 ? apiOrdersList : orders;
+    const shiftOrders = allOrders.filter(o => {
+      const status = (o.status || "").toLowerCase();
+      if (status === "cancelled") return false;
+      const orderTimeMs = getSafeTimestamp(o);
+      return orderTimeMs >= shiftStartMs;
+    });
+
+    const posOrders = shiftOrders.filter(o => !isWaiterOrder(o) && isSettledOrder(o));
+
+    let cashSales = 0;
+    let cardSales = 0;
+    let onlineSales = 0;
+
+    posOrders.forEach(o => {
+      const pm = o.paymentMethod || '';
+      const hasAdvancePM = /advance\s*\(/i.test(pm);
+
+      // For advance delivery orders, only count what the cashier actually collected at
+      // the POS counter. The remaining COD balance is the rider's responsibility.
+      let orderAmt = Number(o.total || 0);
+      if (hasAdvancePM) {
+        const advancePaid = Number(o.advancePayment || 0);
+        if (advancePaid > 0) {
+          orderAmt = advancePaid;
+        } else {
+          // Fallback: parse advance amount directly from PM string
+          // e.g. "Advance (JazzCash): Rs.485" → 485
+          const amtMatch = pm.match(/Rs\.?\s*(\d+(?:\.\d+)?)/i);
+          if (amtMatch) orderAmt = parseFloat(amtMatch[1]);
+        }
+      } else if (o.riderId) {
+        // Pure COD delivery (no cashier-collected advance) — the rider collects 100% on
+        // delivery, so none of it ever lands in this cashier's drawer.
+        orderAmt = 0;
+      }
+
+      const splits = parsePaymentSplits(pm, orderAmt);
+      splits.forEach(({ method, amount }) => {
+        const mLower = method.toLowerCase();
+        const isCash = mLower.includes("cash") && !mLower.includes("jazz") && !mLower.includes("easy") && !mLower.includes("online") && !mLower.includes("card") && !mLower.includes("mobile") && !mLower.includes("paisa");
+        if (isCash) cashSales += amount;
+        else if (mLower.includes("card") || mLower.includes("bank")) cardSales += amount;
+        else onlineSales += amount;
+      });
     });
 
     const totalSales = cashSales + cardSales + onlineSales;
@@ -228,7 +287,7 @@ const Shifts = () => {
 
     return {
       totalSales, cashSales, cardSales, onlineSales,
-      orderCount: settledOrders.length, cancelled, expectedCash
+      orderCount: posOrders.length, cancelled, expectedCash
     };
   }, [activeShift, apiOrdersList, orders]);
 

@@ -79,10 +79,18 @@ const Customers = () => {
 
       map[nameKey].totalOrders += 1;
       if (o.status !== "cancelled") {
-        map[nameKey].totalSpent += Number(o.total || 0);
-      }
-      if (o.status !== "cancelled" && (!o.paymentMethod || o.paymentMethod === "Pending" || o.paymentMethod === "Unpaid")) {
-        map[nameKey].outstandingDue += Number(o.total || 0);
+        // COD-advance-aware settlement check (mirrors POS.tsx / Shifts.tsx's isSettledOrder
+        // and the backend's cash-settlement.service.ts): a pure "Cash on Delivery"/"COD" order
+        // with no advance collected yet has had NO money collected, so it must not count as
+        // spent — it belongs in outstandingDue instead, same as a Pending/Unpaid order.
+        const pm = (o.paymentMethod || "").toLowerCase().trim();
+        const isPureUncollectedCod = (pm === "cash on delivery" || pm === "cod" || pm === "cash-on-delivery") && Number(o.advancePayment || 0) <= 0;
+        const isUnpaid = !o.paymentMethod || pm === "pending" || pm === "unpaid" || isPureUncollectedCod;
+        if (!isUnpaid) {
+          map[nameKey].totalSpent += Number(o.total || 0);
+        } else {
+          map[nameKey].outstandingDue += Number(o.total || 0);
+        }
       }
     }
     return map;

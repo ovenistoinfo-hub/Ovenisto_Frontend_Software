@@ -118,6 +118,7 @@ export const orderService = {
     date?: string;
     page?: number;
     limit?: number;
+    outletId?: string;
   }): Promise<{ data: OrderRecord[]; meta: any }> {
     const q = new URLSearchParams();
     if (params?.search) q.set('search', params.search);
@@ -126,6 +127,9 @@ export const orderService = {
     if (params?.date) q.set('date', params.date);
     if (params?.page) q.set('page', String(params.page));
     if (params?.limit) q.set('limit', String(params.limit));
+    // Super Admin branch filter (?outletId=) — read by the backend's resolveOutletScope
+    // as a fallback when no X-Outlet-Id header is set. Omit for "all outlets".
+    if (params?.outletId && params.outletId !== 'all') q.set('outletId', params.outletId);
     const res = await api.get<{ success: boolean; data: OrderRecord[]; meta: any }>(`/orders?${q.toString()}`);
     return { data: res.data, meta: (res as any).meta };
   },

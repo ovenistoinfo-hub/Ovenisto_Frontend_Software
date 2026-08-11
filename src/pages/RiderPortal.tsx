@@ -1,5 +1,5 @@
 import { useState, useCallback } from "react";
-import { Bike, MapPin, Phone, Clock, CheckCircle2, Truck, RotateCcw, RefreshCw, Package, TrendingUp, Banknote, Wallet, Bell, Navigation, ArrowUpRight, ShieldAlert, Loader2 } from "lucide-react";
+import { Bike, MapPin, Phone, Clock, CheckCircle2, Truck, RotateCcw, RefreshCw, Package, TrendingUp, Banknote, Wallet, Bell, Navigation, ArrowUpRight, ShieldAlert, Loader2, Info } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -49,6 +49,7 @@ const RiderPortal = () => {
     amountToCollect: number;
   } | null>(null);
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string>("Cash");
+  const [showMyCollectionDialog, setShowMyCollectionDialog] = useState(false);
 
   // Cash Hub / Active balance for logged in rider
   const { data: myActiveCash, refetch: refetchActiveCash } = useQuery({
@@ -184,7 +185,10 @@ const RiderPortal = () => {
       </div>
 
       {/* COD Cash in Hand Summary Card */}
-      <Card className="border border-emerald-500/30 bg-emerald-500/10 shadow-sm">
+      <Card
+        className="border border-emerald-500/30 bg-emerald-500/10 shadow-sm cursor-pointer hover:border-emerald-400 hover:bg-emerald-500/15 transition-colors"
+        onClick={() => setShowMyCollectionDialog(true)}
+      >
         <CardContent className="p-3.5 flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <div className="h-10 w-10 rounded-xl bg-emerald-500/20 flex items-center justify-center text-emerald-500 shrink-0">
@@ -202,6 +206,9 @@ const RiderPortal = () => {
               </p>
             </div>
           </div>
+          <Button variant="ghost" size="sm" className="h-8 text-xs rounded-lg gap-1 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20 shrink-0" onClick={(e) => { e.stopPropagation(); setShowMyCollectionDialog(true); }}>
+            View Details
+          </Button>
         </CardContent>
       </Card>
 
@@ -311,7 +318,9 @@ const RiderPortal = () => {
               const advPaid    = Number(a.order?.advancePayment ?? 0);
               const orderTotal = Number(a.order?.total ?? 0);
               const mode       = getDeliveryPaymentMode(payMethod, advPaid);
-              const toCollect  = Number(a.amountToCollect ?? getRiderCollectAmount(orderTotal, advPaid, mode));
+              const toCollect  = (mode === "prepaid" || mode === "collected")
+                ? 0
+                : Number(a.amountToCollect ?? getRiderCollectAmount(orderTotal, advPaid, mode));
 
               const isActionLoading = actionIds.has(a.id);
 
@@ -678,6 +687,89 @@ const RiderPortal = () => {
                 <CheckCircle2 className="h-4 w-4" />
               )}
               Confirm & Complete Delivery
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* My Collection Dialog */}
+      <Dialog open={showMyCollectionDialog} onOpenChange={setShowMyCollectionDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400">
+              <Wallet className="h-5 w-5" />
+              My Collection & Active Balance
+            </DialogTitle>
+            <DialogDescription>
+              Active delivery COD collections under your account.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            {/* Total Card */}
+            <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-center">
+              <span className="text-xs text-muted-foreground uppercase tracking-wider font-semibold block">Total Expected Collection</span>
+              <span className="text-2xl font-black text-emerald-600 dark:text-emerald-400 font-mono">
+                {currency} {(myActiveCash?.totalExpected || 0).toLocaleString()}
+              </span>
+            </div>
+
+            {/* Sales Breakdown */}
+            <div className="flex flex-wrap gap-2 text-center text-xs justify-center">
+              {(settings?.paymentMethods && settings.paymentMethods.length > 0 ? settings.paymentMethods : ['Cash', 'Credit Card', 'Account', 'JazzCash', 'EasyPaisa']).map((m) => {
+                const val = myActiveCash?.byMethod?.[m] ?? (m.toLowerCase() === 'cash' ? (myActiveCash?.expectedCash || 0) : m.toLowerCase().includes('card') ? (myActiveCash?.expectedCard || 0) : 0);
+                return (
+                  <div key={m} className="p-2 rounded-lg bg-card border border-border flex-1 min-w-[75px]">
+                    <span className="text-muted-foreground block text-[10px] uppercase truncate">{m}</span>
+                    <span className="font-bold text-foreground font-mono">{currency} {val.toLocaleString()}</span>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Orders List */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-xs font-semibold text-muted-foreground">
+                <span>Active Orders ({myActiveCash?.orderCount || 0})</span>
+              </div>
+              <div className="max-h-48 overflow-y-auto space-y-1.5 pr-1">
+                {myActiveCash?.orders && myActiveCash.orders.length > 0 ? (
+                  myActiveCash.orders.map((ord: any) => (
+                    <div key={ord.id} className="p-2 rounded-lg bg-card border border-border/60 flex items-center justify-between text-xs gap-2">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="font-bold font-mono">#{ord.orderNo || ord.orderNumber || ord.id?.slice(-6)}</span>
+                          {ord.channel && (
+                            <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 font-semibold border-emerald-500/30 text-emerald-600 dark:text-emerald-400">
+                              {ord.channel}
+                            </Badge>
+                          )}
+                        </div>
+                        <span className="text-muted-foreground">({ord.paymentMethod || 'Cash'})</span>
+                      </div>
+                      <span className="font-bold font-mono text-emerald-600 dark:text-emerald-400 shrink-0">
+                        {currency} {(Number(ord.staffAmount ?? ord.total ?? 0)).toLocaleString()}
+                      </span>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-center py-4 text-xs text-muted-foreground">
+                    No active uncleared orders found.
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Manager Notice */}
+            <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs text-amber-700 dark:text-amber-300 flex items-start gap-2">
+              <Info className="h-4 w-4 shrink-0 mt-0.5" />
+              <span>Hand this cash over to the Manager to clear your balance.</span>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowMyCollectionDialog(false)}>
+              Close
             </Button>
           </DialogFooter>
         </DialogContent>

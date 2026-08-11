@@ -5,21 +5,29 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, LineChart, Line, Legend } from "recharts";
 import { TrendingUp, ShoppingCart, Users, ArrowUpRight, BarChart3, ShoppingBag, Utensils, Award } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
-import { useData } from "@/contexts/DataContext";
 import { useQuery } from "@tanstack/react-query";
 import { reportService } from "@/services/report.service";
+import { orderService, type OrderRecord } from "@/services/order.service";
 import { useOutletFilter } from "@/hooks/useOutletFilter";
 import { OutletFilterSelect } from "@/components/OutletFilterSelect";
 
 const Analytics = () => {
   const { outletId, setOutletId, outlets, isSuperAdmin } = useOutletFilter();
-  const { orders, foodMenuItems } = useData();
   const currency = "Rs.";
 
   const { data: dashboardData, isLoading: dashboardLoading } = useQuery({
     queryKey: ["analytics-dashboard", outletId],
     queryFn: () => reportService.getDashboard({ outletId }),
   });
+
+  // Live orders (replaces the old useData()/DataContext "orders" array, which nothing
+  // populates from the API anymore and was always effectively empty). Matches the
+  // fetch-many-for-client-side-aggregation pattern used by Customers.tsx/CustomerDetail.tsx.
+  const { data: ordersResp, isLoading: ordersLoading } = useQuery({
+    queryKey: ["analytics-orders", outletId],
+    queryFn: () => orderService.getOrders({ limit: 1000, outletId }),
+  });
+  const orders: OrderRecord[] = ordersResp?.data ?? [];
 
   const [loading, setLoading] = useState(true);
   useEffect(() => { const t = setTimeout(() => setLoading(false), 500); return () => clearTimeout(t); }, []);
@@ -30,7 +38,9 @@ const Analytics = () => {
     for (let i = 6; i >= 0; i--) {
       const d = new Date(); d.setDate(d.getDate() - i);
       const dateStr = d.toISOString().split("T")[0];
-      const dayOrders = completedOrders.filter(o => o.date === dateStr);
+      // o.date from the live API is a full ISO datetime string (e.g. "2026-08-05T14:23:11.123Z"),
+      // not a bare "YYYY-MM-DD" string like the old mock data — compare only the date portion.
+      const dayOrders = completedOrders.filter(o => String(o.date).slice(0, 10) === dateStr);
       days.push({ date: `${d.toLocaleDateString("en-US", { month: "short" })} ${d.getDate()}`, revenue: dayOrders.reduce((s, o) => s + o.total, 0), orders: dayOrders.length });
     }
     return days;
@@ -38,6 +48,19 @@ const Analytics = () => {
 
   const weeklyRevenue = last7Days.reduce((s, d) => s + d.revenue, 0);
   const weeklyOrders = last7Days.reduce((s, d) => s + d.orders, 0);
+
+  // Real previous-7-day-window revenue (days -13..-7), computed the same way as weeklyRevenue
+  // (days -6..0) — replaces the old fabricated "weeklyRevenue * 0.85" estimate.
+  const prevWeekRevenue = useMemo(() => {
+    let total = 0;
+    for (let i = 13; i >= 7; i--) {
+      const d = new Date(); d.setDate(d.getDate() - i);
+      const dateStr = d.toISOString().split("T")[0];
+      const dayOrders = completedOrders.filter(o => String(o.date).slice(0, 10) === dateStr);
+      total += dayOrders.reduce((s, o) => s + o.total, 0);
+    }
+    return total;
+  }, [completedOrders]);
 
   const peakHours = useMemo(() => {
     const hourCounts: Record<string, number> = {};
@@ -66,7 +89,7 @@ const Analytics = () => {
     for (let i = 6; i >= 0; i--) {
       const d = new Date(); d.setDate(d.getDate() - i);
       const dateStr = d.toISOString().split("T")[0];
-      const dayCustomers = new Set(orders.filter(o => o.date === dateStr).map(o => o.customer));
+      const dayCustomers = new Set(orders.filter(o => String(o.date).slice(0, 10) === dateStr).map(o => o.customerName));
       days.push({ day: d.toLocaleDateString("en-US", { weekday: "short" }), unique: dayCustomers.size });
     }
     return days;
@@ -93,12 +116,11 @@ const Analytics = () => {
   const uniqueCustomers = new Set(orders.filter(o => {
     const d = new Date(o.date); const now = new Date();
     return d >= new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7);
-  }).map(o => o.customer)).size;
+  }).map(o => o.customerName)).size;
 
-  const prevWeekRevenue = weeklyRevenue * 0.85;
   const growth = prevWeekRevenue > 0 ? ((weeklyRevenue - prevWeekRevenue) / prevWeekRevenue * 100).toFixed(1) : "0";
 
-  if (loading || dashboardLoading) return <div className="space-y-6"><Skeleton className="h-8 w-48" /><div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">{Array.from({length:4}).map((_,i)=><Skeleton key={i} className="h-24" />)}</div><div className="grid grid-cols-1 lg:grid-cols-2 gap-4"><Skeleton className="h-72" /><Skeleton className="h-72" /></div></div>;
+  if (loading || dashboardLoading || ordersLoading) return <div className="space-y-6"><Skeleton className="h-8 w-48" /><div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">{Array.from({length:4}).map((_,i)=><Skeleton key={i} className="h-24" />)}</div><div className="grid grid-cols-1 lg:grid-cols-2 gap-4"><Skeleton className="h-72" /><Skeleton className="h-72" /></div></div>;
 
   const topItemsList = dashboardData?.topItems ?? [];
   const topCustomersList = dashboardData?.topCustomers ?? [];

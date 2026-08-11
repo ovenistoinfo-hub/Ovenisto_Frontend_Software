@@ -124,14 +124,23 @@ const CustomerDetail = () => {
     </div>
   );
 
+  // A "Cash on Delivery" order with no advance collected yet hasn't actually been paid —
+  // treat it the same as a Pending/Unpaid order until an advance is recorded. Mirrors the
+  // canonical isSettledOrder COD check in POS.tsx / Shifts.tsx.
+  const isUncollectedCOD = (o: OrderRecord) => {
+    const method = (o.paymentMethod || "").toLowerCase().trim();
+    return (method === "cash on delivery" || method === "cod" || method === "cash-on-delivery")
+      && Number(o.advancePayment || 0) <= 0;
+  };
+
   const totalOrdersCount = customerOrders.length > 0 ? customerOrders.length : Number(customer.totalOrders || 0);
   const totalSpentVal = customerOrders.length > 0
-    ? customerOrders.reduce((sum, o) => sum + (o.status !== "cancelled" ? Number(o.total || 0) : 0), 0)
+    ? customerOrders.reduce((sum, o) => sum + (o.status !== "cancelled" && !isUncollectedCOD(o) ? Number(o.total || 0) : 0), 0)
     : Number(customer.totalSpent || 0);
   const avgOrderVal = totalOrdersCount > 0 ? Math.round(totalSpentVal / totalOrdersCount) : 0;
   const outstandingDueVal = customerOrders.length > 0
     ? customerOrders
-        .filter(o => o.status !== "cancelled" && (!o.paymentMethod || o.paymentMethod === "Pending" || o.paymentMethod === "Unpaid"))
+        .filter(o => o.status !== "cancelled" && (!o.paymentMethod || o.paymentMethod === "Pending" || o.paymentMethod === "Unpaid" || isUncollectedCOD(o)))
         .reduce((sum, o) => sum + Number(o.total || 0), 0)
     : Number(customer.outstandingDue || 0);
   const lastOrderDate = customerOrders.length > 0

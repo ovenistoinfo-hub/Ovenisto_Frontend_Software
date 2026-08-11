@@ -1068,7 +1068,7 @@ const WaiterPanel = () => {
       if (unpaidOrders.length > 0) {
         const isReservationDineIn = Boolean(activeReservationForTable);
         const mLower = paymentMethod.toLowerCase();
-        const isCashMethod = mLower.includes("cash") && !mLower.includes("jazz") && !mLower.includes("easy");
+        const isCashMethod = mLower.includes("cash") && !mLower.includes("jazz") && !mLower.includes("easy") && !mLower.includes("online") && !mLower.includes("card") && !mLower.includes("mobile") && !mLower.includes("paisa");
         const shouldBeApproved = !isCashMethod || isReservationDineIn;
 
         await Promise.all(
@@ -3194,13 +3194,20 @@ const WaiterPanel = () => {
               <div className="max-h-48 overflow-y-auto space-y-1.5 pr-1">
                 {myActiveCash?.orders && myActiveCash.orders.length > 0 ? (
                   myActiveCash.orders.map((ord: any) => (
-                    <div key={ord.id} className="p-2 rounded-lg bg-card border border-border/60 flex items-center justify-between text-xs">
-                      <div>
-                        <span className="font-bold font-mono">#{ord.orderNo || ord.orderNumber || ord.id.slice(-6)}</span>
-                        <span className="text-muted-foreground ml-2">({ord.paymentMethod || 'Cash'})</span>
+                    <div key={ord.id} className="p-2 rounded-lg bg-card border border-border/60 flex items-center justify-between text-xs gap-2">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="font-bold font-mono">#{ord.orderNo || ord.orderNumber || ord.id.slice(-6)}</span>
+                          {ord.channel && (
+                            <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 font-semibold border-emerald-500/30 text-emerald-600 dark:text-emerald-400">
+                              {ord.channel}
+                            </Badge>
+                          )}
+                        </div>
+                        <span className="text-muted-foreground">({ord.paymentMethod || 'Cash'})</span>
                       </div>
-                      <span className="font-bold font-mono text-emerald-600 dark:text-emerald-400">
-                        {currency} {(Number(ord.total) || 0).toLocaleString()}
+                      <span className="font-bold font-mono text-emerald-600 dark:text-emerald-400 shrink-0">
+                        {currency} {(Number(ord.staffAmount ?? ord.total ?? 0)).toLocaleString()}
                       </span>
                     </div>
                   ))
