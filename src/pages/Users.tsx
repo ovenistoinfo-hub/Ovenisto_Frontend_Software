@@ -15,6 +15,8 @@ import { toast } from "sonner";
 import { userService, type UserRecord, type UnlinkedEmployee } from "@/services/user.service";
 import { outletService, type OutletRecord } from "@/services/outlet.service";
 import { useAuth } from "@/contexts/AuthContext";
+import { Link } from "react-router-dom";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const roleColors: Record<string, string> = {
   "Super Admin": "bg-purple-100 text-purple-700",
@@ -105,6 +107,14 @@ const Users = () => {
     ? roles.filter(r => !ownerRoles.includes(r))
     : roles;
 
+  // Roles that can be created without linking an onboarded Employee: the two
+  // owner roles, plus Customer Screen (a shared kiosk display, not a person).
+  const independentRoles = ["Super Admin", "Admin", "Customer Screen"];
+  // "Owner Account" mode's role choices, scoped by what this actor may create.
+  const ownerModeRoles = isAdminOrHigher ? independentRoles : independentRoles.filter(r => r === "Customer Screen");
+  // "Employee Login" mode's role choices — everything that isn't an independent role.
+  const employeeModeRoles = roles.filter(r => !independentRoles.includes(r));
+
   const [showDialog, setShowDialog] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -115,6 +125,7 @@ const Users = () => {
   const [outlets, setOutlets] = useState<OutletRecord[]>([]);
   const [unlinkedEmployees, setUnlinkedEmployees] = useState<UnlinkedEmployee[]>([]);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>("none");
+  const [accountMode, setAccountMode] = useState<"employee" | "owner">("employee");
 
   const { data: list = [], isLoading: loading } = useQuery({
     queryKey: ["users"],
@@ -140,11 +151,21 @@ const Users = () => {
     setForm({ name: "", email: "", phone: "", role: defaultRole, password: "", branch: "", outletId: "" });
     setPerms(rolePresets[defaultRole]);
     setSelectedEmployeeId("none");
+    setAccountMode("employee");
     setUnlinkedEmployees([]);
     userService.getUnlinkedEmployees()
       .then(setUnlinkedEmployees)
       .catch((err) => console.error("Failed to fetch unlinked employees", err));
     setShowDialog(true);
+  };
+
+  const handleModeChange = (mode: "employee" | "owner") => {
+    setAccountMode(mode);
+    setSelectedEmployeeId("none");
+    const roleList = mode === "owner" ? ownerModeRoles : employeeModeRoles;
+    const defaultRole = roleList[0] || (mode === "owner" ? "Customer Screen" : "Cashier");
+    setForm(p => ({ ...p, name: "", email: "", phone: "", outletId: "", role: defaultRole }));
+    setPerms(rolePresets[defaultRole] || {});
   };
   const openEdit = (u: UserRecord) => {
     // Manager cannot edit any user
@@ -191,6 +212,10 @@ const Users = () => {
   };
 
   const handleSave = async () => {
+    if (!editingId && accountMode === "employee" && selectedEmployeeId === "none") {
+      toast.error("Please select an onboarded employee to grant a login");
+      return;
+    }
     if (!form.name || !form.email) { toast.error("Name and email are required"); return; }
     // Duplicate checks against existing users
     const lowerEmail = form.email.trim().toLowerCase();
@@ -224,7 +249,7 @@ const Users = () => {
           phone: form.phone || null,
           role: form.role,
           outletId: form.outletId || null,
-          employeeId: selectedEmployeeId === "none" ? null : selectedEmployeeId,
+          employeeId: accountMode === "employee" ? selectedEmployeeId : null,
         });
         toast.success("User added");
       }
@@ -340,28 +365,43 @@ const Users = () => {
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>{editingId ? "Edit" : "Add"} User</DialogTitle></DialogHeader>
           <div className="space-y-4">
-            {/* Link to onboarded employee dropdown (only on Add User) */}
+            {/* Owner Account vs Employee Login mode toggle (only on Add User) */}
             {!editingId && (
+              <Tabs value={accountMode} onValueChange={(v) => handleModeChange(v as "employee" | "owner")}>
+                <TabsList className="grid grid-cols-2 w-full">
+                  <TabsTrigger value="employee">Employee Login</TabsTrigger>
+                  <TabsTrigger value="owner">Owner Account</TabsTrigger>
+                </TabsList>
+              </Tabs>
+            )}
+
+            {!editingId && accountMode === "employee" && (
               <div className="bg-primary/5 border border-primary/10 rounded-lg p-3">
                 <label className="text-sm font-semibold mb-1 block text-primary">
-                  Link to Onboarded Employee (Optional)
+                  Onboarded Employee
                 </label>
                 <p className="text-xs text-muted-foreground mb-2">
-                  Select an onboarded employee who does not have a user account yet to pre-fill their details.
+                  Select an onboarded employee who does not have a login yet. Their name, email and phone will be pre-filled from their Employee record.
                 </p>
-                <Select value={selectedEmployeeId} onValueChange={handleEmployeeSelect}>
-                  <SelectTrigger className="bg-background">
-                    <SelectValue placeholder="Select onboarded employee (optional)" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">None (Create Independent User)</SelectItem>
-                    {unlinkedEmployees.map(emp => (
-                      <SelectItem key={emp.id} value={emp.id}>
-                        {emp.firstName} {emp.lastName || ""} — {emp.designation} {emp.outlet ? `(${emp.outlet.name})` : ""}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                {unlinkedEmployees.length === 0 ? (
+                  <div className="text-sm text-muted-foreground bg-background rounded-md border p-3">
+                    No onboarded employees are waiting for a login.{" "}
+                    <Link to="/employees" className="text-primary underline">Go to Employees →</Link> to onboard one first.
+                  </div>
+                ) : (
+                  <Select value={selectedEmployeeId} onValueChange={handleEmployeeSelect}>
+                    <SelectTrigger className="bg-background">
+                      <SelectValue placeholder="Select onboarded employee" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {unlinkedEmployees.map(emp => (
+                        <SelectItem key={emp.id} value={emp.id}>
+                          {emp.firstName} {emp.lastName || ""} — {emp.designation} {emp.outlet ? `(${emp.outlet.name})` : ""}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
             )}
 
@@ -418,7 +458,11 @@ const Users = () => {
                 <label className="text-sm font-medium mb-1 block">Role</label>
                 <Select disabled={selectedEmployeeId !== "none"} value={form.role} onValueChange={handleRoleChange}>
                   <SelectTrigger><SelectValue placeholder="Role" /></SelectTrigger>
-                  <SelectContent>{availableRoles.map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}</SelectContent>
+                  <SelectContent>
+                    {(editingId ? availableRoles : (accountMode === "owner" ? ownerModeRoles : employeeModeRoles)).map(r => (
+                      <SelectItem key={r} value={r}>{r}</SelectItem>
+                    ))}
+                  </SelectContent>
                 </Select>
               </div>
               {branchScopedRoles.includes(form.role) && (
