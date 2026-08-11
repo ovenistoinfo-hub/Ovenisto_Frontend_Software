@@ -821,6 +821,11 @@ const POS = () => {
             const amtMatch = pm.match(/Rs\.?\s*(\d+(?:\.\d+)?)/i);
             if (amtMatch) orderAmt = parseFloat(amtMatch[1]);
           }
+        } else if (o.riderId) {
+          // Pure COD delivery (no cashier-collected advance) — the rider collects
+          // 100% on delivery, so none of it ever lands in this cashier's drawer.
+          // It's tracked under the rider's own balance in Cash Hub instead.
+          orderAmt = 0;
         }
         total += orderAmt;
 

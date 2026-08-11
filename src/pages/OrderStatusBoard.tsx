@@ -192,22 +192,39 @@ const OrderStatusBoard = () => {
   useOrderEvents(handleOrderEvent);
   useVisiblePolling(loadOrders, 60000, autoRefresh);
 
+  const isTodayOrder = useCallback((o: any) => {
+    const todayStr = new Date().toLocaleDateString("en-CA");
+    let dStr = "";
+    if (o.date) {
+      const d = new Date(o.date);
+      if (!isNaN(d.getTime())) dStr = d.toLocaleDateString("en-CA");
+    }
+    if (!dStr && o.createdAt) {
+      const d = new Date(o.createdAt);
+      if (!isNaN(d.getTime())) dStr = d.toLocaleDateString("en-CA");
+    }
+    return dStr === todayStr;
+  }, []);
+
   // ── Status Filter Counts ──
   const statusCounts: Record<FilterStatus, number> = useMemo(() => ({
     active: allOrders.filter((o) => o.status === "pending" || o.status === "preparing" || o.status === "ready").length,
     pending: allOrders.filter((o) => o.status === "pending").length,
     preparing: allOrders.filter((o) => o.status === "preparing").length,
     ready: allOrders.filter((o) => o.status === "ready").length,
-    completed: allOrders.filter((o) => o.status === "completed").length,
-  }), [allOrders]);
+    completed: allOrders.filter((o) => o.status === "completed" && isTodayOrder(o)).length,
+  }), [allOrders, isTodayOrder]);
 
   // Active status orders list
   const activeStatusOrders = useMemo(() => {
     if (activeStatus === "active") {
       return allOrders.filter((o) => o.status === "pending" || o.status === "preparing" || o.status === "ready");
     }
+    if (activeStatus === "completed") {
+      return allOrders.filter((o) => o.status === "completed" && isTodayOrder(o));
+    }
     return allOrders.filter((o) => o.status === activeStatus);
-  }, [allOrders, activeStatus]);
+  }, [allOrders, activeStatus, isTodayOrder]);
 
   // Group active orders by column (Dine In, Takeaway, Delivery)
   const ordersByColumn = useMemo(() => {

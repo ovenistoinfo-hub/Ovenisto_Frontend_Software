@@ -991,7 +991,7 @@ const CashHub = () => {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Order #</TableHead>
-                      <TableHead>Type</TableHead>
+                      <TableHead>Source</TableHead>
                       <TableHead>Customer</TableHead>
                       <TableHead>Method</TableHead>
                       <TableHead className="text-right">Amount</TableHead>
@@ -1004,8 +1004,18 @@ const CashHub = () => {
                           #{ord.orderNo || ord.orderNumber || ord.id?.substring(0, 8)}
                         </TableCell>
                         <TableCell className="text-xs">
-                          <Badge variant="outline" className="text-[10px]">
-                            {ord.type || ord.orderType || "Dine In"}
+                          <Badge
+                            variant="outline"
+                            className={
+                              "text-[10px] font-semibold " +
+                              (ord.channel === "Delivery Rider (COD)"
+                                ? "bg-blue-500/10 text-blue-500 border-blue-500/30"
+                                : ord.channel === "Waiter Panel"
+                                ? "bg-purple-500/10 text-purple-500 border-purple-500/30"
+                                : "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30")
+                            }
+                          >
+                            {ord.channel || ord.type || ord.orderType || "POS Counter"}
                           </Badge>
                         </TableCell>
                         <TableCell className="text-xs">
