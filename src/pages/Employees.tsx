@@ -545,13 +545,6 @@ const Employees = () => {
               <TabsContent value="positional" className="mt-4 space-y-3">
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                   <div className="space-y-1.5">
-                    <Label>Division</Label>
-                    <Input list="employee-division-list" value={form.division ?? ""} onChange={(e) => setForm(p => ({ ...p, division: e.target.value }))} />
-                    <datalist id="employee-division-list">
-                      {[...new Set(list.map(e => e.division).filter(Boolean))].map(div => <option key={div} value={div} />)}
-                    </datalist>
-                  </div>
-                  <div className="space-y-1.5">
                     <Label>Designation <span className="text-destructive">*</span></Label>
                     <Select value={form.designation ?? ""} onValueChange={(v) => setForm(p => ({ ...p, designation: v }))}>
                       <SelectTrigger><SelectValue placeholder="Select designation" /></SelectTrigger>
@@ -578,7 +571,16 @@ const Employees = () => {
                       <SelectContent>{RATE_TYPES.map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}</SelectContent>
                     </Select>
                   </div>
-                  <div className="space-y-1.5"><Label>Rate (PKR) <span className="text-destructive">*</span></Label><Input type="number" min="0" value={form.rate} onChange={(e) => setForm(p => ({ ...p, rate: Number(e.target.value) }))} /></div>
+                  <div className="space-y-1.5">
+                    <Label>Rate (PKR) <span className="text-destructive">*</span></Label>
+                    <Input
+                      type="number"
+                      min="0"
+                      placeholder="0"
+                      value={form.rate || ""}
+                      onChange={(e) => setForm(p => ({ ...p, rate: e.target.value ? Number(e.target.value) : 0 }))}
+                    />
+                  </div>
                   <div className="space-y-1.5">
                     <Label>Pay Frequency <span className="text-destructive">*</span></Label>
                     <Select value={form.payFrequency ?? ""} onValueChange={(v) => setForm(p => ({ ...p, payFrequency: v }))}>
