@@ -464,7 +464,7 @@ const Users = () => {
               </div>
               <div>
                 <label className="text-sm font-medium mb-1 block">Role</label>
-                <Select value={form.role} onValueChange={handleRoleChange}>
+                <Select disabled={selectedEmployeeId !== "none"} value={form.role} onValueChange={handleRoleChange}>
                   <SelectTrigger><SelectValue placeholder="Role" /></SelectTrigger>
                   <SelectContent>
                     {(editingId ? availableRoles : (accountMode === "owner" ? ownerModeRoles : employeeModeRoles)).map(r => (
