@@ -162,8 +162,9 @@ const Users = () => {
   const handleModeChange = (mode: "employee" | "owner") => {
     setAccountMode(mode);
     setSelectedEmployeeId("none");
-    const roleList = mode === "owner" ? ownerModeRoles : employeeModeRoles;
-    const defaultRole = roleList[0] || (mode === "owner" ? "Customer Screen" : "Cashier");
+    const defaultRole = mode === "owner"
+      ? (ownerModeRoles[0] || "Customer Screen")
+      : "Cashier";
     setForm(p => ({ ...p, name: "", email: "", phone: "", outletId: "", role: defaultRole }));
     setPerms(rolePresets[defaultRole] || {});
   };
@@ -456,7 +457,7 @@ const Users = () => {
               </div>
               <div>
                 <label className="text-sm font-medium mb-1 block">Role</label>
-                <Select disabled={selectedEmployeeId !== "none"} value={form.role} onValueChange={handleRoleChange}>
+                <Select value={form.role} onValueChange={handleRoleChange}>
                   <SelectTrigger><SelectValue placeholder="Role" /></SelectTrigger>
                   <SelectContent>
                     {(editingId ? availableRoles : (accountMode === "owner" ? ownerModeRoles : employeeModeRoles)).map(r => (
