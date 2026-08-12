@@ -185,7 +185,12 @@ const Users = () => {
     const emp = unlinkedEmployees.find(e => e.id === empId);
     if (emp) {
       const fullName = [emp.firstName, emp.lastName].filter(Boolean).join(" ");
-      const matchingRole = roles.find(r => r.toLowerCase() === emp.designation.toLowerCase());
+      const empDesig = emp.designation.toLowerCase();
+      const matchingRole = roles.find(r =>
+        r.toLowerCase() === empDesig ||
+        empDesig.includes(r.toLowerCase()) ||
+        r.toLowerCase().includes(empDesig)
+      );
       
       setForm(p => ({
         ...p,
@@ -406,7 +411,9 @@ const Users = () => {
               </div>
             )}
 
-            {/* Basic Info */}
+            {/* Hide the rest of the form in employee mode until an employee is selected */}
+            {(!( !editingId && accountMode === "employee" && selectedEmployeeId === "none")) && (
+            <>{/* Basic Info */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="text-sm font-medium mb-1 block">Full Name</label>
@@ -532,10 +539,12 @@ const Users = () => {
                 </table>
               </div>
             </div>
+          </>)}
+          
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowDialog(false)}>Cancel</Button>
-            <Button className="gradient-primary text-primary-foreground" onClick={handleSave} disabled={saving}>{saving ? "Saving..." : "Save"}</Button>
+            <Button className="gradient-primary text-primary-foreground" onClick={handleSave} disabled={saving || (!editingId && accountMode === "employee" && selectedEmployeeId === "none")}>{saving ? "Saving..." : "Save"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
