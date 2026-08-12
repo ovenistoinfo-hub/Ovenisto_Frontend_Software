@@ -582,6 +582,7 @@ const Employees = () => {
                       onChange={(e) => setForm(p => ({ ...p, rate: e.target.value ? Number(e.target.value) : 0 }))}
                     />
                   </div>
+                  {form.designation === "Rider" && (
                   <div className="space-y-1.5">
                     <Label>Delivery Commission (PKR / Ride)</Label>
                     <Input
@@ -592,6 +593,7 @@ const Employees = () => {
                       onChange={(e) => setForm(p => ({ ...p, commissionPerDelivery: e.target.value ? Number(e.target.value) : 0 }))}
                     />
                   </div>
+                  )}
                   <div className="space-y-1.5">
                     <Label>Pay Frequency <span className="text-destructive">*</span></Label>
                     <Select value={form.payFrequency ?? ""} onValueChange={(v) => setForm(p => ({ ...p, payFrequency: v }))}>
