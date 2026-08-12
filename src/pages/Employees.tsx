@@ -171,8 +171,11 @@ const Employees = () => {
       setActiveTab("basic");
       return false;
     }
-    if (list.some(e => e.id !== editingId && e.phone?.trim() === form.phone.trim())) {
-      toast.error(`Phone number "${form.phone}" is already assigned to another employee!`);
+    const cleanPhoneDigits = form.phone.replace(/\D/g, "");
+    const conflictingPhoneEmp = list.find(e => e.id !== editingId && (e.phone || "").replace(/\D/g, "") === cleanPhoneDigits);
+    if (conflictingPhoneEmp) {
+      const name = `${conflictingPhoneEmp.firstName} ${conflictingPhoneEmp.lastName || ""}`.trim();
+      toast.error(`Phone number "${form.phone}" is already registered to employee "${name}"!`);
       setActiveTab("basic");
       return false;
     }
@@ -183,8 +186,10 @@ const Employees = () => {
       return false;
     }
     const lowerEmail = cleanEmail.toLowerCase();
-    if (list.some(e => e.id !== editingId && e.email?.trim().toLowerCase() === lowerEmail)) {
-      toast.error(`Email "${cleanEmail}" is already assigned to another employee!`);
+    const conflictingEmailEmp = list.find(e => e.id !== editingId && (e.email || "").trim().toLowerCase() === lowerEmail);
+    if (conflictingEmailEmp) {
+      const name = `${conflictingEmailEmp.firstName} ${conflictingEmailEmp.lastName || ""}`.trim();
+      toast.error(`Email "${cleanEmail}" is already registered to employee "${name}"!`);
       setActiveTab("basic");
       return false;
     }
@@ -251,14 +256,16 @@ const Employees = () => {
       setActiveTab("biographical");
       return false;
     }
-    const cleanCnic = form.cnic.trim();
-    if (cleanCnic.length !== 15) {
+    const cleanCnicDigits = form.cnic.replace(/\D/g, "");
+    if (cleanCnicDigits.length !== 13) {
       toast.error("CNIC must be in format XXXXX-XXXXXXX-X (13 digits)");
       setActiveTab("biographical");
       return false;
     }
-    if (list.some(e => e.id !== editingId && e.cnic?.trim() === cleanCnic)) {
-      toast.error(`CNIC "${form.cnic}" is already assigned to another employee!`);
+    const conflictingCnicEmp = list.find(e => e.id !== editingId && (e.cnic || "").replace(/\D/g, "") === cleanCnicDigits);
+    if (conflictingCnicEmp) {
+      const name = `${conflictingCnicEmp.firstName} ${conflictingCnicEmp.lastName || ""}`.trim();
+      toast.error(`CNIC "${form.cnic}" is already registered to employee "${name}"!`);
       setActiveTab("biographical");
       return false;
     }
@@ -486,45 +493,66 @@ const Employees = () => {
                   </div>
                   <div className="space-y-1.5">
                     <Label>Phone <span className="text-destructive">*</span></Label>
-                    <Input
-                      list="emp-phone-list"
-                      value={form.phone}
-                      maxLength={12}
-                      onChange={(e) => setForm(p => ({ ...p, phone: formatPhone(e.target.value) }))}
-                      className={form.phone && list.some(e => e.id !== editingId && e.phone?.trim() === form.phone.trim()) ? "border-destructive" : ""}
-                    />
-                    <datalist id="emp-phone-list">
-                      {[...new Set(list.map(e => e.phone).filter(Boolean))].map(ph => <option key={ph} value={ph} />)}
-                    </datalist>
-                    {form.phone && list.some(e => e.id !== editingId && e.phone?.trim() === form.phone.trim()) && (
-                      <p className="text-[11px] text-destructive mt-0.5">⚠ This phone is already assigned to another employee</p>
-                    )}
+                    {(() => {
+                      const phDigits = (form.phone || "").replace(/\D/g, "");
+                      const phoneConflict = phDigits.length === 11 ? list.find(e => e.id !== editingId && (e.phone || "").replace(/\D/g, "") === phDigits) : null;
+                      return (
+                        <>
+                          <Input
+                            list="emp-phone-list"
+                            value={form.phone}
+                            maxLength={12}
+                            onChange={(e) => setForm(p => ({ ...p, phone: formatPhone(e.target.value) }))}
+                            className={phoneConflict ? "border-destructive focus-visible:ring-destructive" : ""}
+                          />
+                          <datalist id="emp-phone-list">
+                            {[...new Set(list.map(e => e.phone).filter(Boolean))].map(ph => <option key={ph} value={ph} />)}
+                          </datalist>
+                          {phoneConflict && (
+                            <p className="text-[11px] text-destructive mt-0.5 font-medium">
+                              ⚠ Phone number is already assigned to {phoneConflict.firstName} {phoneConflict.lastName || ""}
+                            </p>
+                          )}
+                        </>
+                      );
+                    })()}
                   </div>
                   <div className="space-y-1.5">
                     <Label>Email <span className="text-destructive">*</span></Label>
-                    <Input
-                      type="email"
-                      placeholder="name@ovenisto.com"
-                      list="emp-email-list"
-                      value={form.email ?? "@ovenisto.com"}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        if (!val) {
-                          setForm(p => ({ ...p, email: "@ovenisto.com" }));
-                        } else if (!val.includes("@") && !val.endsWith("@ovenisto.com")) {
-                          setForm(p => ({ ...p, email: `${val}@ovenisto.com` }));
-                        } else {
-                          setForm(p => ({ ...p, email: val }));
-                        }
-                      }}
-                      className={form.email && list.some(e => e.id !== editingId && e.email?.toLowerCase() === form.email?.toLowerCase()) ? "border-destructive" : ""}
-                    />
-                    <datalist id="emp-email-list">
-                      {[...new Set(list.map(e => e.email).filter(Boolean))].map(em => <option key={em} value={em} />)}
-                    </datalist>
-                    {form.email && list.some(e => e.id !== editingId && e.email?.toLowerCase() === form.email?.toLowerCase()) && (
-                      <p className="text-[11px] text-destructive mt-0.5">⚠ This email is already assigned to another employee</p>
-                    )}
+                    {(() => {
+                      const cleanEm = (form.email || "").trim().toLowerCase();
+                      const isValidEm = cleanEm && cleanEm !== "@ovenisto.com" && !cleanEm.startsWith("@");
+                      const emailConflict = isValidEm ? list.find(e => e.id !== editingId && (e.email || "").trim().toLowerCase() === cleanEm) : null;
+                      return (
+                        <>
+                          <Input
+                            type="email"
+                            placeholder="name@ovenisto.com"
+                            list="emp-email-list"
+                            value={form.email ?? "@ovenisto.com"}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              if (!val) {
+                                setForm(p => ({ ...p, email: "@ovenisto.com" }));
+                              } else if (!val.includes("@") && !val.endsWith("@ovenisto.com")) {
+                                setForm(p => ({ ...p, email: `${val}@ovenisto.com` }));
+                              } else {
+                                setForm(p => ({ ...p, email: val }));
+                              }
+                            }}
+                            className={emailConflict ? "border-destructive focus-visible:ring-destructive" : ""}
+                          />
+                          <datalist id="emp-email-list">
+                            {[...new Set(list.map(e => e.email).filter(Boolean))].map(em => <option key={em} value={em} />)}
+                          </datalist>
+                          {emailConflict && (
+                            <p className="text-[11px] text-destructive mt-0.5 font-medium">
+                              ⚠ Email is already assigned to {emailConflict.firstName} {emailConflict.lastName || ""}
+                            </p>
+                          )}
+                        </>
+                      );
+                    })()}
                   </div>
                   <div className="space-y-1.5">
                     <Label>Photograph <span className="text-destructive">*</span></Label>
@@ -647,19 +675,38 @@ const Employees = () => {
                   </div>
                   <div className="space-y-1.5">
                     <Label>CNIC <span className="text-destructive">*</span></Label>
-                    <Input
-                      placeholder="42101-1234567-1"
-                      value={form.cnic ?? ""}
-                      maxLength={15}
-                      onChange={(e) => setForm(p => ({ ...p, cnic: formatCNIC(e.target.value) }))}
-                      className={form.cnic && form.cnic.length > 0 && form.cnic.length < 15 ? "border-warning" : form.cnic?.length === 15 ? "border-success" : ""}
-                    />
-                    {form.cnic && form.cnic.length > 0 && form.cnic.length < 15 && (
-                      <p className="text-[11px] text-warning mt-0.5">Format: XXXXX-XXXXXXX-X</p>
-                    )}
-                    {form.cnic?.length === 15 && (
-                      <p className="text-[11px] text-success mt-0.5">✓ Valid format</p>
-                    )}
+                    {(() => {
+                      const cnicDigits = (form.cnic || "").replace(/\D/g, "");
+                      const cnicConflict = cnicDigits.length === 13 ? list.find(e => e.id !== editingId && (e.cnic || "").replace(/\D/g, "") === cnicDigits) : null;
+                      return (
+                        <>
+                          <Input
+                            placeholder="42101-1234567-1"
+                            value={form.cnic ?? ""}
+                            maxLength={15}
+                            onChange={(e) => setForm(p => ({ ...p, cnic: formatCNIC(e.target.value) }))}
+                            className={
+                              cnicConflict
+                                ? "border-destructive focus-visible:ring-destructive"
+                                : form.cnic && form.cnic.length > 0 && form.cnic.length < 15
+                                ? "border-warning"
+                                : form.cnic?.length === 15
+                                ? "border-success"
+                                : ""
+                            }
+                          />
+                          {cnicConflict ? (
+                            <p className="text-[11px] text-destructive mt-0.5 font-medium">
+                              ⚠ CNIC is already assigned to {cnicConflict.firstName} {cnicConflict.lastName || ""}
+                            </p>
+                          ) : form.cnic && form.cnic.length > 0 && form.cnic.length < 15 ? (
+                            <p className="text-[11px] text-warning mt-0.5">Format: XXXXX-XXXXXXX-X (13 digits)</p>
+                          ) : form.cnic?.length === 15 ? (
+                            <p className="text-[11px] text-success mt-0.5">✓ Valid format</p>
+                          ) : null}
+                        </>
+                      );
+                    })()}
                   </div>
                 </div>
               </TabsContent>
