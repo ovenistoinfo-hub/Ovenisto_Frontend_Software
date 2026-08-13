@@ -11,6 +11,7 @@ export interface RiderRecord {
   // from dashboard
   todayOrders?: number;
   todaySales?: number;
+  todayCommissions?: number;
   pendingCash?: number;
   collectedCash?: number;
 }
@@ -80,7 +81,7 @@ export const deliveryService = {
     return res.data;
   },
 
-  async getMyStats(): Promise<{ rider: RiderRecord; todayOrders: number; todaySales: number; totalOrders: number; totalSales: number; pendingCash: number }> {
+  async getMyStats(): Promise<{ rider: RiderRecord; todayOrders: number; todaySales: number; todayCommissions: number; totalOrders: number; totalSales: number; totalCommissions: number; pendingCash: number }> {
     const res = await api.get<{ success: boolean; data: any }>('/delivery/my-stats');
     return res.data;
   },
@@ -102,6 +103,6 @@ export const deliveryService = {
 
   async getPendingDeliveryOrders(): Promise<PendingDeliveryOrder[]> {
     const res = await api.get<{ success: boolean; data: PendingDeliveryOrder[] }>('/orders?type=DELIVERY&limit=50');
-    return (res.data || []).filter(o => !o.riderId);
+    return (res.data || []).filter(o => !o.riderId && o.status !== 'cancelled' && o.status !== 'CANCELLED');
   },
 };

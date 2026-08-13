@@ -15,6 +15,9 @@ interface PayslipData {
   rewards: number;
   rewardNote?: string;
   advanceAmount?: number;
+  completedDeliveries?: number;
+  commissionRate?: number;
+  totalDeliveryCommissions?: number;
   finalPay: number;
   isReceipt: boolean; // true = already-disbursed receipt, false = calculated preview
   transactionId?: string;
@@ -78,6 +81,12 @@ export function generatePayslipPDF(data: PayslipData) {
     [data.penaltiesLabel ?? "Penalties (Absents)", `-Rs.${data.penalties.toLocaleString()}`],
     ["Rewards / Bonuses", `+Rs.${data.rewards.toLocaleString()}`],
   ];
+  if (data.totalDeliveryCommissions && data.totalDeliveryCommissions > 0) {
+    const ridesText = data.completedDeliveries && data.completedDeliveries > 0
+      ? ` (${data.completedDeliveries} rides${data.commissionRate ? ` @ Rs.${data.commissionRate}` : ""})`
+      : "";
+    rows.push([`Delivery Commissions${ridesText}`, `+Rs.${data.totalDeliveryCommissions.toLocaleString()}`]);
+  }
   if (data.advanceAmount && data.advanceAmount > 0) {
     rows.push(["Less Salary Advance", `-Rs.${data.advanceAmount.toLocaleString()}`]);
   }

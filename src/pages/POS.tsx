@@ -37,7 +37,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "
 import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
 import { Link, useLocation } from "react-router-dom";
-import { cn, formatPakistaniPhone } from "@/lib/utils";
+import { cn, formatPakistaniPhone, isValidPakistaniPhone } from "@/lib/utils";
 import { api } from "@/services/api";
 import { generateInvoicePDF } from "@/lib/generate-invoice-pdf";
 import { useData } from "@/contexts/DataContext";
@@ -99,8 +99,8 @@ const quickDenominations = [10, 20, 50, 100, 500, 1000];
 
 // Roles that can populate the "Waiter" (serving staff) selector — Waiters only.
 const WAITER_ASSIGNMENT_ROLES = ['Waiter', 'waiter'];
-// Cancellation-request "Send Approval Request To" — only managers/admins can approve.
-const CANCEL_APPROVER_ROLES = ['Super Admin', 'Admin', 'Manager'];
+// Cancellation-request "Send Approval Request To" — only branch admin and manager can approve.
+const CANCEL_APPROVER_ROLES = ['Admin', 'Manager'];
 // Cancellation-request "Responsible Person" — rank-and-file staff only, never a
 // manager/admin (those are the approver pool above, kept mutually exclusive).
 const CANCEL_RESPONSIBLE_ROLES = ['Cashier', 'Kitchen Staff', 'Kitchen Manager', 'Waiter'];
@@ -1260,7 +1260,7 @@ const POS = () => {
     setTableNumber(null);
     setDeliveryAddress("");
     setDeliveryPhone("");
-    setRider("Self Pickup");
+    setRider("Unassigned");
     setSelectedRiderId("");
     setSelectedCustomer("");
     setLoadedAdvancePayment(0);
@@ -1305,6 +1305,10 @@ const POS = () => {
         toast.error("Customer phone number is required!");
         return false;
       }
+      if (!isValidPakistaniPhone(activePhone)) {
+        toast.error("Customer phone number must be 11 digits (03XX-XXXXXXX)!");
+        return false;
+      }
     }
     return true;
   };
@@ -1344,6 +1348,10 @@ const POS = () => {
       }
       if (!activePhone || !activePhone.trim()) {
         toast.error("Customer phone number is required!");
+        return;
+      }
+      if (!isValidPakistaniPhone(activePhone)) {
+        toast.error("Customer phone number must be 11 digits (03XX-XXXXXXX)!");
         return;
       }
     }
@@ -1981,15 +1989,21 @@ const POS = () => {
               </div>
               <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
                 <Phone className="h-4 w-4 text-muted-foreground shrink-0" />
-                <Input value={deliveryPhone} onChange={(e) => setDeliveryPhone(e.target.value)} placeholder="Phone number *" className={cn("h-7 sm:h-8 text-xs flex-1", !((selectedCustomerData as any)?.phone || deliveryPhone.trim()) && "border-amber-500/40 focus:border-amber-500")} />
+                <Input
+                  value={deliveryPhone}
+                  maxLength={12}
+                  onChange={(e) => setDeliveryPhone(formatPakistaniPhone(e.target.value))}
+                  placeholder="Phone number (11 Digits) *"
+                  className={cn("h-7 sm:h-8 text-xs flex-1 font-mono", !((selectedCustomerData as any)?.phone || deliveryPhone.trim()) && "border-amber-500/40 focus:border-amber-500")}
+                />
                 <Select value={selectedRiderId || "none"} onValueChange={val => {
-                  if (val === "none") { setSelectedRiderId(""); setRider("Self Pickup"); return; }
+                  if (val === "none") { setSelectedRiderId(""); setRider("Unassigned"); return; }
                   const r = apiRiders.find(r => r.id === val);
                   if (r) { setSelectedRiderId(r.id); setRider(r.name); }
                 }}>
                   <SelectTrigger className="w-44 h-8 text-xs"><SelectValue placeholder="Assign Rider" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="none">Self Pickup / Unassigned</SelectItem>
+                    <SelectItem value="none">Assign Rider</SelectItem>
                     {apiRiders.map((r) => (
                       <SelectItem key={r.id} value={r.id}>{r.name}{r.phone ? ` — ${r.phone}` : ""}</SelectItem>
                     ))}

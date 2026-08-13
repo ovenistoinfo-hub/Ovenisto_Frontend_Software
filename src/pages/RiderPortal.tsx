@@ -1,5 +1,5 @@
 import { useState, useCallback } from "react";
-import { Bike, MapPin, Phone, Clock, CheckCircle2, Truck, RotateCcw, RefreshCw, Package, TrendingUp, Banknote, Wallet, Bell, Navigation, ArrowUpRight, ShieldAlert, Loader2, Info } from "lucide-react";
+import { Bike, MapPin, Phone, Clock, CheckCircle2, Truck, RotateCcw, RefreshCw, Package, TrendingUp, Banknote, Wallet, Bell, Navigation, ArrowUpRight, ShieldAlert, Loader2, Info, Coins, Zap } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -35,7 +35,7 @@ const RiderPortal = () => {
   const [rider, setRider]                 = useState<RiderRecord | null>(null);
   const [assignments, setAssignments]     = useState<AssignmentRecord[]>([]);
   const [pendingOrders, setPendingOrders] = useState<PendingDeliveryOrder[]>([]);
-  const [stats, setStats]                 = useState<{ todayOrders: number; todaySales: number; totalOrders: number; totalSales: number; pendingCash: number } | null>(null);
+  const [stats, setStats]                 = useState<{ todayOrders: number; todaySales: number; todayCommissions?: number; totalOrders: number; totalSales: number; totalCommissions?: number; pendingCash: number } | null>(null);
   const [loading, setLoading]             = useState(true);
   const [actionIds, setActionIds]         = useState<Set<string>>(new Set());
 
@@ -195,14 +195,12 @@ const RiderPortal = () => {
               <Wallet className="h-5 w-5" />
             </div>
             <div>
-              <p className="text-xs font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">
-                🏍️ Delivery Collections in Hand
+              <p className="text-xs font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider flex items-center gap-1.5">
+                <Wallet className="h-3.5 w-3.5" />
+                Delivery Collections
               </p>
               <p className="text-xl font-black text-foreground font-mono">
                 {currency} {(myActiveCash?.totalExpected || 0).toLocaleString()}
-              </p>
-              <p className="text-[11px] text-muted-foreground">
-                {myActiveCash?.orderCount || 0} orders collected • Hand over these collections to the Manager to settle in Cash Hub.
               </p>
             </div>
           </div>
@@ -214,10 +212,7 @@ const RiderPortal = () => {
 
       {/* Mobile Ergonomic Quick Stats */}
       {stats && (() => {
-        const completedAssignmentsToday = assignments.filter(a => a.status === 'delivered');
-        const todayCommissions = completedAssignmentsToday.reduce(
-          (sum, a) => sum + Number(a.commissionEarned ?? 0), 0
-        );
+        const todayCommissions = stats.todayCommissions ?? assignments.filter(a => a.status === 'delivered').reduce((sum, a) => sum + Number(a.commissionEarned ?? 0), 0);
 
         return (
           <div className="grid grid-cols-2 gap-2.5">
@@ -239,7 +234,10 @@ const RiderPortal = () => {
 
             <Card className="shadow-sm border-border bg-card col-span-2">
               <CardContent className="p-3 text-center space-y-0.5">
-                <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">🏍️ Today's Earned Commissions</p>
+                <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider flex items-center justify-center gap-1.5">
+                  <Coins className="h-3.5 w-3.5 text-amber-500" />
+                  Today's Earned Commissions
+                </p>
                 <p className="text-xl font-black text-emerald-500">{currency} {todayCommissions.toLocaleString()}</p>
               </CardContent>
             </Card>
@@ -302,8 +300,8 @@ const RiderPortal = () => {
                       className="w-full bg-amber-500 hover:bg-amber-600 text-black font-extrabold text-xs h-10 gap-1.5 shadow-md active:scale-95 transition-all mt-1"
                       disabled={claimingId === o.id}
                       onClick={() => claimOrder(o.id, o.orderNumber)}>
-                      {claimingId === o.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-                      {claimingId === o.id ? "CLAIMING ORDER..." : "⚡ ACCEPT & CLAIM THIS ORDER"}
+                      {claimingId === o.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4 fill-black text-black" />}
+                      {claimingId === o.id ? "CLAIMING ORDER..." : "ACCEPT & CLAIM THIS ORDER"}
                     </Button>
                   </div>
                 ))}

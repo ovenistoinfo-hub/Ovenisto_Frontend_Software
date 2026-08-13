@@ -1,4 +1,4 @@
-import { useState, useMemo, Fragment } from "react";
+import React, { useState, useMemo, Fragment } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { employeeService, type EmployeeRecord } from "@/services/employee.service";
 import { attendanceService, type AttendanceRecord } from "@/services/attendance.service";
@@ -726,7 +726,7 @@ const Payroll = () => {
                     </TableHeader>
                     <TableBody>
                       {filteredRows.map(row => (
-                        <React.Fragment key={row.employee.id}>
+                        <Fragment key={row.employee.id}>
                         <TableRow className="hover:bg-muted/30 transition-colors">
                           <TableCell className="font-medium">
                             <div className="flex items-center gap-2.5">
@@ -898,7 +898,7 @@ const Payroll = () => {
                             </TableCell>
                           </TableRow>
                         )}
-                        </React.Fragment>
+                        </Fragment>
                       ))}
                     </TableBody>
                   </Table>
@@ -1181,6 +1181,19 @@ const Payroll = () => {
                   </TableCell>
                   <TableCell className="text-xs text-right text-success">+Rs. {(selectedSlip?.rewards ?? 0).toLocaleString()}</TableCell>
                 </TableRow>
+                {selectedSlip && (selectedSlip.totalDeliveryCommissions ?? 0) > 0 && (
+                  <TableRow>
+                    <TableCell className="text-xs">
+                      Delivery Commissions
+                      {(selectedSlip.completedDeliveries ?? 0) > 0 && (
+                        <span className="text-[10px] text-muted-foreground ml-1">
+                          ({selectedSlip.completedDeliveries} rides{selectedSlip.commissionRate ? ` @ Rs. ${selectedSlip.commissionRate}` : ""})
+                        </span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-xs text-right text-emerald-600 dark:text-emerald-400 font-semibold">+Rs. {(selectedSlip.totalDeliveryCommissions ?? 0).toLocaleString()}</TableCell>
+                  </TableRow>
+                )}
                 {selectedSlip && selectedSlip.advanceDeducted > 0 && (
                   <TableRow>
                     <TableCell className="text-xs">
@@ -1226,6 +1239,9 @@ const Payroll = () => {
               rewards: selectedSlip.rewards,
               rewardNote: selectedSlip.rewardNote || undefined,
               advanceAmount: selectedSlip.advanceDeducted,
+              completedDeliveries: selectedSlip.completedDeliveries,
+              commissionRate: selectedSlip.commissionRate,
+              totalDeliveryCommissions: selectedSlip.totalDeliveryCommissions,
               finalPay: selectedSlip.finalPay,
               isReceipt: false,
             })}>
@@ -1293,6 +1309,19 @@ const Payroll = () => {
                   </TableCell>
                   <TableCell className="text-xs text-right text-success">+Rs. {(selectedLogSlip?.rewards ?? 0).toLocaleString()}</TableCell>
                 </TableRow>
+                {selectedLogSlip && (selectedLogSlip.totalDeliveryCommissions ?? 0) > 0 && (
+                  <TableRow>
+                    <TableCell className="text-xs">
+                      Delivery Commissions
+                      {(selectedLogSlip.completedDeliveries ?? 0) > 0 && (
+                        <span className="text-[10px] text-muted-foreground ml-1">
+                          ({selectedLogSlip.completedDeliveries} rides)
+                        </span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-xs text-right text-emerald-600 dark:text-emerald-400 font-semibold">+Rs. {(selectedLogSlip.totalDeliveryCommissions ?? 0).toLocaleString()}</TableCell>
+                  </TableRow>
+                )}
                 {effectiveAdvanceAmount > 0 && !selectedLogSlip?.isAdvance && (
                   <TableRow>
                     <TableCell className="text-xs">
@@ -1364,6 +1393,8 @@ const Payroll = () => {
                 rewards: Number(selectedLogSlip.rewards),
                 rewardNote: selectedLogSlip.notes || undefined,
                 advanceAmount: effectiveAdvanceAmount || undefined,
+                completedDeliveries: selectedLogSlip.completedDeliveries,
+                totalDeliveryCommissions: Number(selectedLogSlip.totalDeliveryCommissions ?? 0),
                 finalPay: Number(selectedLogSlip.finalPay),
                 isReceipt: true,
                 transactionId: selectedLogSlip.id,

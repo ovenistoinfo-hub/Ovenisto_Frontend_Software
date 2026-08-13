@@ -286,8 +286,8 @@ const OrderStatusBoard = () => {
 
     const assignedKitchen = kitchens.find(k => (k.status === "active" || !k.status) && k.assignedCategories?.includes(categoryName));
 
-    // If no kitchen is assigned to this category (e.g. drinks/beverages), auto-ready!
-    if (!assignedKitchen) return "ready";
+    // If no kitchen is specifically assigned to this category, return order's overall status!
+    if (!assignedKitchen) return order.status === "preparing" ? "preparing" : order.status === "ready" ? "ready" : "pending";
 
     if (order.kitchenProgress && Array.isArray(order.kitchenProgress)) {
       const prog = order.kitchenProgress.find((p: any) => p.kitchenId === assignedKitchen.id);
