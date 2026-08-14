@@ -17,6 +17,7 @@ export interface OrderItemRecord {
   notes: string | null;
   categoryName: string | null;
   status: string; // "active" | "cancelled"
+  kitchenStatus?: string;
 }
 
 export interface OrderRecord {
@@ -32,6 +33,7 @@ export interface OrderRecord {
   tax: number;
   total: number;
   status: string; // "pending", "preparing", "ready", "completed", "cancelled", "scheduled"
+  kitchenStatus?: string;
   paymentMethod: string | null;
   date: string;
   time: string | null;

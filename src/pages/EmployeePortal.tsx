@@ -195,17 +195,22 @@ export default function EmployeePortal() {
   // Settlement History for staff member
   const { data: mySettlementHistory } = useQuery({
     queryKey: ["my-settlement-history", user?.id],
-    queryFn: () => cashSettlementService.getHistory({ staffId: user!.id, limit: 100 }),
+    queryFn: () => {
+      api.clearCache(`/cash-settlements/history`);
+      return cashSettlementService.getHistory({ staffId: user!.id, limit: 100 });
+    },
     enabled: !!user?.id,
   });
 
   const refetchMyActiveCash = () => {
     if (user?.id) {
       api.clearCache(`/cash-settlements/staff/${user.id}/active`);
+      api.clearCache(`/cash-settlements/history`);
       refetchActiveCash();
       qc.invalidateQueries({ queryKey: ["my-settlement-history", user?.id] });
     }
   };
+
 
   useModuleEvents(["cashSettlement:created", "order:created", "order:updated", "delivery:status_updated"], refetchMyActiveCash);
   useVisiblePolling(refetchMyActiveCash, 30000);
