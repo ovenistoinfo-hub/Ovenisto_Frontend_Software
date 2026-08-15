@@ -41,6 +41,7 @@ export interface MenuItemRecord {
   mealTypeIds: string[];
   variants: MenuItemVariant[];
   modifiers?: MenuItemModifierRecord[];
+  recipes?: RecipeIngredient[];
 }
 
 export interface MenuItemModifierRecord {

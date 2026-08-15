@@ -293,11 +293,12 @@ const Users = () => {
 
   const handleDelete = async (id: string, name: string) => {
     if (isManager) return;
-    if (!confirm(`Deactivate user "${name}"?`)) return;
+    if (!confirm(`Permanently delete user "${name}" from database? This action cannot be undone.`)) return;
     try {
       await userService.deleteUser(id);
-      toast.success("User deactivated");
+      toast.success("User permanently deleted");
       queryClient.invalidateQueries({ queryKey: ["users"] });
+      queryClient.invalidateQueries({ queryKey: ["unlinked-employees"] });
     } catch (err: any) {
       toast.error(err.message || "Failed to delete user");
     }

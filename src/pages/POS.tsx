@@ -2,11 +2,14 @@ import React, { useState, useMemo, useEffect, useRef, useCallback } from "react"
 import type { OrderItem, Order, OrderType, CustomerType, OrderModificationLog } from "@/data/mock-data";
 import { orderService, type OrderRecord } from "@/services/order.service";
 import { cancellationRequestService, type CancellationRequestRecord } from "@/services/cancellationRequest.service";
-import { menuService } from "@/services/menu.service";
+import { menuService, type RecipeIngredient } from "@/services/menu.service";
+import { calculateFoodAvailability } from "@/utils/foodAvailability";
 import { customerService, type CustomerRecord } from "@/services/customer.service";
 import { userService } from "@/services/user.service";
 import { settingsService, type SettingsRecord } from "@/services/settings.service";
+import { stockService, type ProductionStockRecord } from "@/services/stock.service";
 import { inventoryService, type IngredientRecord } from "@/services/inventory.service";
+import { warehouseService, type WarehouseStockRecord } from "@/services/warehouse.service";
 import { shiftService, type ShiftRecord } from "@/services/shift.service";
 import { deliveryService, type RiderRecord } from "@/services/delivery.service";
 import { tableService, type TableRecord } from "@/services/table.service";
@@ -31,7 +34,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Progress } from "@/components/ui/progress";
@@ -200,6 +203,7 @@ const POS = () => {
         ...v,
         price: Number(v.price),
       })),
+      recipes: item.recipes || [],
     }));
   }, [apiMenuItems, localFoodMenuItems]);
 
@@ -675,7 +679,7 @@ const POS = () => {
   useEffect(() => {
     if (orderType === "Delivery") {
       deliveryService.getRiders()
-        .then(riders => setApiRiders(riders.filter(r => r.status !== "off_duty" && (r.activeDeliveries || 0) < 5)))
+        .then(riders => setApiRiders(riders.filter(r => r.status !== "offline" && (r.activeDeliveries || 0) < 5)))
         .catch(() => {});
     }
   }, [orderType]);
@@ -705,8 +709,8 @@ const POS = () => {
     if (!activeShift) return {
       total: 0, cash: 0, card: 0, online: 0, nonCash: 0, count: 0,
       byMethod: createMethodMap(),
-      pos: { total: 0, cash: 0, nonCash: 0, count: 0, byMethod: createMethodMap() },
-      waiter: { total: 0, cash: 0, nonCash: 0, count: 0, byMethod: createMethodMap(), orders: [] as any[], pendingOrders: [] as any[], pendingTotal: 0, pendingCount: 0 }
+      pos: { total: 0, cash: 0, card: 0, online: 0, nonCash: 0, count: 0, byMethod: createMethodMap() },
+      waiter: { total: 0, cash: 0, card: 0, online: 0, nonCash: 0, count: 0, byMethod: createMethodMap(), orders: [] as any[], pendingOrders: [] as any[], pendingTotal: 0, pendingCount: 0 }
     };
 
     const shiftStartMs = new Date(activeShift.openedAt).getTime();
@@ -955,8 +959,106 @@ const POS = () => {
       }));
     }
     return ingredients.filter((i: any) => i.status === "active" && i.currentStock <= i.lowStockLevel);
-  }, [apiLowStockItems, ingredients]
-  );
+  }, [apiLowStockItems, ingredients]);
+
+  // Fetch the kitchen warehouse for this outlet to get per-warehouse ingredient stock
+  // (same stock the backend order validator checks — must match to avoid false availability signals)
+  const { data: kitchenWarehouses = [] } = useQuery({
+    queryKey: ["kitchen-warehouses", user?.outletId],
+    queryFn: () => warehouseService.getAll({ type: 'KITCHEN', outletId: user?.outletId ?? undefined }),
+    staleTime: 60000,
+    enabled: !!user?.outletId,
+  });
+
+  const kitchenWarehouseId = kitchenWarehouses.length > 0 ? kitchenWarehouses[0].id : null;
+
+  const { data: kitchenWarehouseStock = [] } = useQuery<WarehouseStockRecord[]>({
+    queryKey: ["kitchen-warehouse-stock", kitchenWarehouseId],
+    queryFn: () => warehouseService.getStock(kitchenWarehouseId!),
+    staleTime: 30000,
+    enabled: !!kitchenWarehouseId,
+  });
+
+  const ingredientStockMap = useMemo(() => {
+    const map = new Map<string, number>();
+    if (kitchenWarehouseStock.length > 0) {
+      // Use kitchen warehouse-level stock (same as backend order validation)
+      for (const ws of kitchenWarehouseStock) {
+        if (ws?.ingredient?.id) map.set(ws.ingredient.id, Number(ws.currentStock ?? 0));
+      }
+    } else {
+      // Fallback to global ingredient stock if no kitchen warehouse exists
+      const list = ingredients || [];
+      for (const ing of list || []) {
+        if (ing?.id) map.set(ing.id, Number(ing.currentStock ?? 0));
+      }
+    }
+    return map;
+  }, [kitchenWarehouseStock, ingredients]);
+
+  const { data: apiProductionStock = [] } = useQuery<ProductionStockRecord[]>({
+    queryKey: ["production-stock"],
+    queryFn: () => stockService.getProductionStock(),
+    staleTime: 30000,
+  });
+
+  const productionStockMap = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const item of apiProductionStock || []) {
+      if (item?.productionItemId) {
+        const existing = map.get(item.productionItemId) || 0;
+        map.set(item.productionItemId, existing + Number(item.currentStock ?? 0));
+      }
+    }
+    return map;
+  }, [apiProductionStock]);
+
+  const lowStockFoodItems = useMemo(() => {
+    const list: {
+      id: string;
+      foodName: string;
+      sizeName?: string;
+      variantId?: string | null;
+      availableQuantity: number;
+      status: 'low' | 'out_of_stock';
+      limitingIngredient?: string;
+    }[] = [];
+
+    for (const item of foodMenuItems) {
+      const recipes: RecipeIngredient[] = (item as any).recipes || [];
+      if (recipes.length === 0) continue;
+
+      const variants = (item as any).variants || [];
+      if (variants.length > 0) {
+        for (const v of variants) {
+          const avail = calculateFoodAvailability(recipes, v.id, ingredientStockMap, productionStockMap);
+          if (avail.isRestricted && (avail.status === 'low' || avail.status === 'out_of_stock')) {
+            list.push({
+              id: `${item.id}-${v.id}`,
+              foodName: item.name,
+              sizeName: v.name,
+              variantId: v.id,
+              availableQuantity: avail.availableQuantity,
+              status: avail.status,
+              limitingIngredient: avail.limitingIngredient,
+            });
+          }
+        }
+      } else {
+        const avail = calculateFoodAvailability(recipes, null, ingredientStockMap, productionStockMap);
+        if (avail.isRestricted && (avail.status === 'low' || avail.status === 'out_of_stock')) {
+          list.push({
+            id: item.id,
+            foodName: item.name,
+            availableQuantity: avail.availableQuantity,
+            status: avail.status,
+            limitingIngredient: avail.limitingIngredient,
+          });
+        }
+      }
+    }
+    return list;
+  }, [foodMenuItems, ingredientStockMap, productionStockMap]);
 
   const activeStaff = useMemo(() => {
     if (!apiStaff || apiStaff.length === 0) return [];
@@ -1141,6 +1243,11 @@ const POS = () => {
     const itemModifiers = (item as any).modifiers?.filter((m: any) => m.status === "active") || [];
     const hasModifiers = itemModifiers.length > 0;
     if (!hasVariants && !hasModifiers) {
+      const avail = calculateFoodAvailability((item as any).recipes || [], null, ingredientStockMap, productionStockMap);
+      if (avail.isRestricted && avail.availableQuantity === 0) {
+        toast.error(`Cannot add ${item.name} - Out of stock based on ingredient stock`);
+        return;
+      }
       const itemPrice = resolvePrice(item, orderType);
       setCart(prev => {
         const existing = prev.find(c => c.name === item.name && (!c.modifiers || c.modifiers.length === 0));
@@ -1164,14 +1271,29 @@ const POS = () => {
 
   const confirmAddToCart = () => {
     if (!pendingItem) return;
+    const variants = (pendingItem as any).variants || [];
+    const selectedVariantObj = selectedVariant ? variants.find((v: any) => v.name === selectedVariant) : null;
+
+    if (selectedVariantObj) {
+      const avail = calculateFoodAvailability((pendingItem as any).recipes || [], selectedVariantObj.id, ingredientStockMap, productionStockMap);
+      if (avail.isRestricted && avail.availableQuantity === 0) {
+        toast.error(`${pendingItem.name} (${selectedVariantObj.name}) is out of stock based on ingredient stock`);
+        return;
+      }
+    } else if (variants.length === 0) {
+      const avail = calculateFoodAvailability((pendingItem as any).recipes || [], null, ingredientStockMap, productionStockMap);
+      if (avail.isRestricted && avail.availableQuantity === 0) {
+        toast.error(`${pendingItem.name} is out of stock based on ingredient stock`);
+        return;
+      }
+    }
+
     const itemMods: any[] = (pendingItem as any).modifiers || modifiers;
     const modifiersCost = selectedModifiers.reduce((sum, mId) => {
       const mod = itemMods.find((m: any) => m.id === mId) || modifiers.find((m) => m.id === mId);
       return sum + (Number(mod?.price) || 0);
     }, 0);
 
-    const variants = (pendingItem as any).variants || [];
-    const selectedVariantObj = selectedVariant ? variants.find((v: any) => v.name === selectedVariant) : null;
     const variantPrice = selectedVariantObj ? resolvePrice(selectedVariantObj, orderType) : resolvePrice(pendingItem, orderType);
     const variantLabel = selectedVariant ? ` (${selectedVariant})` : "";
 
@@ -1737,11 +1859,11 @@ const POS = () => {
               <span className="hidden lg:inline">🧾 My Collection:</span> {effectiveSettings.currency} {myActiveCash!.totalExpected.toLocaleString()}
             </Button>
           )}
-          {lowStockItems.length > 0 && (
+          {(lowStockItems.length > 0 || lowStockFoodItems.length > 0) && (
             <Button variant="outline" size="sm" className="h-8 text-xs rounded-lg gap-1 shrink-0 px-2 border-destructive/30 text-destructive hover:bg-destructive/5" onClick={() => setShowLowStock(true)}>
               <AlertTriangle className="h-3.5 w-3.5" />
               <span className="hidden lg:inline">Low Stock</span>
-              <Badge className="h-5 px-1 text-[10px] bg-destructive text-destructive-foreground">{lowStockItems.length}</Badge>
+              <Badge className="h-5 px-1 text-[10px] bg-destructive text-destructive-foreground">{lowStockItems.length + lowStockFoodItems.length}</Badge>
             </Button>
           )}
         </div>
@@ -2253,16 +2375,33 @@ const POS = () => {
                         <>
                           <p className="text-xs font-medium text-muted-foreground mb-2">Select Size:</p>
                           <div className="flex flex-wrap gap-2 mb-3">
-                            {(item as any).variants.map((v: any) => (
-                              <button key={v.name} onClick={() => setSelectedVariant(selectedVariant === v.name ? null : v.name)} className={cn(
-                                "px-3 py-2 rounded-lg border text-xs font-medium transition-all",
-                                selectedVariant === v.name
-                                  ? "border-primary bg-primary/10 text-primary ring-1 ring-primary"
-                                  : "border-border hover:border-primary/50 hover:bg-muted/50"
-                              )}>
-                                {v.name} <span className="text-muted-foreground ml-1">{effectiveSettings.currency}{resolvePrice(v, orderType)}</span>
-                              </button>
-                            ))}
+                            {(item as any).variants.map((v: any) => {
+                              const vAvail = calculateFoodAvailability((item as any).recipes || [], v.id, ingredientStockMap, productionStockMap);
+                              const isOutOfStock = vAvail.isRestricted && vAvail.availableQuantity === 0;
+                              return (
+                                <button
+                                  key={v.name}
+                                  disabled={isOutOfStock}
+                                  onClick={() => {
+                                    if (isOutOfStock) {
+                                      toast.error(`${item.name} (${v.name}) is out of stock based on ingredient stock`);
+                                      return;
+                                    }
+                                    setSelectedVariant(selectedVariant === v.name ? null : v.name);
+                                  }}
+                                  className={cn(
+                                    "px-3 py-2 rounded-lg border text-xs font-medium transition-all flex items-center gap-1",
+                                    selectedVariant === v.name
+                                      ? "border-primary bg-primary/10 text-primary ring-1 ring-primary"
+                                      : "border-border hover:border-primary/50 hover:bg-muted/50",
+                                    isOutOfStock && "opacity-50 cursor-not-allowed bg-muted text-muted-foreground line-through hover:border-border hover:bg-muted"
+                                  )}
+                                >
+                                  {v.name} <span className="text-muted-foreground ml-1">{effectiveSettings.currency}{resolvePrice(v, orderType)}</span>
+                                  {isOutOfStock && <span className="text-[10px] text-destructive font-extrabold ml-1">(Out of Stock)</span>}
+                                </button>
+                              );
+                            })}
                           </div>
                         </>
                       )}
@@ -3457,39 +3596,113 @@ const POS = () => {
 
       {/* Low Stock Sheet */}
       <Sheet open={showLowStock} onOpenChange={setShowLowStock}>
-        <SheetContent side="right" className="w-full sm:w-[380px] p-0">
+        <SheetContent side="right" className="w-full sm:w-[420px] p-0 flex flex-col">
           <div className="p-4 border-b bg-destructive/5">
-            <h2 className="font-bold text-lg flex items-center gap-2"><AlertTriangle className="h-5 w-5 text-destructive" />Low Stock Alert</h2>
-            <p className="text-xs text-muted-foreground">{lowStockItems.length} ingredients below minimum level</p>
+            <h2 className="font-bold text-lg flex items-center gap-2"><AlertTriangle className="h-5 w-5 text-destructive" />Low & Out of Stock Alert</h2>
+            <p className="text-xs text-muted-foreground">
+              {lowStockFoodItems.length} food item sizes & {lowStockItems.length} ingredients low/out of stock
+            </p>
           </div>
-          <div className="p-4 space-y-2 overflow-y-auto max-h-[calc(100vh-80px)]">
-            {lowStockItems.map(item => (
-              <Card key={item.id} className="p-3 border-l-4 border-l-destructive">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <p className="font-semibold text-sm">{item.name}</p>
-                    <p className="text-xs text-muted-foreground">{item.category} — {item.unit}</p>
-                  </div>
-                  <Badge variant="destructive" className="text-[10px]">LOW</Badge>
+          <Tabs defaultValue="food" className="flex-1 flex flex-col overflow-hidden">
+            <div className="px-4 pt-2 border-b bg-muted/20">
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="food" className="text-xs font-bold gap-1">
+                  <Utensils className="h-3.5 w-3.5" />
+                  Food Items ({lowStockFoodItems.length})
+                </TabsTrigger>
+                <TabsTrigger value="ingredients" className="text-xs font-bold gap-1">
+                  <Package className="h-3.5 w-3.5" />
+                  Ingredients ({lowStockItems.length})
+                </TabsTrigger>
+              </TabsList>
+            </div>
+
+            <TabsContent value="food" className="flex-1 p-4 space-y-2.5 overflow-y-auto m-0">
+              {lowStockFoodItems.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground text-xs">
+                  <CheckCircle2 className="h-8 w-8 text-emerald-500 mx-auto mb-2 opacity-80" />
+                  All food items have sufficient ingredient stock!
                 </div>
-                <div className="flex items-center gap-4 mt-2 text-xs">
-                  <div>
-                    <span className="text-muted-foreground">Current: </span>
-                    <span className="font-bold text-destructive">{item.currentStock} {item.unit}</span>
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">Min Level: </span>
-                    <span className="font-medium">{item.lowStockLevel} {item.unit}</span>
-                  </div>
+              ) : (
+                lowStockFoodItems.map(item => (
+                  <Card key={item.id} className={cn(
+                    "p-3 border-l-4 transition-all shadow-2xs",
+                    item.status === 'out_of_stock' ? "border-l-destructive bg-destructive/5" : "border-l-amber-500 bg-amber-500/5"
+                  )}>
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <p className="font-bold text-sm text-foreground">{item.foodName}</p>
+                        {item.sizeName && (
+                          <Badge variant="outline" className="text-[10px] mt-0.5 font-semibold bg-background">
+                            Size: {item.sizeName}
+                          </Badge>
+                        )}
+                      </div>
+                      <Badge variant={item.status === 'out_of_stock' ? "destructive" : "secondary"} className={cn(
+                        "text-[10px] font-extrabold uppercase px-2 py-0.5",
+                        item.status === 'low' && "bg-amber-500 text-white border-amber-600"
+                      )}>
+                        {item.status === 'out_of_stock' ? 'Out of Stock (0)' : `Low Stock (${item.availableQuantity})`}
+                      </Badge>
+                    </div>
+
+                    <div className="flex items-center justify-between mt-2.5 pt-2 border-t border-border/40 text-xs">
+                      <div>
+                        <span className="text-muted-foreground font-medium">Available Quantity: </span>
+                        <span className={cn(
+                          "font-extrabold",
+                          item.status === 'out_of_stock' ? "text-destructive" : "text-amber-600 dark:text-amber-400"
+                        )}>
+                          {item.availableQuantity} {item.availableQuantity === 1 ? 'item' : 'items'}
+                        </span>
+                      </div>
+                      {item.limitingIngredient && (
+                        <span className="text-[10px] text-muted-foreground font-medium truncate max-w-[140px]" title={`Limiting ingredient: ${item.limitingIngredient}`}>
+                          Limiting: {item.limitingIngredient}
+                        </span>
+                      )}
+                    </div>
+                  </Card>
+                ))
+              )}
+            </TabsContent>
+
+            <TabsContent value="ingredients" className="flex-1 p-4 space-y-2.5 overflow-y-auto m-0">
+              {lowStockItems.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground text-xs">
+                  <CheckCircle2 className="h-8 w-8 text-emerald-500 mx-auto mb-2 opacity-80" />
+                  All raw ingredients are above minimum level!
                 </div>
-                <div className="mt-2">
-                  <div className="h-1.5 rounded-full bg-muted overflow-hidden">
-                    <div className="h-full bg-destructive rounded-full" style={{ width: `${Math.min(100, (item.currentStock / item.lowStockLevel) * 100)}%` }} />
-                  </div>
-                </div>
-              </Card>
-            ))}
-          </div>
+              ) : (
+                lowStockItems.map(item => (
+                  <Card key={item.id} className="p-3 border-l-4 border-l-destructive">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <p className="font-semibold text-sm">{item.name}</p>
+                        <p className="text-xs text-muted-foreground">{item.category} — {item.unit}</p>
+                      </div>
+                      <Badge variant="destructive" className="text-[10px]">LOW</Badge>
+                    </div>
+                    <div className="flex items-center gap-4 mt-2 text-xs">
+                      <div>
+                        <span className="text-muted-foreground">Current: </span>
+                        <span className="font-bold text-destructive">{item.currentStock} {item.unit}</span>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Min Level: </span>
+                        <span className="font-medium">{item.lowStockLevel} {item.unit}</span>
+                      </div>
+                    </div>
+                    <div className="mt-2">
+                      <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                        <div className="h-full bg-destructive rounded-full" style={{ width: `${Math.min(100, (item.currentStock / item.lowStockLevel) * 100)}%` }} />
+                      </div>
+                    </div>
+                  </Card>
+                ))
+              )}
+            </TabsContent>
+          </Tabs>
         </SheetContent>
       </Sheet>
 
