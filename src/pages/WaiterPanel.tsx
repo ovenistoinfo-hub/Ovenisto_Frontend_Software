@@ -58,9 +58,24 @@ interface CartItem {
 const dineInPrice  = (item: MenuItemRecord): number  => item.dineInPrice ?? item.price;
 const variantDineInPrice = (v: MenuItemVariant): number => v.dineInPrice ?? v.price;
 
+/** Resolve modifier selling price for a menu item */
+const resolveModifierPrice = (mod: any, selectedVariantId?: string | null): number => {
+  if (!mod) return 0;
+  if (selectedVariantId && Array.isArray(mod.variantConfig) && mod.variantConfig.length > 0) {
+    const vc = mod.variantConfig.find((c: any) => c.variantId === selectedVariantId);
+    if (vc && vc.sellingPrice !== undefined && vc.sellingPrice !== null) {
+      return Number(vc.sellingPrice);
+    }
+  }
+  if (mod.sellingPrice !== undefined && mod.sellingPrice !== null) {
+    return Number(mod.sellingPrice);
+  }
+  return Number(mod.price || 0);
+};
+
 /** Use item-specific modifiers only, matching POS behavior */
 const resolveModifiers = (item: MenuItemRecord) => {
-  return item.modifiers?.filter((m) => m.status === "active") || [];
+  return item.modifiers?.filter((m: any) => m.status === "active" || m.status === undefined || !m.status) || [];
 };
 
 // ─── Status config ─────────────────────────────────────────────────────────
@@ -251,7 +266,7 @@ const WaiterPanel = () => {
   const [menuCategory,    setMenuCategory]     = useState("All");
   const [expandedItemId,    setExpandedItemId]    = useState<string | null>(null);
   const [selectedVariant,   setSelectedVariant]   = useState<{ id: string; name: string; price: number } | null>(null);
-  const [selectedModifiers, setSelectedModifiers] = useState<string[]>([]);
+  const [selectedModifierQtys, setSelectedModifierQtys] = useState<Record<string, number>>({});
   const [placingOrder, setPlacingOrder] = useState(false);
   const [taxRate,       setTaxRate]       = useState<number>(settings.taxRate ?? 0);
   const [isOrderingMode, setIsOrderingMode] = useState(false);
@@ -764,7 +779,7 @@ const WaiterPanel = () => {
   const resetExpansion = () => {
     setExpandedItemId(null);
     setSelectedVariant(null);
-    setSelectedModifiers([]);
+    setSelectedModifierQtys({});
   };
 
   const addToOrder = (item: MenuItemRecord) => {
@@ -788,7 +803,7 @@ const WaiterPanel = () => {
     } else {
       setExpandedItemId(item.id);
       setSelectedVariant(null);
-      setSelectedModifiers([]);
+      setSelectedModifierQtys({});
     }
   };
 
@@ -798,11 +813,22 @@ const WaiterPanel = () => {
 
     const itemMods  = resolveModifiers(item);
     const basePrice = selectedVariant ? selectedVariant.price : dineInPrice(item);
-    const modsCost  = selectedModifiers.reduce((s, mId) => s + (itemMods.find((m) => m.id === mId)?.price ?? 0), 0);
+    const modsCost = Object.entries(selectedModifierQtys).reduce((sum, [mId, modQty]) => {
+      const mod = itemMods.find((m: any) => m.id === mId || m.modifierId === mId);
+      const unitPrice = resolveModifierPrice(mod, selectedVariant?.id);
+      return sum + (unitPrice * modQty);
+    }, 0);
     const totalPrice = basePrice + modsCost;
     const variantName = selectedVariant?.name;
-    const modNames    = selectedModifiers.map((mId) => itemMods.find((m) => m.id === mId)?.name ?? "").filter(Boolean);
-    const cartKey     = `${item.id}-${variantName ?? "base"}-${[...selectedModifiers].sort().join("-")}`;
+    const modNames = Object.entries(selectedModifierQtys).map(([mId, modQty]) => {
+      const mod = itemMods.find((m: any) => m.id === mId || m.modifierId === mId);
+      const name = mod?.name ?? "";
+      const unitPrice = resolveModifierPrice(mod, selectedVariant?.id);
+      const pricePart = unitPrice > 0 ? ` (+${currency}${unitPrice * modQty})` : "";
+      return modQty > 1 ? `${name} x${modQty}${pricePart}` : `${name}${pricePart}`;
+    }).filter(Boolean);
+    const modKey = Object.entries(selectedModifierQtys).map(([k, v]) => `${k}:${v}`).sort().join("-");
+    const cartKey = `${item.id}-${variantName ?? "base"}-${modKey}`;
 
     setCartItems((prev) => {
       const ex = prev.find((c) => c.id === cartKey);
@@ -2181,22 +2207,79 @@ const WaiterPanel = () => {
                                 <div>
                                   <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide mb-1.5">Add Extras</p>
                                   <div className="flex gap-1.5 flex-wrap">
-                                    {itemMods.map((mod) => (
-                                      <button
-                                        key={mod.id}
-                                        onClick={() => setSelectedModifiers((prev) =>
-                                          prev.includes(mod.id) ? prev.filter((x) => x !== mod.id) : [...prev, mod.id]
-                                        )}
-                                        className={cn(
-                                          "px-2.5 py-1.5 rounded-lg text-xs border transition-all",
-                                          selectedModifiers.includes(mod.id)
-                                            ? "bg-primary/10 border-primary/50 text-primary font-bold"
-                                            : "bg-card border-zinc-200 dark:border-zinc-800 text-muted-foreground hover:border-zinc-300 dark:hover:border-zinc-700 hover:text-foreground"
-                                        )}
-                                      >
-                                        {mod.name}{mod.price > 0 ? ` +${currency}${mod.price}` : ""}
-                                      </button>
-                                    ))}
+                                    {itemMods.map((mod) => {
+                                      const modId = mod.id || (mod as any).modifierId;
+                                      const qty = selectedModifierQtys[modId] || 0;
+                                      const isSelected = qty > 0;
+                                      const unitPrice = resolveModifierPrice(mod, selectedVariant?.id);
+                                      return (
+                                        <div
+                                          key={modId}
+                                          className={cn(
+                                            "flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs border transition-all select-none",
+                                            isSelected
+                                              ? "bg-primary/10 border-primary/50 text-primary font-bold ring-1 ring-primary/40"
+                                              : "bg-card border-zinc-200 dark:border-zinc-800 text-muted-foreground hover:border-zinc-300 dark:hover:border-zinc-700 hover:text-foreground"
+                                          )}
+                                        >
+                                          <button
+                                            type="button"
+                                            onClick={() => setSelectedModifierQtys((prev) => {
+                                              const curr = prev[modId] || 0;
+                                              if (curr > 0) {
+                                                const { [modId]: _, ...rest } = prev;
+                                                return rest;
+                                              }
+                                              return { ...prev, [modId]: 1 };
+                                            })}
+                                            className="flex items-center gap-1 cursor-pointer"
+                                          >
+                                            <span>{mod.name}</span>
+                                            {unitPrice > 0 ? (
+                                              <span className="font-normal opacity-80">+{currency}{unitPrice}</span>
+                                            ) : (
+                                              <span className="text-[10px] opacity-60">Free</span>
+                                            )}
+                                          </button>
+
+                                          {isSelected && (
+                                            <div className="flex items-center gap-1 ml-0.5 pl-1 border-l border-primary/30">
+                                              <button
+                                                type="button"
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  setSelectedModifierQtys((prev) => {
+                                                    const curr = prev[modId] || 1;
+                                                    if (curr <= 1) {
+                                                      const { [modId]: _, ...rest } = prev;
+                                                      return rest;
+                                                    }
+                                                    return { ...prev, [modId]: curr - 1 };
+                                                  });
+                                                }}
+                                                className="h-4 w-4 rounded bg-primary/20 hover:bg-primary/30 flex items-center justify-center text-primary font-bold text-[11px]"
+                                              >
+                                                -
+                                              </button>
+                                              <span className="w-3 text-center font-bold text-[11px]">{qty}</span>
+                                              <button
+                                                type="button"
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  setSelectedModifierQtys((prev) => ({
+                                                    ...prev,
+                                                    [modId]: (prev[modId] || 0) + 1,
+                                                  }));
+                                                }}
+                                                className="h-4 w-4 rounded bg-primary/20 hover:bg-primary/30 flex items-center justify-center text-primary font-bold text-[11px]"
+                                              >
+                                                +
+                                              </button>
+                                            </div>
+                                          )}
+                                        </div>
+                                      );
+                                    })}
                                   </div>
                                 </div>
                               )}
@@ -2208,7 +2291,10 @@ const WaiterPanel = () => {
                                   onClick={() => confirmAddWithOptions(item)}
                                 >
                                   <Plus className="h-3.5 w-3.5 mr-1" /> Add to Cart
-                                  {selectedVariant && ` · ${currency} ${(selectedVariant.price + selectedModifiers.reduce((s, mId) => s + (itemMods.find((m) => m.id === mId)?.price ?? 0), 0)).toLocaleString()}`}
+                                  {selectedVariant && ` · ${currency} ${(selectedVariant.price + Object.entries(selectedModifierQtys).reduce((s, [mId, q]) => {
+                                    const m = itemMods.find((x: any) => x.id === mId || x.modifierId === mId);
+                                    return s + (resolveModifierPrice(m, selectedVariant?.id) * q);
+                                  }, 0)).toLocaleString()}`}
                                 </Button>
                                 {hasModifiers && (
                                   <Button size="sm" variant="outline" className="h-9 text-xs rounded-lg border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/30" onClick={() => addWithoutExtras(item)}>

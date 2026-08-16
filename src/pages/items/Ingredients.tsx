@@ -18,7 +18,7 @@ import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 
 const COMMON_BRANDS = ["Shan", "National", "Nestle", "Olper's", "Dalda", "Sufi", "Rafhan", "Knorr", "Nurpur", "Millac", "Haleeb", "K&N's", "Dawn", "Menu", "Lays"];
-const emptyForm = { name: "", brand: "", categoryId: "", unitId: "", lowStockLevel: 0, supplierId: "", shelfLifeHours: "" };
+const emptyForm = { name: "", brand: "", categoryId: "", unitId: "", lowStockLevel: 0, purchasePrice: 0, supplierId: "", shelfLifeHours: "" };
 
 const Ingredients = () => {
   const { user } = useAuth();
@@ -90,27 +90,21 @@ const Ingredients = () => {
     try {
       const supplierIdVal = form.supplierId && form.supplierId !== "none" ? form.supplierId : null;
       const shelfHoursVal = form.shelfLifeHours !== "" ? Number(form.shelfLifeHours) : null;
+      const payload = {
+        name: form.name,
+        brand: form.brand || null,
+        categoryId: form.categoryId || null,
+        unitId: form.unitId || null,
+        lowStockLevel: form.lowStockLevel,
+        purchasePrice: form.purchasePrice != null ? Number(form.purchasePrice) : 0,
+        supplierId: supplierIdVal,
+        shelfLifeHours: shelfHoursVal,
+      };
       if (editingId) {
-        await inventoryService.updateIngredient(editingId, {
-          name: form.name,
-          brand: form.brand || null,
-          categoryId: form.categoryId || null,
-          unitId: form.unitId || null,
-          lowStockLevel: form.lowStockLevel,
-          supplierId: supplierIdVal,
-          shelfLifeHours: shelfHoursVal,
-        });
+        await inventoryService.updateIngredient(editingId, payload);
         toast.success("Updated successfully");
       } else {
-        await inventoryService.createIngredient({
-          name: form.name,
-          brand: form.brand || null,
-          categoryId: form.categoryId || null,
-          unitId: form.unitId || null,
-          lowStockLevel: form.lowStockLevel,
-          supplierId: supplierIdVal,
-          shelfLifeHours: shelfHoursVal,
-        });
+        await inventoryService.createIngredient(payload);
         toast.success("Ingredient added");
       }
       setShowDialog(false);
@@ -159,6 +153,10 @@ const Ingredients = () => {
               <div className="space-y-1.5"><Label>Brand</Label><Input list="brand-list" placeholder="Select or type brand" value={form.brand} onChange={(e) => setForm((p) => ({ ...p, brand: e.target.value }))} /><datalist id="brand-list">{[...new Set([...COMMON_BRANDS, ...list.map(i => i.brand).filter(Boolean)])].map(b => <option key={b!} value={b!} />)}</datalist></div>
               <div className="space-y-1.5"><Label>Category</Label><Select value={form.categoryId} onValueChange={(v) => setForm((p) => ({ ...p, categoryId: v }))}><SelectTrigger><SelectValue placeholder="Category" /></SelectTrigger><SelectContent>{categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent></Select></div>
               <div className="space-y-1.5"><Label>Unit</Label><Select value={form.unitId} onValueChange={(v) => setForm((p) => ({ ...p, unitId: v }))}><SelectTrigger><SelectValue placeholder="Unit" /></SelectTrigger><SelectContent>{units.map(u => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}</SelectContent></Select></div>
+              <div className="space-y-1.5">
+                <Label>Cost Price (Rs.)</Label>
+                <Input placeholder="0" type="number" min="0" step="any" value={form.purchasePrice || ""} onChange={(e) => setForm((p) => ({ ...p, purchasePrice: Number(e.target.value) }))} />
+              </div>
               <div className="space-y-1.5"><Label>Low Stock Level</Label><Input placeholder="0" type="number" value={form.lowStockLevel || ""} onChange={(e) => setForm((p) => ({ ...p, lowStockLevel: Number(e.target.value) }))} /></div>
               <div className="space-y-1.5">
                 <Label>Supplier / Vendor</Label>
@@ -186,8 +184,8 @@ const Ingredients = () => {
       <Card className="shadow-sm"><CardHeader className="pb-3"><div className="relative max-w-sm"><Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} placeholder="Search..." className="pl-9" /></div></CardHeader>
         <CardContent>{filtered.length === 0 ? (<div className="text-center py-12"><Leaf className="h-12 w-12 text-muted-foreground mx-auto mb-3 opacity-30" /><p className="text-muted-foreground">No ingredients found</p><p className="text-xs text-muted-foreground mt-1.5">Add your first ingredient to get started.</p><Button size="sm" className="gradient-primary text-primary-foreground mt-3" onClick={openAdd}><Plus className="h-4 w-4 mr-1" />Add Ingredient</Button></div>) : (
           <>
-            <div className="rounded-lg border overflow-auto max-h-[calc(100vh-300px)]"><Table><TableHeader className="sticky top-0 z-10 bg-card"><TableRow className="bg-muted/50 hover:bg-muted/50"><TableHead>SN</TableHead><TableHead>Name</TableHead><TableHead>Brand</TableHead><TableHead>Category</TableHead><TableHead>Unit</TableHead><TableHead>Vendor</TableHead><TableHead>Min Level</TableHead><TableHead>Shelf Life</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader>
-              <TableBody>{paged.map((item, i) => { return (<TableRow key={item.id} className="hover:bg-muted/30 transition-colors"><TableCell>{(page-1)*10+i+1}</TableCell><TableCell className="font-medium">{item.name}</TableCell><TableCell className="text-muted-foreground">{item.brand || "—"}</TableCell><TableCell>{item.category?.name || "—"}</TableCell><TableCell>{item.unit?.name || "—"}</TableCell><TableCell className="text-muted-foreground">
+            <div className="rounded-lg border overflow-auto max-h-[calc(100vh-300px)]"><Table><TableHeader className="sticky top-0 z-10 bg-card"><TableRow className="bg-muted/50 hover:bg-muted/50"><TableHead>SN</TableHead><TableHead>Name</TableHead><TableHead>Brand</TableHead><TableHead>Category</TableHead><TableHead>Unit</TableHead><TableHead>Cost Price</TableHead><TableHead>Vendor</TableHead><TableHead>Min Level</TableHead><TableHead>Shelf Life</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader>
+              <TableBody>{paged.map((item, i) => { return (<TableRow key={item.id} className="hover:bg-muted/30 transition-colors"><TableCell>{(page-1)*10+i+1}</TableCell><TableCell className="font-medium">{item.name}</TableCell><TableCell className="text-muted-foreground">{item.brand || "—"}</TableCell><TableCell>{item.category?.name || "—"}</TableCell><TableCell>{item.unit?.name || "—"}</TableCell><TableCell className="text-sm font-medium">{item.purchasePrice != null && Number(item.purchasePrice) > 0 ? `Rs. ${Number(item.purchasePrice).toLocaleString()}` : <span className="text-muted-foreground">—</span>}</TableCell><TableCell className="text-muted-foreground">
                                               {item.supplier?.name || "—"}
                                             </TableCell><TableCell className="text-sm">{Number(item.lowStockLevel)}</TableCell><TableCell className="text-sm">{item.shelfLifeHours != null ? `${item.shelfLifeHours}h` : "—"}</TableCell><TableCell><div className="flex gap-1"><Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(item)}><Pencil className="h-3 w-3" /></Button>
                 <AlertDialog><AlertDialogTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"><Trash2 className="h-4 w-4" /></Button></AlertDialogTrigger><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Delete {item.name}?</AlertDialogTitle><AlertDialogDescription>This action cannot be undone.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={() => handleDelete(item.id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Delete</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>

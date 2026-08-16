@@ -51,6 +51,18 @@ export interface MenuItemModifierRecord {
   type: string;
   status: string;
   variantIds: string[];
+  qty: number;
+  sellingPrice: number;
+  variantConfig: ModifierVariantConfig[];
+  ingredientId: string | null;
+  ingredientCost: number | null;
+  ingredientUnit: string | null;
+}
+
+export interface ModifierVariantConfig {
+  variantId: string;
+  qty: number;
+  sellingPrice: number;
 }
 
 export interface RecipeIngredient {
@@ -74,9 +86,13 @@ export interface RecipeIngredient {
 export interface ModifierRecord {
   id: string;
   name: string;
-  price: number;
+  price: number;        // selling price (what customer pays)
   type: string;
   status: string;
+  ingredientId: string | null;
+  ingredientCost: number | null;   // ingredient purchasePrice
+  ingredientUnit: string | null;
+  ingredientUnitSymbol: string | null;
 }
 
 export const menuService = {
@@ -149,12 +165,12 @@ export const menuService = {
     return res.data;
   },
 
-  async createModifier(data: { name: string; price?: number; type?: string; status?: string }): Promise<ModifierRecord> {
+  async createModifier(data: { ingredientId: string; price?: number; type?: string; status?: string }): Promise<ModifierRecord> {
     const res = await api.post<{ success: boolean; data: ModifierRecord }>('/menu/modifiers', data);
     return res.data;
   },
 
-  async updateModifier(id: string, data: Partial<{ name: string; price: number; type: string; status: string }>): Promise<ModifierRecord> {
+  async updateModifier(id: string, data: Partial<{ ingredientId: string; price: number; type: string; status: string }>): Promise<ModifierRecord> {
     const res = await api.put<{ success: boolean; data: ModifierRecord }>(`/menu/modifiers/${id}`, data);
     return res.data;
   },

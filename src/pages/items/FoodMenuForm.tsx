@@ -17,7 +17,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Plus, Trash2, Upload, ArrowLeft, Utensils, Timer, Loader2, X, ChevronDown, ChevronRight } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { toast } from "sonner";
-import { menuService, type CategoryRecord, type ModifierRecord, type RecipeIngredient } from "@/services/menu.service";
+import { menuService, type CategoryRecord, type ModifierRecord, type RecipeIngredient, type ModifierVariantConfig } from "@/services/menu.service";
 import { inventoryService, type IngredientRecord, type UnitRecord } from "@/services/inventory.service";
 import { mealTypeService, type MealTypeRecord } from "@/services/mealType.service";
 import productionItemService, { type ProductionItemRecord } from "@/services/production-items.service";
@@ -116,11 +116,23 @@ const FoodMenuForm = () => {
   // Recipe rows
   const [recipeRows, setRecipeRows] = useState<RecipeRow[]>([]);
 
-  // Modifiers
-  const [selectedModifiers, setSelectedModifiers] = useState<string[]>([]);
-  const [modifierVariantMap, setModifierVariantMap] = useState<Record<string, string[]>>({});
+  // Modifiers — table rows (like recipe rows)
+  // For simple pricing: quantities["base"] = qty, costs["base"] = cost, sellingPrices["base"] = price
+  // For variant pricing: quantities[variantIndex] = qty, costs[variantIndex] = cost, sellingPrices[variantIndex] = price
+  interface ModifierRow {
+    modifierId: string;
+    name: string;
+    ingredientId: string | null;
+    unitId: string;
+    unit: string;
+    usageUnitId: string;
+    usageUnitName: string;
+    quantities: Record<string, number>;
+    costs: Record<string, number>;
+    sellingPrices: Record<string, number>;
+  }
+  const [modifierRows, setModifierRows] = useState<ModifierRow[]>([]);
   const [modifiersOpen, setModifiersOpen] = useState(false);
-  const [activeModifierTab, setActiveModifierTab] = useState(0);
 
   // Reference data
   const [categories, setCategories] = useState<CategoryRecord[]>([]);
@@ -268,20 +280,49 @@ const FoodMenuForm = () => {
             setRecipeRows(Object.values(rowMap));
           }
 
-          // Load linked modifiers
+          // Load linked modifiers — convert to ModifierRow[]
           if (item.modifiers && item.modifiers.length > 0) {
-            setSelectedModifiers(item.modifiers.map((m: any) => m.id));
-            const isVariantPricing = item.variants && item.variants.length > 0;
-            const allVids = item.variants?.map((v: any) => v.id) || [];
-            const vMap: Record<string, string[]> = {};
-            item.modifiers.forEach((m: any) => {
-              if (m.variantIds?.length) {
-                vMap[m.id] = m.variantIds;
-              } else if (isVariantPricing) {
-                vMap[m.id] = [...allVids];
+            const isVariant = item.variants && item.variants.length > 0;
+            const cMap = buildConversionMap(unitsList);
+            const variantIdToIndex: Record<string, string> = {};
+            if (item.variants) item.variants.forEach((v, idx) => { variantIdToIndex[v.id] = idx.toString(); });
+
+            const rows: ModifierRow[] = item.modifiers.map((m: any) => {
+              const ing = ings.find(ig => ig.id === m.ingredientId);
+              const baseUnitName = ing?.unit?.name || m.ingredientUnit || "";
+              const baseUnitId = ing?.unit?.id || ing?.unitId || "";
+              const quantities: Record<string, number> = {};
+              const costs: Record<string, number> = {};
+              const sellingPrices: Record<string, number> = {};
+
+              if (isVariant && m.variantConfig?.length) {
+                m.variantConfig.forEach((vc: ModifierVariantConfig) => {
+                  const key = variantIdToIndex[vc.variantId] ?? "base";
+                  const q = Number(vc.qty || 1);
+                  quantities[key] = q;
+                  costs[key] = q * Number(ing?.purchasePrice || 0);
+                  sellingPrices[key] = Number(vc.sellingPrice || 0);
+                });
+              } else {
+                const q = Number(m.qty ?? 1);
+                quantities["base"] = q;
+                costs["base"] = q * Number(ing?.purchasePrice || 0);
+                sellingPrices["base"] = Number(m.sellingPrice ?? m.price ?? 0);
               }
+              return {
+                modifierId: m.id,
+                name: m.name,
+                ingredientId: m.ingredientId ?? null,
+                unitId: baseUnitId,
+                unit: baseUnitName,
+                usageUnitId: baseUnitId,
+                usageUnitName: baseUnitName,
+                quantities,
+                costs,
+                sellingPrices,
+              };
             });
-            setModifierVariantMap(vMap);
+            setModifierRows(rows);
           }
         }
       } catch (err: any) {
@@ -326,17 +367,19 @@ const FoodMenuForm = () => {
       });
       return { ...row, quantities: newQuantities, costs: newCosts };
     }));
-    // Clean up modifier variant map
-    const removedVariantId = savedVariantIds[i] || `new-${i}`;
-    setModifierVariantMap(prev => {
-      const next: Record<string, string[]> = {};
-      for (const [modId, vids] of Object.entries(prev)) {
-        next[modId] = vids.filter(v => v !== removedVariantId);
-      }
-      const emptyMods = Object.keys(next).filter(k => next[k].length === 0);
-      setSelectedModifiers(p => p.filter(m => !emptyMods.includes(m)));
-      return next;
-    });
+    // Re-index modifier rows variant quantities/costs/prices
+    setModifierRows(prev => prev.map(row => {
+      const newQtys: Record<string, number> = {};
+      const newCosts: Record<string, number> = {};
+      const newPrices: Record<string, number> = {};
+      Object.entries(row.quantities).forEach(([k, v]) => {
+        if (k === "base") { newQtys[k] = v; newCosts[k] = row.costs[k] || 0; newPrices[k] = row.sellingPrices[k] || 0; return; }
+        const idx = parseInt(k, 10);
+        if (idx < i) { newQtys[k] = v; newCosts[k] = row.costs[k] || 0; newPrices[k] = row.sellingPrices[k] || 0; }
+        else if (idx > i) { newQtys[(idx - 1).toString()] = v; newCosts[(idx - 1).toString()] = row.costs[k] || 0; newPrices[(idx - 1).toString()] = row.sellingPrices[k] || 0; }
+      });
+      return { ...row, quantities: newQtys, costs: newCosts, sellingPrices: newPrices };
+    }));
   };
 
   const updateVariant = (i: number, field: keyof Variant, value: string | number | null) =>
@@ -356,18 +399,28 @@ const FoodMenuForm = () => {
   const updateRecipeIngredient = (idx: number, ingredientId: string) => {
     const ing = ingredients.find(ig => ig.id === ingredientId);
     if (!ing) return;
-    setRecipeRows(p => p.map((r, i) => i === idx ? {
-      ...r,
-      ingredientId,
-      productionItemId: undefined,
-      name: ing.name,
-      unitId: ing.unit?.id || "",
-      unit: ing.unit?.name || "",
-      usageUnitId: ing.unit?.id || "",
-      usageUnitName: ing.unit?.name || "",
-      quantities: {},
-      costs: {},
-    } : r));
+    const unitId = ing.unit?.id || (ing as any).unitId || "";
+    const usageUnitId = unitId;
+    setRecipeRows(p => p.map((r, i) => {
+      if (i !== idx) return r;
+      const newCosts: Record<string, number> = {};
+      Object.entries(r.quantities).forEach(([k, qty]) => {
+        const baseQty = convertToBaseUnit(qty, usageUnitId, unitId, conversionMap);
+        newCosts[k] = baseQty * Number(ing.purchasePrice || 0);
+      });
+      return {
+        ...r,
+        ingredientId,
+        productionItemId: undefined,
+        name: ing.name,
+        unitId,
+        unit: ing.unit?.name || "",
+        usageUnitId,
+        usageUnitName: ing.unit?.name || "",
+        quantities: { ...r.quantities },
+        costs: newCosts,
+      };
+    }));
   };
 
   const updateRecipeItem = (idx: number, value: string) => {
@@ -375,34 +428,49 @@ const FoodMenuForm = () => {
       const ingredientId = value.slice(4);
       const ing = ingredients.find(ig => ig.id === ingredientId);
       if (!ing) return;
-      setRecipeRows(p => p.map((r, i) => i === idx ? {
-        ...r,
-        ingredientId,
-        productionItemId: undefined,
-        name: ing.name,
-        unitId: ing.unit?.id || "",
-        unit: ing.unit?.name || "",
-        usageUnitId: ing.unit?.id || "",
-        usageUnitName: ing.unit?.name || "",
-        quantities: {},
-        costs: {},
-      } : r));
+      const unitId = ing.unit?.id || (ing as any).unitId || "";
+      const usageUnitId = unitId;
+      setRecipeRows(p => p.map((r, i) => {
+        if (i !== idx) return r;
+        const newCosts: Record<string, number> = {};
+        Object.entries(r.quantities).forEach(([k, qty]) => {
+          const baseQty = convertToBaseUnit(qty, usageUnitId, unitId, conversionMap);
+          newCosts[k] = baseQty * Number(ing.purchasePrice || 0);
+        });
+        return {
+          ...r,
+          ingredientId,
+          productionItemId: undefined,
+          name: ing.name,
+          unitId,
+          unit: ing.unit?.name || "",
+          usageUnitId,
+          usageUnitName: ing.unit?.name || "",
+          quantities: { ...r.quantities },
+          costs: newCosts,
+        };
+      }));
     } else if (value.startsWith('prod_')) {
       const productionItemId = value.slice(5);
       const prod = productionItems.find(p => p.id === productionItemId);
       if (!prod) return;
-      setRecipeRows(p => p.map((r, i) => i === idx ? {
-        ...r,
-        ingredientId: undefined,
-        productionItemId,
-        name: prod.name,
-        unitId: "",
-        unit: prod.unit,
-        usageUnitId: "",
-        usageUnitName: prod.unit,
-        quantities: {},
-        costs: {},
-      } : r));
+      setRecipeRows(p => p.map((r, i) => {
+        if (i !== idx) return r;
+        const newCosts: Record<string, number> = {};
+        Object.keys(r.quantities).forEach(k => { newCosts[k] = 0; });
+        return {
+          ...r,
+          ingredientId: undefined,
+          productionItemId,
+          name: prod.name,
+          unitId: "",
+          unit: prod.unit,
+          usageUnitId: "",
+          usageUnitName: prod.unit,
+          quantities: { ...r.quantities },
+          costs: newCosts,
+        };
+      }));
     }
   };
 
@@ -440,22 +508,95 @@ const FoodMenuForm = () => {
   const getColumnTotal = (key: string) => recipeRows.reduce((s, r) => s + (r.costs[key] || 0), 0);
   const totalFoodCost = recipeRows.reduce((s, r) => s + Object.values(r.costs).reduce((a, b) => a + b, 0), 0);
 
-  // ── Modifier helpers ──
-  const toggleModifier = (mid: string) => setSelectedModifiers(p => p.includes(mid) ? p.filter(m => m !== mid) : [...p, mid]);
+  // ── Modifier row helpers ──
+  const addModifierRow = () => {
+    setModifierRows(p => [...p, {
+      modifierId: "",
+      name: "",
+      ingredientId: null,
+      unitId: "",
+      unit: "",
+      usageUnitId: "",
+      usageUnitName: "",
+      quantities: {},
+      costs: {},
+      sellingPrices: {},
+    }]);
+  };
 
-  const isModifierForVariant = (modId: string, variantId: string): boolean =>
-    (modifierVariantMap[modId] || []).includes(variantId);
+  const removeModifierRow = (idx: number) => setModifierRows(p => p.filter((_, i) => i !== idx));
 
-  const toggleModifierForVariant = (modId: string, variantId: string) => {
-    const currentVids = modifierVariantMap[modId] || [];
-    const isAssigned = currentVids.includes(variantId);
-    const nextVids = isAssigned ? currentVids.filter(v => v !== variantId) : [...currentVids, variantId];
-    setModifierVariantMap(prev => ({ ...prev, [modId]: nextVids }));
-    if (nextVids.length === 0) {
-      setSelectedModifiers(p => p.filter(m => m !== modId));
-    } else if (!selectedModifiers.includes(modId)) {
-      setSelectedModifiers(p => [...p, modId]);
-    }
+  const updateModifierSelection = (idx: number, modifierId: string, allModifiers: ModifierRecord[]) => {
+    const mod = allModifiers.find(m => m.id === modifierId);
+    if (!mod) return;
+    const ing = ingredients.find(ig => ig.id === mod.ingredientId);
+    const baseUnitName = ing?.unit?.name || mod.ingredientUnit || "";
+    const baseUnitId = ing?.unit?.id || (ing as any)?.unitId || "";
+    const purchasePrice = Number(ing?.purchasePrice || 0);
+
+    setModifierRows(p => p.map((r, i) => {
+      if (i !== idx) return r;
+      const newQuantities: Record<string, number> = {};
+      const newCosts: Record<string, number> = {};
+      const newSellingPrices: Record<string, number> = {};
+
+      const keys = pricingType === "simple" ? ["base"] : variants.map((_, vIdx) => vIdx.toString());
+      keys.forEach(k => {
+        const qty = r.quantities[k] || 1;
+        newQuantities[k] = qty;
+        newCosts[k] = convertToBaseUnit(qty, baseUnitId, baseUnitId, conversionMap) * purchasePrice;
+        newSellingPrices[k] = r.sellingPrices[k] || 0;
+      });
+
+      return {
+        ...r,
+        modifierId,
+        name: mod.name,
+        ingredientId: mod.ingredientId,
+        unitId: baseUnitId,
+        unit: baseUnitName,
+        usageUnitId: baseUnitId,
+        usageUnitName: baseUnitName,
+        quantities: newQuantities,
+        costs: newCosts,
+        sellingPrices: newSellingPrices,
+      };
+    }));
+  };
+
+  const updateModifierUnit = (idx: number, usageUnitId: string) => {
+    const unit = units.find(u => u.id === usageUnitId);
+    if (!unit) return;
+    setModifierRows(p => p.map((r, i) => {
+      if (i !== idx) return r;
+      const ing = ingredients.find(ig => ig.id === r.ingredientId);
+      const newCosts: Record<string, number> = {};
+      Object.entries(r.quantities).forEach(([k, qty]) => {
+        const baseQty = convertToBaseUnit(qty, usageUnitId, r.unitId, conversionMap);
+        newCosts[k] = baseQty * Number(ing?.purchasePrice || 0);
+      });
+      return { ...r, usageUnitId, usageUnitName: unit.name, costs: newCosts };
+    }));
+  };
+
+  const updateModifierQty = (idx: number, key: string, qty: number) => {
+    setModifierRows(p => p.map((r, i) => {
+      if (i !== idx) return r;
+      const ing = ingredients.find(ig => ig.id === r.ingredientId);
+      const baseQty = convertToBaseUnit(qty, r.usageUnitId, r.unitId, conversionMap);
+      const cost = baseQty * Number(ing?.purchasePrice || 0);
+      return {
+        ...r,
+        quantities: { ...r.quantities, [key]: qty },
+        costs: { ...r.costs, [key]: cost },
+      };
+    }));
+  };
+
+  const updateModifierPrice = (idx: number, key: string, price: number) => {
+    setModifierRows(p => p.map((r, i) =>
+      i !== idx ? r : { ...r, sellingPrices: { ...r.sellingPrices, [key]: price } }
+    ));
   };
 
   // ── Meal type toggle ──
@@ -513,9 +654,34 @@ const FoodMenuForm = () => {
         cookingTime: form.cookingTime || 0,
         mealTypeIds,
         variants: pricingType === "variant" ? variants : [],
-        modifiers: pricingType === "simple"
-          ? selectedModifiers.map(mid => ({ id: mid, variantIds: [] }))
-          : [],
+        // Build modifiers payload: rows with modifierId set
+        modifiers: modifierRows
+          .filter(r => r.modifierId)
+          .map(r => {
+            if (pricingType === "simple") {
+              return {
+                id: r.modifierId,
+                variantIds: [],
+                qty: r.quantities["base"] || 1,
+                sellingPrice: r.sellingPrices["base"] || 0,
+                variantConfig: [],
+              };
+            } else {
+              // variant pricing: build variantConfig with real saved IDs (will be patched post-save for new items)
+              const variantConfig = variants.map((v, idx) => ({
+                variantId: savedVariantIds[idx] || `new-${idx}`,
+                qty: r.quantities[idx.toString()] || 1,
+                sellingPrice: r.sellingPrices[idx.toString()] || 0,
+              }));
+              return {
+                id: r.modifierId,
+                variantIds: [],
+                qty: 1,
+                sellingPrice: 0,
+                variantConfig,
+              };
+            }
+          }),
       };
 
       let savedId = id;
@@ -529,21 +695,23 @@ const FoodMenuForm = () => {
         toast.success("Item added successfully");
       }
 
-      // Fix modifier variantIds with real DB IDs for variant pricing
-      if (pricingType === "variant" && savedItem?.variants?.length && selectedModifiers.length > 0) {
+      // For variant pricing with modifiers: fix temp "new-N" variantIds with real DB IDs
+      if (pricingType === "variant" && savedItem?.variants?.length && modifierRows.some(r => r.modifierId)) {
         const nameToRealId: Record<string, string> = {};
         savedItem.variants.forEach((sv: any) => { nameToRealId[sv.name] = sv.id; });
-        const correctedModifiers = selectedModifiers.map(mid => {
-          const tempVids = modifierVariantMap[mid] || [];
-          const realVids = tempVids.map(vid => {
-            if (!vid.startsWith("new-")) return vid;
-            const idx = parseInt(vid.replace("new-", ""), 10);
-            const name = variants[idx]?.name;
-            return name ? (nameToRealId[name] || vid) : vid;
-          }).filter(vid => !vid.startsWith("new-"));
-          const allSelected = savedItem.variants.every((sv: any) => realVids.includes(sv.id));
-          return { id: mid, variantIds: allSelected ? [] : realVids };
-        });
+        const correctedModifiers = modifierRows
+          .filter(r => r.modifierId)
+          .map(r => {
+            const variantConfig = variants.map((v, idx) => {
+              const realId = nameToRealId[v.name] || savedVariantIds[idx] || '';
+              return {
+                variantId: realId,
+                qty: r.quantities[idx.toString()] || 1,
+                sellingPrice: r.sellingPrices[idx.toString()] || 0,
+              };
+            }).filter(vc => vc.variantId);
+            return { id: r.modifierId, variantIds: [], qty: 1, sellingPrice: 0, variantConfig };
+          });
         await menuService.updateMenuItem(savedId!, { modifiers: correctedModifiers });
       }
 
@@ -763,9 +931,16 @@ const FoodMenuForm = () => {
                                 <SelectContent>
                                   <SelectGroup>
                                     <SelectLabel>Ingredients</SelectLabel>
-                                    {ingredients.map(ig => (
-                                      <SelectItem key={`ing_${ig.id}`} value={`ing_${ig.id}`}>{ig.name}</SelectItem>
-                                    ))}
+                                    {ingredients.map(ig => {
+                                      const price = Number(ig.purchasePrice || 0);
+                                      const unitLabel = ig.unit?.name || 'unit';
+                                      const priceLabel = price > 0 ? ` (Rs. ${price.toLocaleString()}/${unitLabel})` : ' (No price set)';
+                                      return (
+                                        <SelectItem key={`ing_${ig.id}`} value={`ing_${ig.id}`}>
+                                          {ig.name}{priceLabel}
+                                        </SelectItem>
+                                      );
+                                    })}
                                   </SelectGroup>
                                   <SelectGroup>
                                     <SelectLabel>Production Items</SelectLabel>
@@ -800,14 +975,22 @@ const FoodMenuForm = () => {
                                     <Input className="h-8 text-xs w-20" type="number" placeholder="0" value={row.quantities[key] || ""} onChange={(e) => updateRecipeQty(idx, key, Number(e.target.value))} />
                                   </TableCell>
                                   <TableCell className="text-right text-xs text-muted-foreground">
-                                    {(row.costs[key] || 0) > 0 ? `Rs.${Math.round(row.costs[key]).toLocaleString()}` : "—"}
+                                    {(row.costs[key] || 0) > 0
+                                      ? `Rs.${Math.round(row.costs[key]).toLocaleString()}`
+                                      : (row.quantities[key] || 0) > 0 && row.ingredientId
+                                        ? <span className="text-muted-foreground/60 text-xs" title="Ingredient purchase price is not set">Rs.0</span>
+                                        : "—"}
                                   </TableCell>
                                 </React.Fragment>
                               )
                             ))}
                             {pricingType === "simple" && (
                               <TableCell className="text-right text-xs font-medium">
-                                {(row.costs["base"] || 0) > 0 ? `Rs.${Math.round(row.costs["base"]).toLocaleString()}` : "—"}
+                                {(row.costs["base"] || 0) > 0
+                                  ? `Rs.${Math.round(row.costs["base"]).toLocaleString()}`
+                                  : (row.quantities["base"] || 0) > 0 && row.ingredientId
+                                    ? <span className="text-muted-foreground/60 text-xs" title="Ingredient purchase price is not set">Rs.0</span>
+                                    : "—"}
                               </TableCell>
                             )}
                             <TableCell>
@@ -885,7 +1068,7 @@ const FoodMenuForm = () => {
             )}
           </CardContent></Card>
 
-          {/* SECTION 6 — Modifiers (Collapsible) */}
+          {/* SECTION 6 — Modifiers */}
           <Card className="shadow-sm">
             <Collapsible open={modifiersOpen} onOpenChange={setModifiersOpen}>
               <CollapsibleTrigger asChild>
@@ -893,57 +1076,203 @@ const FoodMenuForm = () => {
                   <div className="flex items-center gap-2">
                     {modifiersOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                     <CardTitle className="text-base">Modifiers</CardTitle>
-                    {selectedModifiers.length > 0 && <Badge variant="secondary" className="text-xs">{selectedModifiers.length} selected</Badge>}
+                    {modifierRows.filter(r => r.modifierId).length > 0 && (
+                      <Badge variant="secondary" className="text-xs">{modifierRows.filter(r => r.modifierId).length} modifier{modifierRows.filter(r => r.modifierId).length > 1 ? "s" : ""}</Badge>
+                    )}
                   </div>
                 </CardHeader>
               </CollapsibleTrigger>
               <CollapsibleContent>
-                <CardContent className="space-y-3">
-                  {pricingType === "variant" && variants.length > 0 ? (
-                    <>
-                      {/* Variant tabs */}
-                      <div className="flex gap-1 border-b">
-                        {variants.map((v, i) => (
-                          <button
-                            key={i}
-                            className={`px-3 py-1.5 text-sm transition-colors border-b-2 ${activeModifierTab === i ? "border-primary text-primary font-medium" : "border-transparent text-muted-foreground hover:text-foreground"}`}
-                            onClick={() => setActiveModifierTab(i)}
-                          >
-                            {v.name || `Variant ${i + 1}`}
-                          </button>
-                        ))}
+                <CardContent>
+                  {/* Already-used modifier IDs to prevent duplicates */}
+                  {(() => {
+                    const usedIds = new Set(modifierRows.map(r => r.modifierId).filter(Boolean));
+                    const modKeys = pricingType === "simple" ? ["base"] : variants.map((_, i) => i.toString());
+                    const modKeyLabels = pricingType === "simple"
+                      ? { base: "" }
+                      : Object.fromEntries(variants.map((v, i) => [i.toString(), v.name || `V${i + 1}`]));
+
+                    return modifierRows.length === 0 ? (
+                      <div className="text-center py-6">
+                        <p className="text-sm text-muted-foreground mb-3">No modifiers added yet.</p>
+                        <Button variant="outline" size="sm" onClick={addModifierRow} disabled={modifiersList.length === 0}>
+                          <Plus className="h-3 w-3 mr-1" />Add Modifier
+                        </Button>
+                        {modifiersList.length === 0 && (
+                          <p className="text-xs text-muted-foreground mt-2">Create modifiers first in <strong>Items → Modifiers</strong>.</p>
+                        )}
                       </div>
-                      {/* Active tab content */}
-                      <div className="space-y-1.5">
-                        {modifiersList.map(m => {
-                          const variantId = savedVariantIds[activeModifierTab] || `new-${activeModifierTab}`;
-                          const isChecked = isModifierForVariant(m.id, variantId);
-                          return (
-                            <label key={m.id} className={`flex items-center gap-2 text-sm rounded border p-2 cursor-pointer transition-colors ${isChecked ? "border-primary/40 bg-primary/5" : "hover:bg-muted/30"}`}>
-                              <Checkbox checked={isChecked} onCheckedChange={() => toggleModifierForVariant(m.id, variantId)} />
-                              <span className="flex-1">{m.name}</span>
-                              <span className="text-muted-foreground text-xs">{Number(m.price) > 0 ? `+Rs.${m.price}` : "Free"}</span>
-                            </label>
-                          );
-                        })}
-                        {modifiersList.length === 0 && <p className="text-xs text-muted-foreground">No modifiers available.</p>}
+                    ) : (
+                      <div className="space-y-3">
+                        <div className="rounded-lg border overflow-x-auto">
+                          <Table>
+                            <TableHeader>
+                              <TableRow className="bg-muted/50 hover:bg-muted/50">
+                                <TableHead className="w-10">SN</TableHead>
+                                <TableHead className="w-[220px] min-w-[180px] max-w-[240px]">Modifier</TableHead>
+                                <TableHead className="w-24">Unit</TableHead>
+                                {modKeys.map(key => (
+                                  pricingType === "simple" ? (
+                                    <React.Fragment key={key}>
+                                      <TableHead className="w-20">Qty</TableHead>
+                                      <TableHead className="w-24 text-right">Cost (Rs.)</TableHead>
+                                      <TableHead className="w-28">Selling Price</TableHead>
+                                    </React.Fragment>
+                                  ) : (
+                                    <TableHead key={key} colSpan={3} className="text-center border-l min-w-[200px]">{modKeyLabels[key]}</TableHead>
+                                  )
+                                ))}
+                                <TableHead className="w-10"></TableHead>
+                              </TableRow>
+                              {pricingType === "variant" && (
+                                <TableRow className="bg-muted/30 hover:bg-muted/30">
+                                  <TableHead></TableHead>
+                                  <TableHead></TableHead>
+                                  <TableHead></TableHead>
+                                  {modKeys.map(key => (
+                                    <React.Fragment key={key}>
+                                      <TableHead className="text-xs border-l w-16">Qty</TableHead>
+                                      <TableHead className="text-xs w-20 text-right">Cost</TableHead>
+                                      <TableHead className="text-xs w-24">Selling Price</TableHead>
+                                    </React.Fragment>
+                                  ))}
+                                  <TableHead></TableHead>
+                                </TableRow>
+                              )}
+                            </TableHeader>
+                            <TableBody>
+                              {modifierRows.map((row, idx) => {
+                                const compatibleUnits = row.unitId ? getCompatibleUnits(row.unitId, units, conversionMap) : [];
+                                return (
+                                  <TableRow key={idx} className="hover:bg-muted/20">
+                                    <TableCell className="text-muted-foreground">{idx + 1}</TableCell>
+                                    <TableCell className="w-[220px] max-w-[240px]">
+                                      <Select
+                                        value={row.modifierId}
+                                        onValueChange={(v) => updateModifierSelection(idx, v, modifiersList)}
+                                      >
+                                        <SelectTrigger className="h-8 text-xs w-full">
+                                          <SelectValue placeholder="Select modifier..." />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          {modifiersList
+                                            .filter(m => !usedIds.has(m.id) || m.id === row.modifierId)
+                                            .map(m => {
+                                              const ing = ingredients.find(ig => ig.id === m.ingredientId);
+                                              const price = Number(ing?.purchasePrice || 0);
+                                              const unitLabel = ing?.unit?.name || m.ingredientUnit || 'unit';
+                                              const priceLabel = price > 0 ? ` (Rs. ${price.toLocaleString()}/${unitLabel})` : ` (${unitLabel})`;
+                                              return (
+                                                <SelectItem key={m.id} value={m.id}>
+                                                  <span className="font-medium">{m.name}</span>
+                                                  <span className="text-muted-foreground ml-1 text-xs">{priceLabel}</span>
+                                                </SelectItem>
+                                              );
+                                            })
+                                          }
+                                          {modifiersList.filter(m => !usedIds.has(m.id) || m.id === row.modifierId).length === 0 && (
+                                            <div className="px-3 py-2 text-xs text-muted-foreground">All modifiers already added</div>
+                                          )}
+                                        </SelectContent>
+                                      </Select>
+                                    </TableCell>
+                                    <TableCell>
+                                      {compatibleUnits.length > 1 ? (
+                                        <Select value={row.usageUnitId} onValueChange={(v) => updateModifierUnit(idx, v)}>
+                                          <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Unit" /></SelectTrigger>
+                                          <SelectContent>{compatibleUnits.map(u => <SelectItem key={u.id} value={u.id}>{u.symbol || u.name}</SelectItem>)}</SelectContent>
+                                        </Select>
+                                      ) : (
+                                        <span className="text-xs text-muted-foreground">{row.usageUnitName || row.unit || "—"}</span>
+                                      )}
+                                    </TableCell>
+                                    {modKeys.map(key => (
+                                      pricingType === "simple" ? (
+                                        <React.Fragment key={key}>
+                                          <TableCell>
+                                            <Input
+                                              className="h-8 text-xs w-20"
+                                              type="number"
+                                              min={0}
+                                              step="0.01"
+                                              placeholder="1"
+                                              value={row.quantities[key] ?? ""}
+                                              onChange={(e) => updateModifierQty(idx, key, Number(e.target.value))}
+                                            />
+                                          </TableCell>
+                                          <TableCell className="text-right text-xs font-medium">
+                                            {(row.costs[key] || 0) > 0
+                                              ? `Rs.${Math.round(row.costs[key]).toLocaleString()}`
+                                              : (row.quantities[key] || 0) > 0 && row.ingredientId
+                                                ? <span className="text-muted-foreground/60 text-xs" title="Ingredient purchase price is not set">Rs.0</span>
+                                                : "—"}
+                                          </TableCell>
+                                          <TableCell>
+                                            <Input
+                                              className="h-8 text-xs w-28"
+                                              type="number"
+                                              min={0}
+                                              placeholder="0"
+                                              value={row.sellingPrices[key] ?? ""}
+                                              onChange={(e) => updateModifierPrice(idx, key, Number(e.target.value))}
+                                            />
+                                          </TableCell>
+                                        </React.Fragment>
+                                      ) : (
+                                        <React.Fragment key={key}>
+                                          <TableCell className="border-l">
+                                            <Input
+                                              className="h-8 text-xs w-16"
+                                              type="number"
+                                              min={0}
+                                              step="0.01"
+                                              placeholder="1"
+                                              value={row.quantities[key] ?? ""}
+                                              onChange={(e) => updateModifierQty(idx, key, Number(e.target.value))}
+                                            />
+                                          </TableCell>
+                                          <TableCell className="text-right text-xs text-muted-foreground">
+                                            {(row.costs[key] || 0) > 0
+                                              ? `Rs.${Math.round(row.costs[key]).toLocaleString()}`
+                                              : (row.quantities[key] || 0) > 0 && row.ingredientId
+                                                ? <span className="text-muted-foreground/60 text-xs" title="Ingredient purchase price is not set">Rs.0</span>
+                                                : "—"}
+                                          </TableCell>
+                                          <TableCell>
+                                            <Input
+                                              className="h-8 text-xs w-24"
+                                              type="number"
+                                              min={0}
+                                              placeholder="0"
+                                              value={row.sellingPrices[key] ?? ""}
+                                              onChange={(e) => updateModifierPrice(idx, key, Number(e.target.value))}
+                                            />
+                                          </TableCell>
+                                        </React.Fragment>
+                                      )
+                                    ))}
+                                    <TableCell>
+                                      <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => removeModifierRow(idx)}>
+                                        <Trash2 className="h-3 w-3" />
+                                      </Button>
+                                    </TableCell>
+                                  </TableRow>
+                                );
+                              })}
+                            </TableBody>
+                          </Table>
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={addModifierRow}
+                          disabled={modifierRows.length >= modifiersList.length}
+                        >
+                          <Plus className="h-3 w-3 mr-1" />Add Modifier
+                        </Button>
                       </div>
-                    </>
-                  ) : (
-                    <div className="space-y-1.5">
-                      {modifiersList.map(m => {
-                        const isSelected = selectedModifiers.includes(m.id);
-                        return (
-                          <label key={m.id} className={`flex items-center gap-2 text-sm rounded border p-2 cursor-pointer ${isSelected ? "border-primary/40 bg-primary/5" : ""}`}>
-                            <Checkbox checked={isSelected} onCheckedChange={() => toggleModifier(m.id)} />
-                            <span className="flex-1">{m.name}</span>
-                            <span className="text-muted-foreground text-xs">{Number(m.price) > 0 ? `+Rs.${m.price}` : "Free"}</span>
-                          </label>
-                        );
-                      })}
-                      {modifiersList.length === 0 && <p className="text-xs text-muted-foreground">No modifiers created yet. Go to Items &gt; Modifiers to create some.</p>}
-                    </div>
-                  )}
+                    );
+                  })()}
                 </CardContent>
               </CollapsibleContent>
             </Collapsible>

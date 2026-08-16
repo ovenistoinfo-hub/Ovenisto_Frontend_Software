@@ -23,7 +23,7 @@ import { useQuery } from "@tanstack/react-query";
 import { cashSettlementService } from "@/services/cashSettlement.service";
 import { getSocket } from "@/lib/socket";
 import { useModuleEvents } from "@/hooks/use-module-events";
-import { Search, Plus, Minus, X, ShoppingCart, FileText, Printer, ArrowLeft, Trash2, User, Users, MapPin, Phone, Flame, Check, CreditCard, Banknote, Smartphone, RotateCcw, Download, ClipboardList, AlertTriangle, UtensilsCrossed, CalendarClock, Calendar, Timer, ChefHat, Tag, Zap, History, Monitor, BookOpen, StickyNote, Eye, Building2, Crown, CircleAlert, Bell, DollarSign, Package, Ban, Truck, ShoppingBag, Utensils, AlertCircle, CheckCircle2, Clock, Loader2, Wallet, Info, Coins } from "lucide-react";
+import { Search, Plus, Minus, X, ShoppingCart, FileText, Printer, ArrowLeft, Trash2, User, Users, MapPin, Phone, Flame, Check, CreditCard, Banknote, Smartphone, RotateCcw, Download, ClipboardList, AlertTriangle, UtensilsCrossed, CalendarClock, Calendar, Timer, ChefHat, Tag, Zap, History, Monitor, BookOpen, StickyNote, Eye, Building2, Crown, CircleAlert, Bell, DollarSign, Package, Ban, Truck, ShoppingBag, Utensils, AlertCircle, CheckCircle2, Clock, Loader2, Wallet, Info, Coins, Layers } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -50,10 +50,26 @@ import { getRiderCollectAmount } from "@/utils/deliveryPayment";
 
 interface CartItem extends OrderItem {
   modifiers?: string[];
+  modifierIds?: { modifierId: string; qty: number }[];
   cookingTime?: number;
   notes?: string;
   menuItemId?: string;
   variantId?: string | null;
+}
+
+/** Resolve modifier selling price for a menu item (supports variantConfig, sellingPrice, and base price fallback) */
+function resolveModifierPrice(mod: any, selectedVariantId?: string | null): number {
+  if (!mod) return 0;
+  if (selectedVariantId && Array.isArray(mod.variantConfig) && mod.variantConfig.length > 0) {
+    const vc = mod.variantConfig.find((c: any) => c.variantId === selectedVariantId);
+    if (vc && vc.sellingPrice !== undefined && vc.sellingPrice !== null) {
+      return Number(vc.sellingPrice);
+    }
+  }
+  if (mod.sellingPrice !== undefined && mod.sellingPrice !== null) {
+    return Number(mod.sellingPrice);
+  }
+  return Number(mod.price || 0);
 }
 
 /** Resolve price based on order type — falls back to base `price` */
@@ -455,7 +471,7 @@ const POS = () => {
   // Modifiers
   const [showModifiers, setShowModifiers] = useState(false);
   const [pendingItem, setPendingItem] = useState<typeof foodMenuItems[0] | null>(null);
-  const [selectedModifiers, setSelectedModifiers] = useState<string[]>([]);
+  const [selectedModifierQtys, setSelectedModifierQtys] = useState<Record<string, number>>({});
   const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
   const [selectedVariant, setSelectedVariant] = useState<string | null>(null);
 
@@ -510,6 +526,8 @@ const POS = () => {
 
   // Low Stock
   const [showLowStock, setShowLowStock] = useState(false);
+  const [stockSearch, setStockSearch] = useState("");
+  const [stockStatusFilter, setStockStatusFilter] = useState<"all" | "out" | "low">("all");
 
   // Payment-only mode (loaded from Order Status for collecting payment on existing order)
   const [paymentOnlyMode, setPaymentOnlyMode] = useState(false);
@@ -1060,6 +1078,42 @@ const POS = () => {
     return list;
   }, [foodMenuItems, ingredientStockMap, productionStockMap]);
 
+  const foodOutOfStockCount = useMemo(() => lowStockFoodItems.filter(i => i.status === 'out_of_stock').length, [lowStockFoodItems]);
+  const foodLowStockCount = useMemo(() => lowStockFoodItems.filter(i => i.status === 'low').length, [lowStockFoodItems]);
+
+  const ingOutOfStockCount = useMemo(() => lowStockItems.filter((i: any) => Number(i.currentStock || 0) <= 0).length, [lowStockItems]);
+  const ingLowStockCount = useMemo(() => lowStockItems.filter((i: any) => Number(i.currentStock || 0) > 0).length, [lowStockItems]);
+
+  const filteredLowStockFoodItems = useMemo(() => {
+    return lowStockFoodItems.filter(item => {
+      const q = stockSearch.trim().toLowerCase();
+      const matchesSearch = !q ||
+        item.foodName.toLowerCase().includes(q) ||
+        (item.sizeName && item.sizeName.toLowerCase().includes(q)) ||
+        (item.limitingIngredient && item.limitingIngredient.toLowerCase().includes(q));
+
+      if (!matchesSearch) return false;
+      if (stockStatusFilter === "out") return item.status === "out_of_stock";
+      if (stockStatusFilter === "low") return item.status === "low";
+      return true;
+    });
+  }, [lowStockFoodItems, stockSearch, stockStatusFilter]);
+
+  const filteredLowStockIngredients = useMemo(() => {
+    return lowStockItems.filter((item: any) => {
+      const q = stockSearch.trim().toLowerCase();
+      const matchesSearch = !q ||
+        item.name.toLowerCase().includes(q) ||
+        (item.category && item.category.toLowerCase().includes(q));
+
+      if (!matchesSearch) return false;
+      const isOutOfStock = Number(item.currentStock || 0) <= 0;
+      if (stockStatusFilter === "out") return isOutOfStock;
+      if (stockStatusFilter === "low") return !isOutOfStock;
+      return true;
+    });
+  }, [lowStockItems, stockSearch, stockStatusFilter]);
+
   const activeStaff = useMemo(() => {
     if (!apiStaff || apiStaff.length === 0) return [];
     const waitersOnly = apiStaff.filter((s: any) => !s.role || s.role.toLowerCase() === "waiter");
@@ -1264,7 +1318,7 @@ const POS = () => {
     } else {
       setExpandedItemId(item.id);
       setPendingItem(item);
-      setSelectedModifiers([]);
+      setSelectedModifierQtys({});
       setSelectedVariant(null);
     }
   };
@@ -1273,6 +1327,7 @@ const POS = () => {
     if (!pendingItem) return;
     const variants = (pendingItem as any).variants || [];
     const selectedVariantObj = selectedVariant ? variants.find((v: any) => v.name === selectedVariant) : null;
+    const selectedVarId = selectedVariantObj?.id;
 
     if (selectedVariantObj) {
       const avail = calculateFoodAvailability((pendingItem as any).recipes || [], selectedVariantObj.id, ingredientStockMap, productionStockMap);
@@ -1289,9 +1344,10 @@ const POS = () => {
     }
 
     const itemMods: any[] = (pendingItem as any).modifiers || modifiers;
-    const modifiersCost = selectedModifiers.reduce((sum, mId) => {
-      const mod = itemMods.find((m: any) => m.id === mId) || modifiers.find((m) => m.id === mId);
-      return sum + (Number(mod?.price) || 0);
+    const modifiersCost = Object.entries(selectedModifierQtys).reduce((sum, [mId, modQty]) => {
+      const mod = itemMods.find((m: any) => m.id === mId || m.modifierId === mId) || modifiers.find((m: any) => m.id === mId);
+      const unitPrice = resolveModifierPrice(mod, selectedVarId);
+      return sum + (unitPrice * modQty);
     }, 0);
 
     const variantPrice = selectedVariantObj ? resolvePrice(selectedVariantObj, orderType) : resolvePrice(pendingItem, orderType);
@@ -1299,14 +1355,29 @@ const POS = () => {
 
     setCart((prev) => {
       const fullName = `${pendingItem.name}${variantLabel}`;
-      const modKey = selectedModifiers.sort().join("-");
+      const modKey = Object.entries(selectedModifierQtys).map(([k, v]) => `${k}:${v}`).sort().join("-");
       const existingIdx = prev.findIndex((c) => c.name === fullName && (c.modifiers?.sort().join("-") || "") === modKey);
-      if (existingIdx >= 0 && selectedModifiers.length === 0) return prev.map((c, i) => i === existingIdx ? { ...c, qty: c.qty + 1 } : c);
-      const modLabels = selectedModifiers.map((mId) => (itemMods.find((m: any) => m.id === mId) || modifiers.find((m) => m.id === mId))?.name || "");
+      if (existingIdx >= 0 && Object.keys(selectedModifierQtys).length === 0) return prev.map((c, i) => i === existingIdx ? { ...c, qty: c.qty + 1 } : c);
+      
+      const modLabels = Object.entries(selectedModifierQtys).map(([mId, modQty]) => {
+        const mod = itemMods.find((m: any) => m.id === mId || m.modifierId === mId) || modifiers.find((m: any) => m.id === mId);
+        const name = mod?.name || "";
+        const unitPrice = resolveModifierPrice(mod, selectedVarId);
+        const pricePart = unitPrice > 0 ? ` (+Rs.${unitPrice * modQty})` : "";
+        return modQty > 1 ? `${name} x${modQty}${pricePart}` : `${name}${pricePart}`;
+      });
+
+      const modifierIds = Object.entries(selectedModifierQtys).map(([mId, modQty]) => ({
+        modifierId: mId,
+        qty: modQty,
+      }));
+
       return [...prev, {
         id: `${pendingItem.id}-${Date.now()}`, name: fullName,
         price: variantPrice + modifiersCost, qty: 1, discount: 0,
-        modifiers: modLabels, cookingTime: (pendingItem as any).cookingTime || 0,
+        modifiers: modLabels,
+        modifierIds,
+        cookingTime: (pendingItem as any).cookingTime || 0,
         menuItemId: pendingItem.id, variantId: selectedVariantObj?.id || null,
       }];
     });
@@ -1314,6 +1385,7 @@ const POS = () => {
     setPendingItem(null);
     setExpandedItemId(null);
     setSelectedVariant(null);
+    setSelectedModifierQtys({});
   };
 
   const addDirectToCart = () => {
@@ -1328,6 +1400,7 @@ const POS = () => {
     setPendingItem(null);
     setExpandedItemId(null);
     setSelectedVariant(null);
+    setSelectedModifierQtys({});
   };
 
   const updateQty = (id: string, delta: number) => setCart((prev) => prev.map((c) => c.id === id ? { ...c, qty: Math.max(1, c.qty + delta) } : c));
@@ -1551,7 +1624,7 @@ const POS = () => {
             menuItemId: (c as any).menuItemId || null,
             variantId: (c as any).variantId || null,
             name: c.name, price: c.price, qty: c.qty, discount: c.discount,
-            modifiers: c.modifiers || [], cookingTime: c.cookingTime || null, notes: c.notes || null,
+            modifiers: c.modifiers || [], modifierIds: (c as any).modifierIds || [], cookingTime: c.cookingTime || null, notes: c.notes || null,
           })),
           subtotal: itemsSubtotal, discount: orderDiscount, tax, total,
           advancePayment: finalAdvancePayment || undefined,
@@ -1860,10 +1933,27 @@ const POS = () => {
             </Button>
           )}
           {(lowStockItems.length > 0 || lowStockFoodItems.length > 0) && (
-            <Button variant="outline" size="sm" className="h-8 text-xs rounded-lg gap-1 shrink-0 px-2 border-destructive/30 text-destructive hover:bg-destructive/5" onClick={() => setShowLowStock(true)}>
-              <AlertTriangle className="h-3.5 w-3.5" />
-              <span className="hidden lg:inline">Low Stock</span>
-              <Badge className="h-5 px-1 text-[10px] bg-destructive text-destructive-foreground">{lowStockItems.length + lowStockFoodItems.length}</Badge>
+            <Button
+              variant="outline"
+              size="sm"
+              className={cn(
+                "h-8 text-xs rounded-lg gap-1.5 shrink-0 px-2.5 font-semibold transition-all shadow-2xs",
+                (foodOutOfStockCount + ingOutOfStockCount) > 0
+                  ? "border-destructive/40 text-destructive bg-destructive/10 hover:bg-destructive/20 hover:border-destructive/60"
+                  : "border-amber-500/40 text-amber-600 dark:text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 hover:border-amber-500/60"
+              )}
+              onClick={() => setShowLowStock(true)}
+            >
+              <AlertTriangle className={cn("h-3.5 w-3.5", (foodOutOfStockCount + ingOutOfStockCount) > 0 ? "text-destructive animate-pulse" : "text-amber-500")} />
+              <span className="hidden lg:inline">Stock Alerts</span>
+              <Badge
+                className={cn(
+                  "h-5 px-1.5 text-[10px] font-bold rounded-full",
+                  (foodOutOfStockCount + ingOutOfStockCount) > 0 ? "bg-destructive text-destructive-foreground" : "bg-amber-500 text-white"
+                )}
+              >
+                {lowStockItems.length + lowStockFoodItems.length}
+              </Badge>
             </Button>
           )}
         </div>
@@ -2360,7 +2450,11 @@ const POS = () => {
                             const selectedVariantObj = selectedVariant ? (item as any).variants?.find((v: any) => v.name === selectedVariant) : null;
                             const basePrice = selectedVariantObj ? resolvePrice(selectedVariantObj, orderType) : resolvePrice(item, orderType);
                             const itemMods: any[] = (item as any).modifiers || [];
-                            const modCost = selectedModifiers.reduce((s, mId) => s + Number(itemMods.find((m: any) => m.id === mId)?.price || modifiers.find(m => m.id === mId)?.price || 0), 0);
+                            const modCost = Object.entries(selectedModifierQtys).reduce((s, [mId, q]) => {
+                              const mod = itemMods.find((m: any) => m.id === mId || m.modifierId === mId) || modifiers.find(m => m.id === mId);
+                              const unitPrice = resolveModifierPrice(mod, selectedVariantObj?.id);
+                              return s + (unitPrice * q);
+                            }, 0);
                             return (
                               <p className="text-primary font-bold text-sm">
                                 {effectiveSettings.currency} {basePrice + modCost}
@@ -2410,7 +2504,7 @@ const POS = () => {
                         const selectedVariantObj = selectedVariant ? (item as any).variants?.find((v: any) => v.name === selectedVariant) : null;
                         const selectedVarId = selectedVariantObj?.id;
                         const itemMods: any[] = ((item as any).modifiers || [])
-                          .filter((m: any) => m.status === "active")
+                          .filter((m: any) => m.status === "active" || m.status === undefined || !m.status)
                           .filter((m: any) => {
                             // If modifier has variantIds filter, only show for matching variant
                             if (!m.variantIds || m.variantIds.length === 0) return true; // applies to all
@@ -2422,19 +2516,83 @@ const POS = () => {
                           <>
                             <p className="text-xs font-medium text-muted-foreground mb-2">Select Modifiers (optional):</p>
                             <div className="flex flex-wrap gap-2 mb-3">
-                              {itemMods.map((m: any) => (
-                                <button key={m.id} onClick={() => {
-                                  if (selectedModifiers.includes(m.id)) setSelectedModifiers(p => p.filter(x => x !== m.id));
-                                  else setSelectedModifiers(p => [...p, m.id]);
-                                }} className={cn(
-                                  "px-3 py-2 rounded-lg border text-xs font-medium transition-all",
-                                  selectedModifiers.includes(m.id)
-                                    ? "border-primary bg-primary/10 text-primary ring-1 ring-primary"
-                                    : "border-border hover:border-primary/50 hover:bg-muted/50"
-                                )}>
-                                  {m.name} {Number(m.price) > 0 && <span className="text-muted-foreground ml-1">+Rs.{m.price}</span>}
-                                </button>
-                              ))}
+                              {itemMods.map((m: any) => {
+                                const modId = m.id || m.modifierId;
+                                const qty = selectedModifierQtys[modId] || 0;
+                                const isSelected = qty > 0;
+                                const unitPrice = resolveModifierPrice(m, selectedVarId);
+                                return (
+                                  <div
+                                    key={modId}
+                                    className={cn(
+                                      "flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-medium transition-all select-none",
+                                      isSelected
+                                        ? "border-primary bg-primary/10 text-primary ring-1 ring-primary"
+                                        : "border-border hover:border-primary/50 hover:bg-muted/50 text-foreground"
+                                    )}
+                                  >
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setSelectedModifierQtys(prev => {
+                                          const current = prev[modId] || 0;
+                                          if (current > 0) {
+                                            const { [modId]: _, ...rest } = prev;
+                                            return rest;
+                                          }
+                                          return { ...prev, [modId]: 1 };
+                                        });
+                                      }}
+                                      className="flex items-center gap-1 cursor-pointer"
+                                    >
+                                      <span>{m.name}</span>
+                                      {unitPrice > 0 ? (
+                                        <span className="text-muted-foreground font-normal">
+                                          (+Rs.{unitPrice})
+                                        </span>
+                                      ) : (
+                                        <span className="text-muted-foreground/60 text-[10px]">Free</span>
+                                      )}
+                                    </button>
+
+                                    {isSelected && (
+                                      <div className="flex items-center gap-1 ml-1 pl-1.5 border-l border-primary/30">
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setSelectedModifierQtys(prev => {
+                                              const current = prev[modId] || 1;
+                                              if (current <= 1) {
+                                                const { [modId]: _, ...rest } = prev;
+                                                return rest;
+                                              }
+                                              return { ...prev, [modId]: current - 1 };
+                                            });
+                                          }}
+                                          className="h-5 w-5 rounded bg-primary/20 hover:bg-primary/30 flex items-center justify-center text-primary font-bold transition-colors cursor-pointer"
+                                        >
+                                          -
+                                        </button>
+                                        <span className="w-4 text-center font-bold text-xs">{qty}</span>
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setSelectedModifierQtys(prev => ({
+                                              ...prev,
+                                              [modId]: (prev[modId] || 0) + 1,
+                                            }));
+                                          }}
+                                          className="h-5 w-5 rounded bg-primary/20 hover:bg-primary/30 flex items-center justify-center text-primary font-bold transition-colors cursor-pointer"
+                                        >
+                                          +
+                                        </button>
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
                             </div>
                           </>
                         );
@@ -2444,27 +2602,41 @@ const POS = () => {
                         <Button size="sm" className="gradient-primary text-primary-foreground text-xs" onClick={() => {
                           if (!pendingItem) return;
                           const selectedVariantObj = selectedVariant ? (item as any).variants?.find((v: any) => v.name === selectedVariant) : null;
+                          const selectedVarId = selectedVariantObj?.id;
                           const variantPrice = selectedVariantObj ? resolvePrice(selectedVariantObj, orderType) : resolvePrice(item, orderType);
                           const allMods: any[] = (item as any).modifiers || modifiers;
-                          const modifiersCost = selectedModifiers.reduce((sum, mId) => {
-                            const mod = allMods.find((m: any) => m.id === mId) || modifiers.find((m) => m.id === mId);
-                            return sum + (Number(mod?.price) || 0);
+                          const modifiersCost = Object.entries(selectedModifierQtys).reduce((sum, [mId, modQty]) => {
+                            const mod = allMods.find((m: any) => m.id === mId || m.modifierId === mId) || modifiers.find((m: any) => m.id === mId);
+                            const unitPrice = resolveModifierPrice(mod, selectedVarId);
+                            return sum + (unitPrice * modQty);
                           }, 0);
                           const variantLabel = selectedVariant ? ` (${selectedVariant})` : "";
-                          const modLabels = selectedModifiers.map((mId) => (allMods.find((m: any) => m.id === mId) || modifiers.find((m) => m.id === mId))?.name || "");
+                          const modLabels = Object.entries(selectedModifierQtys).map(([mId, modQty]) => {
+                            const mod = allMods.find((m: any) => m.id === mId || m.modifierId === mId) || modifiers.find((m: any) => m.id === mId);
+                            const name = mod?.name || "";
+                            const unitPrice = resolveModifierPrice(mod, selectedVarId);
+                            const pricePart = unitPrice > 0 ? ` (+Rs.${unitPrice * modQty})` : "";
+                            return modQty > 1 ? `${name} x${modQty}${pricePart}` : `${name}${pricePart}`;
+                          });
+                          const modifierIds = Object.entries(selectedModifierQtys).map(([mId, modQty]) => ({
+                            modifierId: mId,
+                            qty: modQty,
+                          }));
                           setCart(prev => [...prev, {
                             id: `${item.id}-${Date.now()}`, name: `${item.name}${variantLabel}`,
                             price: variantPrice + modifiersCost, qty: 1, discount: 0,
-                            modifiers: modLabels, cookingTime: (item as any).cookingTime || 0,
+                            modifiers: modLabels,
+                            modifierIds,
+                            cookingTime: (item as any).cookingTime || 0,
                             menuItemId: item.id, variantId: selectedVariantObj?.id || null,
                           }]);
                           setExpandedItemId(null);
                           setPendingItem(null);
                           setSelectedVariant(null);
-                          setSelectedModifiers([]);
+                          setSelectedModifierQtys({});
                           toast.success(`${item.name}${variantLabel} added`);
                         }}>Add to Cart</Button>
-                        <Button size="sm" variant="ghost" className="text-xs ml-auto" onClick={() => { setExpandedItemId(null); setPendingItem(null); setSelectedVariant(null); }}>Cancel</Button>
+                        <Button size="sm" variant="ghost" className="text-xs ml-auto" onClick={() => { setExpandedItemId(null); setPendingItem(null); setSelectedVariant(null); setSelectedModifierQtys({}); }}>Cancel</Button>
                       </div>
                     </div>
                   )}
@@ -3595,71 +3767,219 @@ const POS = () => {
       </Dialog>
 
       {/* Low Stock Sheet */}
-      <Sheet open={showLowStock} onOpenChange={setShowLowStock}>
-        <SheetContent side="right" className="w-full sm:w-[420px] p-0 flex flex-col">
-          <div className="p-4 border-b bg-destructive/5">
-            <h2 className="font-bold text-lg flex items-center gap-2"><AlertTriangle className="h-5 w-5 text-destructive" />Low & Out of Stock Alert</h2>
-            <p className="text-xs text-muted-foreground">
-              {lowStockFoodItems.length} food item sizes & {lowStockItems.length} ingredients low/out of stock
-            </p>
-          </div>
-          <Tabs defaultValue="food" className="flex-1 flex flex-col overflow-hidden">
-            <div className="px-4 pt-2 border-b bg-muted/20">
-              <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="food" className="text-xs font-bold gap-1">
-                  <Utensils className="h-3.5 w-3.5" />
-                  Food Items ({lowStockFoodItems.length})
-                </TabsTrigger>
-                <TabsTrigger value="ingredients" className="text-xs font-bold gap-1">
-                  <Package className="h-3.5 w-3.5" />
-                  Ingredients ({lowStockItems.length})
-                </TabsTrigger>
-              </TabsList>
+      <Sheet open={showLowStock} onOpenChange={(open) => {
+        setShowLowStock(open);
+        if (!open) {
+          setStockSearch("");
+          setStockStatusFilter("all");
+        }
+      }}>
+        <SheetContent side="right" className="w-full sm:max-w-none sm:w-[480px] md:w-[520px] p-0 flex flex-col bg-background/95 backdrop-blur-md">
+          {/* Sheet Header */}
+          <div className="p-5 border-b border-border/70 bg-gradient-to-br from-card via-card/90 to-destructive/[0.04] space-y-3.5">
+            <div className="flex items-start justify-between gap-3 pr-6">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-2xl bg-destructive/15 border border-destructive/30 flex items-center justify-center text-destructive shadow-xs shrink-0">
+                  <AlertTriangle className="h-5 w-5" />
+                </div>
+                <div>
+                  <h2 className="font-bold text-lg text-foreground tracking-tight flex items-center gap-2">
+                    Stock & Portions Alert
+                  </h2>
+                  <p className="text-xs text-muted-foreground">
+                    Live kitchen inventory & portion restrictions
+                  </p>
+                </div>
+              </div>
             </div>
 
-            <TabsContent value="food" className="flex-1 p-4 space-y-2.5 overflow-y-auto m-0">
+            {/* Quick Status Pill Bar */}
+            <div className="flex items-center gap-2 flex-wrap pt-0.5">
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-semibold bg-destructive/10 text-destructive border border-destructive/25 shadow-2xs">
+                <span className="h-2 w-2 rounded-full bg-destructive animate-pulse" />
+                <span>{foodOutOfStockCount + ingOutOfStockCount} Out of Stock</span>
+              </div>
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/25 shadow-2xs">
+                <span className="h-2 w-2 rounded-full bg-amber-500" />
+                <span>{foodLowStockCount + ingLowStockCount} Low Stock</span>
+              </div>
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-medium bg-muted/60 text-muted-foreground border border-border/50 ml-auto">
+                <Package className="h-3 w-3" />
+                <span>{lowStockFoodItems.length + lowStockItems.length} Total</span>
+              </div>
+            </div>
+          </div>
+
+          <Tabs defaultValue="food" className="flex-1 flex flex-col overflow-hidden">
+            {/* Tabs + Search & Filters */}
+            <div className="p-3.5 border-b border-border/60 bg-muted/20 space-y-2.5">
+              {/* Tab Selector */}
+              <TabsList className="grid w-full grid-cols-2 p-1 bg-muted/70 rounded-xl h-10">
+                <TabsTrigger value="food" className="text-xs font-bold gap-2 rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-xs">
+                  <UtensilsCrossed className="h-3.5 w-3.5 text-primary" />
+                  <span>Food Items</span>
+                  <Badge variant="secondary" className="h-5 px-1.5 text-[10px] font-bold rounded-full ml-0.5">
+                    {lowStockFoodItems.length}
+                  </Badge>
+                </TabsTrigger>
+                <TabsTrigger value="ingredients" className="text-xs font-bold gap-2 rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-xs">
+                  <Package className="h-3.5 w-3.5 text-info" />
+                  <span>Ingredients</span>
+                  <Badge variant="secondary" className="h-5 px-1.5 text-[10px] font-bold rounded-full ml-0.5">
+                    {lowStockItems.length}
+                  </Badge>
+                </TabsTrigger>
+              </TabsList>
+
+              {/* Search Bar + Filter Pills */}
+              <div className="flex items-center gap-2">
+                <div className="relative flex-1">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                  <Input
+                    value={stockSearch}
+                    onChange={(e) => setStockSearch(e.target.value)}
+                    placeholder="Search alert items..."
+                    className="h-8 pl-8 pr-7 text-xs rounded-lg bg-background/80 border-border/60 focus:bg-background"
+                  />
+                  {stockSearch && (
+                    <button
+                      onClick={() => setStockSearch("")}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  )}
+                </div>
+
+                {/* Filter Toggles */}
+                <div className="flex items-center gap-1 bg-muted/50 p-0.5 rounded-lg border border-border/50 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setStockStatusFilter("all")}
+                    className={cn(
+                      "px-2 py-1 text-[10px] font-bold rounded-md transition-all",
+                      stockStatusFilter === "all"
+                        ? "bg-background text-foreground shadow-2xs"
+                        : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    All
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setStockStatusFilter("out")}
+                    className={cn(
+                      "px-2 py-1 text-[10px] font-bold rounded-md transition-all flex items-center gap-1",
+                      stockStatusFilter === "out"
+                        ? "bg-destructive text-destructive-foreground shadow-2xs"
+                        : "text-muted-foreground hover:text-destructive"
+                    )}
+                  >
+                    <span className="h-1.5 w-1.5 rounded-full bg-destructive" />
+                    Out
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setStockStatusFilter("low")}
+                    className={cn(
+                      "px-2 py-1 text-[10px] font-bold rounded-md transition-all flex items-center gap-1",
+                      stockStatusFilter === "low"
+                        ? "bg-amber-500 text-white shadow-2xs"
+                        : "text-muted-foreground hover:text-amber-500"
+                    )}
+                  >
+                    <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                    Low
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Food Items Tab */}
+            <TabsContent value="food" className="flex-1 p-4 space-y-2.5 overflow-y-auto m-0 focus-visible:outline-none">
               {lowStockFoodItems.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground text-xs">
-                  <CheckCircle2 className="h-8 w-8 text-emerald-500 mx-auto mb-2 opacity-80" />
-                  All food items have sufficient ingredient stock!
+                <div className="flex flex-col items-center justify-center py-14 text-center space-y-3">
+                  <div className="h-14 w-14 rounded-3xl bg-emerald-500/10 border border-emerald-500/25 flex items-center justify-center text-emerald-500 shadow-inner">
+                    <CheckCircle2 className="h-7 w-7" />
+                  </div>
+                  <div>
+                    <p className="font-bold text-sm text-foreground">All Food Items Ready</p>
+                    <p className="text-xs text-muted-foreground mt-1 max-w-[260px]">
+                      Every food item on the menu has sufficient raw ingredient inventory in the kitchen.
+                    </p>
+                  </div>
+                </div>
+              ) : filteredLowStockFoodItems.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-12 text-center text-muted-foreground space-y-2">
+                  <Search className="h-8 w-8 opacity-25" />
+                  <p className="text-xs font-semibold">No food items match your filter</p>
+                  <p className="text-[11px] opacity-70">Try searching with a different term or filter</p>
                 </div>
               ) : (
-                lowStockFoodItems.map(item => (
-                  <Card key={item.id} className={cn(
-                    "p-3 border-l-4 transition-all shadow-2xs",
-                    item.status === 'out_of_stock' ? "border-l-destructive bg-destructive/5" : "border-l-amber-500 bg-amber-500/5"
-                  )}>
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <p className="font-bold text-sm text-foreground">{item.foodName}</p>
+                filteredLowStockFoodItems.map(item => (
+                  <Card
+                    key={item.id}
+                    className={cn(
+                      "p-3.5 rounded-2xl border transition-all duration-150 shadow-2xs space-y-2.5",
+                      item.status === 'out_of_stock'
+                        ? "border-destructive/30 bg-destructive/[0.03] hover:border-destructive/60 hover:bg-destructive/[0.06]"
+                        : "border-amber-500/30 bg-amber-500/[0.03] hover:border-amber-500/60 hover:bg-amber-500/[0.06]"
+                    )}
+                  >
+                    {/* Top Row: Name + Status Badge */}
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <p className="font-bold text-sm text-foreground tracking-tight leading-snug">
+                          {item.foodName}
+                        </p>
                         {item.sizeName && (
-                          <Badge variant="outline" className="text-[10px] mt-0.5 font-semibold bg-background">
-                            Size: {item.sizeName}
-                          </Badge>
+                          <div className="mt-1 inline-flex items-center gap-1 text-[11px] font-semibold text-muted-foreground bg-muted/60 px-2 py-0.5 rounded-md border border-border/50">
+                            <Layers className="h-3 w-3 text-primary/70" />
+                            <span>Size: {item.sizeName}</span>
+                          </div>
                         )}
                       </div>
-                      <Badge variant={item.status === 'out_of_stock' ? "destructive" : "secondary"} className={cn(
-                        "text-[10px] font-extrabold uppercase px-2 py-0.5",
-                        item.status === 'low' && "bg-amber-500 text-white border-amber-600"
-                      )}>
-                        {item.status === 'out_of_stock' ? 'Out of Stock (0)' : `Low Stock (${item.availableQuantity})`}
-                      </Badge>
+
+                      {/* Status Badge */}
+                      <span
+                        className={cn(
+                          "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wide shrink-0",
+                          item.status === 'out_of_stock'
+                            ? "bg-destructive/15 text-destructive border border-destructive/30"
+                            : "bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30"
+                        )}
+                      >
+                        <span className={cn("h-1.5 w-1.5 rounded-full", item.status === 'out_of_stock' ? "bg-destructive animate-pulse" : "bg-amber-500")} />
+                        {item.status === 'out_of_stock' ? 'Out of Stock' : 'Low Stock'}
+                      </span>
                     </div>
 
-                    <div className="flex items-center justify-between mt-2.5 pt-2 border-t border-border/40 text-xs">
-                      <div>
-                        <span className="text-muted-foreground font-medium">Available Quantity: </span>
-                        <span className={cn(
-                          "font-extrabold",
-                          item.status === 'out_of_stock' ? "text-destructive" : "text-amber-600 dark:text-amber-400"
-                        )}>
-                          {item.availableQuantity} {item.availableQuantity === 1 ? 'item' : 'items'}
+                    {/* Bottom Row: Available portions + Limiting ingredient */}
+                    <div className="flex items-center justify-between gap-2 pt-2 border-t border-border/40 text-xs">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-muted-foreground text-[11px] font-medium">Available:</span>
+                        <span
+                          className={cn(
+                            "font-mono font-extrabold px-2 py-0.5 rounded-lg text-xs",
+                            item.status === 'out_of_stock'
+                              ? "bg-destructive/15 text-destructive border border-destructive/20"
+                              : "bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/20"
+                          )}
+                        >
+                          {item.availableQuantity} {item.availableQuantity === 1 ? 'portion' : 'portions'}
                         </span>
                       </div>
+
                       {item.limitingIngredient && (
-                        <span className="text-[10px] text-muted-foreground font-medium truncate max-w-[140px]" title={`Limiting ingredient: ${item.limitingIngredient}`}>
-                          Limiting: {item.limitingIngredient}
-                        </span>
+                        <div
+                          className="flex items-center gap-1.5 text-[11px] text-muted-foreground font-medium bg-background/80 px-2 py-1 rounded-lg border border-border/60 max-w-[220px] shrink-0"
+                          title={`Depleted ingredient: ${item.limitingIngredient}`}
+                        >
+                          <AlertCircle className={cn("h-3.5 w-3.5 shrink-0", item.status === 'out_of_stock' ? "text-destructive" : "text-amber-500")} />
+                          <span className="truncate">
+                            Depleted: <strong className="text-foreground">{item.limitingIngredient}</strong>
+                          </span>
+                        </div>
                       )}
                     </div>
                   </Card>
@@ -3667,39 +3987,111 @@ const POS = () => {
               )}
             </TabsContent>
 
-            <TabsContent value="ingredients" className="flex-1 p-4 space-y-2.5 overflow-y-auto m-0">
+            {/* Ingredients Tab */}
+            <TabsContent value="ingredients" className="flex-1 p-4 space-y-2.5 overflow-y-auto m-0 focus-visible:outline-none">
               {lowStockItems.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground text-xs">
-                  <CheckCircle2 className="h-8 w-8 text-emerald-500 mx-auto mb-2 opacity-80" />
-                  All raw ingredients are above minimum level!
+                <div className="flex flex-col items-center justify-center py-14 text-center space-y-3">
+                  <div className="h-14 w-14 rounded-3xl bg-emerald-500/10 border border-emerald-500/25 flex items-center justify-center text-emerald-500 shadow-inner">
+                    <CheckCircle2 className="h-7 w-7" />
+                  </div>
+                  <div>
+                    <p className="font-bold text-sm text-foreground">Raw Stock Sufficient</p>
+                    <p className="text-xs text-muted-foreground mt-1 max-w-[260px]">
+                      All raw ingredients in the kitchen warehouse are above their minimum threshold.
+                    </p>
+                  </div>
+                </div>
+              ) : filteredLowStockIngredients.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-12 text-center text-muted-foreground space-y-2">
+                  <Search className="h-8 w-8 opacity-25" />
+                  <p className="text-xs font-semibold">No ingredients match your filter</p>
+                  <p className="text-[11px] opacity-70">Try searching with a different term or filter</p>
                 </div>
               ) : (
-                lowStockItems.map(item => (
-                  <Card key={item.id} className="p-3 border-l-4 border-l-destructive">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <p className="font-semibold text-sm">{item.name}</p>
-                        <p className="text-xs text-muted-foreground">{item.category} — {item.unit}</p>
+                filteredLowStockIngredients.map((item: any) => {
+                  const curr = Number(item.currentStock || 0);
+                  const minLvl = Number(item.lowStockLevel || 1);
+                  const isOutOfStock = curr <= 0;
+                  const ratio = Math.min(100, Math.max(0, (curr / minLvl) * 100));
+
+                  return (
+                    <Card
+                      key={item.id}
+                      className={cn(
+                        "p-3.5 rounded-2xl border transition-all duration-150 shadow-2xs space-y-2.5",
+                        isOutOfStock
+                          ? "border-destructive/30 bg-destructive/[0.03] hover:border-destructive/60 hover:bg-destructive/[0.06]"
+                          : "border-amber-500/30 bg-amber-500/[0.03] hover:border-amber-500/60 hover:bg-amber-500/[0.06]"
+                      )}
+                    >
+                      {/* Top Row: Name + Category & Status Badge */}
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                          <p className="font-bold text-sm text-foreground tracking-tight leading-snug">
+                            {item.name}
+                          </p>
+                          <div className="flex items-center gap-1.5 mt-1 text-[11px] text-muted-foreground font-medium">
+                            {item.category && (
+                              <span className="bg-muted/60 px-2 py-0.5 rounded-md border border-border/50">
+                                {item.category}
+                              </span>
+                            )}
+                            <span>·</span>
+                            <span>Unit: <strong className="text-foreground">{item.unit || "unit"}</strong></span>
+                          </div>
+                        </div>
+
+                        {/* Status Badge */}
+                        <span
+                          className={cn(
+                            "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wide shrink-0",
+                            isOutOfStock
+                              ? "bg-destructive/15 text-destructive border border-destructive/30"
+                              : "bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30"
+                          )}
+                        >
+                          <span className={cn("h-1.5 w-1.5 rounded-full", isOutOfStock ? "bg-destructive animate-pulse" : "bg-amber-500")} />
+                          {isOutOfStock ? "Out of Stock" : "Low Stock"}
+                        </span>
                       </div>
-                      <Badge variant="destructive" className="text-[10px]">LOW</Badge>
-                    </div>
-                    <div className="flex items-center gap-4 mt-2 text-xs">
-                      <div>
-                        <span className="text-muted-foreground">Current: </span>
-                        <span className="font-bold text-destructive">{item.currentStock} {item.unit}</span>
+
+                      {/* Stock Level Numerical Summary */}
+                      <div className="grid grid-cols-3 gap-2 bg-background/70 p-2 rounded-xl border border-border/50 text-center">
+                        <div>
+                          <p className="text-[10px] text-muted-foreground font-medium">Current Stock</p>
+                          <p className={cn("text-xs font-mono font-extrabold mt-0.5", isOutOfStock ? "text-destructive" : "text-amber-600 dark:text-amber-400")}>
+                            {curr} <span className="text-[10px] font-normal text-muted-foreground">{item.unit}</span>
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] text-muted-foreground font-medium">Min Level</p>
+                          <p className="text-xs font-mono font-bold text-foreground mt-0.5">
+                            {minLvl} <span className="text-[10px] font-normal text-muted-foreground">{item.unit}</span>
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] text-muted-foreground font-medium">Capacity</p>
+                          <p className={cn("text-xs font-mono font-bold mt-0.5", isOutOfStock ? "text-destructive" : "text-amber-600 dark:text-amber-400")}>
+                            {Math.round(ratio)}%
+                          </p>
+                        </div>
                       </div>
-                      <div>
-                        <span className="text-muted-foreground">Min Level: </span>
-                        <span className="font-medium">{item.lowStockLevel} {item.unit}</span>
+
+                      {/* Progress Bar */}
+                      <div className="space-y-1">
+                        <div className="h-1.5 rounded-full bg-muted/80 overflow-hidden">
+                          <div
+                            className={cn(
+                              "h-full rounded-full transition-all duration-300",
+                              isOutOfStock ? "bg-destructive" : "bg-amber-500"
+                            )}
+                            style={{ width: `${Math.max(2, ratio)}%` }}
+                          />
+                        </div>
                       </div>
-                    </div>
-                    <div className="mt-2">
-                      <div className="h-1.5 rounded-full bg-muted overflow-hidden">
-                        <div className="h-full bg-destructive rounded-full" style={{ width: `${Math.min(100, (item.currentStock / item.lowStockLevel) * 100)}%` }} />
-                      </div>
-                    </div>
-                  </Card>
-                ))
+                    </Card>
+                  );
+                })
               )}
             </TabsContent>
           </Tabs>
