@@ -4182,39 +4182,30 @@ const POS = () => {
           </DialogHeader>
 
           <div className="space-y-6 py-3 text-sm">
-            {/* Top Key Metrics Grid (3 Cards for POS Counter Register) */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
-              <Card className="p-4 bg-muted/30 border-border/70 rounded-2xl shadow-sm hover:border-primary/30 transition-colors">
+            {/* Top Key Metrics Grid (2 Cards for Opening & Expected Closing Cash) */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Card className="p-4 sm:p-5 bg-muted/30 border-border/70 rounded-2xl shadow-sm hover:border-primary/30 transition-colors flex flex-col justify-between">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Opening Cash Float</span>
+                  <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Opening Cash</span>
                   <div className="h-8 w-8 rounded-xl bg-muted/60 border border-border/60 flex items-center justify-center text-muted-foreground">
                     <Banknote className="h-4 w-4" />
                   </div>
                 </div>
-                <p className="font-black text-xl sm:text-2xl text-foreground mt-2 font-mono">{effectiveSettings.currency} {(activeShift?.openingCash || 0).toLocaleString()}</p>
-                <span className="text-[10px] text-muted-foreground font-medium mt-1 block">Initial register float</span>
+                <p className="font-black text-2xl sm:text-3xl text-foreground mt-3 font-mono">
+                  {effectiveSettings.currency} {Math.round(activeShift?.openingCash || 0).toLocaleString()}
+                </p>
               </Card>
 
-              <Card className="p-4 bg-amber-500/5 border-amber-500/20 rounded-2xl shadow-sm hover:border-amber-500/40 transition-colors">
+              <Card className="p-4 sm:p-5 bg-emerald-500/10 border-emerald-500/30 rounded-2xl shadow-sm hover:border-emerald-500/50 transition-colors flex flex-col justify-between">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider">POS Counter Cash</span>
-                  <div className="h-8 w-8 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-500">
-                    <Flame className="h-4 w-4" />
-                  </div>
-                </div>
-                <p className="font-black text-xl sm:text-2xl text-amber-600 dark:text-amber-400 mt-2 font-mono">{effectiveSettings.currency} {shiftSales.pos.cash.toLocaleString()}</p>
-                <span className="text-[10px] text-amber-600/80 dark:text-amber-400/80 font-semibold mt-1 block">{shiftSales.pos.count} POS orders</span>
-              </Card>
-
-              <Card className="p-4 bg-emerald-500/10 border-emerald-500/30 rounded-2xl shadow-sm hover:border-emerald-500/50 transition-colors">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">Expected Drawer Cash</span>
+                  <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">Expected Closing Cash</span>
                   <div className="h-8 w-8 rounded-xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-500">
                     <Wallet className="h-4 w-4" />
                   </div>
                 </div>
-                <p className="font-black text-xl sm:text-2xl text-emerald-600 dark:text-emerald-400 mt-2 font-mono">{effectiveSettings.currency} {((activeShift?.openingCash || 0) + shiftSales.pos.cash).toLocaleString()}</p>
-                <span className="text-[10px] text-emerald-600/80 dark:text-emerald-400/80 font-extrabold mt-1 block">Float + Direct POS Cash</span>
+                <p className="font-black text-2xl sm:text-3xl text-emerald-600 dark:text-emerald-400 mt-3 font-mono">
+                  {effectiveSettings.currency} {Math.round((activeShift?.openingCash || 0) + shiftSales.pos.cash).toLocaleString()}
+                </p>
               </Card>
             </div>
 
@@ -4260,40 +4251,45 @@ const POS = () => {
               </div>
 
               {/* Difference Calculation Alert */}
-              {closingCashInput && (
-                <div className={cn(
-                  "p-4 rounded-2xl text-xs sm:text-sm font-bold flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 border shadow-sm transition-all",
-                  Number(closingCashInput) - ((activeShift?.openingCash || 0) + shiftSales.pos.cash) === 0
-                    ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/40"
-                    : Number(closingCashInput) - ((activeShift?.openingCash || 0) + shiftSales.pos.cash) < 0
-                    ? "bg-destructive/15 text-destructive border-destructive/40"
-                    : "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/40"
-                )}>
-                  <span className="flex items-center gap-2">
-                    {Number(closingCashInput) - ((activeShift?.openingCash || 0) + shiftSales.pos.cash) === 0 && (
-                      <>
-                        <CheckCircle2 className="h-5 w-5 text-emerald-500 shrink-0" />
-                        <span>Cash drawer matches expected amount perfectly!</span>
-                      </>
-                    )}
-                    {Number(closingCashInput) - ((activeShift?.openingCash || 0) + shiftSales.pos.cash) < 0 && (
-                      <>
-                        <AlertTriangle className="h-5 w-5 text-destructive shrink-0" />
-                        <span>Shortage detected in physical cash drawer</span>
-                      </>
-                    )}
-                    {Number(closingCashInput) - ((activeShift?.openingCash || 0) + shiftSales.pos.cash) > 0 && (
-                      <>
-                        <AlertCircle className="h-5 w-5 text-amber-500 shrink-0" />
-                        <span>Excess cash detected in physical cash drawer</span>
-                      </>
-                    )}
-                  </span>
-                  <span className="font-black text-sm sm:text-base font-mono self-end sm:self-auto">
-                    Difference: {effectiveSettings.currency} {(Number(closingCashInput) - ((activeShift?.openingCash || 0) + shiftSales.pos.cash)).toLocaleString()}
-                  </span>
-                </div>
-              )}
+              {closingCashInput && (() => {
+                const enteredCash = Math.round(Number(closingCashInput) || 0);
+                const expectedCash = Math.round((activeShift?.openingCash || 0) + shiftSales.pos.cash);
+                const diff = enteredCash - expectedCash;
+                return (
+                  <div className={cn(
+                    "p-4 rounded-2xl text-xs sm:text-sm font-bold flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 border shadow-sm transition-all",
+                    diff === 0
+                      ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/40"
+                      : diff < 0
+                      ? "bg-destructive/15 text-destructive border-destructive/40"
+                      : "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/40"
+                  )}>
+                    <span className="flex items-center gap-2">
+                      {diff === 0 && (
+                        <>
+                          <CheckCircle2 className="h-5 w-5 text-emerald-500 shrink-0" />
+                          <span>Cash drawer matches expected amount perfectly!</span>
+                        </>
+                      )}
+                      {diff < 0 && (
+                        <>
+                          <AlertTriangle className="h-5 w-5 text-destructive shrink-0" />
+                          <span>Shortage detected in physical cash drawer</span>
+                        </>
+                      )}
+                      {diff > 0 && (
+                        <>
+                          <AlertCircle className="h-5 w-5 text-amber-500 shrink-0" />
+                          <span>Excess cash detected in physical cash drawer</span>
+                        </>
+                      )}
+                    </span>
+                    <span className="font-black text-sm sm:text-base font-mono self-end sm:self-auto">
+                      Difference: {effectiveSettings.currency} {diff.toLocaleString()}
+                    </span>
+                  </div>
+                );
+              })()}
             </div>
 
             {/* POS COUNTER SALES BREAKDOWN */}
@@ -4307,43 +4303,66 @@ const POS = () => {
               </div>
 
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div className="p-3 rounded-2xl bg-muted/40 border border-border/50">
+                <div className="p-3.5 rounded-2xl bg-muted/40 border border-border/50">
                   <span className="text-[11px] text-muted-foreground font-bold block uppercase tracking-wider">Total POS Sales</span>
-                  <span className="font-extrabold text-base text-foreground font-mono mt-0.5 block">{effectiveSettings.currency} {shiftSales.pos.total.toLocaleString()}</span>
+                  <span className="font-extrabold text-base text-foreground font-mono mt-1 block">
+                    {effectiveSettings.currency} {Math.round(shiftSales.pos.total).toLocaleString()}
+                  </span>
                 </div>
-                <div className="p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/20">
+                <div className="p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/20">
                   <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-bold block uppercase tracking-wider">POS Cash Sales</span>
-                  <span className="font-extrabold text-base text-emerald-600 dark:text-emerald-400 font-mono mt-0.5 block">{effectiveSettings.currency} {shiftSales.pos.cash.toLocaleString()}</span>
+                  <span className="font-extrabold text-base text-emerald-600 dark:text-emerald-400 font-mono mt-1 block">
+                    {effectiveSettings.currency} {Math.round(shiftSales.pos.cash).toLocaleString()}
+                  </span>
                 </div>
-                <div className="p-3 rounded-2xl bg-info/10 border border-info/20">
-                  <span className="text-[11px] text-info font-bold block uppercase tracking-wider">POS Non-Cash</span>
-                  <span className="font-extrabold text-base text-info font-mono mt-0.5 block">{effectiveSettings.currency} {shiftSales.pos.nonCash.toLocaleString()}</span>
+                <div className="p-3.5 rounded-2xl bg-info/10 border border-info/20">
+                  <span className="text-[11px] text-info font-bold block uppercase tracking-wider">POS Online Sales</span>
+                  <span className="font-extrabold text-base text-info font-mono mt-1 block">
+                    {effectiveSettings.currency} {Math.round(shiftSales.pos.nonCash).toLocaleString()}
+                  </span>
                 </div>
-                <div className="p-3 rounded-2xl bg-muted/40 border border-border/50">
+                <div className="p-3.5 rounded-2xl bg-muted/40 border border-border/50">
                   <span className="text-[11px] text-muted-foreground font-bold block uppercase tracking-wider">Order Volume</span>
-                  <span className="font-extrabold text-base text-foreground mt-0.5 block">{shiftSales.pos.count} orders</span>
+                  <span className="font-extrabold text-base text-foreground mt-1 block">{shiftSales.pos.count} orders</span>
                 </div>
               </div>
 
-              {/* POS Payment Methods pills */}
-              <div>
+              {/* POS Online Payment Methods pills */}
+              <div className="pt-1">
                 <p className="text-[11px] font-extrabold text-muted-foreground uppercase tracking-wider mb-2.5 flex items-center gap-1.5">
                   <CreditCard className="h-3.5 w-3.5 text-primary" />
-                  POS Sales by Payment Method
+                  POS Online Sales by Payment Method
                 </p>
-                <div className="flex flex-wrap gap-2.5">
-                  {Object.entries(shiftSales.pos.byMethod).map(([method, amount]) => {
-                    const mLower = method.toLowerCase();
+                {(() => {
+                  const onlineMethods = Object.entries(shiftSales.pos.byMethod).filter(([method]) => {
+                    const mLower = method.toLowerCase().trim();
                     const isCash = mLower.includes("cash") && !mLower.includes("jazz") && !mLower.includes("easy") && !mLower.includes("online") && !mLower.includes("card") && !mLower.includes("mobile") && !mLower.includes("paisa");
+                    return !isCash;
+                  });
+
+                  if (onlineMethods.length === 0) {
                     return (
-                      <div key={method} className="flex items-center gap-2 bg-muted/50 border border-border/70 rounded-2xl px-3.5 py-2 text-xs font-bold shadow-xs">
-                        {isCash ? <Banknote className="h-3.5 w-3.5 text-emerald-500" /> : mLower.includes("card") ? <CreditCard className="h-3.5 w-3.5 text-info" /> : <Smartphone className="h-3.5 w-3.5 text-purple-500" />}
-                        <span className="text-muted-foreground">{method}:</span>
-                        <span className="font-extrabold text-foreground font-mono">{effectiveSettings.currency} {amount.toLocaleString()}</span>
-                      </div>
+                      <p className="text-xs text-muted-foreground italic py-1">No online payment methods recorded in this shift.</p>
                     );
-                  })}
-                </div>
+                  }
+
+                  return (
+                    <div className="flex flex-wrap gap-2.5">
+                      {onlineMethods.map(([method, amount]) => {
+                        const mLower = method.toLowerCase();
+                        return (
+                          <div key={method} className="flex items-center gap-2 bg-muted/50 border border-border/70 rounded-2xl px-3.5 py-2 text-xs font-bold shadow-xs">
+                            {mLower.includes("card") ? <CreditCard className="h-3.5 w-3.5 text-info" /> : <Smartphone className="h-3.5 w-3.5 text-purple-500" />}
+                            <span className="text-muted-foreground">{method}:</span>
+                            <span className="font-extrabold text-foreground font-mono">
+                              {effectiveSettings.currency} {Math.round(amount).toLocaleString()}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
               </div>
             </div>
           </div>
@@ -4359,11 +4378,11 @@ const POS = () => {
                 if (!activeShift) return;
                 try {
                   await shiftService.closeShift(activeShift.id, {
-                    closingCash:      Number(closingCashInput),
-                    totalSales:       shiftSales.pos.total,
-                    totalCashSales:   shiftSales.pos.cash,
-                    totalCardSales:   shiftSales.pos.card || 0,
-                    totalOnlineSales: shiftSales.pos.online || 0,
+                    closingCash:      Math.round(Number(closingCashInput)),
+                    totalSales:       Math.round(shiftSales.pos.total),
+                    totalCashSales:   Math.round(shiftSales.pos.cash),
+                    totalCardSales:   Math.round(shiftSales.pos.card || 0),
+                    totalOnlineSales: Math.round(shiftSales.pos.online || 0),
                     orderCount:       shiftSales.pos.count,
                     cancelledOrders:  0,
                     totalExpenses:    0,
