@@ -58,7 +58,9 @@ export interface DealRecord {
   discountPercent: number | null;
   applicableItems: string[];
   applicableCategories: string[];
-  // buy_x_get_y
+  // buy_x_get_y — bogoItems is the real shape; the flat fields below mirror its
+  // first row per side, and are the whole offer on deals saved before it existed.
+  bogoItems: DealBogoItemRecord[];
   buyItemId: string | null;
   /** Pins the offer to one size of the buy item. Null on deals saved before sizes were pinned. */
   buyVariantId: string | null;
@@ -67,6 +69,23 @@ export interface DealRecord {
   /** Pins the free side to one size. Null on legacy deals, whose giveaway the server caps. */
   getVariantId: string | null;
   getQty: number | null;
+}
+
+/** One item on one side of a Buy X Get Y offer. Both sides hold several. */
+export interface DealBogoItemRecord {
+  id: string;
+  role: "BUY" | "GET";
+  menuItemId: string;
+  variantId: string | null;
+  qty: number;
+  displayOrder: number;
+}
+
+export interface DealBogoItemInput {
+  menuItemId: string;
+  variantId?: string | null;
+  qty: number;
+  displayOrder?: number;
 }
 
 export interface DealComponentInput {
@@ -115,6 +134,8 @@ export interface DealInput {
   applicableItems?: string[];
   applicableCategories?: string[];
   // buy_x_get_y
+  buyItems?: DealBogoItemInput[];
+  getItems?: DealBogoItemInput[];
   buyItemId?: string | null;
   buyVariantId?: string | null;
   buyQty?: number | null;

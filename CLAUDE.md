@@ -108,12 +108,21 @@ plus a body explaining _why_ the change was made when that is not obvious.
   (or similar) and lets `AppLayout.tsx`'s `<main className="p-4 md:p-6 overflow-auto">` own the
   available width. `DealForm.tsx` had picked up a stray `max-w-7xl mx-auto` that left large dead
   gutters on wide screens (removed 2026-08-22) — don't copy that pattern into a new page.
-- **A Buy X Get Y deal must pin a size on both sides** — `DealForm.tsx` shows a Size picker
-  whenever the chosen item has variants and blocks the save until one is picked, because the
-  backend (`assertBuyXGetYVariants`) rejects it otherwise. The Offer Impact figures are exact once
-  both sides are pinned; while a multi-size side is unpinned they fall back to the worst case
-  (bought cheapest, given away priciest) and say so in the footnote. Changing the item clears that
-  side's variant — don't drop that reset, or the deal saves a size belonging to a different dish.
+- **Every deal format edits its items through the same row table** — Category | Menu Item | Size /
+  Variant | (Qty) | Cost | Selling | delete, on a `grid` with an explicit `gridTemplateColumns`.
+  Fixed Bundle, Choice Steps and Buy X Get Y all use it; a new format should too rather than
+  inventing stacked dropdown cards (Buy X Get Y had those until 2026-08-22).
+- **Buy X Get Y sends `buyItems`/`getItems` arrays, not the flat fields** — both sides take several
+  items and are driven by one shared set of helpers (`patchBogoRow`/`addBogoRow`/`updateBogoItem`)
+  parameterised by which setter to use. Loading an existing deal reads `bogoItems` and falls back to
+  the flat `buyItemId`/`getItemId` for deals saved before the relation existed — keep that fallback
+  or editing an old deal silently drops its contents.
+- **A Buy X Get Y row must pin a size** — `DealForm.tsx` shows the Size cell whenever the item has
+  variants and blocks the save until one is picked, because the backend (`assertBuyXGetYVariants`)
+  rejects it otherwise. Offer Impact is exact once every row is pinned; an unpinned multi-size row
+  falls back to the worst case (bought cheapest, given away priciest) and says so in the footnote.
+  Changing a row's item clears its variant — don't drop that reset, or the deal saves a size
+  belonging to a different dish.
 - **Rs./% shared-toggle pattern** (`DealForm.tsx`'s "Set Deal Price" + Channel Price Overrides): one
   master two-state toggle governs several inputs' *mode* at once, with a shared conversion helper
   (`applyPercent`/`pctFromPrice`-style) so switching modes back-derives a sensible value instead of

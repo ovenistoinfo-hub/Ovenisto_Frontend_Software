@@ -93,8 +93,24 @@ const Deals = () => {
       const scope = items.length > 0 ? items.join(", ") : `${deal.applicableCategories.length} categor${deal.applicableCategories.length === 1 ? "y" : "ies"}`;
       return `${deal.discountPercent}% off: ${scope}`;
     }
-    if (deal.type === "buy_x_get_y" && deal.buyItemId && deal.getItemId) {
-      return `Buy ${deal.buyQty} ${itemName(deal.buyItemId)} → Get ${deal.getQty} ${itemName(deal.getItemId)} Free`;
+    if (deal.type === "buy_x_get_y") {
+      // A deal saved since bogoItems existed lists every item on both sides; an
+      // older one has a single item per side in the flat fields.
+      const side = (role: "BUY" | "GET") =>
+        (deal.bogoItems ?? [])
+          .filter((b) => b.role === role)
+          .slice()
+          .sort((a, b) => a.displayOrder - b.displayOrder)
+          .map((b) => `${b.qty} ${itemName(b.menuItemId)}`);
+
+      let buys = side("BUY");
+      let gets = side("GET");
+      if (buys.length === 0 && deal.buyItemId) buys = [`${deal.buyQty} ${itemName(deal.buyItemId)}`];
+      if (gets.length === 0 && deal.getItemId) gets = [`${deal.getQty} ${itemName(deal.getItemId)}`];
+
+      if (buys.length > 0 && gets.length > 0) {
+        return `Buy ${buys.join(" + ")} → Get ${gets.join(" + ")} Free`;
+      }
     }
     return deal.description || "Promotional combo deal";
   };

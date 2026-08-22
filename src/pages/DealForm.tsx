@@ -44,6 +44,28 @@ interface ScopeItemRow {
   itemId: string;
 }
 
+/** One row on either side of a Buy X Get Y offer. `categoryId` is a UI-only
+ *  filter for the row's item dropdown and is never sent to the backend. */
+interface BogoRow {
+  categoryId: string;
+  itemId: string;
+  variantId: string | null;
+  qty: number;
+}
+
+const emptyBogoRow = (): BogoRow => ({ categoryId: "", itemId: "", variantId: null, qty: 1 });
+
+/** Drops rows the admin left blank and strips the UI-only category filter. */
+const toBogoInput = (rows: BogoRow[]) =>
+  rows
+    .filter((r) => r.itemId)
+    .map((r, idx) => ({
+      menuItemId: r.itemId,
+      variantId: r.variantId,
+      qty: Math.max(1, Number(r.qty) || 1),
+      displayOrder: idx,
+    }));
+
 interface OptionGroupRow {
   id: string;
   label: string;
@@ -53,6 +75,23 @@ interface OptionGroupRow {
    *  types their own wording, which then wins over the derived text. */
   labelEdited: boolean;
 }
+
+/** The two halves of a Buy X Get Y offer. Both render the same row table, so
+ *  they are described once here rather than duplicated in the markup. */
+const BOGO_SIDES = [
+  {
+    key: "buy" as const,
+    title: "Customer Buys",
+    icon: ShoppingBag,
+    hint: "Every item listed here has to be bought for the offer to apply",
+  },
+  {
+    key: "get" as const,
+    title: "Customer Gets Free",
+    icon: Gift,
+    hint: "Every item listed here is given away when the offer applies",
+  },
+];
 
 const PERCENT_PRESETS = [10, 15, 20, 25, 30, 50];
 
@@ -139,17 +178,13 @@ const DealForm = () => {
   const [applicableCategoryIds, setApplicableCategoryIds] = useState<string[]>([]);
 
   // Buy X Get Y
-  const [buyItemId, setBuyItemId] = useState<string | null>(null);
-  // Both sides pin a specific size. Without one the offer means "any size", and
-  // a customer can qualify with the cheapest and claim the priciest one free.
-  const [buyVariantId, setBuyVariantId] = useState<string | null>(null);
-  const [buyQty, setBuyQty] = useState<number>(1);
-  const [getItemId, setGetItemId] = useState<string | null>(null);
-  const [getVariantId, setGetVariantId] = useState<string | null>(null);
-  const [getQty, setGetQty] = useState<number>(1);
+  // Both sides hold any number of items, so "Buy 1 Pizza + 1 Pasta, get 1 Drink
+  // + 1 Fries free" is one deal. Each row pins a size — without one the offer
+  // means "any size", and a customer can qualify with the cheapest while
+  // claiming the priciest free.
+  const [buyRows, setBuyRows] = useState<BogoRow[]>([emptyBogoRow()]);
+  const [getRows, setGetRows] = useState<BogoRow[]>([emptyBogoRow()]);
   // UI-only category filters narrowing the two item dropdowns; never persisted.
-  const [buyCategoryId, setBuyCategoryId] = useState("");
-  const [getCategoryId, setGetCategoryId] = useState("");
 
   // Validity & Schedule
   const todayStr = new Date().toISOString().split("T")[0];
@@ -220,12 +255,32 @@ const DealForm = () => {
       (existingDeal.applicableItems ?? []).map((itemId) => ({ categoryId: "", itemId }))
     );
     setApplicableCategoryIds(existingDeal.applicableCategories ?? []);
-    setBuyItemId(existingDeal.buyItemId ?? null);
-    setBuyVariantId(existingDeal.buyVariantId ?? null);
-    setBuyQty(existingDeal.buyQty ?? 1);
-    setGetItemId(existingDeal.getItemId ?? null);
-    setGetVariantId(existingDeal.getVariantId ?? null);
-    setGetQty(existingDeal.getQty ?? 1);
+    // A deal saved since bogoItems existed carries every row there. An older one
+    // has a single item per side in the flat fields — read those so editing an
+    // existing deal doesn't silently drop it.
+    const bogo = existingDeal.bogoItems ?? [];
+    const fromRelation = (role: "BUY" | "GET"): BogoRow[] =>
+      bogo
+        .filter((b) => b.role === role)
+        .slice()
+        .sort((a, b) => a.displayOrder - b.displayOrder)
+        .map((b) => ({ categoryId: "", itemId: b.menuItemId, variantId: b.variantId, qty: b.qty }));
+
+    const legacyRow = (itemId: string | null, variantId: string | null, qty: number | null): BogoRow[] =>
+      itemId ? [{ categoryId: "", itemId, variantId, qty: qty ?? 1 }] : [emptyBogoRow()];
+
+    const buyFromRelation = fromRelation("BUY");
+    const getFromRelation = fromRelation("GET");
+    setBuyRows(
+      buyFromRelation.length > 0
+        ? buyFromRelation
+        : legacyRow(existingDeal.buyItemId, existingDeal.buyVariantId, existingDeal.buyQty)
+    );
+    setGetRows(
+      getFromRelation.length > 0
+        ? getFromRelation
+        : legacyRow(existingDeal.getItemId, existingDeal.getVariantId, existingDeal.getQty)
+    );
 
     setValidFrom(existingDeal.validFrom?.slice(0, 10) || todayStr);
     if (!existingDeal.validTo) {
@@ -564,6 +619,41 @@ const DealForm = () => {
   const updateChoiceVariant = (groupId: string, idx: number, variantId: string) =>
     patchChoice(groupId, idx, { variantId });
 
+  /** Both Buy X Get Y sides are edited the same way, so they share one set of
+   *  helpers parameterised by which setter to drive. */
+  const patchBogoRow = (
+    setRows: React.Dispatch<React.SetStateAction<BogoRow[]>>,
+    idx: number,
+    patch: Partial<BogoRow>
+  ) => setRows((prev) => prev.map((r, i) => (i === idx ? { ...r, ...patch } : r)));
+
+  const addBogoRow = (setRows: React.Dispatch<React.SetStateAction<BogoRow[]>>) =>
+    setRows((prev) => [...prev, emptyBogoRow()]);
+
+  // Never drop the last row — an empty side has nothing to add back from.
+  const removeBogoRow = (setRows: React.Dispatch<React.SetStateAction<BogoRow[]>>, idx: number) =>
+    setRows((prev) => (prev.length <= 1 ? prev : prev.filter((_, i) => i !== idx)));
+
+  // Changing the category clears the item and size under it — the old item is no
+  // longer in the narrowed dropdown.
+  const updateBogoCategory = (
+    setRows: React.Dispatch<React.SetStateAction<BogoRow[]>>,
+    idx: number,
+    categoryId: string
+  ) => patchBogoRow(setRows, idx, { categoryId, itemId: "", variantId: null });
+
+  /** Picking an item defaults to its first size, matching the other row tables.
+   *  Changing the item must clear the old size, or the deal would save a size
+   *  belonging to a different dish. */
+  const updateBogoItem = (
+    setRows: React.Dispatch<React.SetStateAction<BogoRow[]>>,
+    idx: number,
+    itemId: string
+  ) => {
+    const item = menuItems.find((m) => m.id === itemId);
+    patchBogoRow(setRows, idx, { itemId, variantId: item?.variants?.[0]?.id ?? null });
+  };
+
   /**
    * How a step reads to a customer: "Choose any 2 Pizza". The noun comes from the
    * choices' shared category, not the step's label — the label is free text an
@@ -689,23 +779,24 @@ const DealForm = () => {
   }, [discountScopeItems, discountPercent]);
 
   /**
-   * What a Buy X Get Y offer earns and gives away.
+   * What a Buy X Get Y offer earns and gives away, across every item on both
+   * sides.
    *
-   * Once both sides pin a size, this is exact — the server matches the pinned
-   * variant, so those are the only prices in play. Until they are pinned the
-   * offer still means "any size", so the figures fall back to the worst case
-   * for the business: bought at the cheapest qualifying size, taken free at the
-   * priciest. The footnote below tells the user which of the two they are
-   * looking at.
+   * A row that pins a size is exact — the server matches that variant, so those
+   * are the only prices in play. A row that has several sizes and none pinned
+   * still means "any size", so it falls back to the worst case for the business:
+   * bought at the cheapest, given away at the priciest. The footnote tells the
+   * user which of the two they are looking at.
    */
   const bogoImpact = useMemo(() => {
-    const buyItem = menuItems.find((m) => m.id === buyItemId);
-    const getItem = menuItems.find((m) => m.id === getItemId);
-    if (!buyItem || !getItem) return null;
+    /** Prices one row: the pinned size if there is one, otherwise the size that
+     *  hurts most on that side of the offer. */
+    const priceRow = (row: BogoRow, worst: "cheapest" | "priciest") => {
+      const item = menuItems.find((m) => m.id === row.itemId);
+      if (!item) return null;
 
-    const unitsOf = (item: typeof buyItem) => {
       const variants = item.variants || [];
-      return variants.length > 0
+      const units = variants.length
         ? variants.map((v) => ({
             id: v.id as string | null,
             label: v.name as string | null,
@@ -713,34 +804,46 @@ const DealForm = () => {
             cost: Number(v.costPrice ?? item.costPrice ?? 0),
           }))
         : [{ id: null, label: null, price: Number(item.price || 0), cost: Number(item.costPrice || 0) }];
+
+      const pinned = row.variantId ? units.find((u) => u.id === row.variantId) : undefined;
+      const chosen =
+        pinned ??
+        units.reduce((a, b) =>
+          worst === "cheapest" ? (b.price < a.price ? b : a) : b.price > a.price ? b : a
+        );
+
+      const qty = Math.max(1, Number(row.qty) || 1);
+      return {
+        item,
+        label: chosen.label,
+        qty,
+        price: chosen.price * qty,
+        cost: chosen.cost * qty,
+        // Only an unpinned row with a real choice of sizes makes this a guess.
+        unpinned: units.length > 1 && !pinned,
+      };
     };
 
-    const buyUnits = unitsOf(buyItem);
-    const getUnits = unitsOf(getItem);
+    const buy = buyRows.map((r) => priceRow(r, "cheapest")).filter(Boolean) as NonNullable<
+      ReturnType<typeof priceRow>
+    >[];
+    const give = getRows.map((r) => priceRow(r, "priciest")).filter(Boolean) as NonNullable<
+      ReturnType<typeof priceRow>
+    >[];
+    if (buy.length === 0 || give.length === 0) return null;
 
-    // A pinned size is the only one the server will accept, so price it
-    // directly. Unpinned, assume whichever size costs the business most.
-    const pinnedBuy = buyVariantId
-      ? buyUnits.find((u) => u.id === buyVariantId)
-      : undefined;
-    const pinnedGet = getVariantId
-      ? getUnits.find((u) => u.id === getVariantId)
-      : undefined;
+    const sum = (rows: typeof buy, key: "price" | "cost") =>
+      rows.reduce((total, r) => total + r[key], 0);
 
-    const chosenBuy = pinnedBuy ?? buyUnits.reduce((a, b) => (b.price < a.price ? b : a));
-    const chosenGet = pinnedGet ?? getUnits.reduce((a, b) => (b.price > a.price ? b : a));
-
-    const revenue = buyQty * chosenBuy.price;
-    const totalCost = buyQty * chosenBuy.cost + getQty * chosenGet.cost;
-    const giveawayValue = getQty * chosenGet.price;
-    const giveawayCost = getQty * chosenGet.cost;
+    const revenue = sum(buy, "price");
+    const giveawayValue = sum(give, "price");
+    const giveawayCost = sum(give, "cost");
+    const totalCost = sum(buy, "cost") + giveawayCost;
     const profit = revenue - totalCost;
 
     return {
-      buyItem,
-      getItem,
-      buyLabel: chosenBuy.label,
-      getLabel: chosenGet.label,
+      buy,
+      give,
       revenue,
       totalCost,
       giveawayValue,
@@ -752,13 +855,33 @@ const DealForm = () => {
         revenue + giveawayValue > 0
           ? Math.round((giveawayValue / (revenue + giveawayValue)) * 100)
           : 0,
-      hasCost: chosenBuy.cost > 0 || chosenGet.cost > 0,
-      // True only while a side with several sizes has none pinned — that is the
-      // case where these numbers are a worst case rather than the real figure.
-      variantSpread:
-        (buyUnits.length > 1 && !pinnedBuy) || (getUnits.length > 1 && !pinnedGet),
+      hasCost: totalCost > 0,
+      variantSpread: [...buy, ...give].some((r) => r.unpinned),
     };
-  }, [menuItems, buyItemId, buyVariantId, getItemId, getVariantId, buyQty, getQty]);
+  }, [menuItems, buyRows, getRows]);
+
+  /** The "format" line of the setup checklist. Each deal type has its own idea
+   *  of being configured, so it is derived here rather than hard-coded to the
+   *  Fixed Bundle's row count. */
+  const formatChecklist = useMemo(() => {
+    if (dealType === "combo") {
+      return { done: comboRows.length > 0, label: `${comboRows.length} item(s) in bundle` };
+    }
+    if (dealType === "option_combo") {
+      const steps = optionGroups.filter((g) => g.choices.some((c) => c.itemId)).length;
+      return { done: steps > 0, label: `${steps} choice step(s) configured` };
+    }
+    if (dealType === "buy_x_get_y") {
+      const buys = buyRows.filter((r) => r.itemId).length;
+      const gets = getRows.filter((r) => r.itemId).length;
+      return {
+        done: buys > 0 && gets > 0,
+        label: buys > 0 && gets > 0 ? `Buy ${buys} item(s) → get ${gets} free` : "Pick the buy and free items",
+      };
+    }
+    const scoped = applicableItemIds.length + applicableCategoryIds.length;
+    return { done: scoped > 0, label: scoped > 0 ? `${scoped} item(s)/categor(ies) in scope` : "Choose what the discount applies to" };
+  }, [dealType, comboRows, optionGroups, buyRows, getRows, applicableItemIds, applicableCategoryIds]);
 
   /** Names the discount's scope for the POS preview — the selected categories,
    *  plus a count of items named on their own. Items a selected category already
@@ -873,33 +996,40 @@ const DealForm = () => {
         return;
       }
     } else if (dealType === "buy_x_get_y") {
-      if (!buyItemId) {
-        toast.error('Select the "Buy" item');
-        return;
-      }
-      if (!buyQty || buyQty < 1) {
-        toast.error('Enter a valid "Buy" quantity');
-        return;
-      }
-      if (!getItemId) {
-        toast.error('Select the "Get" item');
-        return;
-      }
-      if (!getQty || getQty < 1) {
-        toast.error('Enter a valid "Get" quantity');
-        return;
-      }
-      // A size is mandatory whenever the item has any — the server rejects the
-      // save otherwise, and an unpinned offer is the one that loses money.
-      const buyItem = menuItems.find((m) => m.id === buyItemId);
-      if (buyItem && (buyItem.variants?.length ?? 0) > 0 && !buyVariantId) {
-        toast.error(`Pick which size of ${buyItem.name} the customer has to buy`);
-        return;
-      }
-      const getItem = menuItems.find((m) => m.id === getItemId);
-      if (getItem && (getItem.variants?.length ?? 0) > 0 && !getVariantId) {
-        toast.error(`Pick which size of ${getItem.name} the customer gets free`);
-        return;
+      const sides = [
+        { label: "buy", rows: buyRows, verb: "has to buy" },
+        { label: "get", rows: getRows, verb: "gets free" },
+      ];
+      for (const side of sides) {
+        const filled = side.rows.filter((r) => r.itemId);
+        if (filled.length === 0) {
+          toast.error(`Add at least one item the customer ${side.verb}`);
+          return;
+        }
+        for (const row of filled) {
+          const item = menuItems.find((m) => m.id === row.itemId);
+          if (!item) continue;
+          // A size is mandatory whenever the item has one — the server rejects
+          // the save otherwise, and an unpinned row is the one that loses money.
+          if ((item.variants?.length ?? 0) > 0 && !row.variantId) {
+            toast.error(`Pick which size of ${item.name} the customer ${side.verb}`);
+            return;
+          }
+          if (!row.qty || row.qty < 1) {
+            toast.error(`Enter a valid quantity for ${item.name}`);
+            return;
+          }
+        }
+        const seen = new Set<string>();
+        for (const row of filled) {
+          const key = `${row.itemId}:${row.variantId ?? ""}`;
+          if (seen.has(key)) {
+            const item = menuItems.find((m) => m.id === row.itemId);
+            toast.error(`${item?.name ?? "That item"} is listed twice — raise its quantity instead`);
+            return;
+          }
+          seen.add(key);
+        }
       }
     }
 
@@ -953,12 +1083,8 @@ const DealForm = () => {
         applicableItems: dealType === "percentage" ? applicableItemIds : [],
         applicableCategories:
           dealType === "percentage" ? applicableCategoryIds : [],
-        buyItemId: dealType === "buy_x_get_y" ? buyItemId : null,
-        buyVariantId: dealType === "buy_x_get_y" ? buyVariantId : null,
-        buyQty: dealType === "buy_x_get_y" ? Number(buyQty) : null,
-        getItemId: dealType === "buy_x_get_y" ? getItemId : null,
-        getVariantId: dealType === "buy_x_get_y" ? getVariantId : null,
-        getQty: dealType === "buy_x_get_y" ? Number(getQty) : null,
+        buyItems: dealType === "buy_x_get_y" ? toBogoInput(buyRows) : [],
+        getItems: dealType === "buy_x_get_y" ? toBogoInput(getRows) : [],
       };
 
       if (isEdit && id) {
@@ -1423,12 +1549,18 @@ const DealForm = () => {
                     )
                   ) : bogoImpact ? (
                     <>
-                      <p className="text-[11px] text-foreground/90 font-medium truncate">
-                        • Buy {buyQty} × {bogoImpact.buyItem.name}
-                      </p>
-                      <p className="text-[11px] text-emerald-600 dark:text-emerald-400 font-bold truncate">
-                        • Get {getQty} × {bogoImpact.getItem.name} free
-                      </p>
+                      {bogoImpact.buy.map((r, i) => (
+                        <p key={`b${i}`} className="text-[11px] text-foreground/90 font-medium truncate">
+                          • Buy {r.qty} × {r.item.name}
+                          {r.label ? ` (${r.label})` : ""}
+                        </p>
+                      ))}
+                      {bogoImpact.give.map((r, i) => (
+                        <p key={`g${i}`} className="text-[11px] text-emerald-600 dark:text-emerald-400 font-bold truncate">
+                          • Get {r.qty} × {r.item.name}
+                          {r.label ? ` (${r.label})` : ""} free
+                        </p>
+                      ))}
                     </>
                   ) : (
                     <p className="text-muted-foreground italic text-[11px]">
@@ -1508,20 +1640,12 @@ const DealForm = () => {
                     <span>Deal Name specified</span>
                   </li>
                   <li className="flex items-center gap-1.5">
-                    {dealType === "combo" ? (
-                      comboRows.length > 0 ? (
-                        <Check className="h-3 w-3 text-emerald-500" />
-                      ) : (
-                        <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-                      )
-                    ) : (
+                    {formatChecklist.done ? (
                       <Check className="h-3 w-3 text-emerald-500" />
+                    ) : (
+                      <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
                     )}
-                    <span>
-                      {dealType === "combo"
-                        ? `${comboRows.length} item(s) in bundle`
-                        : "Format configured"}
-                    </span>
+                    <span>{formatChecklist.label}</span>
                   </li>
                   <li className="flex items-center gap-1.5">
                     {dealPrice > 0 || dealType !== "combo" ? (
@@ -2956,7 +3080,9 @@ const DealForm = () => {
             </Card>
           )}
 
-          {/* SECTION 3C: Buy X Get Y Configuration */}
+          {/* SECTION 3C: Buy X Get Y Configuration — both sides use the same row
+              table as the Fixed Bundle and Choice Steps sections, so an admin
+              reads one layout across every deal format. */}
           {dealType === "buy_x_get_y" && (
             <Card className="shadow-xs border-border/80 overflow-hidden">
               <CardHeader className="pb-3 border-b bg-muted/20">
@@ -2965,198 +3091,233 @@ const DealForm = () => {
                   3. Buy X Get Y Configuration
                 </CardTitle>
                 <CardDescription className="text-xs">
-                  Define what the customer buys and what they receive for free
+                  Define what the customer buys and what they receive for free — both sides take several items
                 </CardDescription>
               </CardHeader>
-              <CardContent className="p-5">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
-                  {/* What they pay for */}
-                  <div className="p-4 rounded-xl border bg-muted/10 space-y-3">
-                    <p className="text-xs font-bold text-foreground uppercase tracking-wide flex items-center gap-1.5">
-                      <ShoppingBag className="h-4 w-4 text-primary" />
-                      Customer Buys
-                    </p>
+              <CardContent className="p-5 space-y-4">
+                {BOGO_SIDES.map((side) => {
+                  const rows = side.key === "buy" ? buyRows : getRows;
+                  const setRows = side.key === "buy" ? setBuyRows : setGetRows;
+                  const SideIcon = side.icon;
 
-                    <div className="space-y-1.5">
-                      <Label className="text-xs font-medium text-muted-foreground">Category</Label>
-                      <Select
-                        value={buyCategoryId || "all"}
-                        onValueChange={(val) => {
-                          setBuyCategoryId(val === "all" ? "" : val);
-                          setBuyItemId(null);
-                        }}
+                  return (
+                    <div
+                      key={side.key}
+                      className={cn(
+                        "rounded-xl border overflow-hidden",
+                        side.key === "get"
+                          ? "border-emerald-500/30 bg-emerald-500/5"
+                          : "border-border/60 bg-muted/10"
+                      )}
+                    >
+                      {/* Side header */}
+                      <div
+                        className={cn(
+                          "flex items-center justify-between gap-3 px-3 py-2.5 border-b",
+                          side.key === "get"
+                            ? "border-emerald-500/20 bg-emerald-500/10"
+                            : "border-border/50 bg-muted/20"
+                        )}
                       >
-                        <SelectTrigger className="h-9 text-xs">
-                          <SelectValue placeholder="All categories" />
-                        </SelectTrigger>
-                        <SelectContent className="max-h-60">
-                          <SelectItem value="all" className="text-xs">All Categories</SelectItem>
-                          {foodCategories.map((c) => (
-                            <SelectItem key={c.id} value={c.id} className="text-xs">{c.name}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <Label className="text-xs font-medium text-muted-foreground">Item</Label>
-                      <Select
-                        value={buyItemId ?? undefined}
-                        onValueChange={(val) => {
-                          setBuyItemId(val);
-                          setBuyVariantId(null);
-                        }}
-                      >
-                        <SelectTrigger className="h-9 text-xs">
-                          <SelectValue placeholder="Select item..." />
-                        </SelectTrigger>
-                        <SelectContent className="max-h-60">
-                          {menuItems
-                            .filter((m) => !buyCategoryId || m.categoryId === buyCategoryId)
-                            .map((item) => (
-                              <SelectItem key={item.id} value={item.id} className="text-xs">
-                                {item.name}
-                              </SelectItem>
-                            ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-
-                    {(() => {
-                      const item = menuItems.find((m) => m.id === buyItemId);
-                      const variants = item?.variants ?? [];
-                      if (variants.length === 0) return null;
-                      return (
-                        <div className="space-y-1.5">
-                          <Label className="text-xs font-medium text-muted-foreground">Size</Label>
-                          <Select value={buyVariantId ?? undefined} onValueChange={setBuyVariantId}>
-                            <SelectTrigger className="h-9 text-xs">
-                              <SelectValue placeholder="Select size..." />
-                            </SelectTrigger>
-                            <SelectContent className="max-h-60">
-                              {variants.map((v) => (
-                                <SelectItem key={v.id} value={v.id} className="text-xs">
-                                  {v.name} — Rs. {Number(v.price ?? 0).toLocaleString()}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          {!buyVariantId && (
-                            <p className="text-[11px] text-amber-600 dark:text-amber-400">
-                              This item comes in {variants.length} sizes — pick one, or the offer applies to all of them.
-                            </p>
+                        <p
+                          className={cn(
+                            "text-xs font-bold uppercase tracking-wide flex items-center gap-1.5",
+                            side.key === "get"
+                              ? "text-emerald-600 dark:text-emerald-400"
+                              : "text-foreground"
                           )}
+                        >
+                          <SideIcon
+                            className={cn(
+                              "h-4 w-4",
+                              side.key === "get" ? "text-emerald-500" : "text-primary"
+                            )}
+                          />
+                          {side.title}
+                        </p>
+                        <span className="text-[11px] text-muted-foreground">
+                          {rows.filter((r) => r.itemId).length} item
+                          {rows.filter((r) => r.itemId).length !== 1 ? "s" : ""}
+                        </span>
+                      </div>
+
+                      <div className="p-3 space-y-2">
+                        {/* Header row */}
+                        <div
+                          className="grid gap-2 px-3 pb-1"
+                          style={{ gridTemplateColumns: "1fr 1.4fr 0.9fr 64px 78px 78px 36px" }}
+                        >
+                          <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Category</span>
+                          <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Menu Item</span>
+                          <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Size / Variant</span>
+                          <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground text-center">Qty</span>
+                          <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground text-right">Cost</span>
+                          <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground text-right">Selling</span>
+                          <span />
                         </div>
-                      );
-                    })()}
 
-                    <div className="space-y-1.5">
-                      <Label className="text-xs font-medium text-muted-foreground">Quantity</Label>
-                      <Input
-                        type="number"
-                        min={1}
-                        value={buyQty}
-                        onChange={(e) => setBuyQty(Math.max(1, Number(e.target.value)))}
-                        className="h-9 text-xs font-bold"
-                      />
-                    </div>
-                  </div>
-
-                  {/* What they get free */}
-                  <div className="p-4 rounded-xl border bg-emerald-500/5 border-emerald-500/30 space-y-3">
-                    <p className="text-xs font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wide flex items-center gap-1.5">
-                      <Gift className="h-4 w-4 text-emerald-500" />
-                      Customer Gets Free
-                    </p>
-
-                    <div className="space-y-1.5">
-                      <Label className="text-xs font-medium text-muted-foreground">Category</Label>
-                      <Select
-                        value={getCategoryId || "all"}
-                        onValueChange={(val) => {
-                          setGetCategoryId(val === "all" ? "" : val);
-                          setGetItemId(null);
-                        }}
-                      >
-                        <SelectTrigger className="h-9 text-xs">
-                          <SelectValue placeholder="All categories" />
-                        </SelectTrigger>
-                        <SelectContent className="max-h-60">
-                          <SelectItem value="all" className="text-xs">All Categories</SelectItem>
-                          {foodCategories.map((c) => (
-                            <SelectItem key={c.id} value={c.id} className="text-xs">{c.name}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <Label className="text-xs font-medium text-muted-foreground">Item</Label>
-                      <Select
-                        value={getItemId ?? undefined}
-                        onValueChange={(val) => {
-                          setGetItemId(val);
-                          setGetVariantId(null);
-                        }}
-                      >
-                        <SelectTrigger className="h-9 text-xs">
-                          <SelectValue placeholder="Select free item..." />
-                        </SelectTrigger>
-                        <SelectContent className="max-h-60">
-                          {menuItems
-                            .filter((m) => !getCategoryId || m.categoryId === getCategoryId)
-                            .map((item) => (
-                              <SelectItem key={item.id} value={item.id} className="text-xs">
-                                {item.name}
-                              </SelectItem>
-                            ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-
-                    {(() => {
-                      const item = menuItems.find((m) => m.id === getItemId);
-                      const variants = item?.variants ?? [];
-                      if (variants.length === 0) return null;
-                      return (
                         <div className="space-y-1.5">
-                          <Label className="text-xs font-medium text-muted-foreground">Size</Label>
-                          <Select value={getVariantId ?? undefined} onValueChange={setGetVariantId}>
-                            <SelectTrigger className="h-9 text-xs">
-                              <SelectValue placeholder="Select free size..." />
-                            </SelectTrigger>
-                            <SelectContent className="max-h-60">
-                              {variants.map((v) => (
-                                <SelectItem key={v.id} value={v.id} className="text-xs">
-                                  {v.name} — Rs. {Number(v.price ?? 0).toLocaleString()}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          {!getVariantId && (
-                            <p className="text-[11px] text-amber-600 dark:text-amber-400">
-                              This item comes in {variants.length} sizes — pick one, or the offer applies to all of them.
-                            </p>
-                          )}
-                        </div>
-                      );
-                    })()}
+                          {rows.map((row, idx) => {
+                            const selectedItem = menuItems.find((m) => m.id === row.itemId);
+                            // A row with an item shows that item's real category; only an
+                            // empty row falls back to whatever category was picked to filter.
+                            const activeCategoryId = selectedItem?.categoryId ?? row.categoryId;
+                            const itemChoices = activeCategoryId
+                              ? menuItems.filter((m) => m.categoryId === activeCategoryId)
+                              : menuItems;
+                            const variants = selectedItem?.variants || [];
+                            let unitPrice = Number(selectedItem?.price || 0);
+                            if (row.variantId) {
+                              const v = variants.find((vr) => vr.id === row.variantId);
+                              if (v && v.price != null) unitPrice = Number(v.price);
+                            }
+                            const unitCost = row.itemId ? getItemCost(row.itemId, row.variantId) : 0;
 
-                    <div className="space-y-1.5">
-                      <Label className="text-xs font-medium text-muted-foreground">Quantity (Free)</Label>
-                      <Input
-                        type="number"
-                        min={1}
-                        value={getQty}
-                        onChange={(e) => setGetQty(Math.max(1, Number(e.target.value)))}
-                        className="h-9 text-xs font-bold text-emerald-600 dark:text-emerald-400"
-                      />
+                            return (
+                              <div
+                                key={idx}
+                                className="grid gap-2 items-center px-3 py-2.5 rounded-lg border border-border/60 bg-background hover:bg-muted/20 transition-colors"
+                                style={{ gridTemplateColumns: "1fr 1.4fr 0.9fr 64px 78px 78px 36px" }}
+                              >
+                                {/* Category filter — narrows the item dropdown beside it */}
+                                <Select
+                                  value={activeCategoryId || "all"}
+                                  onValueChange={(val) =>
+                                    updateBogoCategory(setRows, idx, val === "all" ? "" : val)
+                                  }
+                                >
+                                  <SelectTrigger className="h-8 text-xs border-0 bg-muted/30 hover:bg-muted/50 focus:ring-1">
+                                    <SelectValue placeholder="All categories" />
+                                  </SelectTrigger>
+                                  <SelectContent className="max-h-60">
+                                    <SelectItem value="all" className="text-xs">All Categories</SelectItem>
+                                    {foodCategories.map((c) => (
+                                      <SelectItem key={c.id} value={c.id} className="text-xs">
+                                        {c.name}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+
+                                {/* Item select — only items from the category above */}
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <span className="text-[10px] font-mono text-muted-foreground/60 shrink-0 w-4 text-right">
+                                    {idx + 1}.
+                                  </span>
+                                  <Select
+                                    value={row.itemId}
+                                    onValueChange={(val) => updateBogoItem(setRows, idx, val)}
+                                  >
+                                    <SelectTrigger className="h-8 text-xs border-0 bg-muted/30 hover:bg-muted/50 focus:ring-1">
+                                      <SelectValue placeholder="Select item…" />
+                                    </SelectTrigger>
+                                    <SelectContent className="max-h-60">
+                                      {itemChoices.length === 0 ? (
+                                        <div className="px-2 py-3 text-xs text-muted-foreground text-center">
+                                          No items in this category
+                                        </div>
+                                      ) : (
+                                        itemChoices.map((item) => (
+                                          <SelectItem key={item.id} value={item.id} className="text-xs">
+                                            {item.name}
+                                          </SelectItem>
+                                        ))
+                                      )}
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+
+                                {/* Size — mandatory when the item has any, or the offer
+                                    means "any size" and the server rejects the save. */}
+                                <div>
+                                  {variants.length > 0 ? (
+                                    <Select
+                                      value={row.variantId || undefined}
+                                      onValueChange={(val) => patchBogoRow(setRows, idx, { variantId: val })}
+                                    >
+                                      <SelectTrigger
+                                        className={cn(
+                                          "h-8 text-xs border-0 bg-muted/30 hover:bg-muted/50 focus:ring-1",
+                                          !row.variantId && "ring-1 ring-amber-500/60"
+                                        )}
+                                      >
+                                        <SelectValue placeholder="Pick size…" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {variants.map((v) => (
+                                          <SelectItem key={v.id} value={v.id} className="text-xs">
+                                            {v.name}
+                                          </SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                  ) : (
+                                    <span className="text-xs text-muted-foreground px-1">—</span>
+                                  )}
+                                </div>
+
+                                {/* Qty */}
+                                <Input
+                                  type="number"
+                                  min={1}
+                                  value={row.qty}
+                                  onChange={(e) =>
+                                    patchBogoRow(setRows, idx, { qty: Math.max(1, Number(e.target.value)) })
+                                  }
+                                  className="h-8 text-xs text-center font-bold border-0 bg-muted/30 focus-visible:ring-1"
+                                />
+
+                                {/* Cost */}
+                                <span className="text-xs font-mono text-muted-foreground text-right">
+                                  {unitCost > 0 ? `Rs. ${unitCost.toLocaleString()}` : "—"}
+                                </span>
+
+                                {/* Selling price */}
+                                <span
+                                  className={cn(
+                                    "text-xs font-mono font-semibold text-right",
+                                    side.key === "get"
+                                      ? "text-emerald-600 dark:text-emerald-400"
+                                      : "text-foreground"
+                                  )}
+                                >
+                                  {row.itemId ? `Rs. ${unitPrice.toLocaleString()}` : "—"}
+                                </span>
+
+                                {/* Delete */}
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  disabled={rows.length <= 1}
+                                  onClick={() => removeBogoRow(setRows, idx)}
+                                  className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10 disabled:opacity-30"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </Button>
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        {/* Footer — add another item to this side */}
+                        <div className="flex items-center justify-between px-3 pt-2 border-t border-border/50 mt-1">
+                          <span className="text-xs text-muted-foreground">{side.hint}</span>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => addBogoRow(setRows)}
+                            className="h-7 text-xs gap-1.5"
+                          >
+                            <Plus className="h-3.5 w-3.5" /> Add Item
+                          </Button>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                </div>
+                  );
+                })}
               </CardContent>
             </Card>
           )}
@@ -3201,8 +3362,9 @@ const DealForm = () => {
                             Rs.&nbsp;{Math.round(bogoImpact.revenue).toLocaleString()}
                           </p>
                           <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">
-                            {buyQty} × {bogoImpact.buyItem.name}
-                            {bogoImpact.buyLabel ? ` (${bogoImpact.buyLabel})` : ""}
+                            {bogoImpact.buy
+                              .map((r) => `${r.qty} × ${r.item.name}${r.label ? ` (${r.label})` : ""}`)
+                              .join(" + ")}
                           </p>
                         </div>
                       </div>
