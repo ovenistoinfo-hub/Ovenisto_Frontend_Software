@@ -143,6 +143,9 @@ const DealForm = () => {
   const [buyQty, setBuyQty] = useState<number>(1);
   const [getItemId, setGetItemId] = useState<string | null>(null);
   const [getQty, setGetQty] = useState<number>(1);
+  // UI-only category filters narrowing the two item dropdowns; never persisted.
+  const [buyCategoryId, setBuyCategoryId] = useState("");
+  const [getCategoryId, setGetCategoryId] = useState("");
 
   // Validity & Schedule
   const todayStr = new Date().toISOString().split("T")[0];
@@ -679,6 +682,63 @@ const DealForm = () => {
     };
   }, [discountScopeItems, discountPercent]);
 
+  /**
+   * What a Buy X Get Y offer earns and gives away.
+   *
+   * Measured at the worst case for the business: the customer buys the cheapest
+   * qualifying variant and takes the priciest one free. That is not pessimism —
+   * the deal records only a menu item, and the server's revalidateBuyXGetYLine
+   * checks only that the item matches, so any variant of it is genuinely
+   * claimable.
+   */
+  const bogoImpact = useMemo(() => {
+    const buyItem = menuItems.find((m) => m.id === buyItemId);
+    const getItem = menuItems.find((m) => m.id === getItemId);
+    if (!buyItem || !getItem) return null;
+
+    const unitsOf = (item: typeof buyItem) => {
+      const variants = item.variants || [];
+      return variants.length > 0
+        ? variants.map((v) => ({
+            label: v.name as string | null,
+            price: Number(v.price ?? item.price ?? 0),
+            cost: Number(v.costPrice ?? item.costPrice ?? 0),
+          }))
+        : [{ label: null, price: Number(item.price || 0), cost: Number(item.costPrice || 0) }];
+    };
+
+    const buyUnits = unitsOf(buyItem);
+    const getUnits = unitsOf(getItem);
+    const cheapestBuy = buyUnits.reduce((a, b) => (b.price < a.price ? b : a));
+    const priciestGet = getUnits.reduce((a, b) => (b.price > a.price ? b : a));
+
+    const revenue = buyQty * cheapestBuy.price;
+    const totalCost = buyQty * cheapestBuy.cost + getQty * priciestGet.cost;
+    const giveawayValue = getQty * priciestGet.price;
+    const giveawayCost = getQty * priciestGet.cost;
+    const profit = revenue - totalCost;
+
+    return {
+      buyItem,
+      getItem,
+      buyLabel: cheapestBuy.label,
+      getLabel: priciestGet.label,
+      revenue,
+      totalCost,
+      giveawayValue,
+      giveawayCost,
+      profit,
+      margin: revenue > 0 ? Math.round((profit / revenue) * 100) : null,
+      // What the offer feels like to the customer, against everything they carry out.
+      effectiveDiscount:
+        revenue + giveawayValue > 0
+          ? Math.round((giveawayValue / (revenue + giveawayValue)) * 100)
+          : 0,
+      hasCost: cheapestBuy.cost > 0 || priciestGet.cost > 0,
+      variantSpread: buyUnits.length > 1 || getUnits.length > 1,
+    };
+  }, [menuItems, buyItemId, getItemId, buyQty, getQty]);
+
   /** Names the discount's scope for the POS preview — the selected categories,
    *  plus a count of items named on their own. Items a selected category already
    *  covers are left out; counting them twice would overstate the scope. */
@@ -705,10 +765,10 @@ const DealForm = () => {
     return parts.join(" + ");
   }, [applicableCategoryIds, applicableItemIds, foodCategories, menuItems]);
 
-  // The last section's number follows what the chosen type renders above it:
-  // combo/option_combo have a Pricing section 4 and percentage a Discount Impact
-  // section 4, while Buy X Get Y ends at 3.
-  const validitySectionNumber = dealType === "buy_x_get_y" ? 4 : 5;
+  // Every deal type now renders a section 4 — Pricing for the combo formats,
+  // Discount Impact for percentage, Offer Impact for Buy X Get Y — so validity
+  // is always 5.
+  const validitySectionNumber = 5;
 
   // Percentage Scope Helpers
   const addScopeItemRow = () =>
@@ -1326,9 +1386,18 @@ const DealForm = () => {
                         No categories or items selected
                       </p>
                     )
+                  ) : bogoImpact ? (
+                    <>
+                      <p className="text-[11px] text-foreground/90 font-medium truncate">
+                        • Buy {buyQty} × {bogoImpact.buyItem.name}
+                      </p>
+                      <p className="text-[11px] text-emerald-600 dark:text-emerald-400 font-bold truncate">
+                        • Get {getQty} × {bogoImpact.getItem.name} free
+                      </p>
+                    </>
                   ) : (
-                    <p className="text-[11px] text-foreground/90 font-medium">
-                      Buy {buyQty}x → Get {getQty}x Free
+                    <p className="text-muted-foreground italic text-[11px]">
+                      Buy and free items not chosen yet
                     </p>
                   )}
                 </div>
@@ -1348,6 +1417,13 @@ const DealForm = () => {
                         was Rs. {Math.round(discountImpact.minBefore).toLocaleString()} – {Math.round(discountImpact.maxBefore).toLocaleString()}
                       </span>
                     )}
+                    {/* Same slot, same meaning: what the customer hands over, against
+                        what the whole basket would otherwise have cost. */}
+                    {dealType === "buy_x_get_y" && bogoImpact && bogoImpact.giveawayValue > 0 && (
+                      <span className="text-[10px] text-muted-foreground line-through font-mono block">
+                        Rs. {Math.round(bogoImpact.revenue + bogoImpact.giveawayValue).toLocaleString()}
+                      </span>
+                    )}
                     <span className="text-xl font-black text-primary font-mono">
                       {dealType === "combo" || dealType === "option_combo"
                         ? `Rs. ${(dealPrice || 0).toLocaleString()}`
@@ -1355,7 +1431,9 @@ const DealForm = () => {
                         ? discountImpact.maxAfter > 0
                           ? `Rs. ${Math.round(discountImpact.minAfter).toLocaleString()} – ${Math.round(discountImpact.maxAfter).toLocaleString()}`
                           : "—"
-                        : "Buy X Get Y"}
+                        : bogoImpact
+                        ? `Rs. ${Math.round(bogoImpact.revenue).toLocaleString()}`
+                        : "—"}
                     </span>
                   </div>
 
@@ -1368,6 +1446,12 @@ const DealForm = () => {
                   {dealType === "percentage" && (discountPercent || 0) > 0 && (
                     <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-2 py-0.5 rounded shrink-0">
                       SAVE {discountPercent}%
+                    </span>
+                  )}
+
+                  {dealType === "buy_x_get_y" && bogoImpact && bogoImpact.effectiveDiscount > 0 && (
+                    <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-2 py-0.5 rounded shrink-0">
+                      SAVE {bogoImpact.effectiveDiscount}%
                     </span>
                   )}
                 </div>
@@ -2851,91 +2935,118 @@ const DealForm = () => {
               </CardHeader>
               <CardContent className="p-5">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+                  {/* What they pay for */}
                   <div className="p-4 rounded-xl border bg-muted/10 space-y-3">
                     <p className="text-xs font-bold text-foreground uppercase tracking-wide flex items-center gap-1.5">
                       <ShoppingBag className="h-4 w-4 text-primary" />
-                      Customer Buys:
+                      Customer Buys
                     </p>
+
                     <div className="space-y-1.5">
-                      <Label className="text-xs font-medium text-muted-foreground">
-                        Item
-                      </Label>
+                      <Label className="text-xs font-medium text-muted-foreground">Category</Label>
                       <Select
-                        value={buyItemId ?? undefined}
-                        onValueChange={setBuyItemId}
+                        value={buyCategoryId || "all"}
+                        onValueChange={(val) => {
+                          setBuyCategoryId(val === "all" ? "" : val);
+                          setBuyItemId(null);
+                        }}
                       >
                         <SelectTrigger className="h-9 text-xs">
-                          <SelectValue placeholder="Select item..." />
+                          <SelectValue placeholder="All categories" />
                         </SelectTrigger>
                         <SelectContent className="max-h-60">
-                          {menuItems.map((item) => (
-                            <SelectItem
-                              key={item.id}
-                              value={item.id}
-                              className="text-xs"
-                            >
-                              {item.name}
-                            </SelectItem>
+                          <SelectItem value="all" className="text-xs">All Categories</SelectItem>
+                          {foodCategories.map((c) => (
+                            <SelectItem key={c.id} value={c.id} className="text-xs">{c.name}</SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
                     </div>
+
                     <div className="space-y-1.5">
-                      <Label className="text-xs font-medium text-muted-foreground">
-                        Quantity
-                      </Label>
+                      <Label className="text-xs font-medium text-muted-foreground">Item</Label>
+                      <Select value={buyItemId ?? undefined} onValueChange={setBuyItemId}>
+                        <SelectTrigger className="h-9 text-xs">
+                          <SelectValue placeholder="Select item..." />
+                        </SelectTrigger>
+                        <SelectContent className="max-h-60">
+                          {menuItems
+                            .filter((m) => !buyCategoryId || m.categoryId === buyCategoryId)
+                            .map((item) => (
+                              <SelectItem key={item.id} value={item.id} className="text-xs">
+                                {item.name}
+                              </SelectItem>
+                            ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-medium text-muted-foreground">Quantity</Label>
                       <Input
                         type="number"
                         min={1}
                         value={buyQty}
-                        onChange={(e) =>
-                          setBuyQty(Math.max(1, Number(e.target.value)))
-                        }
+                        onChange={(e) => setBuyQty(Math.max(1, Number(e.target.value)))}
                         className="h-9 text-xs font-bold"
                       />
                     </div>
                   </div>
 
+                  {/* What they get free */}
                   <div className="p-4 rounded-xl border bg-emerald-500/5 border-emerald-500/30 space-y-3">
                     <p className="text-xs font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wide flex items-center gap-1.5">
                       <Gift className="h-4 w-4 text-emerald-500" />
-                      Customer Gets Free:
+                      Customer Gets Free
                     </p>
+
                     <div className="space-y-1.5">
-                      <Label className="text-xs font-medium text-muted-foreground">
-                        Item
-                      </Label>
+                      <Label className="text-xs font-medium text-muted-foreground">Category</Label>
                       <Select
-                        value={getItemId ?? undefined}
-                        onValueChange={setGetItemId}
+                        value={getCategoryId || "all"}
+                        onValueChange={(val) => {
+                          setGetCategoryId(val === "all" ? "" : val);
+                          setGetItemId(null);
+                        }}
                       >
                         <SelectTrigger className="h-9 text-xs">
-                          <SelectValue placeholder="Select free item..." />
+                          <SelectValue placeholder="All categories" />
                         </SelectTrigger>
                         <SelectContent className="max-h-60">
-                          {menuItems.map((item) => (
-                            <SelectItem
-                              key={item.id}
-                              value={item.id}
-                              className="text-xs"
-                            >
-                              {item.name}
-                            </SelectItem>
+                          <SelectItem value="all" className="text-xs">All Categories</SelectItem>
+                          {foodCategories.map((c) => (
+                            <SelectItem key={c.id} value={c.id} className="text-xs">{c.name}</SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
                     </div>
+
                     <div className="space-y-1.5">
-                      <Label className="text-xs font-medium text-muted-foreground">
-                        Quantity (Free)
-                      </Label>
+                      <Label className="text-xs font-medium text-muted-foreground">Item</Label>
+                      <Select value={getItemId ?? undefined} onValueChange={setGetItemId}>
+                        <SelectTrigger className="h-9 text-xs">
+                          <SelectValue placeholder="Select free item..." />
+                        </SelectTrigger>
+                        <SelectContent className="max-h-60">
+                          {menuItems
+                            .filter((m) => !getCategoryId || m.categoryId === getCategoryId)
+                            .map((item) => (
+                              <SelectItem key={item.id} value={item.id} className="text-xs">
+                                {item.name}
+                              </SelectItem>
+                            ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-medium text-muted-foreground">Quantity (Free)</Label>
                       <Input
                         type="number"
                         min={1}
                         value={getQty}
-                        onChange={(e) =>
-                          setGetQty(Math.max(1, Number(e.target.value)))
-                        }
+                        onChange={(e) => setGetQty(Math.max(1, Number(e.target.value)))}
                         className="h-9 text-xs font-bold text-emerald-600 dark:text-emerald-400"
                       />
                     </div>
@@ -2944,6 +3055,156 @@ const DealForm = () => {
               </CardContent>
             </Card>
           )}
+
+          {/* SECTION 4: Offer Impact (Buy X Get Y) — the same margin read-out the
+              other three formats get. */}
+          {dealType === "buy_x_get_y" && (
+            <Card className="shadow-xs border-border/80 overflow-hidden">
+              <CardHeader className="pb-3 border-b bg-muted/20">
+                <CardTitle className="text-sm font-bold uppercase tracking-wider text-foreground flex items-center gap-2">
+                  <Sparkles className="h-4 w-4 text-primary" />
+                  4. Offer Impact
+                </CardTitle>
+                <CardDescription className="text-xs">
+                  What this offer earns and what it gives away, per redemption
+                </CardDescription>
+              </CardHeader>
+
+              <CardContent className="p-5 space-y-5">
+                {!bogoImpact ? (
+                  <div className="text-center py-10 space-y-2 border-2 border-dashed border-border/60 rounded-xl bg-muted/10">
+                    <div className="w-12 h-12 rounded-full bg-muted/60 flex items-center justify-center mx-auto">
+                      <Gift className="h-5 w-5 text-muted-foreground/50" />
+                    </div>
+                    <p className="text-sm font-bold text-foreground">Offer not complete yet</p>
+                    <p className="text-xs text-muted-foreground">
+                      Choose both the purchased item and the free item above
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+
+                      {/* Money in */}
+                      <div className="rounded-xl border border-border/70 bg-muted/25 p-4 flex flex-col justify-between gap-2">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                          <Coins className="h-3.5 w-3.5 text-muted-foreground/70" />
+                          Customer Pays
+                        </span>
+                        <div>
+                          <p className="text-xl font-black font-mono text-foreground tracking-tight">
+                            Rs.&nbsp;{Math.round(bogoImpact.revenue).toLocaleString()}
+                          </p>
+                          <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">
+                            {buyQty} × {bogoImpact.buyItem.name}
+                            {bogoImpact.buyLabel ? ` (${bogoImpact.buyLabel})` : ""}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Money given away */}
+                      <div className="rounded-xl border-2 border-primary/50 bg-primary/[0.04] p-4 flex flex-col justify-between gap-2 shadow-xs">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-primary flex items-center gap-1.5">
+                            <Gift className="h-3.5 w-3.5" />
+                            You Give Away
+                          </span>
+                          {bogoImpact.effectiveDiscount > 0 && (
+                            <span className="text-[10px] font-bold text-primary px-1.5 py-0.5 rounded bg-primary/10 shrink-0">
+                              ≈{bogoImpact.effectiveDiscount}% off
+                            </span>
+                          )}
+                        </div>
+                        <div>
+                          <p className="text-xl font-black font-mono text-primary tracking-tight">
+                            Rs.&nbsp;{Math.round(bogoImpact.giveawayValue).toLocaleString()}
+                          </p>
+                          <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">
+                            {bogoImpact.hasCost
+                              ? `Retail value · costs you Rs. ${Math.round(bogoImpact.giveawayCost).toLocaleString()}`
+                              : "Retail value of the free item"}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Whether it still pays */}
+                      <div className={cn(
+                        "rounded-xl border p-4 flex flex-col justify-between gap-2 transition-all",
+                        !bogoImpact.hasCost
+                          ? "border-border/70 bg-muted/25"
+                          : bogoImpact.profit > 0
+                          ? "border-emerald-500/40 bg-emerald-500/[0.04]"
+                          : "border-destructive/40 bg-destructive/[0.04]"
+                      )}>
+                        <span className={cn(
+                          "text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5",
+                          !bogoImpact.hasCost
+                            ? "text-muted-foreground"
+                            : bogoImpact.profit > 0
+                            ? "text-emerald-600 dark:text-emerald-400"
+                            : "text-destructive"
+                        )}>
+                          <TrendingUp className="h-3.5 w-3.5" />
+                          Profit Per Redemption
+                        </span>
+                        <div>
+                          {bogoImpact.hasCost && bogoImpact.margin != null ? (
+                            <>
+                              <div className="flex items-baseline gap-1.5">
+                                <p className={cn(
+                                  "text-xl font-black font-mono tracking-tight",
+                                  bogoImpact.profit > 0
+                                    ? "text-emerald-600 dark:text-emerald-400"
+                                    : "text-destructive"
+                                )}>
+                                  {bogoImpact.margin}%
+                                </p>
+                                <span className="text-xs font-mono font-bold text-muted-foreground">
+                                  (Rs.&nbsp;{Math.round(bogoImpact.profit).toLocaleString()})
+                                </span>
+                              </div>
+                              <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">
+                                After both items&apos; recipe cost
+                              </p>
+                            </>
+                          ) : (
+                            <>
+                              <p className="text-xl font-black font-mono text-muted-foreground/40">—</p>
+                              <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">
+                                Set recipes in Menu Items for live profit
+                              </p>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Losing money on every redemption is worth stopping for */}
+                    {bogoImpact.hasCost && bogoImpact.profit <= 0 && (
+                      <div className="rounded-xl border border-destructive/40 bg-destructive/[0.04] px-4 py-3">
+                        <p className="text-xs font-bold text-destructive flex items-center gap-1.5">
+                          <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                          This offer loses Rs. {Math.abs(Math.round(bogoImpact.profit)).toLocaleString()} every time it is redeemed
+                        </p>
+                        <p className="text-[10px] text-muted-foreground mt-1">
+                          Raise the buy quantity, or give away something cheaper.
+                        </p>
+                      </div>
+                    )}
+
+                    {/* The deal stores no variant, so the priciest one is claimable */}
+                    {bogoImpact.variantSpread && (
+                      <p className="text-[10px] text-muted-foreground flex items-start gap-1.5">
+                        <HelpCircle className="h-3 w-3 shrink-0 mt-0.5" />
+                        Figures assume the worst case — the customer buys the cheapest size and takes the priciest one free. The offer is defined per item, so any size qualifies.
+                      </p>
+                    )}
+                  </>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
           {/* Validity & Schedule — always the last section, so its number follows
               whatever the chosen deal type rendered above it. */}
           <Card className="shadow-xs border-border/80 overflow-hidden">
