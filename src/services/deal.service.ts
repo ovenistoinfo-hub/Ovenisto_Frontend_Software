@@ -60,8 +60,12 @@ export interface DealRecord {
   applicableCategories: string[];
   // buy_x_get_y
   buyItemId: string | null;
+  /** Pins the offer to one size of the buy item. Null on deals saved before sizes were pinned. */
+  buyVariantId: string | null;
   buyQty: number | null;
   getItemId: string | null;
+  /** Pins the free side to one size. Null on legacy deals, whose giveaway the server caps. */
+  getVariantId: string | null;
   getQty: number | null;
 }
 
@@ -112,8 +116,10 @@ export interface DealInput {
   applicableCategories?: string[];
   // buy_x_get_y
   buyItemId?: string | null;
+  buyVariantId?: string | null;
   buyQty?: number | null;
   getItemId?: string | null;
+  getVariantId?: string | null;
   getQty?: number | null;
 }
 

@@ -108,6 +108,12 @@ plus a body explaining _why_ the change was made when that is not obvious.
   (or similar) and lets `AppLayout.tsx`'s `<main className="p-4 md:p-6 overflow-auto">` own the
   available width. `DealForm.tsx` had picked up a stray `max-w-7xl mx-auto` that left large dead
   gutters on wide screens (removed 2026-08-22) — don't copy that pattern into a new page.
+- **A Buy X Get Y deal must pin a size on both sides** — `DealForm.tsx` shows a Size picker
+  whenever the chosen item has variants and blocks the save until one is picked, because the
+  backend (`assertBuyXGetYVariants`) rejects it otherwise. The Offer Impact figures are exact once
+  both sides are pinned; while a multi-size side is unpinned they fall back to the worst case
+  (bought cheapest, given away priciest) and say so in the footnote. Changing the item clears that
+  side's variant — don't drop that reset, or the deal saves a size belonging to a different dish.
 - **Rs./% shared-toggle pattern** (`DealForm.tsx`'s "Set Deal Price" + Channel Price Overrides): one
   master two-state toggle governs several inputs' *mode* at once, with a shared conversion helper
   (`applyPercent`/`pctFromPrice`-style) so switching modes back-derives a sensible value instead of

@@ -140,8 +140,12 @@ const DealForm = () => {
 
   // Buy X Get Y
   const [buyItemId, setBuyItemId] = useState<string | null>(null);
+  // Both sides pin a specific size. Without one the offer means "any size", and
+  // a customer can qualify with the cheapest and claim the priciest one free.
+  const [buyVariantId, setBuyVariantId] = useState<string | null>(null);
   const [buyQty, setBuyQty] = useState<number>(1);
   const [getItemId, setGetItemId] = useState<string | null>(null);
+  const [getVariantId, setGetVariantId] = useState<string | null>(null);
   const [getQty, setGetQty] = useState<number>(1);
   // UI-only category filters narrowing the two item dropdowns; never persisted.
   const [buyCategoryId, setBuyCategoryId] = useState("");
@@ -217,8 +221,10 @@ const DealForm = () => {
     );
     setApplicableCategoryIds(existingDeal.applicableCategories ?? []);
     setBuyItemId(existingDeal.buyItemId ?? null);
+    setBuyVariantId(existingDeal.buyVariantId ?? null);
     setBuyQty(existingDeal.buyQty ?? 1);
     setGetItemId(existingDeal.getItemId ?? null);
+    setGetVariantId(existingDeal.getVariantId ?? null);
     setGetQty(existingDeal.getQty ?? 1);
 
     setValidFrom(existingDeal.validFrom?.slice(0, 10) || todayStr);
@@ -685,11 +691,12 @@ const DealForm = () => {
   /**
    * What a Buy X Get Y offer earns and gives away.
    *
-   * Measured at the worst case for the business: the customer buys the cheapest
-   * qualifying variant and takes the priciest one free. That is not pessimism —
-   * the deal records only a menu item, and the server's revalidateBuyXGetYLine
-   * checks only that the item matches, so any variant of it is genuinely
-   * claimable.
+   * Once both sides pin a size, this is exact — the server matches the pinned
+   * variant, so those are the only prices in play. Until they are pinned the
+   * offer still means "any size", so the figures fall back to the worst case
+   * for the business: bought at the cheapest qualifying size, taken free at the
+   * priciest. The footnote below tells the user which of the two they are
+   * looking at.
    */
   const bogoImpact = useMemo(() => {
     const buyItem = menuItems.find((m) => m.id === buyItemId);
@@ -700,29 +707,40 @@ const DealForm = () => {
       const variants = item.variants || [];
       return variants.length > 0
         ? variants.map((v) => ({
+            id: v.id as string | null,
             label: v.name as string | null,
             price: Number(v.price ?? item.price ?? 0),
             cost: Number(v.costPrice ?? item.costPrice ?? 0),
           }))
-        : [{ label: null, price: Number(item.price || 0), cost: Number(item.costPrice || 0) }];
+        : [{ id: null, label: null, price: Number(item.price || 0), cost: Number(item.costPrice || 0) }];
     };
 
     const buyUnits = unitsOf(buyItem);
     const getUnits = unitsOf(getItem);
-    const cheapestBuy = buyUnits.reduce((a, b) => (b.price < a.price ? b : a));
-    const priciestGet = getUnits.reduce((a, b) => (b.price > a.price ? b : a));
 
-    const revenue = buyQty * cheapestBuy.price;
-    const totalCost = buyQty * cheapestBuy.cost + getQty * priciestGet.cost;
-    const giveawayValue = getQty * priciestGet.price;
-    const giveawayCost = getQty * priciestGet.cost;
+    // A pinned size is the only one the server will accept, so price it
+    // directly. Unpinned, assume whichever size costs the business most.
+    const pinnedBuy = buyVariantId
+      ? buyUnits.find((u) => u.id === buyVariantId)
+      : undefined;
+    const pinnedGet = getVariantId
+      ? getUnits.find((u) => u.id === getVariantId)
+      : undefined;
+
+    const chosenBuy = pinnedBuy ?? buyUnits.reduce((a, b) => (b.price < a.price ? b : a));
+    const chosenGet = pinnedGet ?? getUnits.reduce((a, b) => (b.price > a.price ? b : a));
+
+    const revenue = buyQty * chosenBuy.price;
+    const totalCost = buyQty * chosenBuy.cost + getQty * chosenGet.cost;
+    const giveawayValue = getQty * chosenGet.price;
+    const giveawayCost = getQty * chosenGet.cost;
     const profit = revenue - totalCost;
 
     return {
       buyItem,
       getItem,
-      buyLabel: cheapestBuy.label,
-      getLabel: priciestGet.label,
+      buyLabel: chosenBuy.label,
+      getLabel: chosenGet.label,
       revenue,
       totalCost,
       giveawayValue,
@@ -734,10 +752,13 @@ const DealForm = () => {
         revenue + giveawayValue > 0
           ? Math.round((giveawayValue / (revenue + giveawayValue)) * 100)
           : 0,
-      hasCost: cheapestBuy.cost > 0 || priciestGet.cost > 0,
-      variantSpread: buyUnits.length > 1 || getUnits.length > 1,
+      hasCost: chosenBuy.cost > 0 || chosenGet.cost > 0,
+      // True only while a side with several sizes has none pinned — that is the
+      // case where these numbers are a worst case rather than the real figure.
+      variantSpread:
+        (buyUnits.length > 1 && !pinnedBuy) || (getUnits.length > 1 && !pinnedGet),
     };
-  }, [menuItems, buyItemId, getItemId, buyQty, getQty]);
+  }, [menuItems, buyItemId, buyVariantId, getItemId, getVariantId, buyQty, getQty]);
 
   /** Names the discount's scope for the POS preview — the selected categories,
    *  plus a count of items named on their own. Items a selected category already
@@ -868,6 +889,18 @@ const DealForm = () => {
         toast.error('Enter a valid "Get" quantity');
         return;
       }
+      // A size is mandatory whenever the item has any — the server rejects the
+      // save otherwise, and an unpinned offer is the one that loses money.
+      const buyItem = menuItems.find((m) => m.id === buyItemId);
+      if (buyItem && (buyItem.variants?.length ?? 0) > 0 && !buyVariantId) {
+        toast.error(`Pick which size of ${buyItem.name} the customer has to buy`);
+        return;
+      }
+      const getItem = menuItems.find((m) => m.id === getItemId);
+      if (getItem && (getItem.variants?.length ?? 0) > 0 && !getVariantId) {
+        toast.error(`Pick which size of ${getItem.name} the customer gets free`);
+        return;
+      }
     }
 
     setSaving(true);
@@ -921,8 +954,10 @@ const DealForm = () => {
         applicableCategories:
           dealType === "percentage" ? applicableCategoryIds : [],
         buyItemId: dealType === "buy_x_get_y" ? buyItemId : null,
+        buyVariantId: dealType === "buy_x_get_y" ? buyVariantId : null,
         buyQty: dealType === "buy_x_get_y" ? Number(buyQty) : null,
         getItemId: dealType === "buy_x_get_y" ? getItemId : null,
+        getVariantId: dealType === "buy_x_get_y" ? getVariantId : null,
         getQty: dealType === "buy_x_get_y" ? Number(getQty) : null,
       };
 
@@ -2966,7 +3001,13 @@ const DealForm = () => {
 
                     <div className="space-y-1.5">
                       <Label className="text-xs font-medium text-muted-foreground">Item</Label>
-                      <Select value={buyItemId ?? undefined} onValueChange={setBuyItemId}>
+                      <Select
+                        value={buyItemId ?? undefined}
+                        onValueChange={(val) => {
+                          setBuyItemId(val);
+                          setBuyVariantId(null);
+                        }}
+                      >
                         <SelectTrigger className="h-9 text-xs">
                           <SelectValue placeholder="Select item..." />
                         </SelectTrigger>
@@ -2981,6 +3022,35 @@ const DealForm = () => {
                         </SelectContent>
                       </Select>
                     </div>
+
+
+                    {(() => {
+                      const item = menuItems.find((m) => m.id === buyItemId);
+                      const variants = item?.variants ?? [];
+                      if (variants.length === 0) return null;
+                      return (
+                        <div className="space-y-1.5">
+                          <Label className="text-xs font-medium text-muted-foreground">Size</Label>
+                          <Select value={buyVariantId ?? undefined} onValueChange={setBuyVariantId}>
+                            <SelectTrigger className="h-9 text-xs">
+                              <SelectValue placeholder="Select size..." />
+                            </SelectTrigger>
+                            <SelectContent className="max-h-60">
+                              {variants.map((v) => (
+                                <SelectItem key={v.id} value={v.id} className="text-xs">
+                                  {v.name} — Rs. {Number(v.price ?? 0).toLocaleString()}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          {!buyVariantId && (
+                            <p className="text-[11px] text-amber-600 dark:text-amber-400">
+                              This item comes in {variants.length} sizes — pick one, or the offer applies to all of them.
+                            </p>
+                          )}
+                        </div>
+                      );
+                    })()}
 
                     <div className="space-y-1.5">
                       <Label className="text-xs font-medium text-muted-foreground">Quantity</Label>
@@ -3024,7 +3094,13 @@ const DealForm = () => {
 
                     <div className="space-y-1.5">
                       <Label className="text-xs font-medium text-muted-foreground">Item</Label>
-                      <Select value={getItemId ?? undefined} onValueChange={setGetItemId}>
+                      <Select
+                        value={getItemId ?? undefined}
+                        onValueChange={(val) => {
+                          setGetItemId(val);
+                          setGetVariantId(null);
+                        }}
+                      >
                         <SelectTrigger className="h-9 text-xs">
                           <SelectValue placeholder="Select free item..." />
                         </SelectTrigger>
@@ -3039,6 +3115,35 @@ const DealForm = () => {
                         </SelectContent>
                       </Select>
                     </div>
+
+
+                    {(() => {
+                      const item = menuItems.find((m) => m.id === getItemId);
+                      const variants = item?.variants ?? [];
+                      if (variants.length === 0) return null;
+                      return (
+                        <div className="space-y-1.5">
+                          <Label className="text-xs font-medium text-muted-foreground">Size</Label>
+                          <Select value={getVariantId ?? undefined} onValueChange={setGetVariantId}>
+                            <SelectTrigger className="h-9 text-xs">
+                              <SelectValue placeholder="Select free size..." />
+                            </SelectTrigger>
+                            <SelectContent className="max-h-60">
+                              {variants.map((v) => (
+                                <SelectItem key={v.id} value={v.id} className="text-xs">
+                                  {v.name} — Rs. {Number(v.price ?? 0).toLocaleString()}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          {!getVariantId && (
+                            <p className="text-[11px] text-amber-600 dark:text-amber-400">
+                              This item comes in {variants.length} sizes — pick one, or the offer applies to all of them.
+                            </p>
+                          )}
+                        </div>
+                      );
+                    })()}
 
                     <div className="space-y-1.5">
                       <Label className="text-xs font-medium text-muted-foreground">Quantity (Free)</Label>
@@ -3196,7 +3301,7 @@ const DealForm = () => {
                     {bogoImpact.variantSpread && (
                       <p className="text-[10px] text-muted-foreground flex items-start gap-1.5">
                         <HelpCircle className="h-3 w-3 shrink-0 mt-0.5" />
-                        Figures assume the worst case — the customer buys the cheapest size and takes the priciest one free. The offer is defined per item, so any size qualifies.
+                        A size is still unpinned, so any size qualifies — these figures assume the worst case: bought at the cheapest size, taken free at the priciest. Pick a size on both sides for the real numbers.
                       </p>
                     )}
                   </>
