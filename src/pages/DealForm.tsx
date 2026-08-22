@@ -76,6 +76,10 @@ interface OptionGroupRow {
   labelEdited: boolean;
 }
 
+/** Column widths for the Buy X Get Y row table. Qty sits after Selling, the
+ *  same place a Fixed Bundle row puts it, so both tables scan identically. */
+const BOGO_GRID = "1fr 1.4fr 0.9fr 78px 78px 84px 36px";
+
 /** The two halves of a Buy X Get Y offer. Both render the same row table, so
  *  they are described once here rather than duplicated in the markup. */
 const BOGO_SIDES = [
@@ -645,6 +649,12 @@ const DealForm = () => {
   /** Picking an item defaults to its first size, matching the other row tables.
    *  Changing the item must clear the old size, or the deal would save a size
    *  belonging to a different dish. */
+  const updateBogoQty = (
+    setRows: React.Dispatch<React.SetStateAction<BogoRow[]>>,
+    idx: number,
+    qty: number
+  ) => patchBogoRow(setRows, idx, { qty: Math.max(1, qty) });
+
   const updateBogoItem = (
     setRows: React.Dispatch<React.SetStateAction<BogoRow[]>>,
     idx: number,
@@ -3107,6 +3117,7 @@ const DealForm = () => {
                   const rows = side.key === "buy" ? buyRows : getRows;
                   const setRows = side.key === "buy" ? setBuyRows : setGetRows;
                   const SideIcon = side.icon;
+                  const filledCount = rows.filter((r) => r.itemId).length;
 
                   return (
                     <div
@@ -3143,24 +3154,26 @@ const DealForm = () => {
                           />
                           {side.title}
                         </p>
-                        <span className="text-[11px] text-muted-foreground">
-                          {rows.filter((r) => r.itemId).length} item
-                          {rows.filter((r) => r.itemId).length !== 1 ? "s" : ""}
-                        </span>
+                        <Badge
+                          variant="outline"
+                          className={cn(
+                            "text-[10px] font-mono px-1.5 py-0 shrink-0",
+                            side.key === "get" && "border-emerald-500/40 text-emerald-600 dark:text-emerald-400"
+                          )}
+                        >
+                          {filledCount} item{filledCount !== 1 ? "s" : ""}
+                        </Badge>
                       </div>
 
                       <div className="p-3 space-y-2">
                         {/* Header row */}
-                        <div
-                          className="grid gap-2 px-3 pb-1"
-                          style={{ gridTemplateColumns: "1fr 1.4fr 0.9fr 64px 78px 78px 36px" }}
-                        >
+                        <div className="grid gap-2 px-3 pb-1" style={{ gridTemplateColumns: BOGO_GRID }}>
                           <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Category</span>
                           <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Menu Item</span>
                           <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Size / Variant</span>
-                          <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground text-center">Qty</span>
                           <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground text-right">Cost</span>
                           <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground text-right">Selling</span>
+                          <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground text-center">Qty</span>
                           <span />
                         </div>
 
@@ -3185,7 +3198,7 @@ const DealForm = () => {
                               <div
                                 key={idx}
                                 className="grid gap-2 items-center px-3 py-2.5 rounded-lg border border-border/60 bg-background hover:bg-muted/20 transition-colors"
-                                style={{ gridTemplateColumns: "1fr 1.4fr 0.9fr 64px 78px 78px 36px" }}
+                                style={{ gridTemplateColumns: BOGO_GRID }}
                               >
                                 {/* Category filter — narrows the item dropdown beside it */}
                                 <Select
@@ -3264,17 +3277,6 @@ const DealForm = () => {
                                   )}
                                 </div>
 
-                                {/* Qty */}
-                                <Input
-                                  type="number"
-                                  min={1}
-                                  value={row.qty}
-                                  onChange={(e) =>
-                                    patchBogoRow(setRows, idx, { qty: Math.max(1, Number(e.target.value)) })
-                                  }
-                                  className="h-8 text-xs text-center font-bold border-0 bg-muted/30 focus-visible:ring-1"
-                                />
-
                                 {/* Cost */}
                                 <span className="text-xs font-mono text-muted-foreground text-right">
                                   {unitCost > 0 ? `Rs. ${unitCost.toLocaleString()}` : "—"}
@@ -3291,6 +3293,25 @@ const DealForm = () => {
                                 >
                                   {row.itemId ? `Rs. ${unitPrice.toLocaleString()}` : "—"}
                                 </span>
+
+                                {/* Qty stepper — same control as the Fixed Bundle rows */}
+                                <div className="flex items-center justify-center gap-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => updateBogoQty(setRows, idx, row.qty - 1)}
+                                    className="w-6 h-6 rounded-md bg-muted hover:bg-primary/10 hover:text-primary text-foreground flex items-center justify-center font-bold text-sm leading-none transition-colors"
+                                  >
+                                    −
+                                  </button>
+                                  <span className="w-6 text-center text-xs font-mono font-bold">{row.qty}</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => updateBogoQty(setRows, idx, row.qty + 1)}
+                                    className="w-6 h-6 rounded-md bg-muted hover:bg-primary/10 hover:text-primary text-foreground flex items-center justify-center font-bold text-sm leading-none transition-colors"
+                                  >
+                                    +
+                                  </button>
+                                </div>
 
                                 {/* Delete */}
                                 <Button
