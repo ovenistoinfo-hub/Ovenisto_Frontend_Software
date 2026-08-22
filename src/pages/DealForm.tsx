@@ -3277,12 +3277,12 @@ const DealForm = () => {
                                   )}
                                 </div>
 
-                                {/* Cost */}
+                                {/* Line cost — scales with Qty (from saved recipe cost) */}
                                 <span className="text-xs font-mono text-muted-foreground text-right">
-                                  {unitCost > 0 ? `Rs. ${unitCost.toLocaleString()}` : "—"}
+                                  {unitCost > 0 ? `Rs. ${(unitCost * row.qty).toLocaleString()}` : "—"}
                                 </span>
 
-                                {/* Selling price */}
+                                {/* Line selling price — scales with Qty */}
                                 <span
                                   className={cn(
                                     "text-xs font-mono font-semibold text-right",
@@ -3291,7 +3291,7 @@ const DealForm = () => {
                                       : "text-foreground"
                                   )}
                                 >
-                                  {row.itemId ? `Rs. ${unitPrice.toLocaleString()}` : "—"}
+                                  {row.itemId ? `Rs. ${(unitPrice * row.qty).toLocaleString()}` : "—"}
                                 </span>
 
                                 {/* Qty stepper — same control as the Fixed Bundle rows */}
