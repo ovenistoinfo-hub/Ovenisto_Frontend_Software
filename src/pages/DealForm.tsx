@@ -679,6 +679,32 @@ const DealForm = () => {
     };
   }, [discountScopeItems, discountPercent]);
 
+  /** Names the discount's scope for the POS preview — the selected categories,
+   *  plus a count of items named on their own. Items a selected category already
+   *  covers are left out; counting them twice would overstate the scope. */
+  const discountScopeSummary = useMemo(() => {
+    const categoryNames = applicableCategoryIds
+      .map((id) => foodCategories.find((c) => c.id === id)?.name)
+      .filter(Boolean) as string[];
+
+    const standaloneItems = applicableItemIds.filter((id) => {
+      const item = menuItems.find((m) => m.id === id);
+      return !(item?.categoryId && applicableCategoryIds.includes(item.categoryId));
+    }).length;
+
+    const parts: string[] = [];
+    if (categoryNames.length > 0) {
+      parts.push(
+        categoryNames.slice(0, 2).join(", ") +
+          (categoryNames.length > 2 ? ` +${categoryNames.length - 2} more` : "")
+      );
+    }
+    if (standaloneItems > 0) {
+      parts.push(`${standaloneItems} item${standaloneItems !== 1 ? "s" : ""}`);
+    }
+    return parts.join(" + ");
+  }, [applicableCategoryIds, applicableItemIds, foodCategories, menuItems]);
+
   // The last section's number follows what the chosen type renders above it:
   // combo/option_combo have a Pricing section 4 and percentage a Discount Impact
   // section 4, while Buy X Get Y ends at 3.
@@ -1238,7 +1264,7 @@ const DealForm = () => {
                         : dealType === "option_combo"
                         ? "Custom"
                         : dealType === "percentage"
-                        ? `${discountPercent}% OFF`
+                        ? "Discount"
                         : "BOGO"}
                     </Badge>
                   </div>
@@ -1288,9 +1314,18 @@ const DealForm = () => {
                       ))
                     )
                   ) : dealType === "percentage" ? (
-                    <p className="text-[11px] text-emerald-600 dark:text-emerald-400 font-bold">
-                      {discountPercent}% OFF on selected items
-                    </p>
+                    discountScopeSummary ? (
+                      <p className="text-[11px] text-foreground/90 font-medium">
+                        • {discountScopeSummary}
+                        <span className="text-muted-foreground">
+                          {" "}({discountImpact.itemCount} item{discountImpact.itemCount !== 1 ? "s" : ""})
+                        </span>
+                      </p>
+                    ) : (
+                      <p className="text-muted-foreground italic text-[11px]">
+                        No categories or items selected
+                      </p>
+                    )
                   ) : (
                     <p className="text-[11px] text-foreground/90 font-medium">
                       Buy {buyQty}x → Get {getQty}x Free
@@ -1306,11 +1341,20 @@ const DealForm = () => {
                         Rs. {bundleRegularValue.toLocaleString()}
                       </span>
                     )}
+                    {/* A percentage deal has no single price, so this slot carries what
+                        the customer actually saves — money, like every other type. */}
+                    {dealType === "percentage" && discountImpact.maxBefore > 0 && (
+                      <span className="text-[10px] text-muted-foreground font-mono block">
+                        was Rs. {Math.round(discountImpact.minBefore).toLocaleString()} – {Math.round(discountImpact.maxBefore).toLocaleString()}
+                      </span>
+                    )}
                     <span className="text-xl font-black text-primary font-mono">
                       {dealType === "combo" || dealType === "option_combo"
                         ? `Rs. ${(dealPrice || 0).toLocaleString()}`
                         : dealType === "percentage"
-                        ? `${discountPercent}% OFF`
+                        ? discountImpact.maxAfter > 0
+                          ? `Rs. ${Math.round(discountImpact.minAfter).toLocaleString()} – ${Math.round(discountImpact.maxAfter).toLocaleString()}`
+                          : "—"
                         : "Buy X Get Y"}
                     </span>
                   </div>
@@ -1318,6 +1362,12 @@ const DealForm = () => {
                   {dealType === "combo" && bundleSavingsPercent > 0 && (
                     <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-2 py-0.5 rounded">
                       SAVE {bundleSavingsPercent}%
+                    </span>
+                  )}
+
+                  {dealType === "percentage" && (discountPercent || 0) > 0 && (
+                    <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-2 py-0.5 rounded shrink-0">
+                      SAVE {discountPercent}%
                     </span>
                   )}
                 </div>
