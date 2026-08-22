@@ -2,9 +2,71 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-> The repo-root `../CLAUDE.md` holds the full project guide (architecture, module map,
-> roles, env vars, deployment gotchas, the Outlet Scoping access-control model). It loads
-> alongside this file in frontend sessions — read it first.
+This is the frontend half of the Ovenisto POS system. The API lives in a sibling repo,
+`Ovenisto-backend`, and is the only backend this talks to.
+
+A workspace-level `../CLAUDE.md` used to hold the shared project guide. It sits outside
+both git repos, so a fresh clone never gets it — everything needed to work here is now
+in this file.
+
+## Architecture
+
+Vite + React 18 + TypeScript, routed with react-router, styled with Tailwind over Radix
+primitives (shadcn-style components in `src/components/ui/`), server state in TanStack
+Query, real-time via Socket.IO. 47 pages in `src/pages/`, each lazy-imported in `App.tsx`.
+
+### The layers, outermost first
+
+`App.tsx` nests the providers in an order that matters:
+
+    PersistQueryClientProvider → AuthProvider → OutletProvider → DataProvider → Routes
+
+`OutletProvider` reads the user, so it must sit inside `AuthProvider`.
+
+`ProtectedRoute` gates each route on `isAuthenticated` plus an optional `module`
+permission, and redirects a user who lacks it to `getDefaultRouteForRole(user.role)` —
+not to `/`, because most roles cannot see the dashboard. Most pages render inside
+`AppLayout`; a few (POS, customer display, self-order) are standalone.
+
+### Talking to the API
+
+Everything goes through `src/services/api.ts`. It reads `VITE_API_URL` (default
+`http://localhost:3001/api`), attaches the bearer token from `localStorage`, and on a
+401 transparently calls `/auth/refresh` once and replays the request — so a service
+never handles token refresh itself.
+
+One `*.service.ts` per backend module, 35 of them. They all follow the same envelope
+convention (see the Quick-Reference below). Pages consume them through TanStack Query.
+
+### Outlet scoping — the client half
+
+`src/services/outletStore.ts` is a plain module-level store, deliberately *not* React
+state, because `api.ts` has to read it outside the component tree: every request gets an
+`X-Outlet-Id` header unless the value is `all`.
+
+`OutletContext.tsx` sets it from the user — **Super Admin gets `"all"`, every other role
+is pinned to `user.outletId`** — and re-syncs whenever the user changes. The backend
+does not trust this header for non-Super-Admins (it re-derives scope from the JWT), so
+this is a convenience for the Super Admin's branch picker, never the security boundary.
+
+### Real-time
+
+`src/lib/socket.ts` derives the socket URL by stripping the trailing `/api` off
+`VITE_API_URL` and authenticates with `auth: (cb) => cb({ token: getAccessToken() })`.
+`resetSocket()` must be called on logout, or the next user inherits the previous one's
+authenticated socket and outlet room. Feature hooks (`use-order-events`,
+`use-table-events`, `use-delivery-events`, `use-reservation-events`, `use-module-events`)
+subscribe and invalidate the matching query keys.
+
+### Environment
+
+`VITE_API_URL` is the only variable the app reads. It must include the `/api` suffix —
+`src/lib/socket.ts` strips it to find the socket origin.
+
+### Deployment
+
+Vercel (staging at `ovenisto-staging.vercel.app`). The backend's Socket.IO CORS allows
+any `*.vercel.app` origin, so preview deploys connect without extra configuration.
 
 ## Commands
 
