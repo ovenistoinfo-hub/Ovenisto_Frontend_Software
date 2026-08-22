@@ -841,20 +841,27 @@ const DealForm = () => {
     const totalCost = sum(buy, "cost") + giveawayCost;
     const profit = revenue - totalCost;
 
+    // Everything the customer carries out, at normal menu price. This is the
+    // baseline the Fixed Bundle calls "Total Selling Price" — the free items are
+    // part of it, because without the deal they would have been paid for.
+    const regularValue = revenue + giveawayValue;
+
     return {
       buy,
       give,
-      revenue,
+      // ── At regular menu price ──
+      regularValue,
       totalCost,
-      giveawayValue,
+      menuMargin:
+        regularValue > 0 ? Math.round(((regularValue - totalCost) / regularValue) * 100) : null,
+      // ── This deal ──
+      /** What the customer actually hands over: the bought items only. */
+      dealPrice: revenue,
+      savings: giveawayValue,
+      savingsPercent: regularValue > 0 ? Math.round((giveawayValue / regularValue) * 100) : 0,
       giveawayCost,
       profit,
       margin: revenue > 0 ? Math.round((profit / revenue) * 100) : null,
-      // What the offer feels like to the customer, against everything they carry out.
-      effectiveDiscount:
-        revenue + giveawayValue > 0
-          ? Math.round((giveawayValue / (revenue + giveawayValue)) * 100)
-          : 0,
       hasCost: totalCost > 0,
       variantSpread: [...buy, ...give].some((r) => r.unpinned),
     };
@@ -1586,9 +1593,9 @@ const DealForm = () => {
                     )}
                     {/* Same slot, same meaning: what the customer hands over, against
                         what the whole basket would otherwise have cost. */}
-                    {dealType === "buy_x_get_y" && bogoImpact && bogoImpact.giveawayValue > 0 && (
+                    {dealType === "buy_x_get_y" && bogoImpact && bogoImpact.savings > 0 && (
                       <span className="text-[10px] text-muted-foreground line-through font-mono block">
-                        Rs. {Math.round(bogoImpact.revenue + bogoImpact.giveawayValue).toLocaleString()}
+                        Rs. {Math.round(bogoImpact.regularValue).toLocaleString()}
                       </span>
                     )}
                     <span className="text-xl font-black text-primary font-mono">
@@ -1599,7 +1606,7 @@ const DealForm = () => {
                           ? `Rs. ${Math.round(discountImpact.minAfter).toLocaleString()} – ${Math.round(discountImpact.maxAfter).toLocaleString()}`
                           : "—"
                         : bogoImpact
-                        ? `Rs. ${Math.round(bogoImpact.revenue).toLocaleString()}`
+                        ? `Rs. ${Math.round(bogoImpact.dealPrice).toLocaleString()}`
                         : "—"}
                     </span>
                   </div>
@@ -1616,9 +1623,9 @@ const DealForm = () => {
                     </span>
                   )}
 
-                  {dealType === "buy_x_get_y" && bogoImpact && bogoImpact.effectiveDiscount > 0 && (
+                  {dealType === "buy_x_get_y" && bogoImpact && bogoImpact.savingsPercent > 0 && (
                     <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-2 py-0.5 rounded shrink-0">
-                      SAVE {bogoImpact.effectiveDiscount}%
+                      SAVE {bogoImpact.savingsPercent}%
                     </span>
                   )}
                 </div>
@@ -3322,148 +3329,245 @@ const DealForm = () => {
             </Card>
           )}
 
-          {/* SECTION 4: Offer Impact (Buy X Get Y) — the same margin read-out the
-              other three formats get. */}
+          {/* SECTION 4: Pricing & Cost Breakdown (Buy X Get Y) — deliberately the
+              same two-row ladder the Fixed Bundle uses: what everything is worth
+              at regular menu price, then what this deal changes. Same card
+              styling and the same labels, so an admin reads one vocabulary
+              across every deal format. The only difference is that a Buy X Get Y
+              price is derived, not typed — the customer pays menu price for what
+              they buy, so there is no deal-price input or channel override. */}
           {dealType === "buy_x_get_y" && (
             <Card className="shadow-xs border-border/80 overflow-hidden">
               <CardHeader className="pb-3 border-b bg-muted/20">
-                <CardTitle className="text-sm font-bold uppercase tracking-wider text-foreground flex items-center gap-2">
-                  <Sparkles className="h-4 w-4 text-primary" />
-                  4. Offer Impact
-                </CardTitle>
-                <CardDescription className="text-xs">
-                  What this offer earns and what it gives away, per redemption
-                </CardDescription>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                  <div>
+                    <CardTitle className="text-sm font-bold uppercase tracking-wider text-foreground flex items-center gap-2">
+                      <Sparkles className="h-4 w-4 text-primary" />
+                      4. Pricing & Cost Breakdown
+                    </CardTitle>
+                    <CardDescription className="text-xs">
+                      What the offer is worth at menu price, and what it earns per redemption
+                    </CardDescription>
+                  </div>
+                  {bogoImpact && (
+                    <Badge variant="outline" className="text-[11px] font-mono self-start sm:self-auto gap-1">
+                      <Calculator className="h-3 w-3 text-primary" />
+                      Price Set By Items Bought
+                    </Badge>
+                  )}
+                </div>
               </CardHeader>
 
-              <CardContent className="p-5 space-y-5">
+              <CardContent className="p-5 space-y-6">
                 {!bogoImpact ? (
                   <div className="text-center py-10 space-y-2 border-2 border-dashed border-border/60 rounded-xl bg-muted/10">
                     <div className="w-12 h-12 rounded-full bg-muted/60 flex items-center justify-center mx-auto">
                       <Gift className="h-5 w-5 text-muted-foreground/50" />
                     </div>
-                    <p className="text-sm font-bold text-foreground">Offer not complete yet</p>
+                    <p className="text-sm font-bold text-foreground">Nothing configured yet</p>
                     <p className="text-xs text-muted-foreground">
-                      Choose both the purchased item and the free item above
+                      Pick what the customer buys and what they get free to see what this offer costs you
                     </p>
                   </div>
                 ) : (
                   <>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    {/* ── ROW 1 · AT MENU PRICE (baseline, informational) ── */}
+                    <div className="space-y-2">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70 flex items-center gap-1.5">
+                        <Tag className="h-3 w-3" /> At Regular Menu Price
+                      </p>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
 
-                      {/* Money in */}
-                      <div className="rounded-xl border border-border/70 bg-muted/25 p-4 flex flex-col justify-between gap-2">
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                          <Coins className="h-3.5 w-3.5 text-muted-foreground/70" />
-                          Customer Pays
-                        </span>
-                        <div>
-                          <p className="text-xl font-black font-mono text-foreground tracking-tight">
-                            Rs.&nbsp;{Math.round(bogoImpact.revenue).toLocaleString()}
-                          </p>
-                          <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">
-                            {bogoImpact.buy
-                              .map((r) => `${r.qty} × ${r.item.name}${r.label ? ` (${r.label})` : ""}`)
-                              .join(" + ")}
-                          </p>
-                        </div>
-                      </div>
-
-                      {/* Money given away */}
-                      <div className="rounded-xl border-2 border-primary/50 bg-primary/[0.04] p-4 flex flex-col justify-between gap-2 shadow-xs">
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="text-[10px] font-bold uppercase tracking-wider text-primary flex items-center gap-1.5">
-                            <Gift className="h-3.5 w-3.5" />
-                            You Give Away
-                          </span>
-                          {bogoImpact.effectiveDiscount > 0 && (
-                            <span className="text-[10px] font-bold text-primary px-1.5 py-0.5 rounded bg-primary/10 shrink-0">
-                              ≈{bogoImpact.effectiveDiscount}% off
+                        {/* Total Cost */}
+                        <div className="rounded-xl border border-border/70 bg-muted/25 p-4 flex flex-col justify-between gap-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                              <Coins className="h-3.5 w-3.5 text-muted-foreground/70" />
+                              Total Cost
                             </span>
-                          )}
+                            {bogoImpact.hasCost ? (
+                              <Badge variant="secondary" className="text-[10px] px-1.5 py-0">Recipe Cost</Badge>
+                            ) : (
+                              <Badge variant="outline" className="text-[10px] text-muted-foreground/60 px-1.5 py-0">No Recipe</Badge>
+                            )}
+                          </div>
+                          <div>
+                            <p className="text-xl font-black font-mono text-foreground tracking-tight">
+                              Rs.&nbsp;{Math.round(bogoImpact.totalCost).toLocaleString()}
+                            </p>
+                            <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">
+                              {bogoImpact.hasCost
+                                ? "Raw ingredients & recipe cost"
+                                : "Set recipes in Menu Items for live cost"}
+                            </p>
+                          </div>
                         </div>
-                        <div>
-                          <p className="text-xl font-black font-mono text-primary tracking-tight">
-                            Rs.&nbsp;{Math.round(bogoImpact.giveawayValue).toLocaleString()}
-                          </p>
-                          <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">
-                            {bogoImpact.hasCost
-                              ? `Retail value · costs you Rs. ${Math.round(bogoImpact.giveawayCost).toLocaleString()}`
-                              : "Retail value of the free item"}
-                          </p>
-                        </div>
-                      </div>
 
-                      {/* Whether it still pays */}
-                      <div className={cn(
-                        "rounded-xl border p-4 flex flex-col justify-between gap-2 transition-all",
-                        !bogoImpact.hasCost
-                          ? "border-border/70 bg-muted/25"
-                          : bogoImpact.profit > 0
-                          ? "border-emerald-500/40 bg-emerald-500/[0.04]"
-                          : "border-destructive/40 bg-destructive/[0.04]"
-                      )}>
-                        <span className={cn(
-                          "text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5",
-                          !bogoImpact.hasCost
-                            ? "text-muted-foreground"
-                            : bogoImpact.profit > 0
-                            ? "text-emerald-600 dark:text-emerald-400"
-                            : "text-destructive"
-                        )}>
-                          <TrendingUp className="h-3.5 w-3.5" />
-                          Profit Per Redemption
-                        </span>
-                        <div>
-                          {bogoImpact.hasCost && bogoImpact.margin != null ? (
-                            <>
-                              <div className="flex items-baseline gap-1.5">
-                                <p className={cn(
-                                  "text-xl font-black font-mono tracking-tight",
-                                  bogoImpact.profit > 0
-                                    ? "text-emerald-600 dark:text-emerald-400"
-                                    : "text-destructive"
-                                )}>
-                                  {bogoImpact.margin}%
-                                </p>
-                                <span className="text-xs font-mono font-bold text-muted-foreground">
-                                  (Rs.&nbsp;{Math.round(bogoImpact.profit).toLocaleString()})
-                                </span>
-                              </div>
-                              <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">
-                                After both items&apos; recipe cost
-                              </p>
-                            </>
-                          ) : (
-                            <>
-                              <p className="text-xl font-black font-mono text-muted-foreground/40">—</p>
-                              <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">
-                                Set recipes in Menu Items for live profit
-                              </p>
-                            </>
-                          )}
+                        {/* Total Selling Price */}
+                        <div className="rounded-xl border border-border/70 bg-muted/25 p-4 flex flex-col justify-between gap-2">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                            <Tag className="h-3.5 w-3.5 text-muted-foreground/70" />
+                            Total Selling Price
+                          </span>
+                          <div>
+                            <p className="text-xl font-black font-mono text-foreground tracking-tight">
+                              Rs.&nbsp;{Math.round(bogoImpact.regularValue).toLocaleString()}
+                            </p>
+                            <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">
+                              Everything they carry out, at menu price
+                            </p>
+                          </div>
                         </div>
+
+                        {/* Total Profit % at menu price */}
+                        <div className="rounded-xl border border-border/70 bg-muted/25 p-4 flex flex-col justify-between gap-2">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                            <TrendingUp className="h-3.5 w-3.5 text-muted-foreground/70" />
+                            Total Profit %
+                          </span>
+                          <div>
+                            <p className="text-xl font-black font-mono text-foreground tracking-tight">
+                              {bogoImpact.hasCost && bogoImpact.menuMargin != null ? `${bogoImpact.menuMargin}%` : "—"}
+                            </p>
+                            <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">
+                              Margin before any deal discount
+                            </p>
+                          </div>
+                        </div>
+
                       </div>
                     </div>
 
-                    {/* Losing money on every redemption is worth stopping for */}
+                    {/* ── ROW 2 · THIS DEAL (the decision) ── */}
+                    <div className="space-y-2">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-primary/80 flex items-center gap-1.5">
+                        <Sparkles className="h-3 w-3" /> This Deal
+                      </p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+
+                        {/* Deal Price — derived from what they buy, not typed */}
+                        <div className="rounded-xl border-2 border-primary/50 bg-primary/[0.04] p-4 flex flex-col justify-between gap-2 shadow-xs">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-primary flex items-center gap-1.5">
+                              <Sparkles className="h-3.5 w-3.5" />
+                              Deal Price
+                            </span>
+                            {bogoImpact.savingsPercent > 0 && (
+                              <span className="text-[10px] font-bold text-primary px-1.5 py-0.5 rounded bg-primary/10 shrink-0">
+                                {bogoImpact.savingsPercent}% OFF
+                              </span>
+                            )}
+                          </div>
+                          <div>
+                            <p className="text-xl font-black font-mono text-primary tracking-tight">
+                              Rs.&nbsp;{Math.round(bogoImpact.dealPrice).toLocaleString()}
+                            </p>
+                            <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">
+                              {bogoImpact.savings > 0
+                                ? `Customer saves Rs. ${Math.round(bogoImpact.savings).toLocaleString()}`
+                                : "Customer pays at POS & Web"}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Deal Profit % */}
+                        <div className={cn(
+                          "rounded-xl border p-4 flex flex-col justify-between gap-2 transition-all",
+                          !bogoImpact.hasCost
+                            ? "border-border/70 bg-muted/25"
+                            : bogoImpact.profit > 0
+                            ? "border-emerald-500/40 bg-emerald-500/[0.04]"
+                            : "border-destructive/40 bg-destructive/[0.04]"
+                        )}>
+                          <span className={cn(
+                            "text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5",
+                            !bogoImpact.hasCost
+                              ? "text-muted-foreground"
+                              : bogoImpact.profit > 0
+                              ? "text-emerald-600 dark:text-emerald-400"
+                              : "text-destructive"
+                          )}>
+                            <TrendingUp className="h-3.5 w-3.5" />
+                            Deal Profit %
+                          </span>
+                          <div>
+                            {bogoImpact.hasCost && bogoImpact.margin != null ? (
+                              <>
+                                <div className="flex items-baseline gap-1.5">
+                                  <p className={cn(
+                                    "text-xl font-black font-mono tracking-tight",
+                                    bogoImpact.profit > 0
+                                      ? "text-emerald-600 dark:text-emerald-400"
+                                      : "text-destructive"
+                                  )}>
+                                    {bogoImpact.margin}%
+                                  </p>
+                                  <span className="text-xs font-mono font-bold text-muted-foreground">
+                                    (Rs.&nbsp;{Math.round(bogoImpact.profit).toLocaleString()})
+                                  </span>
+                                </div>
+                                <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">
+                                  Profit over ingredient cost
+                                </p>
+                              </>
+                            ) : (
+                              <>
+                                <p className="text-xl font-black font-mono text-muted-foreground/40">—</p>
+                                <p className="text-[10px] text-muted-foreground mt-0.5">
+                                  Add recipes for profit %
+                                </p>
+                              </>
+                            )}
+                          </div>
+                        </div>
+
+                      </div>
+                    </div>
+
+                    {/* What is actually being given away — the one number a Fixed
+                        Bundle has no equivalent for, so it is spelled out rather
+                        than left implicit in "Customer saves". */}
+                    <div className="rounded-xl border border-border/70 bg-muted/20 px-4 py-3 space-y-1.5">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                        <Gift className="h-3 w-3 text-muted-foreground/70" /> Given Away Free
+                      </p>
+                      {bogoImpact.give.map((r, i) => (
+                        <div key={i} className="flex items-center justify-between gap-3 text-xs">
+                          <span className="text-foreground/90 truncate">
+                            {r.qty} × {r.item.name}
+                            {r.label ? ` (${r.label})` : ""}
+                          </span>
+                          <span className="font-mono text-muted-foreground shrink-0">
+                            Rs.&nbsp;{Math.round(r.price).toLocaleString()}
+                            {r.cost > 0 && (
+                              <span className="text-muted-foreground/60">
+                                {" "}· costs you Rs.&nbsp;{Math.round(r.cost).toLocaleString()}
+                              </span>
+                            )}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Loss warning */}
                     {bogoImpact.hasCost && bogoImpact.profit <= 0 && (
-                      <div className="rounded-xl border border-destructive/40 bg-destructive/[0.04] px-4 py-3">
-                        <p className="text-xs font-bold text-destructive flex items-center gap-1.5">
-                          <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-                          This offer loses Rs. {Math.abs(Math.round(bogoImpact.profit)).toLocaleString()} every time it is redeemed
-                        </p>
-                        <p className="text-[10px] text-muted-foreground mt-1">
-                          Raise the buy quantity, or give away something cheaper.
-                        </p>
+                      <div className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2.5">
+                        <AlertTriangle className="h-4 w-4 text-destructive shrink-0 mt-0.5" />
+                        <div className="space-y-0.5">
+                          <p className="text-xs font-bold text-destructive">
+                            This offer loses Rs. {Math.abs(Math.round(bogoImpact.profit)).toLocaleString()} every time it is redeemed
+                          </p>
+                          <p className="text-[11px] text-muted-foreground">
+                            Raise what the customer has to buy, or give away something cheaper.
+                          </p>
+                        </div>
                       </div>
                     )}
 
-                    {/* The deal stores no variant, so the priciest one is claimable */}
+                    {/* Unpinned sizes make these figures a worst case, not a fact */}
                     {bogoImpact.variantSpread && (
-                      <p className="text-[10px] text-muted-foreground flex items-start gap-1.5">
-                        <HelpCircle className="h-3 w-3 shrink-0 mt-0.5" />
-                        A size is still unpinned, so any size qualifies — these figures assume the worst case: bought at the cheapest size, taken free at the priciest. Pick a size on both sides for the real numbers.
+                      <p className="text-[11px] text-amber-600 dark:text-amber-400 leading-relaxed">
+                        A size is still unpinned, so any size qualifies — these figures assume the worst case: bought at the cheapest size, taken free at the priciest. Pick a size on every row for the real numbers.
                       </p>
                     )}
                   </>
