@@ -28,11 +28,19 @@ interface ComboItemRow {
   qty: number;
 }
 
+/** One selectable choice inside a step group. `categoryId` is a UI-only filter that
+ *  narrows the item dropdown — it is never sent to the backend. */
+interface OptionChoiceRow {
+  categoryId: string;
+  itemId: string;
+  variantId: string | null;
+}
+
 interface OptionGroupRow {
   id: string;
   label: string;
   maxSelections: number;
-  allowedItems: string[];
+  choices: OptionChoiceRow[];
 }
 
 const PERCENT_PRESETS = [10, 15, 20, 25, 30, 50];
@@ -111,7 +119,6 @@ const DealForm = () => {
 
   // Customizable Option Groups
   const [optionGroups, setOptionGroups] = useState<OptionGroupRow[]>([]);
-  const [groupCategoryFilters, setGroupCategoryFilters] = useState<Record<string, string>>({});
 
   // Percentage
   const [discountPercent, setDiscountPercent] = useState<number>(10);
@@ -174,7 +181,14 @@ const DealForm = () => {
           id: g.id,
           label: g.label,
           maxSelections: g.maxSelections,
-          allowedItems: g.options.map((o) => o.menuItemId),
+          // categoryId stays empty here — for a row that already has an item, the
+          // category shown is derived from that item at render time, so this never
+          // races the menuItems query.
+          choices: g.options.map((o) => ({
+            categoryId: "",
+            itemId: o.menuItemId,
+            variantId: o.variantId,
+          })),
         }))
       );
     }
@@ -399,17 +413,15 @@ const DealForm = () => {
 
   // Customizable Option Groups Helpers
   const addOptionGroup = () => {
-    const newId = crypto.randomUUID();
     setOptionGroups((prev) => [
       ...prev,
       {
-        id: newId,
+        id: crypto.randomUUID(),
         label: `Step ${prev.length + 1}: Choose Item`,
-        allowedItems: [],
+        choices: [],
         maxSelections: 1,
       },
     ]);
-    setGroupCategoryFilters((prev) => ({ ...prev, [newId]: "All" }));
   };
 
   const removeOptionGroup = (groupId: string) => {
@@ -430,20 +442,53 @@ const DealForm = () => {
     );
   };
 
-  const toggleItemInGroup = (groupId: string, itemId: string) => {
+  /** Rewrites one choice row inside one group, leaving every other row untouched. */
+  const patchChoice = (
+    groupId: string,
+    idx: number,
+    patch: Partial<OptionChoiceRow>
+  ) => {
     setOptionGroups((prev) =>
-      prev.map((g) => {
-        if (g.id !== groupId) return g;
-        const exists = g.allowedItems.includes(itemId);
-        return {
-          ...g,
-          allowedItems: exists
-            ? g.allowedItems.filter((id) => id !== itemId)
-            : [...g.allowedItems, itemId],
-        };
-      })
+      prev.map((g) =>
+        g.id === groupId
+          ? { ...g, choices: g.choices.map((c, i) => (i === idx ? { ...c, ...patch } : c)) }
+          : g
+      )
     );
   };
+
+  const addChoiceRow = (groupId: string) => {
+    setOptionGroups((prev) =>
+      prev.map((g) =>
+        g.id === groupId
+          ? { ...g, choices: [...g.choices, { categoryId: "", itemId: "", variantId: null }] }
+          : g
+      )
+    );
+  };
+
+  const removeChoiceRow = (groupId: string, idx: number) => {
+    setOptionGroups((prev) =>
+      prev.map((g) =>
+        g.id === groupId ? { ...g, choices: g.choices.filter((_, i) => i !== idx) } : g
+      )
+    );
+  };
+
+  // Changing the category clears the item/variant beneath it — the old item is no
+  // longer in the narrowed dropdown, so keeping it would show a value the list
+  // doesn't contain.
+  const updateChoiceCategory = (groupId: string, idx: number, categoryId: string) =>
+    patchChoice(groupId, idx, { categoryId, itemId: "", variantId: null });
+
+  /** Picking an item defaults to its first variant, matching the Fixed Bundle rows. */
+  const updateChoiceItem = (groupId: string, idx: number, itemId: string) => {
+    const item = menuItems.find((m) => m.id === itemId);
+    patchChoice(groupId, idx, { itemId, variantId: item?.variants?.[0]?.id ?? null });
+  };
+
+  const updateChoiceVariant = (groupId: string, idx: number, variantId: string) =>
+    patchChoice(groupId, idx, { variantId });
 
   // Percentage Scope Helpers
   const toggleApplicableItem = (itemId: string) => {
@@ -488,13 +533,18 @@ const DealForm = () => {
         toast.error("Please add at least 1 Step / Option group for this deal");
         return;
       }
-      const emptyGroup = optionGroups.find((g) => g.allowedItems.length === 0);
+      const emptyGroup = optionGroups.find((g) => g.choices.length === 0);
       if (emptyGroup) {
         toast.error(`Please select at least 1 item for "${emptyGroup.label}"`);
         return;
       }
+      const incompleteGroup = optionGroups.find((g) => g.choices.some((c) => !c.itemId));
+      if (incompleteGroup) {
+        toast.error(`Pick a menu item for every choice row in "${incompleteGroup.label}"`);
+        return;
+      }
       const notEnoughGroup = optionGroups.find(
-        (g) => g.allowedItems.length < g.maxSelections
+        (g) => g.choices.length < g.maxSelections
       );
       if (notEnoughGroup) {
         toast.error(
@@ -568,9 +618,9 @@ const DealForm = () => {
                 minSelections: g.maxSelections,
                 maxSelections: g.maxSelections,
                 displayOrder: idx,
-                options: g.allowedItems.map((itemId, oIdx) => ({
-                  menuItemId: itemId,
-                  variantId: null,
+                options: g.choices.map((c, oIdx) => ({
+                  menuItemId: c.itemId,
+                  variantId: c.variantId,
                   extraPrice: 0,
                   displayOrder: oIdx,
                 })),
@@ -1029,7 +1079,7 @@ const DealForm = () => {
                           key={i}
                           className="text-[11px] text-foreground/90 font-medium truncate"
                         >
-                          • {g.label} ({g.allowedItems.length} options)
+                          • {g.label} ({g.choices.length} options)
                         </p>
                       ))
                     )
@@ -1307,184 +1357,258 @@ const DealForm = () => {
           {/* SECTION 3: Choice Steps & Groups (option_combo only) */}
           {dealType === "option_combo" ? (
             <Card className="shadow-xs border-border/80 overflow-hidden">
-              <CardHeader className="pb-3 border-b bg-muted/20 flex flex-row items-center justify-between">
-                <div>
-                  <CardTitle className="text-sm font-bold uppercase tracking-wider text-foreground flex items-center gap-2">
-                    <Layers className="h-4 w-4 text-primary" />
-                    3. Choice Steps & Groups ({optionGroups.length})
-                  </CardTitle>
-                  <CardDescription className="text-xs">
-                    Define pick-and-choose steps (e.g. Choose 1st Pizza, Choose Soft Drink)
-                  </CardDescription>
+              <CardHeader className="pb-3 border-b bg-muted/20">
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <CardTitle className="text-sm font-bold uppercase tracking-wider text-foreground flex items-center gap-2">
+                      <Layers className="h-4 w-4 text-primary" />
+                      3. Choice Steps & Groups
+                      {optionGroups.length > 0 && (
+                        <span className="ml-1 px-1.5 py-0.5 rounded-md bg-primary/10 text-primary text-[10px] font-bold">
+                          {optionGroups.length}
+                        </span>
+                      )}
+                    </CardTitle>
+                    <CardDescription className="text-xs mt-0.5">
+                      Define pick-and-choose steps (e.g. Choose 1st Pizza, Choose Soft Drink)
+                    </CardDescription>
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={addOptionGroup}
+                    className="gradient-primary text-primary-foreground gap-1.5 text-xs font-bold shadow-xs shrink-0"
+                  >
+                    <Plus className="h-3.5 w-3.5" /> Add Step Group
+                  </Button>
                 </div>
-                <Button
-                  type="button"
-                  size="sm"
-                  onClick={addOptionGroup}
-                  className="gradient-primary text-primary-foreground gap-1.5 text-xs font-bold shadow-xs"
-                >
-                  <Plus className="h-3.5 w-3.5" /> Add Step Group
-                </Button>
               </CardHeader>
-              <CardContent className="p-4 space-y-4">
+
+              <CardContent className="p-4">
                 {optionGroups.length === 0 ? (
-                  <div className="text-center py-10 space-y-3 border border-dashed rounded-xl bg-muted/10">
-                    <Layers className="h-9 w-9 text-muted-foreground/40 mx-auto" />
-                    <div>
-                      <p className="text-sm font-bold text-foreground">
-                        No selection steps created yet
-                      </p>
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        Create choice groups so customers can pick their flavors
-                      </p>
+                  <div className="text-center py-12 space-y-3 border-2 border-dashed border-border/60 rounded-xl bg-muted/10">
+                    <div className="w-12 h-12 rounded-full bg-muted/60 flex items-center justify-center mx-auto">
+                      <Layers className="h-5 w-5 text-muted-foreground/50" />
                     </div>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      onClick={addOptionGroup}
-                      className="text-xs gap-1.5"
-                    >
+                    <div>
+                      <p className="text-sm font-bold text-foreground">No selection steps created yet</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">Create choice groups so customers can pick their own items</p>
+                    </div>
+                    <Button type="button" size="sm" variant="outline" onClick={addOptionGroup} className="text-xs gap-1.5">
                       <Plus className="h-3.5 w-3.5" /> Add First Step Group
                     </Button>
                   </div>
                 ) : (
-                  optionGroups.map((group, gIdx) => {
-                    const activeCat = groupCategoryFilters[group.id] || "All";
-                    const displayItems = menuItems.filter(
-                      (item) =>
-                        activeCat === "All" || item.category?.name === activeCat
-                    );
+                  <div className="space-y-4">
+                    {optionGroups.map((group, gIdx) => (
+                      <div key={group.id} className="rounded-xl border border-border/60 bg-muted/10 overflow-hidden">
 
-                    return (
-                      <div
-                        key={group.id}
-                        className="p-4 rounded-xl border bg-muted/10 space-y-3.5"
-                      >
-                        {/* Group Header */}
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b">
-                          <div className="flex items-center gap-2 flex-1">
+                        {/* Group header — label, how many the customer picks, remove */}
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-3 py-2.5 border-b border-border/50 bg-muted/20">
+                          <div className="flex items-center gap-2 flex-1 min-w-0">
                             <span className="h-6 w-6 rounded-lg bg-primary/10 text-primary font-extrabold text-xs flex items-center justify-center shrink-0">
                               #{gIdx + 1}
                             </span>
                             <Input
                               value={group.label}
-                              onChange={(e) =>
-                                updateGroupLabel(group.id, e.target.value)
-                              }
+                              onChange={(e) => updateGroupLabel(group.id, e.target.value)}
                               placeholder="e.g. Choose 1st Pizza Flavor"
                               className="h-8 text-xs font-bold max-w-sm"
                             />
                           </div>
 
-                          <div className="flex items-center gap-3 self-end sm:self-auto">
+                          <div className="flex items-center gap-3 self-end sm:self-auto shrink-0">
                             <div className="flex items-center gap-1.5">
                               <Label className="text-[11px] text-muted-foreground font-medium whitespace-nowrap">
-                                Pick Exact:
+                                Customer Picks:
                               </Label>
                               <Input
                                 type="number"
                                 min={1}
                                 value={group.maxSelections}
-                                onChange={(e) =>
-                                  updateGroupMax(group.id, Number(e.target.value))
-                                }
+                                onChange={(e) => updateGroupMax(group.id, Number(e.target.value))}
                                 className="h-8 w-16 text-xs text-center font-bold"
                               />
                             </div>
-
                             <Button
                               type="button"
                               variant="ghost"
                               size="sm"
                               onClick={() => removeOptionGroup(group.id)}
-                              className="h-8 text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
+                              className="h-8 text-xs text-muted-foreground hover:text-destructive hover:bg-destructive/10"
                             >
                               <Trash2 className="h-3.5 w-3.5 mr-1" /> Remove
                             </Button>
                           </div>
                         </div>
 
-                        {/* Category Filter for this group */}
-                        <div className="space-y-2">
-                          <div className="flex items-center justify-between">
-                            <p className="text-xs font-semibold text-muted-foreground">
-                              Select available items ({group.allowedItems.length}{" "}
-                              chosen):
-                            </p>
-                            <div className="flex gap-1 overflow-x-auto pb-1 max-w-[55%]">
+                        {/* Choice rows — same row layout as the Fixed Bundle table */}
+                        <div className="p-3">
+                          {group.choices.length === 0 ? (
+                            <div className="text-center py-8 space-y-2.5 border border-dashed border-border/60 rounded-lg bg-background/40">
+                              <p className="text-xs text-muted-foreground">
+                                No selectable items in this step yet
+                              </p>
                               <Button
                                 type="button"
                                 size="sm"
-                                variant={
-                                  activeCat === "All" ? "default" : "outline"
-                                }
-                                onClick={() =>
-                                  setGroupCategoryFilters((p) => ({
-                                    ...p,
-                                    [group.id]: "All",
-                                  }))
-                                }
-                                className="h-6 text-[10px] px-2"
+                                variant="outline"
+                                onClick={() => addChoiceRow(group.id)}
+                                className="text-xs gap-1.5"
                               >
-                                All
+                                <Plus className="h-3.5 w-3.5" /> Add Choice
                               </Button>
-                              {foodCategories.map((c) => (
+                            </div>
+                          ) : (
+                            <div className="space-y-2">
+                              {/* Header row */}
+                              <div className="grid gap-2 px-3 pb-1" style={{ gridTemplateColumns: "1fr 1.4fr 0.9fr 78px 78px 36px" }}>
+                                <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Category</span>
+                                <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Menu Item</span>
+                                <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Size / Variant</span>
+                                <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground text-right">Cost</span>
+                                <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground text-right">Selling</span>
+                                <span />
+                              </div>
+
+                              <div className="space-y-1.5">
+                                {group.choices.map((choice, cIdx) => {
+                                  const selectedItem = menuItems.find((m) => m.id === choice.itemId);
+                                  // A row with an item shows that item's real category; only an
+                                  // empty row falls back to whatever category was picked to filter.
+                                  const activeCategoryId = selectedItem?.categoryId ?? choice.categoryId;
+                                  const itemChoices = activeCategoryId
+                                    ? menuItems.filter((m) => m.categoryId === activeCategoryId)
+                                    : menuItems;
+                                  const variants = selectedItem?.variants || [];
+                                  let unitPrice = Number(selectedItem?.price || 0);
+                                  if (choice.variantId) {
+                                    const v = variants.find((vr) => vr.id === choice.variantId);
+                                    if (v && v.price != null) unitPrice = Number(v.price);
+                                  }
+                                  const unitCost = choice.itemId ? getItemCost(choice.itemId, choice.variantId) : 0;
+
+                                  return (
+                                    <div
+                                      key={cIdx}
+                                      className="grid gap-2 items-center px-3 py-2.5 rounded-lg border border-border/60 bg-background hover:bg-muted/20 transition-colors"
+                                      style={{ gridTemplateColumns: "1fr 1.4fr 0.9fr 78px 78px 36px" }}
+                                    >
+                                      {/* Category filter — narrows the item dropdown beside it */}
+                                      <Select
+                                        value={activeCategoryId || "all"}
+                                        onValueChange={(val) =>
+                                          updateChoiceCategory(group.id, cIdx, val === "all" ? "" : val)
+                                        }
+                                      >
+                                        <SelectTrigger className="h-8 text-xs border-0 bg-muted/30 hover:bg-muted/50 focus:ring-1">
+                                          <SelectValue placeholder="All categories" />
+                                        </SelectTrigger>
+                                        <SelectContent className="max-h-60">
+                                          <SelectItem value="all" className="text-xs">All Categories</SelectItem>
+                                          {foodCategories.map((c) => (
+                                            <SelectItem key={c.id} value={c.id} className="text-xs">
+                                              {c.name}
+                                            </SelectItem>
+                                          ))}
+                                        </SelectContent>
+                                      </Select>
+
+                                      {/* Item select — only items from the category above */}
+                                      <div className="flex items-center gap-2 min-w-0">
+                                        <span className="text-[10px] font-mono text-muted-foreground/60 shrink-0 w-4 text-right">{cIdx + 1}.</span>
+                                        <Select
+                                          value={choice.itemId}
+                                          onValueChange={(val) => updateChoiceItem(group.id, cIdx, val)}
+                                        >
+                                          <SelectTrigger className="h-8 text-xs border-0 bg-muted/30 hover:bg-muted/50 focus:ring-1">
+                                            <SelectValue placeholder="Select item…" />
+                                          </SelectTrigger>
+                                          <SelectContent className="max-h-60">
+                                            {itemChoices.length === 0 ? (
+                                              <div className="px-2 py-3 text-xs text-muted-foreground text-center">
+                                                No items in this category
+                                              </div>
+                                            ) : (
+                                              itemChoices.map((item) => (
+                                                <SelectItem key={item.id} value={item.id} className="text-xs">
+                                                  {item.name}
+                                                </SelectItem>
+                                              ))
+                                            )}
+                                          </SelectContent>
+                                        </Select>
+                                      </div>
+
+                                      {/* Variant */}
+                                      <div>
+                                        {variants.length > 0 ? (
+                                          <Select
+                                            value={choice.variantId || variants[0]?.id || ""}
+                                            onValueChange={(val) => updateChoiceVariant(group.id, cIdx, val)}
+                                          >
+                                            <SelectTrigger className="h-8 text-xs border-0 bg-muted/30 hover:bg-muted/50 focus:ring-1">
+                                              <SelectValue placeholder="Select size…" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                              {variants.map((v) => (
+                                                <SelectItem key={v.id} value={v.id} className="text-xs">
+                                                  {v.name}
+                                                </SelectItem>
+                                              ))}
+                                            </SelectContent>
+                                          </Select>
+                                        ) : (
+                                          <span className="text-xs text-muted-foreground px-1">—</span>
+                                        )}
+                                      </div>
+
+                                      {/* Cost */}
+                                      <span className="text-xs font-mono text-muted-foreground text-right">
+                                        {unitCost > 0 ? `Rs. ${unitCost.toLocaleString()}` : "—"}
+                                      </span>
+
+                                      {/* Selling price */}
+                                      <span className="text-xs font-mono font-semibold text-foreground text-right">
+                                        {choice.itemId ? `Rs. ${unitPrice.toLocaleString()}` : "—"}
+                                      </span>
+
+                                      {/* Delete */}
+                                      <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="icon"
+                                        onClick={() => removeChoiceRow(group.id, cIdx)}
+                                        className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                                      >
+                                        <Trash2 className="h-3.5 w-3.5" />
+                                      </Button>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+
+                              {/* Footer — count + add another choice */}
+                              <div className="flex items-center justify-between px-3 pt-2 border-t border-border/50 mt-1">
+                                <span className="text-xs text-muted-foreground">
+                                  {group.choices.length} choice{group.choices.length !== 1 ? "s" : ""} · customer picks {group.maxSelections}
+                                </span>
                                 <Button
-                                  key={c.id}
                                   type="button"
                                   size="sm"
-                                  variant={
-                                    activeCat === c.name ? "default" : "outline"
-                                  }
-                                  onClick={() =>
-                                    setGroupCategoryFilters((p) => ({
-                                      ...p,
-                                      [group.id]: c.name,
-                                    }))
-                                  }
-                                  className="h-6 text-[10px] px-2 whitespace-nowrap"
+                                  variant="outline"
+                                  onClick={() => addChoiceRow(group.id)}
+                                  className="h-7 text-xs gap-1.5"
                                 >
-                                  {c.name}
+                                  <Plus className="h-3.5 w-3.5" /> Add Choice
                                 </Button>
-                              ))}
+                              </div>
                             </div>
-                          </div>
-
-                          {/* Items Selectable Badges */}
-                          <div className="flex flex-wrap gap-1.5 p-3 rounded-lg border bg-background max-h-48 overflow-y-auto">
-                            {displayItems.map((item) => {
-                              const isSelected = group.allowedItems.includes(
-                                item.id
-                              );
-                              return (
-                                <button
-                                  key={item.id}
-                                  type="button"
-                                  onClick={() =>
-                                    toggleItemInGroup(group.id, item.id)
-                                  }
-                                  className={cn(
-                                    "inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-all cursor-pointer select-none",
-                                    isSelected
-                                      ? "bg-primary/10 border-primary text-primary font-bold ring-1 ring-primary"
-                                      : "bg-muted/30 border-border text-foreground hover:border-primary/40 hover:bg-muted/60"
-                                  )}
-                                >
-                                  {isSelected ? (
-                                    <CheckCircle2 className="h-3.5 w-3.5 text-primary shrink-0" />
-                                  ) : (
-                                    <span className="h-3.5 w-3.5 rounded-full border border-muted-foreground/40 shrink-0" />
-                                  )}
-                                  <span>{item.name}</span>
-                                </button>
-                              );
-                            })}
-                          </div>
+                          )}
                         </div>
                       </div>
-                    );
-                  })
+                    ))}
+                  </div>
                 )}
               </CardContent>
             </Card>
