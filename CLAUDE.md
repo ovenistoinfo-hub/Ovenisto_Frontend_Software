@@ -98,6 +98,21 @@ plus a body explaining _why_ the change was made when that is not obvious.
   string there bumped, or a stale cached shape can crash a page on load before it refetches.
 - **Strict Professional Icons (Zero Emojis)**: NEVER use raw Unicode emojis (e.g. 🔥, 🟢, 📦, 🐼, 🛒, 👑, ⚡, 🥪) in UI components, badges, action buttons, table filter tabs, presets, or status labels. Always import and render professional vector icons from `lucide-react` with explicit sizing (e.g., `h-4 w-4`) and semantic Tailwind text/bg color tokens (e.g., `text-emerald-500 bg-emerald-500/10`).
 - **Direct Image Upload & Visual Preview Only**: All image upload fields across forms (Deals & Combos, Menu Items, Outlets, Users) MUST use direct file uploading (`/api/upload/image`) with an interactive dashed dropzone and visual thumbnail preview card (including `Replace` and `Remove` actions). NEVER provide a manual text URL input field for pasting image links.
+- **`FoodMenuItem.costPrice` / `FoodMenuVariant.costPrice`** (added 2026-08-22) are a persisted
+  snapshot, not a live value — `FoodMenuForm.tsx` computes it from the recipe (`ingredient.purchasePrice
+  × qty`) and sends it in the save payload; it is NOT recomputed on every read. `FoodMenu.tsx`'s
+  Cost/Margin columns and `DealForm.tsx`'s per-row/bundle cost math both read this field directly —
+  don't reintroduce a live `item.recipes` walk for cost display, and remember an item only has a
+  correct `costPrice` after being saved at least once since the field existed.
+- **Page roots don't get a `max-w-*` wrapper** — every page just uses `<div className="space-y-6">`
+  (or similar) and lets `AppLayout.tsx`'s `<main className="p-4 md:p-6 overflow-auto">` own the
+  available width. `DealForm.tsx` had picked up a stray `max-w-7xl mx-auto` that left large dead
+  gutters on wide screens (removed 2026-08-22) — don't copy that pattern into a new page.
+- **Rs./% shared-toggle pattern** (`DealForm.tsx`'s "Set Deal Price" + Channel Price Overrides): one
+  master two-state toggle governs several inputs' *mode* at once, with a shared conversion helper
+  (`applyPercent`/`pctFromPrice`-style) so switching modes back-derives a sensible value instead of
+  clearing fields. Reuse this shape rather than inventing a new one for any future amount-or-percent
+  input group.
 
 <!-- code-review-graph MCP tools -->
 ## MCP Tools: code-review-graph
