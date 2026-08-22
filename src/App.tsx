@@ -56,6 +56,8 @@ const SMS = lazy(() => import("./pages/SMS"));
 const Profile = lazy(() => import("./pages/Profile"));
 const CustomerDisplay = lazy(() => import("./pages/CustomerDisplay"));
 const OrderStatusBoard = lazy(() => import("./pages/OrderStatusBoard"));
+const Deals = lazy(() => import("./pages/Deals"));
+const DealForm = lazy(() => import("./pages/DealForm"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 // New pages
@@ -158,6 +160,9 @@ function AppRoutes() {
       <Route path="/customers" element={<ProtectedRoute module="customers"><AppLayout><Customers /></AppLayout></ProtectedRoute>} />
       <Route path="/customers/:id" element={<ProtectedRoute module="customers"><AppLayout><CustomerDetail /></AppLayout></ProtectedRoute>} />
       <Route path="/delivery" element={<ProtectedRoute module="sales"><AppLayout><Delivery /></AppLayout></ProtectedRoute>} />
+      <Route path="/deals" element={<ProtectedRoute module="sales"><AppLayout><Deals /></AppLayout></ProtectedRoute>} />
+      <Route path="/deals/add" element={<ProtectedRoute module="sales"><AppLayout><DealForm /></AppLayout></ProtectedRoute>} />
+      <Route path="/deals/edit/:id" element={<ProtectedRoute module="sales"><AppLayout><DealForm /></AppLayout></ProtectedRoute>} />
       <Route path="/reservations" element={<ProtectedRoute module="customers"><AppLayout><Reservations /></AppLayout></ProtectedRoute>} />
       <Route path="/purchase-requests" element={<ProtectedRoute module="purchase-requests"><AppLayout><PurchaseRequests /></AppLayout></ProtectedRoute>} />
       <Route path="/purchases" element={<ProtectedRoute module="purchases"><AppLayout><Purchases /></AppLayout></ProtectedRoute>} />

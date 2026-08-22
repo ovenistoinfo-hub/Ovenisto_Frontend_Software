@@ -1,247 +1,380 @@
 import { useState } from "react";
-import { Tag, Plus, Pencil, Trash2, Search, X, GripVertical } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { Tag, Plus, Search, Pencil, Trash2, Package, Layers, Sparkles, Clock, Calendar, Loader2 } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
-import { useData } from "@/contexts/DataContext";
+import { TablePagination, paginate } from "@/components/TablePagination";
+import { dealService, type DealRecord } from "@/services/deal.service";
+import { menuService } from "@/services/menu.service";
+import { isDealLive, dealExpiryLabel, pktDateStr } from "@/lib/deals";
 import { toast } from "sonner";
-import type { Deal, DealOptionGroup } from "@/contexts/DataContext";
-import { DEAL_TYPE_LABELS, DEAL_TYPE_COLORS } from "@/lib/constants";
-
-const typeLabels = DEAL_TYPE_LABELS;
-const typeColors = DEAL_TYPE_COLORS;
 
 const Deals = () => {
-  const { deals, foodMenuItems, foodCategories, addItem, updateItem, removeItem } = useData();
-  const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("All");
-  const [showDialog, setShowDialog] = useState(false);
-  const [editId, setEditId] = useState<string | null>(null);
-  const [deleteId, setDeleteId] = useState<string | null>(null);
-  const [form, setForm] = useState<Partial<Deal>>({ type: "percentage", isActive: true, validFrom: new Date().toISOString().split("T")[0], validTo: "", discountPercent: 10 });
-  const [optionGroups, setOptionGroups] = useState<DealOptionGroup[]>([]);
-  const [itemPickerGroupId, setItemPickerGroupId] = useState<string | null>(null);
-  const [itemPickerCategory, setItemPickerCategory] = useState("All");
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
-  const now = new Date().toISOString().split("T")[0];
-  const filtered = deals.filter(d => {
-    if (search && !d.name.toLowerCase().includes(search.toLowerCase())) return false;
-    if (statusFilter === "Active") return d.isActive && (d.validTo === "always" || d.validTo >= now);
-    if (statusFilter === "Expired") return d.validTo !== "always" && d.validTo < now;
-    if (statusFilter === "Upcoming") return d.validFrom > now;
+  const [search, setSearch] = useState("");
+  const [filterTab, setFilterTab] = useState<"All" | "Active" | "Fixed" | "Custom" | "Inactive" | "Expired">("All");
+  const [page, setPage] = useState(1);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
+
+  const { data: deals = [], isLoading } = useQuery({
+    queryKey: ["deals"],
+    queryFn: () => dealService.getDeals(),
+  });
+
+  const { data: menuItems = [] } = useQuery({
+    queryKey: ["menu-items"],
+    queryFn: () => menuService.getMenuItems({ limit: 500 }),
+  });
+
+  const filtered = deals.filter((d) => {
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      const matchName = d.name.toLowerCase().includes(q);
+      const matchCode = d.code ? d.code.toLowerCase().includes(q) : false;
+      const matchDesc = d.description ? d.description.toLowerCase().includes(q) : false;
+      if (!matchName && !matchCode && !matchDesc) return false;
+    }
+
+    if (filterTab === "Active") return isDealLive(d).valid;
+    if (filterTab === "Fixed") return d.type === "combo";
+    if (filterTab === "Custom") return d.type === "option_combo";
+    if (filterTab === "Inactive") return !d.isActive;
+    if (filterTab === "Expired") return !!d.validTo && d.validTo.slice(0, 10) < pktDateStr();
+
     return true;
   });
 
-  const openAdd = () => {
-    setEditId(null);
-    setForm({ type: "percentage", isActive: true, validFrom: now, validTo: "", discountPercent: 10, name: "", description: "" });
-    setOptionGroups([]);
-    setShowDialog(true);
-  };
-  const openEdit = (d: Deal) => {
-    setEditId(d.id);
-    setForm(d);
-    setOptionGroups(d.optionGroups || []);
-    setShowDialog(true);
-  };
-
-  const handleSave = () => {
-    if (!form.name?.trim()) { toast.error("Deal name is required"); return; }
-    if (form.type === "optionCombo") {
-      if (!form.dealPrice || form.dealPrice <= 0) { toast.error("Deal price is required"); return; }
-      if (optionGroups.length === 0) { toast.error("Add at least one option group"); return; }
-      const emptyGroup = optionGroups.find(g => g.allowedItems.length === 0);
-      if (emptyGroup) { toast.error(`Group "${emptyGroup.label}" has no items`); return; }
+  const handleToggleActive = async (deal: DealRecord) => {
+    setTogglingId(deal.id);
+    try {
+      const updated = await dealService.toggleDeal(deal.id);
+      queryClient.invalidateQueries({ queryKey: ["deals"] });
+      toast.success(`Deal "${deal.name}" is now ${updated.isActive ? "Active" : "Inactive"}`);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to update deal status");
+    } finally {
+      setTogglingId(null);
     }
-    const data = form.type === "optionCombo" ? { ...form, optionGroups } : form;
-    if (editId) { updateItem("deals", editId, data as any); toast.success("Deal updated"); }
-    else { addItem("deals", { id: crypto.randomUUID(), createdAt: now, ...data } as Deal); toast.success("Deal created"); }
-    setShowDialog(false);
   };
 
-  const handleDelete = () => { if (deleteId) { removeItem("deals", deleteId); setDeleteId(null); toast.success("Deal deleted"); } };
-
-  const addOptionGroup = () => {
-    setOptionGroups(prev => [...prev, { id: crypto.randomUUID(), label: `Choose Item ${prev.length + 1}`, allowedItems: [], maxSelections: 1 }]);
+  const handleDelete = async (id: string, name: string) => {
+    try {
+      const message = await dealService.deleteDeal(id);
+      queryClient.invalidateQueries({ queryKey: ["deals"] });
+      toast.success(message || `Deal "${name}" removed`);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to delete deal");
+    }
   };
 
-  const updateGroup = (id: string, updates: Partial<DealOptionGroup>) => {
-    setOptionGroups(prev => prev.map(g => g.id === id ? { ...g, ...updates } : g));
+  // Format included items preview summary
+  const getIncludedItemsSummary = (deal: DealRecord) => {
+    if (deal.type === "combo" && deal.components.length > 0) {
+      return deal.components
+        .map((c) => {
+          const item = menuItems.find((m) => m.id === c.menuItemId);
+          return `${c.qty}x ${item?.name || "Item"}`;
+        })
+        .join(", ");
+    }
+    if (deal.type === "option_combo" && deal.optionGroups.length > 0) {
+      return `${deal.optionGroups.length} Choice Step(s): ${deal.optionGroups.map((g) => g.label).join(" + ")}`;
+    }
+    return deal.description || "Promotional combo deal";
   };
-
-  const removeGroup = (id: string) => {
-    setOptionGroups(prev => prev.filter(g => g.id !== id));
-  };
-
-  const toggleItemInGroup = (groupId: string, itemId: string) => {
-    setOptionGroups(prev => prev.map(g => {
-      if (g.id !== groupId) return g;
-      const has = g.allowedItems.includes(itemId);
-      return { ...g, allowedItems: has ? g.allowedItems.filter(x => x !== itemId) : [...g.allowedItems, itemId] };
-    }));
-  };
-
-  const getValueDisplay = (d: Deal) => {
-    if (d.type === "percentage") return `${d.discountPercent}%`;
-    if (d.type === "combo") return `Rs. ${d.comboPrice}`;
-    if (d.type === "timeBased") return `${d.timeDiscountPercent}% (${d.startTime}-${d.endTime})`;
-    if (d.type === "optionCombo") return `Rs. ${d.dealPrice} • ${d.optionGroups?.length || 0} groups`;
-    return `Buy ${d.buyQty} Get ${d.getQty}`;
-  };
-
-  const activePickerGroup = optionGroups.find(g => g.id === itemPickerGroupId);
-  const pickerItems = foodMenuItems.filter(i => itemPickerCategory === "All" || i.category === itemPickerCategory);
 
   return (
     <div className="space-y-6">
-      <PageHeader icon={<Tag className="h-5 w-5" />} title="Deals & Combos" subtitle="Manage promotional offers and combo meals"
-        actions={<Button className="gradient-primary text-primary-foreground" onClick={openAdd}><Plus className="h-4 w-4 mr-2" />Create Deal</Button>} />
-      <Card className="shadow-sm">
-        <CardHeader className="pb-3">
-          <div className="flex flex-col sm:flex-row gap-3">
-            <div className="relative flex-1 max-w-sm"><Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search deals..." className="pl-9" /></div>
-            <div className="flex gap-1.5 flex-wrap">{["All", "Active", "Expired", "Upcoming"].map(s => (
-              <Button key={s} variant={statusFilter === s ? "default" : "outline"} size="sm" onClick={() => setStatusFilter(s)} className={statusFilter === s ? "gradient-primary text-primary-foreground" : ""}>{s}</Button>
-            ))}</div>
+      {/* Page Header */}
+      <PageHeader
+        icon={<Tag className="h-5 w-5" />}
+        title="Deals & Combos"
+        subtitle="Manage combo meals, bundles, and promotional offers"
+        actions={
+          <Button
+            className="gradient-primary text-primary-foreground font-semibold shadow-xs"
+            onClick={() => navigate("/deals/add")}
+          >
+            <Plus className="h-4 w-4 mr-1.5" />
+            Create Deal & Combo
+          </Button>
+        }
+      />
+
+      {/* Main Table Card */}
+      <Card className="shadow-sm border-border/80">
+        <CardHeader className="pb-3 border-b bg-muted/10">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 flex-wrap">
+            {/* Search */}
+            <div className="relative max-w-sm flex-1">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                value={search}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setPage(1);
+                }}
+                placeholder="Search deals by name or code..."
+                className="pl-9 h-9 text-xs"
+              />
+            </div>
+
+            {/* Filter Tabs */}
+            <div className="flex gap-1 flex-wrap">
+              {(
+                [
+                  { key: "All", label: "All Deals" },
+                  { key: "Active", label: "🟢 Active" },
+                  { key: "Fixed", label: "📦 Fixed Bundles" },
+                  { key: "Custom", label: "🎯 Customizable" },
+                  { key: "Inactive", label: "Draft / Inactive" },
+                  { key: "Expired", label: "Expired" },
+                ] as const
+              ).map((tab) => (
+                <Button
+                  key={tab.key}
+                  variant={filterTab === tab.key ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => {
+                    setFilterTab(tab.key);
+                    setPage(1);
+                  }}
+                  className={`h-8 text-xs ${
+                    filterTab === tab.key ? "gradient-primary text-primary-foreground" : ""
+                  }`}
+                >
+                  {tab.label}
+                </Button>
+              ))}
+            </div>
           </div>
         </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader><TableRow className="bg-muted/50 hover:bg-muted/50">
-                <TableHead className="sticky top-0 z-10 bg-card">Name</TableHead><TableHead className="sticky top-0 z-10 bg-card">Type</TableHead><TableHead className="sticky top-0 z-10 bg-card">Value</TableHead><TableHead className="sticky top-0 z-10 bg-card">Valid</TableHead><TableHead className="sticky top-0 z-10 bg-card">Status</TableHead><TableHead className="sticky top-0 z-10 bg-card">Actions</TableHead>
-              </TableRow></TableHeader>
-              <TableBody>
-                {filtered.map(d => (
-                  <TableRow key={d.id} className="hover:bg-muted/30 transition-colors">
-                    <TableCell><div><p className="font-medium">{d.name}</p><p className="text-xs text-muted-foreground">{d.description}</p></div></TableCell>
-                    <TableCell><Badge variant="secondary" className={typeColors[d.type]}>{typeLabels[d.type]}</Badge></TableCell>
-                    <TableCell className="text-sm">{getValueDisplay(d)}</TableCell>
-                    <TableCell className="text-xs">{d.validFrom} — {d.validTo || "∞"}</TableCell>
-                    <TableCell><Badge variant="secondary" className={d.isActive ? "bg-success/10 text-success" : "bg-muted text-muted-foreground"}>{d.isActive ? "Active" : "Inactive"}</Badge></TableCell>
-                    <TableCell><div className="flex gap-1"><Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(d)}><Pencil className="h-3 w-3" /></Button><Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => setDeleteId(d.id)}><Trash2 className="h-3 w-3" /></Button></div></TableCell>
-                  </TableRow>
-                ))}
-                {filtered.length === 0 && <TableRow><TableCell colSpan={6} className="text-center py-12 text-muted-foreground">No deals found</TableCell></TableRow>}
-              </TableBody>
-            </Table>
-          </div>
+
+        <CardContent className="p-0">
+          {isLoading ? (
+            <div className="text-center py-16">
+              <Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="text-center py-16 px-4">
+              <div className="h-12 w-12 rounded-2xl bg-primary/10 text-primary flex items-center justify-center mx-auto mb-3">
+                <Tag className="h-6 w-6" />
+              </div>
+              <p className="text-sm font-bold text-foreground">No Deals & Combos Found</p>
+              <p className="text-xs text-muted-foreground mt-1 max-w-sm mx-auto">
+                {search
+                  ? "No deals matched your search query."
+                  : "Create your first pizza combo, family bundle, or special meal deal."}
+              </p>
+              <Button
+                size="sm"
+                className="gradient-primary text-primary-foreground mt-4 font-semibold text-xs"
+                onClick={() => navigate("/deals/add")}
+              >
+                <Plus className="h-3.5 w-3.5 mr-1" />
+                Add Deal & Combo
+              </Button>
+            </div>
+          ) : (
+            <>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-muted/40 hover:bg-muted/40 text-xs">
+                      <TableHead className="w-10">SN</TableHead>
+                      <TableHead className="min-w-[200px]">Deal Details</TableHead>
+                      <TableHead className="min-w-[130px]">Format</TableHead>
+                      <TableHead className="min-w-[240px]">Included Items / Steps</TableHead>
+                      <TableHead className="w-32 text-right">Offer Price</TableHead>
+                      <TableHead className="w-40">Validity</TableHead>
+                      <TableHead className="w-20 text-center">Active</TableHead>
+                      <TableHead className="w-20 text-center">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {paginate(filtered, page, 10).map((deal, i) => {
+                      const isOption = deal.type === "option_combo";
+
+                      return (
+                        <TableRow key={deal.id} className="hover:bg-muted/20 transition-colors">
+                          <TableCell className="text-xs text-muted-foreground font-mono">
+                            {(page - 1) * 10 + i + 1}
+                          </TableCell>
+
+                          {/* Deal Name & Details */}
+                          <TableCell>
+                            <div className="flex items-center gap-3">
+                              {deal.image ? (
+                                <img
+                                  src={deal.image}
+                                  alt={deal.name}
+                                  className="h-10 w-10 rounded-lg object-cover shrink-0 border"
+                                />
+                              ) : (
+                                <div className="h-10 w-10 rounded-lg bg-primary/10 text-primary flex items-center justify-center text-xs font-bold shrink-0 border border-primary/20">
+                                  {isOption ? <Layers className="h-5 w-5" /> : <Package className="h-5 w-5" />}
+                                </div>
+                              )}
+                              <div className="space-y-0.5">
+                                <div className="flex items-center gap-1.5">
+                                  <p className="font-bold text-xs text-foreground">{deal.name}</p>
+                                  {deal.code && (
+                                    <Badge variant="outline" className="text-[10px] font-mono px-1 py-0 h-4">
+                                      {deal.code}
+                                    </Badge>
+                                  )}
+                                </div>
+                                {deal.description && (
+                                  <p className="text-[11px] text-muted-foreground line-clamp-1 max-w-xs">
+                                    {deal.description}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          </TableCell>
+
+                          {/* Format Badge */}
+                          <TableCell>
+                            {isOption ? (
+                              <Badge variant="secondary" className="bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30 text-[11px] gap-1">
+                                <Layers className="h-3 w-3" /> Customizable
+                              </Badge>
+                            ) : (
+                              <Badge variant="secondary" className="bg-blue-500/15 text-blue-600 dark:text-blue-400 border-blue-500/30 text-[11px] gap-1">
+                                <Package className="h-3 w-3" /> Fixed Bundle
+                              </Badge>
+                            )}
+                          </TableCell>
+
+                          {/* Included Items Summary */}
+                          <TableCell>
+                            <p className="text-xs text-foreground/90 font-medium line-clamp-2 max-w-sm">
+                              {getIncludedItemsSummary(deal)}
+                            </p>
+                          </TableCell>
+
+                          {/* Price */}
+                          <TableCell className="text-right">
+                            <div className="space-y-0.5">
+                              <p className="font-mono font-extrabold text-sm text-foreground">
+                                Rs. {deal.price.toLocaleString()}
+                              </p>
+                              {deal.dineInPrice || deal.deliveryPrice ? (
+                                <div className="flex items-center justify-end gap-1 text-[10px] text-muted-foreground">
+                                  {deal.dineInPrice != null && <span>Dine: {deal.dineInPrice}</span>}
+                                  {deal.deliveryPrice != null && <span>Del: {deal.deliveryPrice}</span>}
+                                </div>
+                              ) : null}
+                            </div>
+                          </TableCell>
+
+                          {/* Validity */}
+                          <TableCell>
+                            <div className="space-y-0.5 text-xs">
+                              {!deal.validTo ? (
+                                <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-medium text-[11px]">
+                                  <Sparkles className="h-3 w-3" /> Always Active
+                                </span>
+                              ) : (
+                                <span className={`inline-flex items-center gap-1 text-[11px] ${!isDealLive(deal).valid ? "text-destructive font-bold" : "text-muted-foreground"}`}>
+                                  <Calendar className="h-3 w-3" />
+                                  {dealExpiryLabel(deal)}
+                                </span>
+                              )}
+                              {deal.startTime && deal.endTime && (
+                                <p className="text-[10px] text-muted-foreground flex items-center gap-1 font-mono">
+                                  <Clock className="h-2.5 w-2.5" />
+                                  {deal.startTime} - {deal.endTime}
+                                </p>
+                              )}
+                            </div>
+                          </TableCell>
+
+                          {/* Active Switch */}
+                          <TableCell className="text-center">
+                            <Switch
+                              checked={deal.isActive}
+                              disabled={togglingId === deal.id}
+                              onCheckedChange={() => handleToggleActive(deal)}
+                            />
+                          </TableCell>
+
+                          {/* Actions */}
+                          <TableCell className="text-center">
+                            <div className="flex items-center justify-center gap-1">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7"
+                                onClick={() => navigate(`/deals/edit/${deal.id}`)}
+                                title="Edit Deal"
+                              >
+                                <Pencil className="h-3.5 w-3.5" />
+                              </Button>
+
+                              <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                    title="Delete Deal"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>Delete Deal & Combo?</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                      Are you sure you want to remove <strong>{deal.name}</strong>? If it has past
+                                      sales it will be archived (kept for history) instead of deleted.
+                                    </AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                    <AlertDialogAction
+                                      onClick={() => handleDelete(deal.id, deal.name)}
+                                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                    >
+                                      Delete
+                                    </AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+
+              {/* Pagination */}
+              <div className="p-4 border-t">
+                <TablePagination
+                  currentPage={page}
+                  totalItems={filtered.length}
+                  pageSize={10}
+                  onPageChange={setPage}
+                />
+              </div>
+            </>
+          )}
         </CardContent>
       </Card>
-
-      {/* Create / Edit Deal Dialog */}
-      <Dialog open={showDialog} onOpenChange={setShowDialog}><DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto"><DialogHeader><DialogTitle>{editId ? "Edit" : "Create"} Deal</DialogTitle></DialogHeader>
-        <div className="space-y-4">
-          <div><Label>Deal Name</Label><Input value={form.name || ""} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} /></div>
-          <div><Label>Description</Label><Textarea value={form.description || ""} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} /></div>
-          <div><Label>Type</Label><Select value={form.type} onValueChange={v => { setForm(p => ({ ...p, type: v as Deal["type"] })); if (v !== "optionCombo") setOptionGroups([]); }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>
-            <SelectItem value="percentage">Percentage Discount</SelectItem>
-            <SelectItem value="combo">Fixed Price Combo</SelectItem>
-            <SelectItem value="optionCombo">Option Combo (FoodPanda Style)</SelectItem>
-            <SelectItem value="buyXgetY">Buy X Get Y</SelectItem>
-            <SelectItem value="timeBased">Time-Based</SelectItem>
-          </SelectContent></Select></div>
-
-          {form.type === "percentage" && <div><Label>Discount %</Label><Input type="number" value={form.discountPercent || ""} onChange={e => setForm(p => ({ ...p, discountPercent: Number(e.target.value) }))} /></div>}
-          {form.type === "combo" && <div><Label>Combo Price (Rs.)</Label><Input type="number" value={form.comboPrice || ""} onChange={e => setForm(p => ({ ...p, comboPrice: Number(e.target.value) }))} /></div>}
-          {form.type === "timeBased" && <><div className="grid grid-cols-2 gap-3"><div><Label>Start Time</Label><Input type="time" value={form.startTime || ""} onChange={e => setForm(p => ({ ...p, startTime: e.target.value }))} /></div><div><Label>End Time</Label><Input type="time" value={form.endTime || ""} onChange={e => setForm(p => ({ ...p, endTime: e.target.value }))} /></div></div><div><Label>Discount %</Label><Input type="number" value={form.timeDiscountPercent || ""} onChange={e => setForm(p => ({ ...p, timeDiscountPercent: Number(e.target.value) }))} /></div></>}
-
-          {/* Option Combo — Groups Builder */}
-          {form.type === "optionCombo" && (
-            <div className="space-y-4">
-              <div><Label>Deal Price (Rs.)</Label><Input type="number" value={form.dealPrice || ""} onChange={e => setForm(p => ({ ...p, dealPrice: Number(e.target.value) }))} placeholder="Fixed price for entire deal" /></div>
-
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <Label className="text-sm font-semibold">Option Groups</Label>
-                  <Button type="button" size="sm" variant="outline" onClick={addOptionGroup}><Plus className="h-3 w-3 mr-1" />Add Group</Button>
-                </div>
-                {optionGroups.length === 0 && <p className="text-xs text-muted-foreground text-center py-4 border border-dashed rounded-lg">No groups yet. Add groups so customers can choose items at order time.</p>}
-                <div className="space-y-3">
-                  {optionGroups.map((group, idx) => (
-                    <div key={group.id} className="border rounded-xl p-3 bg-muted/20 space-y-2">
-                      <div className="flex items-center gap-2">
-                        <GripVertical className="h-4 w-4 text-muted-foreground shrink-0" />
-                        <span className="text-xs font-bold text-muted-foreground shrink-0">#{idx + 1}</span>
-                        <Input value={group.label} onChange={e => updateGroup(group.id, { label: e.target.value })} className="h-8 text-xs flex-1" placeholder="e.g. Choose Pizza Flavor" />
-                        <Input type="number" value={group.maxSelections} onChange={e => updateGroup(group.id, { maxSelections: Math.max(1, Number(e.target.value)) })} className="h-8 text-xs w-16" title="Max selections" />
-                        <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive shrink-0" onClick={() => removeGroup(group.id)}><X className="h-3 w-3" /></Button>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <div className="flex flex-wrap gap-1">
-                          {group.allowedItems.length === 0 ? (
-                            <span className="text-xs text-muted-foreground italic">No items selected</span>
-                          ) : (
-                            group.allowedItems.map(itemId => {
-                              const mi = foodMenuItems.find(m => m.id === itemId);
-                              return mi ? (
-                                <Badge key={itemId} variant="secondary" className="text-[10px] gap-1 pr-1">
-                                  {mi.name}
-                                  <button type="button" className="ml-0.5 hover:text-destructive" onClick={() => toggleItemInGroup(group.id, itemId)}><X className="h-2.5 w-2.5" /></button>
-                                </Badge>
-                              ) : null;
-                            })
-                          )}
-                        </div>
-                        <Button type="button" size="sm" variant="outline" className="text-xs shrink-0 ml-2" onClick={() => { setItemPickerGroupId(group.id); setItemPickerCategory("All"); }}>
-                          Pick Items
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3"><div><Label>Valid From</Label><Input type="date" value={form.validFrom || ""} onChange={e => setForm(p => ({ ...p, validFrom: e.target.value }))} /></div><div><Label>Valid To</Label><Input type="date" value={form.validTo === "always" ? "" : form.validTo || ""} onChange={e => setForm(p => ({ ...p, validTo: e.target.value || "always" }))} placeholder="Leave empty for always" /></div></div>
-          <div className="flex items-center justify-between"><Label>Active</Label><Switch checked={form.isActive} onCheckedChange={c => setForm(p => ({ ...p, isActive: c }))} /></div>
-        </div>
-        <DialogFooter><Button variant="outline" onClick={() => setShowDialog(false)}>Cancel</Button><Button className="gradient-primary text-primary-foreground" onClick={handleSave}>Save</Button></DialogFooter>
-      </DialogContent></Dialog>
-
-      {/* Item Picker Dialog for Option Groups */}
-      <Dialog open={!!itemPickerGroupId} onOpenChange={() => setItemPickerGroupId(null)}>
-        <DialogContent className="max-w-md max-h-[80vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>Select Items — {activePickerGroup?.label}</DialogTitle></DialogHeader>
-          <div className="flex gap-1.5 flex-wrap mb-3">
-            {["All", ...foodCategories.map(c => c.name)].map(cat => (
-              <Button key={cat} size="sm" variant={itemPickerCategory === cat ? "default" : "outline"} onClick={() => setItemPickerCategory(cat)} className="text-xs h-7">{cat}</Button>
-            ))}
-          </div>
-          <div className="space-y-1 max-h-[50vh] overflow-y-auto">
-            {pickerItems.map(item => {
-              const checked = activePickerGroup?.allowedItems.includes(item.id) ?? false;
-              return (
-                <label key={item.id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 cursor-pointer transition-colors">
-                  <Checkbox checked={checked} onCheckedChange={() => { if (itemPickerGroupId) toggleItemInGroup(itemPickerGroupId, item.id); }} />
-                  {item.image ? <img src={item.image} alt={item.name} className="h-8 w-8 rounded-md object-cover" /> : <div className="h-8 w-8 rounded-md bg-muted flex items-center justify-center text-xs font-bold">{item.name.charAt(0)}</div>}
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">{item.name}</p>
-                    <p className="text-xs text-muted-foreground">{item.category} — Rs. {item.price}</p>
-                  </div>
-                </label>
-              );
-            })}
-          </div>
-          <DialogFooter>
-            <Button onClick={() => setItemPickerGroupId(null)}>Done ({activePickerGroup?.allowedItems.length || 0} selected)</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <AlertDialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Delete Deal?</AlertDialogTitle><AlertDialogDescription>This action cannot be undone.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground">Delete</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
     </div>
   );
 };
+
 export default Deals;

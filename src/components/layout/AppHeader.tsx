@@ -46,6 +46,7 @@ const breadcrumbConfig: Record<string, { label: string; parent?: { label: string
   "/rider-portal": { label: "Rider Portal" },
   "/delivery": { label: "Delivery" },
   "/reservations": { label: "Reservations" },
+  "/deals": { label: "Deals & Combos" },
   "/table-layout": { label: "Table Layout" },
   "/shifts": { label: "Shifts" },
   "/purchases": { label: "Purchases" },
@@ -91,6 +92,20 @@ function getBreadcrumbs(pathname: string) {
         { label: "Home", url: "/" },
         { label: "Customers", url: "/customers" },
         { label: "Detail" },
+      ];
+    }
+    if (pathname === "/deals/add") {
+      return [
+        { label: "Home", url: "/" },
+        { label: "Deals & Combos", url: "/deals" },
+        { label: "Add New" },
+      ];
+    }
+    if (pathname.startsWith("/deals/edit/")) {
+      return [
+        { label: "Home", url: "/" },
+        { label: "Deals & Combos", url: "/deals" },
+        { label: "Edit" },
       ];
     }
     // Fallback
