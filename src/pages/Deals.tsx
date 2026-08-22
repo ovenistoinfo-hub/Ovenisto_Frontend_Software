@@ -88,7 +88,7 @@ const Deals = () => {
     if (deal.type === "option_combo" && deal.optionGroups.length > 0) {
       return `${deal.optionGroups.length} Choice Step(s): ${deal.optionGroups.map((g) => g.label).join(" + ")}`;
     }
-    if (deal.type === "percentage" || deal.type === "time_based") {
+    if (deal.type === "percentage") {
       const items = deal.applicableItems.map(itemName);
       const scope = items.length > 0 ? items.join(", ") : `${deal.applicableCategories.length} categor${deal.applicableCategories.length === 1 ? "y" : "ies"}`;
       return `${deal.discountPercent}% off: ${scope}`;
@@ -104,7 +104,7 @@ const Deals = () => {
     if (deal.type === "combo" || deal.type === "option_combo") {
       return deal.price != null ? `Rs. ${deal.price.toLocaleString()}` : "—";
     }
-    if (deal.type === "percentage" || deal.type === "time_based") {
+    if (deal.type === "percentage") {
       return `${deal.discountPercent}% OFF`;
     }
     return "Free Item";
@@ -224,7 +224,6 @@ const Deals = () => {
                         combo: { icon: Package, label: "Fixed Bundle", className: "bg-blue-500/15 text-blue-600 dark:text-blue-400 border-blue-500/30" },
                         option_combo: { icon: Layers, label: "Customizable", className: "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30" },
                         percentage: { icon: Percent, label: "Percentage Off", className: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30" },
-                        time_based: { icon: Clock, label: "Time-Based", className: "bg-purple-500/15 text-purple-600 dark:text-purple-400 border-purple-500/30" },
                         buy_x_get_y: { icon: Gift, label: "Buy X Get Y", className: "bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/30" },
                       };
                       const badge = formatBadge[deal.type];

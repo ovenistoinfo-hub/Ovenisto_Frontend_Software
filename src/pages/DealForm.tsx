@@ -79,7 +79,7 @@ const DealForm = () => {
   const [optionGroups, setOptionGroups] = useState<OptionGroupRow[]>([]);
   const [groupCategoryFilters, setGroupCategoryFilters] = useState<Record<string, string>>({});
 
-  // Percentage / Time-Based
+  // Percentage
   const [discountPercent, setDiscountPercent] = useState<number>(10);
   const [applicableItemIds, setApplicableItemIds] = useState<string[]>([]);
   const [applicableCategoryIds, setApplicableCategoryIds] = useState<string[]>([]);
@@ -164,11 +164,6 @@ const DealForm = () => {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isEdit, existingDeal, loadingDeal]);
-
-  // Time-Based deals always need a window — force the toggle on for that type.
-  useEffect(() => {
-    if (dealType === "time_based") setHasTimeRestriction(true);
-  }, [dealType]);
 
   // ── Image Upload ──
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -299,7 +294,7 @@ const DealForm = () => {
     );
   };
 
-  // ── Percentage / Time-Based Discount Scope Helpers ──
+  // ── Percentage Discount Scope Helpers ──
   const toggleApplicableItem = (itemId: string) => {
     setApplicableItemIds((prev) =>
       prev.includes(itemId) ? prev.filter((id) => id !== itemId) : [...prev, itemId]
@@ -350,17 +345,13 @@ const DealForm = () => {
         toast.error(`"${notEnoughGroup.label}" needs at least ${notEnoughGroup.maxSelections} selectable item(s)`);
         return;
       }
-    } else if (dealType === "percentage" || dealType === "time_based") {
+    } else if (dealType === "percentage") {
       if (!discountPercent || discountPercent <= 0 || discountPercent > 100) {
         toast.error("Please specify a discount percentage between 1 and 100");
         return;
       }
       if (applicableItemIds.length === 0 && applicableCategoryIds.length === 0) {
         toast.error("Select at least one item or category this discount applies to");
-        return;
-      }
-      if (dealType === "time_based" && (!startTime || !endTime)) {
-        toast.error("A Time-Based deal needs a start and end time");
         return;
       }
     } else if (dealType === "buy_x_get_y") {
@@ -412,9 +403,9 @@ const DealForm = () => {
               })),
             }))
           : [],
-        discountPercent: (dealType === "percentage" || dealType === "time_based") ? Number(discountPercent) : null,
-        applicableItems: (dealType === "percentage" || dealType === "time_based") ? applicableItemIds : [],
-        applicableCategories: (dealType === "percentage" || dealType === "time_based") ? applicableCategoryIds : [],
+        discountPercent: dealType === "percentage" ? Number(discountPercent) : null,
+        applicableItems: dealType === "percentage" ? applicableItemIds : [],
+        applicableCategories: dealType === "percentage" ? applicableCategoryIds : [],
         buyItemId: dealType === "buy_x_get_y" ? buyItemId : null,
         buyQty: dealType === "buy_x_get_y" ? Number(buyQty) : null,
         getItemId: dealType === "buy_x_get_y" ? getItemId : null,
@@ -582,17 +573,16 @@ const DealForm = () => {
             2. Choose Deal Format
           </CardTitle>
           <CardDescription className="text-xs">
-            Select whether this deal is a pre-fixed bundle or customer pick-and-choose
+            Pick how this deal works — you'll only see the fields it needs
           </CardDescription>
         </CardHeader>
         <CardContent className="p-5">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
             {(
               [
                 { type: "combo" as const, icon: Package, title: "Fixed Bundle Combo", subtitle: "Pre-selected items at a bundle price", example: "1 Large Chicken Fajita Pizza + 1 Loaded Fries + 1.5L Drink for Rs. 1,499." },
-                { type: "option_combo" as const, icon: Layers, title: "Customizable Combo (Pick & Choose)", subtitle: "Customer chooses from defined steps", example: "Choose any 2 Pizza flavors + 1 Drink flavor for Rs. 999." },
-                { type: "percentage" as const, icon: Percent, title: "Percentage Discount", subtitle: "% off selected items or categories", example: "20% off all Beverages, all the time." },
-                { type: "time_based" as const, icon: Clock, title: "Time-Based Discount", subtitle: "% off, only during a set time window", example: "15% off Pizzas, 2pm–5pm daily." },
+                { type: "option_combo" as const, icon: Layers, title: "Customizable Combo", subtitle: "Customer picks from defined steps", example: "Choose any 2 Pizza flavors + 1 Drink flavor for Rs. 999." },
+                { type: "percentage" as const, icon: Percent, title: "Percentage Discount", subtitle: "% off selected items or categories", example: "20% off all Beverages — optionally only during set hours." },
                 { type: "buy_x_get_y" as const, icon: Gift, title: "Buy X Get Y", subtitle: "Buy N of an item, get M free", example: "Buy 2 Burgers, get 1 Burger free." },
               ] as const
             ).map((opt) => {
@@ -604,19 +594,19 @@ const DealForm = () => {
                   type="button"
                   onClick={() => setDealType(opt.type)}
                   className={cn(
-                    "p-4 rounded-xl border-2 text-left transition-all relative flex flex-col justify-between space-y-2 select-none cursor-pointer",
+                    "p-4 rounded-xl border-2 text-left transition-all relative flex flex-col justify-between gap-3 h-full select-none cursor-pointer",
                     selected
-                      ? "border-primary bg-primary/[0.04] shadow-xs"
+                      ? "border-primary bg-primary/[0.04] shadow-xs ring-1 ring-primary/20"
                       : "border-border hover:border-primary/40 hover:bg-muted/30"
                   )}
                 >
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-center gap-2.5">
-                      <div className={cn("p-2 rounded-lg", selected ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className={cn("p-2 rounded-lg shrink-0", selected ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground")}>
                         <Icon className="h-5 w-5" />
                       </div>
-                      <div>
-                        <p className="font-bold text-sm text-foreground">{opt.title}</p>
+                      <div className="min-w-0">
+                        <p className="font-bold text-sm text-foreground truncate">{opt.title}</p>
                         <p className="text-[11px] text-muted-foreground">{opt.subtitle}</p>
                       </div>
                     </div>
@@ -626,8 +616,8 @@ const DealForm = () => {
                       </span>
                     )}
                   </div>
-                  <p className="text-xs text-muted-foreground bg-background/80 p-2 rounded-lg border border-border/60">
-                    <strong>Example:</strong> {opt.example}
+                  <p className="text-[11px] leading-relaxed text-muted-foreground bg-background/80 p-2 rounded-lg border border-border/60">
+                    <span className="font-semibold text-foreground/80">Example: </span>{opt.example}
                   </p>
                 </button>
               );
@@ -742,8 +732,8 @@ const DealForm = () => {
       </Card>
       )}
 
-      {/* ── SECTION 3B: Discount Scope (percentage / time_based) ── */}
-      {(dealType === "percentage" || dealType === "time_based") && (
+      {/* ── SECTION 3B: Discount Scope (percentage) ── */}
+      {dealType === "percentage" && (
         <Card className="shadow-xs border-border/80">
           <CardHeader className="pb-3 border-b bg-muted/20">
             <CardTitle className="text-sm font-bold uppercase tracking-wider text-foreground flex items-center gap-2">
@@ -754,105 +744,109 @@ const DealForm = () => {
               How much to discount, and which items or categories it applies to
             </CardDescription>
           </CardHeader>
-          <CardContent className="p-5 space-y-5">
+          <CardContent className="p-5 space-y-6">
             <div className="max-w-xs space-y-1.5">
               <Label className="text-xs font-bold text-primary">Discount Percentage (%) *</Label>
-              <Input
-                type="number"
-                min={1}
-                max={100}
-                placeholder="0"
-                value={discountPercent || ""}
-                onChange={(e) => setDiscountPercent(Math.min(100, Math.max(0, Number(e.target.value))))}
-                className="h-10 text-sm font-extrabold border-primary/50 bg-primary/[0.02]"
-              />
+              <div className="relative">
+                <Input
+                  type="number"
+                  min={1}
+                  max={100}
+                  placeholder="0"
+                  value={discountPercent || ""}
+                  onChange={(e) => setDiscountPercent(Math.min(100, Math.max(0, Number(e.target.value))))}
+                  className="h-10 text-sm font-extrabold border-primary/50 bg-primary/[0.02] pr-8"
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm font-bold text-muted-foreground">%</span>
+              </div>
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <p className="text-xs font-semibold text-muted-foreground">
-                  Applies to ({applicableItemIds.length} item{applicableItemIds.length === 1 ? "" : "s"}, {applicableCategoryIds.length} categor{applicableCategoryIds.length === 1 ? "y" : "ies"} selected):
-                </p>
-                <div className="flex gap-1 overflow-x-auto pb-1 max-w-[50%]">
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant={scopeCategoryFilter === "All" ? "default" : "outline"}
-                    onClick={() => setScopeCategoryFilter("All")}
-                    className="h-6 text-[10px] px-2"
-                  >
-                    All Items
-                  </Button>
-                  {foodCategories.map((c) => (
-                    <Button
-                      key={c.id}
-                      type="button"
-                      size="sm"
-                      variant={scopeCategoryFilter === c.name ? "default" : "outline"}
-                      onClick={() => setScopeCategoryFilter(c.name)}
-                      className="h-6 text-[10px] px-2 whitespace-nowrap"
-                    >
-                      {c.name}
-                    </Button>
-                  ))}
+                <Label className="text-xs font-bold text-foreground">Applies To</Label>
+                <Badge variant="outline" className="text-[10px] font-normal">
+                  {applicableItemIds.length} item{applicableItemIds.length === 1 ? "" : "s"} + {applicableCategoryIds.length} categor{applicableCategoryIds.length === 1 ? "y" : "ies"} selected
+                </Badge>
+              </div>
+
+              {/* Whole-category toggles */}
+              <div className="space-y-1.5">
+                <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Entire Categories</p>
+                {foodCategories.length === 0 ? (
+                  <p className="text-xs text-muted-foreground italic">No categories found</p>
+                ) : (
+                  <div className="flex flex-wrap gap-1.5">
+                    {foodCategories.map((c) => {
+                      const selected = applicableCategoryIds.includes(c.id);
+                      return (
+                        <button
+                          key={c.id}
+                          type="button"
+                          onClick={() => toggleApplicableCategory(c.id)}
+                          className={cn(
+                            "inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold border transition-all cursor-pointer select-none",
+                            selected
+                              ? "bg-primary text-primary-foreground border-primary"
+                              : "bg-muted/30 border-border text-foreground hover:border-primary/40 hover:bg-muted/60"
+                          )}
+                        >
+                          {selected ? <CheckCircle2 className="h-3.5 w-3.5 shrink-0" /> : <Layers className="h-3.5 w-3.5 shrink-0 opacity-50" />}
+                          <span>{c.name}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Individual item toggles */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Or Specific Items</p>
+                  <Select value={scopeCategoryFilter} onValueChange={setScopeCategoryFilter}>
+                    <SelectTrigger className="h-7 w-40 text-[11px]">
+                      <SelectValue placeholder="Filter by category" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="All" className="text-xs">All Categories</SelectItem>
+                      {foodCategories.map((c) => (
+                        <SelectItem key={c.id} value={c.name} className="text-xs">{c.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex flex-wrap gap-1.5 p-3 rounded-lg border bg-background max-h-48 overflow-y-auto">
+                  {menuItems
+                    .filter((item) => scopeCategoryFilter === "All" || item.category?.name === scopeCategoryFilter)
+                    .map((item) => {
+                      const isSelected = applicableItemIds.includes(item.id);
+                      return (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => toggleApplicableItem(item.id)}
+                          className={cn(
+                            "inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-all cursor-pointer select-none",
+                            isSelected
+                              ? "bg-primary/10 border-primary text-primary font-bold ring-1 ring-primary"
+                              : "bg-muted/30 border-border text-foreground hover:border-primary/40 hover:bg-muted/60"
+                          )}
+                        >
+                          {isSelected ? (
+                            <CheckCircle2 className="h-3.5 w-3.5 text-primary shrink-0" />
+                          ) : (
+                            <span className="h-3.5 w-3.5 rounded-full border border-muted-foreground/40 shrink-0" />
+                          )}
+                          <span>{item.name}</span>
+                        </button>
+                      );
+                    })}
                 </div>
               </div>
 
               <p className="text-[11px] text-muted-foreground">
-                Toggle whole categories, or pick individual items below. Either qualifies an item for the discount.
+                An item qualifies for the discount if it's in a selected category, or individually picked above.
               </p>
-
-              {/* Category toggles */}
-              <div className="flex flex-wrap gap-1.5">
-                {foodCategories.map((c) => {
-                  const selected = applicableCategoryIds.includes(c.id);
-                  return (
-                    <button
-                      key={c.id}
-                      type="button"
-                      onClick={() => toggleApplicableCategory(c.id)}
-                      className={cn(
-                        "inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold border transition-all cursor-pointer select-none",
-                        selected
-                          ? "bg-primary text-primary-foreground border-primary"
-                          : "bg-muted/30 border-border text-foreground hover:border-primary/40 hover:bg-muted/60"
-                      )}
-                    >
-                      {selected ? <CheckCircle2 className="h-3.5 w-3.5 shrink-0" /> : <Layers className="h-3.5 w-3.5 shrink-0 opacity-50" />}
-                      <span>{c.name} (whole category)</span>
-                    </button>
-                  );
-                })}
-              </div>
-
-              {/* Individual item toggles */}
-              <div className="flex flex-wrap gap-1.5 p-3 rounded-lg border bg-background max-h-48 overflow-y-auto">
-                {menuItems
-                  .filter((item) => scopeCategoryFilter === "All" || item.category?.name === scopeCategoryFilter)
-                  .map((item) => {
-                    const isSelected = applicableItemIds.includes(item.id);
-                    return (
-                      <button
-                        key={item.id}
-                        type="button"
-                        onClick={() => toggleApplicableItem(item.id)}
-                        className={cn(
-                          "inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-all cursor-pointer select-none",
-                          isSelected
-                            ? "bg-primary/10 border-primary text-primary font-bold ring-1 ring-primary"
-                            : "bg-muted/30 border-border text-foreground hover:border-primary/40 hover:bg-muted/60"
-                        )}
-                      >
-                        {isSelected ? (
-                          <CheckCircle2 className="h-3.5 w-3.5 text-primary shrink-0" />
-                        ) : (
-                          <span className="h-3.5 w-3.5 rounded-full border border-muted-foreground/40 shrink-0" />
-                        )}
-                        <span>{item.name}</span>
-                      </button>
-                    );
-                  })}
-              </div>
             </div>
           </CardContent>
         </Card>
@@ -1290,19 +1284,13 @@ const DealForm = () => {
               <div>
                 <p className="text-xs font-bold text-foreground flex items-center gap-1.5">
                   <Clock className="h-3.5 w-3.5 text-primary" />
-                  Time Slot Restriction {dealType === "time_based" ? "(Required)" : "(Optional)"}
+                  Time Slot Restriction (Optional)
                 </p>
                 <p className="text-[11px] text-muted-foreground">
-                  {dealType === "time_based"
-                    ? "A Time-Based deal is only active during this window."
-                    : "Restrict deal to specific hours (e.g. Midnight Deal 11PM-3AM)"}
+                  Restrict deal to specific hours (e.g. Midnight Deal 11PM-3AM, or Happy Hour pricing)
                 </p>
               </div>
-              <Switch
-                checked={hasTimeRestriction}
-                disabled={dealType === "time_based"}
-                onCheckedChange={setHasTimeRestriction}
-              />
+              <Switch checked={hasTimeRestriction} onCheckedChange={setHasTimeRestriction} />
             </div>
 
             {hasTimeRestriction && (

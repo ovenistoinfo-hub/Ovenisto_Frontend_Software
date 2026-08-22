@@ -29,7 +29,7 @@ export interface DealOptionGroupRecord {
   options: DealOptionItemRecord[];
 }
 
-export type DealTypeValue = 'combo' | 'option_combo' | 'percentage' | 'buy_x_get_y' | 'time_based';
+export type DealTypeValue = 'combo' | 'option_combo' | 'percentage' | 'buy_x_get_y';
 
 export interface DealRecord {
   id: string;
@@ -54,7 +54,7 @@ export interface DealRecord {
   updatedAt: string;
   components: DealComponentRecord[];
   optionGroups: DealOptionGroupRecord[];
-  // percentage / time_based
+  // percentage
   discountPercent: number | null;
   applicableItems: string[];
   applicableCategories: string[];
@@ -106,7 +106,7 @@ export interface DealInput {
   endTime?: string | null;
   components?: DealComponentInput[];
   optionGroups?: DealOptionGroupInput[];
-  // percentage / time_based
+  // percentage
   discountPercent?: number | null;
   applicableItems?: string[];
   applicableCategories?: string[];
