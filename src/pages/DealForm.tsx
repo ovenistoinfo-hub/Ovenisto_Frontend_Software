@@ -14,7 +14,8 @@ import {
   Tag, Plus, Trash2, ArrowLeft, Loader2, Upload, Sparkles,
   Package, Check, Layers, Calendar, CheckCircle2, Clock, Percent, Gift,
   ShoppingBag, UtensilsCrossed, Truck, Eye, Image as ImageIcon,
-  Coins, TrendingUp, Calculator, ArrowUpRight, ArrowDownRight, RefreshCw, BadgePercent, HelpCircle
+  Coins, TrendingUp, Calculator, ArrowUpRight, ArrowDownRight, RefreshCw, BadgePercent, HelpCircle,
+  AlertTriangle
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -575,6 +576,86 @@ const DealForm = () => {
    *  single string shown in the label field, the preview, and saved to the deal. */
   const groupLabel = (group: OptionGroupRow): string =>
     group.labelEdited && group.label.trim() ? group.label : describeGroupPicks(group);
+
+  /**
+   * What a percentage deal actually discounts, by the same rule the server
+   * enforces in deal.pricing.ts's isItemEligibleForDiscount: an item qualifies by
+   * being named directly, or by its category being selected. Both lists empty
+   * discounts nothing (the server refuses to treat that as "everything").
+   */
+  const discountScopeItems = useMemo(() => {
+    if (applicableItemIds.length === 0 && applicableCategoryIds.length === 0) return [];
+    return menuItems.filter(
+      (m) =>
+        applicableItemIds.includes(m.id) ||
+        (m.categoryId ? applicableCategoryIds.includes(m.categoryId) : false)
+    );
+  }, [menuItems, applicableItemIds, applicableCategoryIds]);
+
+  /**
+   * What this discount does to the items in scope. Priced per sellable unit —
+   * a variant is what a customer actually buys, so an item with sizes is
+   * measured by each size, not by its base price.
+   */
+  const discountImpact = useMemo(() => {
+    const pct = Math.min(100, Math.max(0, discountPercent || 0));
+
+    const units: { name: string; price: number; cost: number }[] = [];
+    for (const item of discountScopeItems) {
+      const variants = item.variants || [];
+      if (variants.length > 0) {
+        for (const v of variants) {
+          units.push({
+            name: `${item.name} (${v.name})`,
+            price: Number(v.price ?? item.price ?? 0),
+            cost: Number(v.costPrice ?? item.costPrice ?? 0),
+          });
+        }
+      } else {
+        units.push({
+          name: item.name,
+          price: Number(item.price || 0),
+          cost: Number(item.costPrice || 0),
+        });
+      }
+    }
+
+    let minAfter = Infinity;
+    let maxAfter = 0;
+    let marginSum = 0;
+    let marginCount = 0;
+    const belowCost: { name: string; after: number; cost: number }[] = [];
+
+    for (const unit of units) {
+      if (unit.price <= 0) continue;
+      const after = unit.price * (1 - pct / 100);
+      minAfter = Math.min(minAfter, after);
+      maxAfter = Math.max(maxAfter, after);
+
+      if (unit.cost > 0) {
+        if (after < unit.cost) belowCost.push({ name: unit.name, after, cost: unit.cost });
+        if (after > 0) {
+          marginSum += ((after - unit.cost) / after) * 100;
+          marginCount += 1;
+        }
+      }
+    }
+
+    return {
+      itemCount: discountScopeItems.length,
+      unitCount: units.length,
+      minAfter: minAfter === Infinity ? 0 : minAfter,
+      maxAfter,
+      belowCost,
+      avgMargin: marginCount > 0 ? Math.round(marginSum / marginCount) : null,
+      pricedUnits: marginCount,
+    };
+  }, [discountScopeItems, discountPercent]);
+
+  // The last section's number follows what the chosen type renders above it:
+  // combo/option_combo have a Pricing section 4 and percentage a Discount Impact
+  // section 4, while Buy X Get Y ends at 3.
+  const validitySectionNumber = dealType === "buy_x_get_y" ? 4 : 5;
 
   // Percentage Scope Helpers
   const toggleApplicableItem = (itemId: string) => {
@@ -2374,6 +2455,147 @@ const DealForm = () => {
             </Card>
           )}
 
+          {/* SECTION 4: Discount Impact (Percentage Mode) — the margin read-out the
+              combo types get, answered for a percentage-off deal. */}
+          {dealType === "percentage" && (
+            <Card className="shadow-xs border-border/80 overflow-hidden">
+              <CardHeader className="pb-3 border-b bg-muted/20">
+                <CardTitle className="text-sm font-bold uppercase tracking-wider text-foreground flex items-center gap-2">
+                  <Sparkles className="h-4 w-4 text-primary" />
+                  4. Discount Impact
+                </CardTitle>
+                <CardDescription className="text-xs">
+                  What {discountPercent || 0}% off does to the items in scope
+                </CardDescription>
+              </CardHeader>
+
+              <CardContent className="p-5 space-y-5">
+                {discountImpact.itemCount === 0 ? (
+                  <div className="text-center py-10 space-y-2 border-2 border-dashed border-border/60 rounded-xl bg-muted/10">
+                    <div className="w-12 h-12 rounded-full bg-muted/60 flex items-center justify-center mx-auto">
+                      <Percent className="h-5 w-5 text-muted-foreground/50" />
+                    </div>
+                    <p className="text-sm font-bold text-foreground">Nothing in scope yet</p>
+                    <p className="text-xs text-muted-foreground">
+                      Pick a category or some items above to see what this discount costs you
+                    </p>
+                  </div>
+                ) : (
+                <>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+
+                  {/* How much of the menu this touches */}
+                  <div className="rounded-xl border border-border/70 bg-muted/25 p-4 flex flex-col justify-between gap-2">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                      <Package className="h-3.5 w-3.5 text-muted-foreground/70" />
+                      Items In Scope
+                    </span>
+                    <div>
+                      <p className="text-xl font-black font-mono text-foreground tracking-tight">
+                        {discountImpact.itemCount}
+                      </p>
+                      <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">
+                        {discountImpact.unitCount !== discountImpact.itemCount
+                          ? `${discountImpact.unitCount} sellable sizes/variants`
+                          : "Menu items this discount applies to"}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* What the customer ends up paying */}
+                  <div className="rounded-xl border-2 border-primary/50 bg-primary/[0.04] p-4 flex flex-col justify-between gap-2 shadow-xs">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-primary flex items-center gap-1.5">
+                      <Tag className="h-3.5 w-3.5" />
+                      Price After Discount
+                    </span>
+                    <div>
+                      <p className="text-xl font-black font-mono text-primary tracking-tight">
+                        Rs.&nbsp;{Math.round(discountImpact.minAfter).toLocaleString()} – {Math.round(discountImpact.maxAfter).toLocaleString()}
+                      </p>
+                      <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">
+                        Cheapest → priciest item in scope
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Whether it still pays */}
+                  <div className={cn(
+                    "rounded-xl border p-4 flex flex-col justify-between gap-2 transition-all",
+                    discountImpact.belowCost.length > 0
+                      ? "border-destructive/40 bg-destructive/[0.04]"
+                      : discountImpact.avgMargin != null
+                      ? "border-emerald-500/40 bg-emerald-500/[0.04]"
+                      : "border-border/70 bg-muted/25"
+                  )}>
+                    <span className={cn(
+                      "text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5",
+                      discountImpact.belowCost.length > 0
+                        ? "text-destructive"
+                        : discountImpact.avgMargin != null
+                        ? "text-emerald-600 dark:text-emerald-400"
+                        : "text-muted-foreground"
+                    )}>
+                      <TrendingUp className="h-3.5 w-3.5" />
+                      Avg Margin After
+                    </span>
+                    <div>
+                      {discountImpact.avgMargin != null ? (
+                        <>
+                          <p className={cn(
+                            "text-xl font-black font-mono tracking-tight",
+                            discountImpact.belowCost.length > 0
+                              ? "text-destructive"
+                              : "text-emerald-600 dark:text-emerald-400"
+                          )}>
+                            {discountImpact.avgMargin}%
+                          </p>
+                          <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">
+                            Across {discountImpact.pricedUnits} item{discountImpact.pricedUnits !== 1 ? "s" : ""} with a recipe cost
+                          </p>
+                        </>
+                      ) : (
+                        <>
+                          <p className="text-xl font-black font-mono text-muted-foreground/40">—</p>
+                          <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">
+                            Set recipes in Menu Items for live margin
+                          </p>
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                </div>
+
+                {/* The one thing worth blocking on: selling under cost */}
+                {discountImpact.belowCost.length > 0 && (
+                  <div className="rounded-xl border border-destructive/40 bg-destructive/[0.04] p-4 space-y-2">
+                    <p className="text-xs font-bold text-destructive flex items-center gap-1.5">
+                      <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                      {discountImpact.belowCost.length} item{discountImpact.belowCost.length !== 1 ? "s" : ""} would sell below cost at {discountPercent}%
+                    </p>
+                    <div className="space-y-1">
+                      {discountImpact.belowCost.slice(0, 6).map((u) => (
+                        <div key={u.name} className="flex items-center justify-between gap-3 text-[11px] font-mono">
+                          <span className="text-foreground/90 truncate">{u.name}</span>
+                          <span className="text-destructive font-bold shrink-0">
+                            Rs. {Math.round(u.after).toLocaleString()} vs cost Rs. {Math.round(u.cost).toLocaleString()}
+                          </span>
+                        </div>
+                      ))}
+                      {discountImpact.belowCost.length > 6 && (
+                        <p className="text-[10px] text-muted-foreground pt-0.5">
+                          + {discountImpact.belowCost.length - 6} more
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
+                </>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
           {/* SECTION 3C: Buy X Get Y Configuration */}
           {dealType === "buy_x_get_y" && (
             <Card className="shadow-xs border-border/80 overflow-hidden">
@@ -2481,12 +2703,13 @@ const DealForm = () => {
               </CardContent>
             </Card>
           )}
-          {/* SECTION 5: Validity & Schedule */}
+          {/* Validity & Schedule — always the last section, so its number follows
+              whatever the chosen deal type rendered above it. */}
           <Card className="shadow-xs border-border/80 overflow-hidden">
             <CardHeader className="pb-3 border-b bg-muted/20">
               <CardTitle className="text-sm font-bold uppercase tracking-wider text-foreground flex items-center gap-2">
                 <Calendar className="h-4 w-4 text-primary" />
-                5. Validity Dates & Time Restrictions
+                {validitySectionNumber}. Validity Dates & Time Restrictions
               </CardTitle>
               <CardDescription className="text-xs">
                 Configure calendar date validity and optional happy-hour time windows
