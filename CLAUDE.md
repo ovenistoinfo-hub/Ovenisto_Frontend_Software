@@ -2,6 +2,12 @@
 > roles, env vars, deployment gotchas, the Outlet Scoping access-control model). It loads
 > alongside this file in frontend sessions — read it first.
 
+## Git Commit Convention
+
+- **Never mention "Claude" or any AI/model identifier in git commits, PR titles, or PR bodies** —
+  no `Co-Authored-By: Claude ...` trailer, no session links. Write plain, descriptive commit
+  messages only, as if written by the human developer.
+
 ## Frontend Dev Quick-Reference
 
 - **`SelfOrder.tsx`'s per-device `localStorage` never reflects another device's state.** A
