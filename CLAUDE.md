@@ -1,6 +1,19 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
 > The repo-root `../CLAUDE.md` holds the full project guide (architecture, module map,
 > roles, env vars, deployment gotchas, the Outlet Scoping access-control model). It loads
 > alongside this file in frontend sessions — read it first.
+
+## Commands
+
+- Install: `npm install` (a fresh clone has no `node_modules/`)
+- Dev server: `npm run dev` (Vite)
+- Build: `npm run build`
+- Typecheck: `npm run typecheck` (`tsc --noEmit --project tsconfig.app.json`)
+- Lint: `npm run lint`
+- Test: `npm test` (`vitest run`)
 
 ## Git conventions
 
@@ -68,6 +81,21 @@ plus a body explaining _why_ the change was made when that is not obvious.
   devices already did at that table — always reconcile against the backend
   (`self-order.service.ts`'s `getActiveOrders`) rather than assuming local state is the
   source of truth. See root guide's "Self-Order (QR Ordering) System" for the full pattern.
+- **Every `*.service.ts` follows the same envelope convention**: call `api.get/post/put/patch/delete`,
+  then unwrap `res.data` — never `res.data.data`, matching the backend's `ApiResponse.success()`
+  shape. Use `deal.service.ts` or `menu.service.ts` as the template for a new one.
+- **A new page needs three separate registrations, not one** — `App.tsx` (lazy import + `<Route>`),
+  `AppSidebar.tsx`'s `navSections` (nav entry), and `AppHeader.tsx`'s `breadcrumbConfig` (plus a
+  special-case block for any `/x/add`, `/x/edit/:id` sub-routes). Missing one leaves the page
+  reachable-but-unlisted, or listed-but-breadcrumb-less — grep all three before assuming a page
+  isn't wired up.
+- **Not every page is API-backed** — `DataContext.tsx` is a legacy `localStorage`-backed store
+  (`useData()`) some older pages still read/write directly; newer pages (e.g. `Deals.tsx`/
+  `DealForm.tsx`) use a dedicated `*.service.ts` + react-query instead. Check which pattern a page
+  already uses before extending it; don't mix the two within one page.
+- **The react-query cache persists to `localStorage`** (`App.tsx`'s `PersistQueryClientProvider`,
+  key `ovenisto-rq-cache`). A breaking change to a query's returned data shape needs the `buster`
+  string there bumped, or a stale cached shape can crash a page on load before it refetches.
 
 <!-- code-review-graph MCP tools -->
 ## MCP Tools: code-review-graph
