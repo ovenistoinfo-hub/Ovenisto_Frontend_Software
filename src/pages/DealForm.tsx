@@ -636,20 +636,26 @@ const DealForm = () => {
       }
     }
 
+    let minBefore = Infinity;
+    let maxBefore = 0;
     let minAfter = Infinity;
     let maxAfter = 0;
     let marginSum = 0;
     let marginCount = 0;
-    const belowCost: { name: string; after: number; cost: number }[] = [];
+    const belowCost: { name: string; after: number; cost: number; loss: number }[] = [];
 
     for (const unit of units) {
       if (unit.price <= 0) continue;
       const after = unit.price * (1 - pct / 100);
+      minBefore = Math.min(minBefore, unit.price);
+      maxBefore = Math.max(maxBefore, unit.price);
       minAfter = Math.min(minAfter, after);
       maxAfter = Math.max(maxAfter, after);
 
       if (unit.cost > 0) {
-        if (after < unit.cost) belowCost.push({ name: unit.name, after, cost: unit.cost });
+        if (after < unit.cost) {
+          belowCost.push({ name: unit.name, after, cost: unit.cost, loss: unit.cost - after });
+        }
         if (after > 0) {
           marginSum += ((after - unit.cost) / after) * 100;
           marginCount += 1;
@@ -657,9 +663,14 @@ const DealForm = () => {
       }
     }
 
+    // Worst loss first — that's the one that decides whether the discount is viable.
+    belowCost.sort((a, b) => b.loss - a.loss);
+
     return {
       itemCount: discountScopeItems.length,
       unitCount: units.length,
+      minBefore: minBefore === Infinity ? 0 : minBefore,
+      maxBefore,
       minAfter: minAfter === Infinity ? 0 : minAfter,
       maxAfter,
       belowCost,
@@ -2619,66 +2630,96 @@ const DealForm = () => {
                       Items In Scope
                     </span>
                     <div>
-                      <p className="text-xl font-black font-mono text-foreground tracking-tight">
-                        {discountImpact.itemCount}
-                      </p>
+                      <div className="flex items-baseline gap-1.5">
+                        <p className="text-xl font-black font-mono text-foreground tracking-tight">
+                          {discountImpact.itemCount}
+                        </p>
+                        {discountImpact.unitCount !== discountImpact.itemCount && (
+                          <span className="text-xs font-mono font-bold text-muted-foreground">
+                            ({discountImpact.unitCount} sizes)
+                          </span>
+                        )}
+                      </div>
                       <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">
-                        {discountImpact.unitCount !== discountImpact.itemCount
-                          ? `${discountImpact.unitCount} sellable sizes/variants`
-                          : "Menu items this discount applies to"}
+                        {[
+                          applicableCategoryIds.length > 0
+                            ? `${applicableCategoryIds.length} categor${applicableCategoryIds.length !== 1 ? "ies" : "y"}`
+                            : null,
+                          applicableItemIds.length > 0
+                            ? `${applicableItemIds.length} named item${applicableItemIds.length !== 1 ? "s" : ""}`
+                            : null,
+                        ]
+                          .filter(Boolean)
+                          .join(" + ")}
                       </p>
                     </div>
                   </div>
 
-                  {/* What the customer ends up paying */}
+                  {/* What the customer ends up paying, against what they'd have paid */}
                   <div className="rounded-xl border-2 border-primary/50 bg-primary/[0.04] p-4 flex flex-col justify-between gap-2 shadow-xs">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-primary flex items-center gap-1.5">
-                      <Tag className="h-3.5 w-3.5" />
-                      Price After Discount
-                    </span>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-primary flex items-center gap-1.5">
+                        <Tag className="h-3.5 w-3.5" />
+                        Price After Discount
+                      </span>
+                      {(discountPercent || 0) > 0 && (
+                        <span className="text-[10px] font-bold text-primary px-1.5 py-0.5 rounded bg-primary/10 shrink-0">
+                          −{discountPercent}%
+                        </span>
+                      )}
+                    </div>
                     <div>
                       <p className="text-xl font-black font-mono text-primary tracking-tight">
                         Rs.&nbsp;{Math.round(discountImpact.minAfter).toLocaleString()} – {Math.round(discountImpact.maxAfter).toLocaleString()}
                       </p>
-                      <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">
-                        Cheapest → priciest item in scope
+                      <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight font-mono">
+                        was <span className="line-through">Rs. {Math.round(discountImpact.minBefore).toLocaleString()} – {Math.round(discountImpact.maxBefore).toLocaleString()}</span>
                       </p>
                     </div>
                   </div>
 
-                  {/* Whether it still pays */}
+                  {/* Whether it still pays. The number is coloured by its own value —
+                      a healthy average stays green even when specific items are
+                      underwater — while the card's tint carries that warning. */}
                   <div className={cn(
                     "rounded-xl border p-4 flex flex-col justify-between gap-2 transition-all",
-                    discountImpact.belowCost.length > 0
-                      ? "border-destructive/40 bg-destructive/[0.04]"
-                      : discountImpact.avgMargin != null
-                      ? "border-emerald-500/40 bg-emerald-500/[0.04]"
-                      : "border-border/70 bg-muted/25"
+                    discountImpact.avgMargin == null
+                      ? "border-border/70 bg-muted/25"
+                      : discountImpact.belowCost.length > 0
+                      ? "border-amber-500/40 bg-amber-500/[0.04]"
+                      : "border-emerald-500/40 bg-emerald-500/[0.04]"
                   )}>
-                    <span className={cn(
-                      "text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5",
-                      discountImpact.belowCost.length > 0
-                        ? "text-destructive"
-                        : discountImpact.avgMargin != null
-                        ? "text-emerald-600 dark:text-emerald-400"
-                        : "text-muted-foreground"
-                    )}>
-                      <TrendingUp className="h-3.5 w-3.5" />
-                      Avg Margin After
-                    </span>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className={cn(
+                        "text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5",
+                        discountImpact.avgMargin == null
+                          ? "text-muted-foreground"
+                          : discountImpact.belowCost.length > 0
+                          ? "text-amber-600 dark:text-amber-500"
+                          : "text-emerald-600 dark:text-emerald-400"
+                      )}>
+                        <TrendingUp className="h-3.5 w-3.5" />
+                        Avg Margin After
+                      </span>
+                      {discountImpact.belowCost.length > 0 && (
+                        <span className="text-[10px] font-bold text-amber-600 dark:text-amber-500 px-1.5 py-0.5 rounded bg-amber-500/10 shrink-0">
+                          {discountImpact.belowCost.length} at a loss
+                        </span>
+                      )}
+                    </div>
                     <div>
                       {discountImpact.avgMargin != null ? (
                         <>
                           <p className={cn(
                             "text-xl font-black font-mono tracking-tight",
-                            discountImpact.belowCost.length > 0
-                              ? "text-destructive"
-                              : "text-emerald-600 dark:text-emerald-400"
+                            discountImpact.avgMargin > 0
+                              ? "text-emerald-600 dark:text-emerald-400"
+                              : "text-destructive"
                           )}>
                             {discountImpact.avgMargin}%
                           </p>
                           <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">
-                            Across {discountImpact.pricedUnits} item{discountImpact.pricedUnits !== 1 ? "s" : ""} with a recipe cost
+                            Across {discountImpact.pricedUnits} of {discountImpact.unitCount} with a recipe cost
                           </p>
                         </>
                       ) : (
@@ -2696,23 +2737,45 @@ const DealForm = () => {
 
                 {/* The one thing worth blocking on: selling under cost */}
                 {discountImpact.belowCost.length > 0 && (
-                  <div className="rounded-xl border border-destructive/40 bg-destructive/[0.04] p-4 space-y-2">
-                    <p className="text-xs font-bold text-destructive flex items-center gap-1.5">
-                      <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-                      {discountImpact.belowCost.length} item{discountImpact.belowCost.length !== 1 ? "s" : ""} would sell below cost at {discountPercent}%
-                    </p>
-                    <div className="space-y-1">
-                      {discountImpact.belowCost.slice(0, 6).map((u) => (
-                        <div key={u.name} className="flex items-center justify-between gap-3 text-[11px] font-mono">
-                          <span className="text-foreground/90 truncate">{u.name}</span>
-                          <span className="text-destructive font-bold shrink-0">
-                            Rs. {Math.round(u.after).toLocaleString()} vs cost Rs. {Math.round(u.cost).toLocaleString()}
+                  <div className="rounded-xl border border-destructive/40 bg-destructive/[0.04] overflow-hidden">
+                    <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 border-b border-destructive/20 bg-destructive/[0.04]">
+                      <p className="text-xs font-bold text-destructive flex items-center gap-1.5">
+                        <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                        {discountImpact.belowCost.length} of {discountImpact.unitCount} sell below cost at {discountPercent}%
+                      </p>
+                      <span className="text-[10px] text-muted-foreground">
+                        Lower the discount, or drop these from the scope above
+                      </span>
+                    </div>
+
+                    <div className="px-4 py-3 space-y-1.5">
+                      {/* Column header — keeps the numbers readable as a table, not a
+                          name on one edge and a price on the other. */}
+                      <div className="grid gap-3 items-center" style={{ gridTemplateColumns: "1fr 84px 84px 84px" }}>
+                        <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Item</span>
+                        <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground text-right">Sells At</span>
+                        <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground text-right">Costs</span>
+                        <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground text-right">Loss</span>
+                      </div>
+
+                      {discountImpact.belowCost.slice(0, 6).map((u, i) => (
+                        <div
+                          key={`${u.name}-${i}`}
+                          className="grid gap-3 items-center text-[11px] font-mono"
+                          style={{ gridTemplateColumns: "1fr 84px 84px 84px" }}
+                        >
+                          <span className="text-foreground/90 truncate" title={u.name}>{u.name}</span>
+                          <span className="text-right text-foreground/80">Rs. {Math.round(u.after).toLocaleString()}</span>
+                          <span className="text-right text-muted-foreground">Rs. {Math.round(u.cost).toLocaleString()}</span>
+                          <span className="text-right font-bold text-destructive">
+                            −Rs. {Math.round(u.loss).toLocaleString()}
                           </span>
                         </div>
                       ))}
+
                       {discountImpact.belowCost.length > 6 && (
-                        <p className="text-[10px] text-muted-foreground pt-0.5">
-                          + {discountImpact.belowCost.length - 6} more
+                        <p className="text-[10px] text-muted-foreground pt-1 border-t border-destructive/15 mt-1">
+                          + {discountImpact.belowCost.length - 6} more below cost
                         </p>
                       )}
                     </div>
