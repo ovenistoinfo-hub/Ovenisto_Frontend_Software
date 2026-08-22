@@ -86,21 +86,26 @@ const FoodMenu = () => {
             <>
             <div className="rounded-lg border overflow-auto max-h-[calc(100vh-300px)]">
               <Table>
-                <TableHeader className="sticky top-0 z-10 bg-card"><TableRow className="bg-muted/50 hover:bg-muted/50"><TableHead>SN</TableHead><TableHead>Item</TableHead><TableHead>Category</TableHead><TableHead>Code</TableHead><TableHead>Price</TableHead><TableHead>Cooking Time</TableHead><TableHead>Available</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader>
-                <TableBody>{paginate(filtered, page).map((item, i) => (
+                <TableHeader className="sticky top-0 z-10 bg-card"><TableRow className="bg-muted/50 hover:bg-muted/50"><TableHead>SN</TableHead><TableHead>Item</TableHead><TableHead>Category</TableHead><TableHead>Code</TableHead><TableHead>Price</TableHead><TableHead>Cost</TableHead><TableHead>Margin</TableHead><TableHead>Cooking Time</TableHead><TableHead>Available</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader>
+                <TableBody>{paginate(filtered, page).map((item, i) => {
+                  const margin = item.price > 0 ? ((item.price - (item.costPrice || 0)) / item.price) * 100 : 0;
+                  return (
                   <TableRow key={item.id} className="hover:bg-muted/30 transition-colors">
                     <TableCell>{(page - 1) * 10 + i + 1}</TableCell>
                     <TableCell><div className="flex items-center gap-2">{item.image ? (<img src={item.image} alt={item.name} className="h-8 w-8 rounded-md object-cover shrink-0" />) : (<div className="h-8 w-8 rounded-md gradient-primary flex items-center justify-center text-primary-foreground text-xs font-bold shrink-0">{item.name.charAt(0)}</div>)}<span className="font-medium">{item.name}</span></div></TableCell>
                     <TableCell><Badge variant="secondary">{item.category?.name || "—"}</Badge></TableCell>
                     <TableCell className="text-muted-foreground text-xs">{item.code || "—"}</TableCell>
                     <TableCell className="font-medium">Rs. {item.price}</TableCell>
+                    <TableCell className="text-muted-foreground">{item.costPrice > 0 ? `Rs. ${item.costPrice.toFixed(0)}` : "—"}</TableCell>
+                    <TableCell>{item.costPrice > 0 ? <span className={margin >= 0 ? "text-emerald-500" : "text-destructive"}>{margin.toFixed(0)}%</span> : "—"}</TableCell>
                     <TableCell>{item.cookingTime > 0 ? <span className="flex items-center gap-1 text-xs text-muted-foreground"><Timer className="h-3 w-3" />{item.cookingTime} min</span> : <span className="text-xs text-muted-foreground">—</span>}</TableCell>
                     <TableCell><Switch checked={item.available} onCheckedChange={() => toggleAvailable(item)} /></TableCell>
                     <TableCell><div className="flex gap-1"><Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => navigate(`/items/food-menu/edit/${item.id}`)}><Pencil className="h-3 w-3" /></Button>
                       <AlertDialog><AlertDialogTrigger asChild><Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10"><Trash2 className="h-3 w-3" /></Button></AlertDialogTrigger><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Delete {item.name}?</AlertDialogTitle><AlertDialogDescription>This action cannot be undone.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={() => handleDelete(item.id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Delete</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
                     </div></TableCell>
                   </TableRow>
-                ))}</TableBody>
+                  );
+                })}</TableBody>
               </Table>
             </div>
             <TablePagination currentPage={page} totalItems={filtered.length} onPageChange={setPage} />

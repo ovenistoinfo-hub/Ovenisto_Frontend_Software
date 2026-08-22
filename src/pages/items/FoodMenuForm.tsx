@@ -637,6 +637,8 @@ const FoodMenuForm = () => {
     if (!form.name.trim()) { toast.error("Item name is required"); return; }
     const price = pricingType === "simple" ? simplePrice : (variants[0]?.price || 0);
     if (!price) { toast.error("Price is required"); return; }
+    // Snapshot the recipe-derived food cost so it's saved, not just displayed live
+    const costPrice = pricingType === "simple" ? totalFoodCost : getColumnTotal("0");
 
     setSaving(true);
     try {
@@ -649,11 +651,14 @@ const FoodMenuForm = () => {
         takeAwayPrice:  pricingType === "simple" ? simpleTakeAway  : null,
         deliveryPrice:  pricingType === "simple" ? simpleDelivery  : null,
         foodpandaPrice: pricingType === "simple" ? simpleFoodpanda : null,
+        costPrice,
         available: form.available,
         image: imageUrl || null,
         cookingTime: form.cookingTime || 0,
         mealTypeIds,
-        variants: pricingType === "variant" ? variants : [],
+        variants: pricingType === "variant"
+          ? variants.map((v, idx) => ({ ...v, costPrice: getColumnTotal(idx.toString()) }))
+          : [],
         // Build modifiers payload: rows with modifierId set
         modifiers: modifierRows
           .filter(r => r.modifierId)

@@ -96,6 +96,8 @@ plus a body explaining _why_ the change was made when that is not obvious.
 - **The react-query cache persists to `localStorage`** (`App.tsx`'s `PersistQueryClientProvider`,
   key `ovenisto-rq-cache`). A breaking change to a query's returned data shape needs the `buster`
   string there bumped, or a stale cached shape can crash a page on load before it refetches.
+- **Strict Professional Icons (Zero Emojis)**: NEVER use raw Unicode emojis (e.g. 🔥, 🟢, 📦, 🐼, 🛒, 👑, ⚡, 🥪) in UI components, badges, action buttons, table filter tabs, presets, or status labels. Always import and render professional vector icons from `lucide-react` with explicit sizing (e.g., `h-4 w-4`) and semantic Tailwind text/bg color tokens (e.g., `text-emerald-500 bg-emerald-500/10`).
+- **Direct Image Upload & Visual Preview Only**: All image upload fields across forms (Deals & Combos, Menu Items, Outlets, Users) MUST use direct file uploading (`/api/upload/image`) with an interactive dashed dropzone and visual thumbnail preview card (including `Replace` and `Remove` actions). NEVER provide a manual text URL input field for pasting image links.
 
 <!-- code-review-graph MCP tools -->
 ## MCP Tools: code-review-graph

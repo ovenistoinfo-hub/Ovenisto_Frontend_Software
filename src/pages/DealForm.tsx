@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from "react";
+import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -12,7 +12,9 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
 import {
   Tag, Plus, Trash2, ArrowLeft, Loader2, Upload, Sparkles,
-  Package, Check, Layers, Calendar, CheckCircle2, Clock, Percent, Gift
+  Package, Check, Layers, Calendar, CheckCircle2, Clock, Percent, Gift,
+  ShoppingBag, UtensilsCrossed, Truck, Eye, Image as ImageIcon,
+  Coins, TrendingUp, Calculator, ArrowUpRight, ArrowDownRight, RefreshCw, BadgePercent, HelpCircle
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -30,8 +32,10 @@ interface OptionGroupRow {
   id: string;
   label: string;
   maxSelections: number;
-  allowedItems: string[]; // menuItemIds
+  allowedItems: string[];
 }
+
+const PERCENT_PRESETS = [10, 15, 20, 25, 30, 50];
 
 const DealForm = () => {
   const navigate = useNavigate();
@@ -56,14 +60,39 @@ const DealForm = () => {
 
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [calcMode, setCalcMode] = useState<"discount" | "margin">("discount");
+  const [priceMode, setPriceMode] = useState<"amount" | "percent">("amount");
+  const [percentInput, setPercentInput] = useState<string>("");
 
   // Form State
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
+  const [isCodeManual, setIsCodeManual] = useState(false);
   const [description, setDescription] = useState("");
   const [imageUrl, setImageUrl] = useState("");
   const [dealType, setDealType] = useState<DealTypeValue>("combo");
   const [isActive, setIsActive] = useState(true);
+
+  // Helper to auto-generate clean SKU from deal name
+  const generateCodeFromName = (str: string): string => {
+    return str
+      .toUpperCase()
+      .replace(/[^A-Z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 16);
+  };
+
+  const handleNameChange = (val: string) => {
+    setName(val);
+    if (!isCodeManual && !isEdit) {
+      setCode(generateCodeFromName(val));
+    }
+  };
+
+  const handleCodeChange = (val: string) => {
+    setCode(val.toUpperCase());
+    setIsCodeManual(val.trim().length > 0);
+  };
 
   // Pricing (combo / option_combo)
   const [dealPrice, setDealPrice] = useState<number>(0);
@@ -71,6 +100,11 @@ const DealForm = () => {
   const [takeAwayPrice, setTakeAwayPrice] = useState<number | null>(null);
   const [deliveryPrice, setDeliveryPrice] = useState<number | null>(null);
   const [foodpandaPrice, setFoodpandaPrice] = useState<number | null>(null);
+  // Percent-mode display values for the channel overrides below (Rs. fields stay the source of truth)
+  const [dineInPct, setDineInPct] = useState<string>("");
+  const [takeAwayPct, setTakeAwayPct] = useState<string>("");
+  const [deliveryPct, setDeliveryPct] = useState<string>("");
+  const [foodpandaPct, setFoodpandaPct] = useState<string>("");
 
   // Fixed Bundle Items
   const [comboRows, setComboRows] = useState<ComboItemRow[]>([]);
@@ -112,6 +146,7 @@ const DealForm = () => {
 
     setName(existingDeal.name || "");
     setCode(existingDeal.code || "");
+    setIsCodeManual(Boolean(existingDeal.code));
     setDescription(existingDeal.description || "");
     setImageUrl(existingDeal.image || "");
     setDealType(existingDeal.type);
@@ -123,21 +158,25 @@ const DealForm = () => {
     setDeliveryPrice(existingDeal.deliveryPrice ?? null);
     setFoodpandaPrice(existingDeal.foodpandaPrice ?? null);
 
-    if (existingDeal.components.length > 0) {
-      setComboRows(existingDeal.components.map((c) => ({
-        itemId: c.menuItemId,
-        variantId: c.variantId,
-        qty: c.qty,
-      })));
+    if (existingDeal.components && existingDeal.components.length > 0) {
+      setComboRows(
+        existingDeal.components.map((c) => ({
+          itemId: c.menuItemId,
+          variantId: c.variantId,
+          qty: c.qty,
+        }))
+      );
     }
 
-    if (existingDeal.optionGroups.length > 0) {
-      setOptionGroups(existingDeal.optionGroups.map((g) => ({
-        id: g.id,
-        label: g.label,
-        maxSelections: g.maxSelections,
-        allowedItems: g.options.map((o) => o.menuItemId),
-      })));
+    if (existingDeal.optionGroups && existingDeal.optionGroups.length > 0) {
+      setOptionGroups(
+        existingDeal.optionGroups.map((g) => ({
+          id: g.id,
+          label: g.label,
+          maxSelections: g.maxSelections,
+          allowedItems: g.options.map((o) => o.menuItemId),
+        }))
+      );
     }
 
     setDiscountPercent(existingDeal.discountPercent ?? 10);
@@ -148,7 +187,7 @@ const DealForm = () => {
     setGetItemId(existingDeal.getItemId ?? null);
     setGetQty(existingDeal.getQty ?? 1);
 
-    setValidFrom(existingDeal.validFrom.slice(0, 10) || todayStr);
+    setValidFrom(existingDeal.validFrom?.slice(0, 10) || todayStr);
     if (!existingDeal.validTo) {
       setAlwaysActive(true);
       setValidTo("");
@@ -162,30 +201,38 @@ const DealForm = () => {
       setStartTime(existingDeal.startTime);
       setEndTime(existingDeal.endTime);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isEdit, existingDeal, loadingDeal]);
 
-  // ── Image Upload ──
+  // Direct File Image Upload
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     e.target.value = "";
-    if (file.size > 5 * 1024 * 1024) { toast.error("Image must be under 5MB"); return; }
-    if (!file.type.startsWith("image/")) { toast.error("Only image files allowed"); return; }
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("Image must be under 5MB");
+      return;
+    }
+    if (!file.type.startsWith("image/")) {
+      toast.error("Only image files allowed (PNG, JPG, WebP)");
+      return;
+    }
     setUploading(true);
     try {
       const formData = new FormData();
       formData.append("image", file);
       const token = getAccessToken();
-      const res = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3001/api"}/upload/image`, {
-        method: "POST",
-        headers: { ...(token && { Authorization: `Bearer ${token}` }) },
-        body: formData,
-      });
+      const res = await fetch(
+        `${import.meta.env.VITE_API_URL || "http://localhost:3001/api"}/upload/image`,
+        {
+          method: "POST",
+          headers: { ...(token && { Authorization: `Bearer ${token}` }) },
+          body: formData,
+        }
+      );
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Upload failed");
       setImageUrl(data.data.url);
-      toast.success("Image uploaded successfully");
+      toast.success("Deal image uploaded successfully");
     } catch (err: any) {
       toast.error(err.message || "Image upload failed");
     } finally {
@@ -193,7 +240,7 @@ const DealForm = () => {
     }
   };
 
-  // ── Fixed Bundle Helpers ──
+  // Fixed Bundle Helpers
   const addComboRow = () => {
     const firstItem = menuItems[0];
     if (!firstItem) {
@@ -229,26 +276,122 @@ const DealForm = () => {
     );
   };
 
-  // Calculate total menu value of items in Fixed Bundle
+  // Dynamic unit conversion map from inventory API
+  // Single item cost — reads the recipe-derived costPrice snapshotted when the menu item was saved
+  // (same source as the Cost/Margin columns on the Food Menu list), not a live recipe recompute.
+  const getItemCost = useCallback(
+    (itemId: string, variantId: string | null): number => {
+      const item = menuItems.find((m) => m.id === itemId);
+      if (!item) return 0;
+      if (variantId) {
+        const v = item.variants?.find((vr) => vr.id === variantId);
+        if (v) return Number(v.costPrice || 0);
+      }
+      return Number(item.costPrice || 0);
+    },
+    [menuItems]
+  );
+
+  // Total Bundle Cost (Sum of all recipe ingredient purchase costs)
+  const bundleCostPrice = useMemo(() => {
+    return comboRows.reduce((sum, row) => {
+      const itemCost = getItemCost(row.itemId, row.variantId);
+      return sum + itemCost * row.qty;
+    }, 0);
+  }, [comboRows, getItemCost]);
+
+  // Total Regular Menu Selling Value (Sum of retail menu prices)
   const bundleRegularValue = useMemo(() => {
     return comboRows.reduce((sum, row) => {
       const item = menuItems.find((m) => m.id === row.itemId);
       if (!item) return sum;
       let unitPrice = Number(item.price || 0);
       if (row.variantId) {
-        const v = item.variants.find((vr) => vr.id === row.variantId);
+        const v = item.variants?.find((vr) => vr.id === row.variantId);
         if (v && v.price != null) unitPrice = Number(v.price);
       }
       return sum + unitPrice * row.qty;
     }, 0);
   }, [comboRows, menuItems]);
 
-  const bundleSavings = bundleRegularValue > 0 && dealPrice > 0 ? bundleRegularValue - dealPrice : 0;
-  const bundleSavingsPercent = bundleRegularValue > 0 && bundleSavings > 0
-    ? Math.round((bundleSavings / bundleRegularValue) * 100)
-    : 0;
+  // Deal Profit (Deal Price - Cost Price)
+  const bundleProfit = dealPrice > 0 ? dealPrice - bundleCostPrice : 0;
+  const bundleProfitMargin =
+    dealPrice > 0 && bundleCostPrice > 0
+      ? Math.round(((dealPrice - bundleCostPrice) / dealPrice) * 100)
+      : 0;
 
-  // ── Customizable Groups Helpers ──
+  // Customer Savings (Menu Value - Deal Price)
+  const bundleSavings = bundleRegularValue > 0 && dealPrice > 0 ? bundleRegularValue - dealPrice : 0;
+  const bundleSavingsPercent =
+    bundleRegularValue > 0 && bundleSavings > 0
+      ? Math.round((bundleSavings / bundleRegularValue) * 100)
+      : 0;
+
+  // Baseline margin if items were sold separately at full menu price (no deal applied)
+  const bundleMenuMargin =
+    bundleRegularValue > 0
+      ? Math.round(((bundleRegularValue - bundleCostPrice) / bundleRegularValue) * 100)
+      : 0;
+
+  // Set deal price from a percentage of either the menu total (discount) or the cost (markup)
+  const applyPercent = useCallback(
+    (pct: number, mode: "discount" | "margin" = calcMode) => {
+      const basis = mode === "discount" ? bundleRegularValue : bundleCostPrice;
+      const price = basis > 0 ? Math.round(mode === "discount" ? basis * (1 - pct / 100) : basis * (1 + pct / 100)) : 0;
+      setDealPrice(Math.max(0, price));
+    },
+    [calcMode, bundleRegularValue, bundleCostPrice]
+  );
+
+  const handlePercentInputChange = (val: string) => {
+    setPercentInput(val);
+    applyPercent(Math.min(100, Math.max(0, Number(val) || 0)));
+  };
+
+  const handleCalcModeChange = (mode: "discount" | "margin") => {
+    setCalcMode(mode);
+    if (priceMode === "percent") applyPercent(Number(percentInput) || 0, mode);
+  };
+
+  // Back-derive a display percentage from a saved Rs. amount (used when switching into percent mode)
+  const pctFromPrice = useCallback(
+    (price: number | null): string => {
+      const basis = calcMode === "discount" ? bundleRegularValue : bundleCostPrice;
+      if (!price || basis <= 0) return "";
+      const pct = calcMode === "discount" ? Math.round((1 - price / basis) * 100) : Math.round((price / basis - 1) * 100);
+      return pct > 0 ? String(pct) : "";
+    },
+    [calcMode, bundleRegularValue, bundleCostPrice]
+  );
+
+  // Rs./% is the single toggle governing both the main input and the channel override inputs below
+  const handlePriceModeChange = (mode: "amount" | "percent") => {
+    setPriceMode(mode);
+    if (mode === "percent") {
+      setPercentInput(pctFromPrice(dealPrice));
+      setDineInPct(pctFromPrice(dineInPrice));
+      setTakeAwayPct(pctFromPrice(takeAwayPrice));
+      setDeliveryPct(pctFromPrice(deliveryPrice));
+      setFoodpandaPct(pctFromPrice(foodpandaPrice));
+    }
+  };
+
+  // Convert a typed channel percentage into the Rs. amount actually saved
+  const applyChannelPercent = (
+    pctStr: string,
+    setPct: (v: string) => void,
+    setPrice: (v: number | null) => void
+  ) => {
+    setPct(pctStr);
+    if (pctStr === "") { setPrice(null); return; }
+    const pct = Math.max(0, Number(pctStr) || 0);
+    const basis = calcMode === "discount" ? bundleRegularValue : bundleCostPrice;
+    const price = basis > 0 ? Math.round(calcMode === "discount" ? basis * (1 - pct / 100) : basis * (1 + pct / 100)) : 0;
+    setPrice(Math.max(0, price));
+  };
+
+  // Customizable Option Groups Helpers
   const addOptionGroup = () => {
     const newId = crypto.randomUUID();
     setOptionGroups((prev) => [
@@ -275,7 +418,9 @@ const DealForm = () => {
 
   const updateGroupMax = (groupId: string, maxSelections: number) => {
     setOptionGroups((prev) =>
-      prev.map((g) => (g.id === groupId ? { ...g, maxSelections: Math.max(1, maxSelections) } : g))
+      prev.map((g) =>
+        g.id === groupId ? { ...g, maxSelections: Math.max(1, maxSelections) } : g
+      )
     );
   };
 
@@ -294,7 +439,7 @@ const DealForm = () => {
     );
   };
 
-  // ── Percentage Discount Scope Helpers ──
+  // Percentage Scope Helpers
   const toggleApplicableItem = (itemId: string) => {
     setApplicableItemIds((prev) =>
       prev.includes(itemId) ? prev.filter((id) => id !== itemId) : [...prev, itemId]
@@ -303,11 +448,13 @@ const DealForm = () => {
 
   const toggleApplicableCategory = (categoryId: string) => {
     setApplicableCategoryIds((prev) =>
-      prev.includes(categoryId) ? prev.filter((id) => id !== categoryId) : [...prev, categoryId]
+      prev.includes(categoryId)
+        ? prev.filter((id) => id !== categoryId)
+        : [...prev, categoryId]
     );
   };
 
-  // ── Save Deal ──
+  // Save Deal
   const handleSave = async () => {
     if (!name.trim()) {
       toast.error("Please enter a Deal Name");
@@ -340,9 +487,13 @@ const DealForm = () => {
         toast.error(`Please select at least 1 item for "${emptyGroup.label}"`);
         return;
       }
-      const notEnoughGroup = optionGroups.find((g) => g.allowedItems.length < g.maxSelections);
+      const notEnoughGroup = optionGroups.find(
+        (g) => g.allowedItems.length < g.maxSelections
+      );
       if (notEnoughGroup) {
-        toast.error(`"${notEnoughGroup.label}" needs at least ${notEnoughGroup.maxSelections} selectable item(s)`);
+        toast.error(
+          `"${notEnoughGroup.label}" needs at least ${notEnoughGroup.maxSelections} selectable item(s)`
+        );
         return;
       }
     } else if (dealType === "percentage") {
@@ -355,57 +506,74 @@ const DealForm = () => {
         return;
       }
     } else if (dealType === "buy_x_get_y") {
-      if (!buyItemId) { toast.error('Select the "Buy" item'); return; }
-      if (!buyQty || buyQty < 1) { toast.error('Enter a valid "Buy" quantity'); return; }
-      if (!getItemId) { toast.error('Select the "Get" item'); return; }
-      if (!getQty || getQty < 1) { toast.error('Enter a valid "Get" quantity'); return; }
+      if (!buyItemId) {
+        toast.error('Select the "Buy" item');
+        return;
+      }
+      if (!buyQty || buyQty < 1) {
+        toast.error('Enter a valid "Buy" quantity');
+        return;
+      }
+      if (!getItemId) {
+        toast.error('Select the "Get" item');
+        return;
+      }
+      if (!getQty || getQty < 1) {
+        toast.error('Enter a valid "Get" quantity');
+        return;
+      }
     }
 
     setSaving(true);
     try {
+      const finalCode = code.trim() || generateCodeFromName(name) || null;
       const payload: DealInput = {
         name: name.trim(),
-        code: code.trim() || null,
+        code: finalCode,
         description: description.trim() || null,
         image: imageUrl || null,
         type: dealType,
-        price: (dealType === "combo" || dealType === "option_combo") ? Number(dealPrice) : null,
+        price:
+          dealType === "combo" || dealType === "option_combo"
+            ? Number(dealPrice)
+            : null,
         dineInPrice: dineInPrice != null ? Number(dineInPrice) : null,
         takeAwayPrice: takeAwayPrice != null ? Number(takeAwayPrice) : null,
         deliveryPrice: deliveryPrice != null ? Number(deliveryPrice) : null,
         foodpandaPrice: foodpandaPrice != null ? Number(foodpandaPrice) : null,
         isActive,
         validFrom,
-        validTo: alwaysActive ? null : (validTo || null),
+        validTo: alwaysActive ? null : validTo || null,
         startTime: hasTimeRestriction ? startTime : null,
         endTime: hasTimeRestriction ? endTime : null,
-        components: dealType === "combo"
-          ? comboRows.map((r, idx) => ({
-              menuItemId: r.itemId,
-              variantId: r.variantId,
-              qty: r.qty,
-              displayOrder: idx,
-            }))
-          : [],
-        optionGroups: dealType === "option_combo"
-          ? optionGroups.map((g, idx) => ({
-              label: g.label,
-              // The current UI lets an admin set only a max — a paid combo step
-              // is normally "choose exactly N", so min is forced equal to max.
-              minSelections: g.maxSelections,
-              maxSelections: g.maxSelections,
-              displayOrder: idx,
-              options: g.allowedItems.map((itemId, oIdx) => ({
-                menuItemId: itemId,
-                variantId: null,
-                extraPrice: 0,
-                displayOrder: oIdx,
-              })),
-            }))
-          : [],
+        components:
+          dealType === "combo"
+            ? comboRows.map((r, idx) => ({
+                menuItemId: r.itemId,
+                variantId: r.variantId,
+                qty: r.qty,
+                displayOrder: idx,
+              }))
+            : [],
+        optionGroups:
+          dealType === "option_combo"
+            ? optionGroups.map((g, idx) => ({
+                label: g.label,
+                minSelections: g.maxSelections,
+                maxSelections: g.maxSelections,
+                displayOrder: idx,
+                options: g.allowedItems.map((itemId, oIdx) => ({
+                  menuItemId: itemId,
+                  variantId: null,
+                  extraPrice: 0,
+                  displayOrder: oIdx,
+                })),
+              }))
+            : [],
         discountPercent: dealType === "percentage" ? Number(discountPercent) : null,
         applicableItems: dealType === "percentage" ? applicableItemIds : [],
-        applicableCategories: dealType === "percentage" ? applicableCategoryIds : [],
+        applicableCategories:
+          dealType === "percentage" ? applicableCategoryIds : [],
         buyItemId: dealType === "buy_x_get_y" ? buyItemId : null,
         buyQty: dealType === "buy_x_get_y" ? Number(buyQty) : null,
         getItemId: dealType === "buy_x_get_y" ? getItemId : null,
@@ -431,30 +599,43 @@ const DealForm = () => {
   if (isEdit && loadingDeal) {
     return (
       <div className="flex items-center justify-center py-24">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
   }
 
   return (
-    <div className="space-y-6 pb-20 max-w-5xl mx-auto">
-      {/* Top Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b pb-4">
+    <div className="space-y-6 pb-20">
+      {/* TOP PAGE HEADER */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border/80 pb-4">
         <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={() => navigate("/deals")} className="rounded-xl">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => navigate("/deals")}
+            className="rounded-xl hover:bg-muted/80"
+          >
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-xl font-extrabold tracking-tight text-foreground">
+              <h1 className="text-xl sm:text-2xl font-black tracking-tight text-foreground">
                 {isEdit ? "Edit Deal & Combo" : "Create New Deal & Combo"}
               </h1>
-              <Badge variant={isActive ? "default" : "secondary"} className={isActive ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30" : ""}>
-                {isActive ? "Active" : "Draft / Inactive"}
+              <Badge
+                variant={isActive ? "default" : "secondary"}
+                className={
+                  isActive
+                    ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 font-semibold gap-1.5"
+                    : "text-muted-foreground gap-1.5"
+                }
+              >
+                <span className={cn("h-1.5 w-1.5 rounded-full", isActive ? "bg-emerald-500" : "bg-muted-foreground")} />
+                {isActive ? "Active" : "Draft"}
               </Badge>
             </div>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Configure bundle combos, pick-and-choose meal deals, and channel pricing
+              Build combo bundles, pick-and-choose meal steps, and channel pricing
             </p>
           </div>
         </div>
@@ -466,748 +647,1143 @@ const DealForm = () => {
           </Button>
           <Button
             size="sm"
-            className="gradient-primary text-primary-foreground font-semibold shadow-xs"
+            className="gradient-primary text-primary-foreground font-bold shadow-md shadow-primary/20 px-5"
             onClick={handleSave}
             disabled={saving}
           >
-            {saving ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Sparkles className="h-4 w-4 mr-1.5" />}
-            {isEdit ? "Update Deal" : "Save Deal"}
+            {saving ? (
+              <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+            ) : (
+              <Sparkles className="h-4 w-4 mr-1.5" />
+            )}
+            {isEdit ? "Update Deal" : "Publish Deal"}
           </Button>
         </div>
       </div>
 
-      {/* ── SECTION 1: General Information ── */}
-      <Card className="shadow-xs border-border/80">
-        <CardHeader className="pb-3 border-b bg-muted/20">
-          <CardTitle className="text-sm font-bold uppercase tracking-wider text-foreground flex items-center gap-2">
-            <Tag className="h-4 w-4 text-primary" />
-            1. General Information
-          </CardTitle>
-          <CardDescription className="text-xs">
-            Basic identity and display information for this deal
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="p-5 space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="md:col-span-2 space-y-1.5">
-              <Label className="text-xs font-semibold">
-                Deal Name <span className="text-destructive">*</span>
-              </Label>
-              <Input
-                placeholder="e.g. Family Feast Deal, Duo Pizza Combo, Midnight Munchies"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                className="h-10 text-sm font-medium"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <Label className="text-xs font-semibold">Deal Code / SKU (Optional)</Label>
-              <Input
-                placeholder="e.g. DEAL-01"
-                value={code}
-                onChange={(e) => setCode(e.target.value)}
-                className="h-10 text-sm font-mono"
-              />
-            </div>
-          </div>
-
-          <div className="space-y-1.5">
-            <Label className="text-xs font-semibold">Description / What's Included</Label>
-            <Textarea
-              placeholder="e.g. 1 Large Pizza + 1 Loaded Fries + 1.5 Litre Soft Drink. Freshly baked and served hot!"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              className="text-xs min-h-[70px] resize-y"
-            />
-          </div>
-
-          {/* Image & Active Switch */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t">
-            <div className="space-y-1.5">
-              <Label className="text-xs font-semibold">Deal Promotional Image</Label>
-              <div className="flex items-center gap-2">
-                <Input
-                  placeholder="Image URL or upload..."
-                  value={imageUrl}
-                  onChange={(e) => setImageUrl(e.target.value)}
-                  className="h-9 text-xs flex-1"
-                />
-                <input
-                  type="file"
-                  ref={fileInputRef}
-                  onChange={handleImageUpload}
-                  accept="image/*"
-                  className="hidden"
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="h-9 shrink-0 gap-1.5 text-xs"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={uploading}
-                >
-                  {uploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
-                  Upload
-                </Button>
+      {/* MAIN SPLIT-LAYOUT */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        
+        {/* LEFT FORM SECTION (8 COLS) */}
+        <div className="lg:col-span-8 space-y-6">
+          
+          {/* SECTION 1: General Information */}
+          <Card className="shadow-xs border-border/80 overflow-hidden">
+            <CardHeader className="pb-3 border-b bg-muted/20">
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="text-sm font-bold uppercase tracking-wider text-foreground flex items-center gap-2">
+                    <Tag className="h-4 w-4 text-primary" />
+                    1. General Information
+                  </CardTitle>
+                  <CardDescription className="text-xs">
+                    Basic identity, description, and promotional image for POS & customer menus
+                  </CardDescription>
+                </div>
+                <div className="flex items-center gap-2 bg-background px-2.5 py-1 rounded-lg border">
+                  <span className="text-xs font-semibold text-muted-foreground">Active:</span>
+                  <Switch checked={isActive} onCheckedChange={setIsActive} />
+                </div>
               </div>
-            </div>
+            </CardHeader>
+            <CardContent className="p-5">
+              <div style={{ display: "flex", flexDirection: "row", gap: "16px", alignItems: "stretch" }}>
 
-            <div className="flex items-center justify-between p-3 rounded-xl border bg-muted/10 self-end">
-              <div>
-                <p className="text-xs font-bold text-foreground">Deal Active Status</p>
-                <p className="text-[11px] text-muted-foreground">Available on POS & ordering terminals</p>
-              </div>
-              <Switch checked={isActive} onCheckedChange={setIsActive} />
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+                {/* Left: Title + Description — fills remaining space */}
+                <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: "12px" }}>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-semibold text-foreground/80 uppercase tracking-wide">
+                      Deal Title <span className="text-destructive">*</span>
+                    </Label>
+                    <Input
+                      placeholder="e.g. Mega Crunch Duo Combo, Family Feast Pizza Pack"
+                      value={name}
+                      onChange={(e) => handleNameChange(e.target.value)}
+                      className="h-11 text-sm font-bold placeholder:font-normal"
+                    />
+                  </div>
 
-      {/* ── SECTION 2: Deal Type Selection ── */}
-      <Card className="shadow-xs border-border/80">
-        <CardHeader className="pb-3 border-b bg-muted/20">
-          <CardTitle className="text-sm font-bold uppercase tracking-wider text-foreground flex items-center gap-2">
-            <Layers className="h-4 w-4 text-primary" />
-            2. Choose Deal Format
-          </CardTitle>
-          <CardDescription className="text-xs">
-            Pick how this deal works — you'll only see the fields it needs
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="p-5">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-            {(
-              [
-                { type: "combo" as const, icon: Package, title: "Fixed Bundle Combo", subtitle: "Pre-selected items at a bundle price", example: "1 Large Chicken Fajita Pizza + 1 Loaded Fries + 1.5L Drink for Rs. 1,499." },
-                { type: "option_combo" as const, icon: Layers, title: "Customizable Combo", subtitle: "Customer picks from defined steps", example: "Choose any 2 Pizza flavors + 1 Drink flavor for Rs. 999." },
-                { type: "percentage" as const, icon: Percent, title: "Percentage Discount", subtitle: "% off selected items or categories", example: "20% off all Beverages — optionally only during set hours." },
-                { type: "buy_x_get_y" as const, icon: Gift, title: "Buy X Get Y", subtitle: "Buy N of an item, get M free", example: "Buy 2 Burgers, get 1 Burger free." },
-              ] as const
-            ).map((opt) => {
-              const Icon = opt.icon;
-              const selected = dealType === opt.type;
-              return (
-                <button
-                  key={opt.type}
-                  type="button"
-                  onClick={() => setDealType(opt.type)}
-                  className={cn(
-                    "p-4 rounded-xl border-2 text-left transition-all relative flex flex-col justify-between gap-3 h-full select-none cursor-pointer",
-                    selected
-                      ? "border-primary bg-primary/[0.04] shadow-xs ring-1 ring-primary/20"
-                      : "border-border hover:border-primary/40 hover:bg-muted/30"
-                  )}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <div className={cn("p-2 rounded-lg shrink-0", selected ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground")}>
-                        <Icon className="h-5 w-5" />
+                  <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "6px" }}>
+                    <Label className="text-xs font-semibold text-foreground/80 uppercase tracking-wide">
+                      Description
+                    </Label>
+                    <Textarea
+                      placeholder="e.g. 1 Large Chicken Fajita Pizza + 1 Loaded Fries + 1.5L Cold Drink. Served hot and fresh!"
+                      value={description}
+                      onChange={(e) => setDescription(e.target.value)}
+                      className="text-xs resize-none flex-1"
+                      style={{ flex: 1, minHeight: "90px" }}
+                    />
+                  </div>
+                </div>
+
+                {/* Right: Promotional Image — fixed 200px wide square box */}
+                <div style={{ width: "200px", flexShrink: 0, display: "flex", flexDirection: "column", gap: "6px" }}>
+                  <Label className="text-xs font-semibold text-foreground/80 uppercase tracking-wide">
+                    Cover Image
+                  </Label>
+
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={handleImageUpload}
+                    accept="image/*"
+                    className="hidden"
+                  />
+
+                  {!imageUrl ? (
+                    <div
+                      onClick={() => !uploading && fileInputRef.current?.click()}
+                      style={{
+                        width: "200px",
+                        flex: 1,
+                        minHeight: "165px",
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: "10px",
+                        border: "2px dashed hsl(var(--border))",
+                        borderRadius: "12px",
+                        cursor: uploading ? "wait" : "pointer",
+                        backgroundColor: "transparent",
+                        transition: "all 0.15s ease",
+                        userSelect: "none",
+                      }}
+                      className="group hover:bg-muted/30"
+                      onMouseEnter={e => (e.currentTarget.style.borderColor = "hsl(var(--primary) / 0.5)")}
+                      onMouseLeave={e => (e.currentTarget.style.borderColor = "hsl(var(--border))")}
+                    >
+                      <div className="w-11 h-11 rounded-full bg-muted flex items-center justify-center text-muted-foreground group-hover:bg-primary/10 group-hover:text-primary transition-colors">
+                        {uploading ? (
+                          <Loader2 className="w-5 h-5 animate-spin text-primary" />
+                        ) : (
+                          <Upload className="w-5 h-5" />
+                        )}
                       </div>
-                      <div className="min-w-0">
-                        <p className="font-bold text-sm text-foreground truncate">{opt.title}</p>
-                        <p className="text-[11px] text-muted-foreground">{opt.subtitle}</p>
+                      <div className="text-center px-2">
+                        <p className="text-xs font-bold text-foreground leading-tight">
+                          {uploading ? "Uploading…" : "Click to Upload"}
+                        </p>
+                        <p className="text-[10px] text-muted-foreground mt-1 leading-snug">
+                          PNG, JPG, WebP<br />Max 5 MB
+                        </p>
                       </div>
                     </div>
-                    {selected && (
-                      <span className="h-5 w-5 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-[10px] shrink-0">
-                        <Check className="h-3.5 w-3.5 stroke-[3]" />
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-[11px] leading-relaxed text-muted-foreground bg-background/80 p-2 rounded-lg border border-border/60">
-                    <span className="font-semibold text-foreground/80">Example: </span>{opt.example}
-                  </p>
-                </button>
-              );
-            })}
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* ── SECTION 3: Pricing & Value Calculator (combo / option_combo) ── */}
-      {(dealType === "combo" || dealType === "option_combo") && (
-      <Card className="shadow-xs border-border/80">
-        <CardHeader className="pb-3 border-b bg-muted/20">
-          <CardTitle className="text-sm font-bold uppercase tracking-wider text-foreground flex items-center gap-2">
-            <Sparkles className="h-4 w-4 text-primary" />
-            3. Deal Pricing & Channels
-          </CardTitle>
-          <CardDescription className="text-xs">
-            Set base deal price and optional channel-specific prices
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="p-5 space-y-5">
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3">
-            <div className="space-y-1.5 md:col-span-1">
-              <Label className="text-xs font-bold text-primary">
-                Base Deal Price (Rs.) *
-              </Label>
-              <Input
-                type="number"
-                min={0}
-                placeholder="0"
-                value={dealPrice || ""}
-                onChange={(e) => setDealPrice(Math.max(0, Number(e.target.value)))}
-                className="h-10 text-sm font-extrabold border-primary/50 bg-primary/[0.02]"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-muted-foreground">Dine In (Optional)</Label>
-              <Input
-                type="number"
-                min={0}
-                placeholder={`Default (${dealPrice || 0})`}
-                value={dineInPrice ?? ""}
-                onChange={(e) => setDineInPrice(e.target.value === "" ? null : Math.max(0, Number(e.target.value)))}
-                className="h-10 text-sm"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-muted-foreground">Take Away (Optional)</Label>
-              <Input
-                type="number"
-                min={0}
-                placeholder={`Default (${dealPrice || 0})`}
-                value={takeAwayPrice ?? ""}
-                onChange={(e) => setTakeAwayPrice(e.target.value === "" ? null : Math.max(0, Number(e.target.value)))}
-                className="h-10 text-sm"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-muted-foreground">Delivery (Optional)</Label>
-              <Input
-                type="number"
-                min={0}
-                placeholder={`Default (${dealPrice || 0})`}
-                value={deliveryPrice ?? ""}
-                onChange={(e) => setDeliveryPrice(e.target.value === "" ? null : Math.max(0, Number(e.target.value)))}
-                className="h-10 text-sm"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-muted-foreground">Foodpanda (Optional)</Label>
-              <Input
-                type="number"
-                min={0}
-                placeholder={`Default (${dealPrice || 0})`}
-                value={foodpandaPrice ?? ""}
-                onChange={(e) => setFoodpandaPrice(e.target.value === "" ? null : Math.max(0, Number(e.target.value)))}
-                className="h-10 text-sm"
-              />
-            </div>
-          </div>
-
-          {/* Live Value Breakdown Card for Fixed Bundle */}
-          {dealType === "combo" && comboRows.length > 0 && (
-            <div className="flex items-center justify-between gap-4 p-3.5 rounded-xl border bg-gradient-to-r from-muted/50 via-muted/30 to-primary/[0.04]">
-              <div className="space-y-0.5">
-                <p className="text-xs font-semibold text-muted-foreground">Regular Menu Total</p>
-                <p className="text-sm font-mono font-bold text-foreground">
-                  Rs. {bundleRegularValue.toLocaleString()}
-                </p>
-              </div>
-
-              <div className="space-y-0.5 text-center">
-                <p className="text-xs font-semibold text-primary">Deal Offer Price</p>
-                <p className="text-base font-mono font-extrabold text-primary">
-                  Rs. {dealPrice.toLocaleString()}
-                </p>
-              </div>
-
-              <div className="text-right space-y-0.5">
-                <p className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">Customer Savings</p>
-                <p className="text-sm font-mono font-extrabold text-emerald-600 dark:text-emerald-400">
-                  {bundleSavings > 0 ? `Rs. ${bundleSavings.toLocaleString()} (${bundleSavingsPercent}% OFF)` : "No discount"}
-                </p>
-              </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-      )}
-
-      {/* ── SECTION 3B: Discount Scope (percentage) ── */}
-      {dealType === "percentage" && (
-        <Card className="shadow-xs border-border/80">
-          <CardHeader className="pb-3 border-b bg-muted/20">
-            <CardTitle className="text-sm font-bold uppercase tracking-wider text-foreground flex items-center gap-2">
-              <Percent className="h-4 w-4 text-primary" />
-              3. Discount & Scope
-            </CardTitle>
-            <CardDescription className="text-xs">
-              How much to discount, and which items or categories it applies to
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="p-5 space-y-6">
-            <div className="max-w-xs space-y-1.5">
-              <Label className="text-xs font-bold text-primary">Discount Percentage (%) *</Label>
-              <div className="relative">
-                <Input
-                  type="number"
-                  min={1}
-                  max={100}
-                  placeholder="0"
-                  value={discountPercent || ""}
-                  onChange={(e) => setDiscountPercent(Math.min(100, Math.max(0, Number(e.target.value))))}
-                  className="h-10 text-sm font-extrabold border-primary/50 bg-primary/[0.02] pr-8"
-                />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm font-bold text-muted-foreground">%</span>
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <Label className="text-xs font-bold text-foreground">Applies To</Label>
-                <Badge variant="outline" className="text-[10px] font-normal">
-                  {applicableItemIds.length} item{applicableItemIds.length === 1 ? "" : "s"} + {applicableCategoryIds.length} categor{applicableCategoryIds.length === 1 ? "y" : "ies"} selected
-                </Badge>
-              </div>
-
-              {/* Whole-category toggles */}
-              <div className="space-y-1.5">
-                <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Entire Categories</p>
-                {foodCategories.length === 0 ? (
-                  <p className="text-xs text-muted-foreground italic">No categories found</p>
-                ) : (
-                  <div className="flex flex-wrap gap-1.5">
-                    {foodCategories.map((c) => {
-                      const selected = applicableCategoryIds.includes(c.id);
-                      return (
-                        <button
-                          key={c.id}
+                  ) : (
+                    <div
+                      style={{
+                        width: "200px",
+                        flex: 1,
+                        minHeight: "165px",
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "8px",
+                        padding: "8px",
+                        border: "1px solid hsl(var(--border))",
+                        borderRadius: "12px",
+                      }}
+                      className="bg-muted/20"
+                    >
+                      {/* Image Preview */}
+                      <div style={{ flex: 1, borderRadius: "8px", overflow: "hidden", border: "1px solid hsl(var(--border))" }}>
+                        <img
+                          src={imageUrl}
+                          alt="Deal cover"
+                          style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+                        />
+                      </div>
+                      {/* Actions */}
+                      <div style={{ display: "flex", gap: "6px" }}>
+                        <Button
                           type="button"
-                          onClick={() => toggleApplicableCategory(c.id)}
-                          className={cn(
-                            "inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold border transition-all cursor-pointer select-none",
-                            selected
-                              ? "bg-primary text-primary-foreground border-primary"
-                              : "bg-muted/30 border-border text-foreground hover:border-primary/40 hover:bg-muted/60"
-                          )}
+                          variant="outline"
+                          size="sm"
+                          onClick={() => fileInputRef.current?.click()}
+                          disabled={uploading}
+                          className="h-7 text-[11px] font-semibold gap-1.5 flex-1"
                         >
-                          {selected ? <CheckCircle2 className="h-3.5 w-3.5 shrink-0" /> : <Layers className="h-3.5 w-3.5 shrink-0 opacity-50" />}
-                          <span>{c.name}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-
-              {/* Individual item toggles */}
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between gap-3">
-                  <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Or Specific Items</p>
-                  <Select value={scopeCategoryFilter} onValueChange={setScopeCategoryFilter}>
-                    <SelectTrigger className="h-7 w-40 text-[11px]">
-                      <SelectValue placeholder="Filter by category" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="All" className="text-xs">All Categories</SelectItem>
-                      {foodCategories.map((c) => (
-                        <SelectItem key={c.id} value={c.name} className="text-xs">{c.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="flex flex-wrap gap-1.5 p-3 rounded-lg border bg-background max-h-48 overflow-y-auto">
-                  {menuItems
-                    .filter((item) => scopeCategoryFilter === "All" || item.category?.name === scopeCategoryFilter)
-                    .map((item) => {
-                      const isSelected = applicableItemIds.includes(item.id);
-                      return (
-                        <button
-                          key={item.id}
+                          {uploading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
+                          Replace
+                        </Button>
+                        <Button
                           type="button"
-                          onClick={() => toggleApplicableItem(item.id)}
-                          className={cn(
-                            "inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-all cursor-pointer select-none",
-                            isSelected
-                              ? "bg-primary/10 border-primary text-primary font-bold ring-1 ring-primary"
-                              : "bg-muted/30 border-border text-foreground hover:border-primary/40 hover:bg-muted/60"
-                          )}
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setImageUrl("")}
+                          disabled={uploading}
+                          className="h-7 w-7 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
                         >
-                          {isSelected ? (
-                            <CheckCircle2 className="h-3.5 w-3.5 text-primary shrink-0" />
-                          ) : (
-                            <span className="h-3.5 w-3.5 rounded-full border border-muted-foreground/40 shrink-0" />
-                          )}
-                          <span>{item.name}</span>
-                        </button>
-                      );
-                    })}
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </div>
+
               </div>
+            </CardContent>
+          </Card>
 
-              <p className="text-[11px] text-muted-foreground">
-                An item qualifies for the discount if it's in a selected category, or individually picked above.
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* ── SECTION 3C: Buy X Get Y Configuration ── */}
-      {dealType === "buy_x_get_y" && (
-        <Card className="shadow-xs border-border/80">
-          <CardHeader className="pb-3 border-b bg-muted/20">
-            <CardTitle className="text-sm font-bold uppercase tracking-wider text-foreground flex items-center gap-2">
-              <Gift className="h-4 w-4 text-primary" />
-              3. Buy X Get Y Configuration
-            </CardTitle>
-            <CardDescription className="text-xs">
-              What the customer buys, and what they get free
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="p-5">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="p-4 rounded-xl border bg-muted/10 space-y-3">
-                <p className="text-xs font-bold text-foreground uppercase tracking-wide">Customer Buys</p>
-                <div className="space-y-1.5">
-                  <Label className="text-xs font-medium text-muted-foreground">Item</Label>
-                  <Select value={buyItemId ?? undefined} onValueChange={setBuyItemId}>
-                    <SelectTrigger className="h-9 text-xs">
-                      <SelectValue placeholder="Select item..." />
-                    </SelectTrigger>
-                    <SelectContent className="max-h-60">
-                      {menuItems.map((item) => (
-                        <SelectItem key={item.id} value={item.id} className="text-xs">
-                          {item.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs font-medium text-muted-foreground">Quantity</Label>
-                  <Input
-                    type="number"
-                    min={1}
-                    value={buyQty}
-                    onChange={(e) => setBuyQty(Math.max(1, Number(e.target.value)))}
-                    className="h-9 text-xs font-bold"
-                  />
-                </div>
-              </div>
-
-              <div className="p-4 rounded-xl border bg-emerald-500/5 border-emerald-500/30 space-y-3">
-                <p className="text-xs font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wide">Customer Gets Free</p>
-                <div className="space-y-1.5">
-                  <Label className="text-xs font-medium text-muted-foreground">Item</Label>
-                  <Select value={getItemId ?? undefined} onValueChange={setGetItemId}>
-                    <SelectTrigger className="h-9 text-xs">
-                      <SelectValue placeholder="Select item..." />
-                    </SelectTrigger>
-                    <SelectContent className="max-h-60">
-                      {menuItems.map((item) => (
-                        <SelectItem key={item.id} value={item.id} className="text-xs">
-                          {item.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs font-medium text-muted-foreground">Quantity (Free)</Label>
-                  <Input
-                    type="number"
-                    min={1}
-                    value={getQty}
-                    onChange={(e) => setGetQty(Math.max(1, Number(e.target.value)))}
-                    className="h-9 text-xs font-bold"
-                  />
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* ── SECTION 4: Component Items / Groups (combo / option_combo only) ── */}
-      {dealType === "combo" ? (
-        /* MODE A: Fixed Bundle Items Table */
-        <Card className="shadow-xs border-border/80">
-          <CardHeader className="pb-3 border-b bg-muted/20 flex flex-row items-center justify-between">
-            <div>
+          {/* SECTION 2: Choose Deal Format */}
+          <Card className="shadow-xs border-border/80 overflow-hidden">
+            <CardHeader className="pb-3 border-b bg-muted/20">
               <CardTitle className="text-sm font-bold uppercase tracking-wider text-foreground flex items-center gap-2">
-                <Package className="h-4 w-4 text-primary" />
-                4. Fixed Bundle Items ({comboRows.length})
+                <Layers className="h-4 w-4 text-primary" />
+                2. Choose Deal Format
               </CardTitle>
               <CardDescription className="text-xs">
-                Add all food items and quantities that come included in this bundle
+                Select the structure of this deal — form fields adapt dynamically
               </CardDescription>
-            </div>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={addComboRow}
-              className="gap-1.5 text-xs font-semibold"
-            >
-              <Plus className="h-3.5 w-3.5" />
-              Add Item
-            </Button>
-          </CardHeader>
-          <CardContent className="p-4">
-            {comboRows.length === 0 ? (
-              <div className="text-center py-10 space-y-3 border border-dashed rounded-xl bg-muted/10">
-                <Package className="h-9 w-9 text-muted-foreground/40 mx-auto" />
-                <div>
-                  <p className="text-sm font-bold text-foreground">No items added to this bundle yet</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">Click below to add food menu items to this deal</p>
-                </div>
-                <Button type="button" size="sm" variant="outline" onClick={addComboRow} className="text-xs gap-1.5">
-                  <Plus className="h-3.5 w-3.5" /> Add First Item
-                </Button>
+            </CardHeader>
+            <CardContent className="p-5">
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                {(
+                  [
+                    {
+                      type: "combo" as const,
+                      icon: Package,
+                      title: "Fixed Bundle",
+                      subtitle: "Pre-set items at a special price",
+                      example: "e.g. 1 Pizza + 1 Fries + 1 Drink for Rs. 1,499",
+                      accent: "#3b82f6", // blue-500
+                    },
+                    {
+                      type: "option_combo" as const,
+                      icon: Layers,
+                      title: "Customizable",
+                      subtitle: "Customer picks items from defined steps",
+                      example: "e.g. Choose 1 Pizza + 2 Drinks for Rs. 999",
+                      accent: "#8b5cf6", // violet-500
+                    },
+                    {
+                      type: "percentage" as const,
+                      icon: Percent,
+                      title: "% Discount",
+                      subtitle: "Percentage off selected items or categories",
+                      example: "e.g. 20% off all Burgers & Beverages",
+                      accent: "#f59e0b", // amber-500
+                    },
+                    {
+                      type: "buy_x_get_y" as const,
+                      icon: Gift,
+                      title: "Buy X Get Y",
+                      subtitle: "Buy N items, get M free",
+                      example: "e.g. Buy 2 Pizzas, Get 1 Cold Drink Free",
+                      accent: "#10b981", // emerald-500
+                    },
+                  ] as const
+                ).map((opt) => {
+                  const Icon = opt.icon;
+                  const selected = dealType === opt.type;
+                  return (
+                    <button
+                      key={opt.type}
+                      type="button"
+                      onClick={() => setDealType(opt.type)}
+                      className="relative p-4 rounded-xl border-2 text-left transition-all flex flex-col gap-3 select-none cursor-pointer"
+                      style={selected ? {
+                        borderColor: opt.accent,
+                        backgroundColor: `${opt.accent}14`,
+                        boxShadow: `0 0 0 1px ${opt.accent}30`,
+                      } : {
+                        borderColor: "hsl(var(--border))",
+                        backgroundColor: "transparent",
+                      }}
+                    >
+                      {/* Selected checkmark */}
+                      {selected && (
+                        <span
+                          className="absolute top-3 right-3 h-5 w-5 rounded-full flex items-center justify-center shadow-sm"
+                          style={{ backgroundColor: opt.accent, color: "#fff" }}
+                        >
+                          <Check className="h-3 w-3 stroke-[3]" />
+                        </span>
+                      )}
+
+                      {/* Icon */}
+                      <div
+                        className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 transition-all"
+                        style={selected
+                          ? { backgroundColor: opt.accent, color: "#fff" }
+                          : { backgroundColor: `${opt.accent}18`, color: opt.accent }
+                        }
+                      >
+                        <Icon className="h-4 w-4" />
+                      </div>
+
+                      {/* Text */}
+                      <div className="space-y-0.5 min-w-0">
+                        <p className="font-bold text-[13px] leading-tight text-foreground">
+                          {opt.title}
+                        </p>
+                        <p className="text-[11px] text-muted-foreground leading-snug">
+                          {opt.subtitle}
+                        </p>
+                      </div>
+
+                      {/* Example strip */}
+                      <div className="text-[10px] text-muted-foreground bg-background/60 px-2.5 py-1.5 rounded-md border border-border/50 leading-snug">
+                        {opt.example}
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
-            ) : (
-              <div className="rounded-xl border overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-muted/50 hover:bg-muted/50 text-xs">
-                      <TableHead className="w-10">SN</TableHead>
-                      <TableHead className="min-w-[220px]">Food Menu Item</TableHead>
-                      <TableHead className="min-w-[150px]">Size / Variant</TableHead>
-                      <TableHead className="w-24 text-center">Qty</TableHead>
-                      <TableHead className="w-28 text-right">Unit Price</TableHead>
-                      <TableHead className="w-28 text-right">Subtotal</TableHead>
-                      <TableHead className="w-12 text-center"></TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {comboRows.map((row, idx) => {
-                      const selectedItem = menuItems.find((m) => m.id === row.itemId);
-                      const variants = selectedItem?.variants || [];
-                      let unitPrice = Number(selectedItem?.price || 0);
+            </CardContent>
+          </Card>
 
-                      if (row.variantId) {
-                        const v = variants.find((vr) => vr.id === row.variantId);
-                        if (v && v.price != null) unitPrice = Number(v.price);
-                      }
+        </div>
 
-                      const subtotal = unitPrice * row.qty;
+        {/* RIGHT STICKY PREVIEW (4 COLS) — paired with Sections 1–2 only */}
+        <div className="lg:col-span-4 space-y-4 lg:sticky lg:top-6">
+          <Card className="shadow-lg border-primary/30 bg-gradient-to-br from-card via-card to-primary/[0.03] overflow-hidden">
+            <CardHeader className="pb-3 border-b bg-muted/30">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-xs font-bold uppercase tracking-wider text-foreground flex items-center gap-1.5">
+                  <Eye className="h-4 w-4 text-primary" />
+                  Live POS Card Preview
+                </CardTitle>
+                <Badge variant="outline" className="text-[10px] font-mono">
+                  {code || "NO-CODE"}
+                </Badge>
+              </div>
+            </CardHeader>
+            <CardContent className="p-5 space-y-4">
+              {/* Promotional Card */}
+              <div className="rounded-2xl border-2 border-primary/40 bg-card p-4 shadow-md space-y-3">
+                {imageUrl ? (
+                  <div className="h-32 w-full rounded-xl overflow-hidden border">
+                    <img
+                      src={imageUrl}
+                      alt={name}
+                      className="h-full w-full object-cover"
+                    />
+                  </div>
+                ) : (
+                  <div className="h-24 w-full rounded-xl border border-dashed flex flex-col items-center justify-center text-muted-foreground bg-muted/20">
+                    <ImageIcon className="h-6 w-6 stroke-[1.5] mb-1 opacity-50" />
+                    <span className="text-[11px]">No promotional image uploaded</span>
+                  </div>
+                )}
 
-                      return (
-                        <TableRow key={idx} className="hover:bg-muted/20">
-                          <TableCell className="text-xs text-muted-foreground font-mono">{idx + 1}</TableCell>
+                <div>
+                  <div className="flex items-center justify-between gap-2">
+                    <h3 className="font-extrabold text-sm text-foreground leading-snug">
+                      {name || "Untitled Deal Name"}
+                    </h3>
+                    <Badge className="gradient-primary text-primary-foreground text-[10px] px-2 py-0.5 font-bold">
+                      {dealType === "combo"
+                        ? "Bundle"
+                        : dealType === "option_combo"
+                        ? "Custom"
+                        : dealType === "percentage"
+                        ? `${discountPercent}% OFF`
+                        : "BOGO"}
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                    {description || "No description provided yet."}
+                  </p>
+                </div>
 
-                          {/* Item Dropdown */}
-                          <TableCell>
-                            <Select
-                              value={row.itemId}
-                              onValueChange={(val) => updateComboItem(idx, val)}
-                            >
-                              <SelectTrigger className="h-9 text-xs">
-                                <SelectValue placeholder="Select Food Item..." />
-                              </SelectTrigger>
-                              <SelectContent className="max-h-60">
-                                {menuItems.map((item) => (
-                                  <SelectItem key={item.id} value={item.id} className="text-xs">
-                                    {item.name} {item.category?.name ? `(${item.category.name})` : ""}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </TableCell>
+                {/* Items preview */}
+                <div className="p-2.5 rounded-lg bg-muted/30 border text-xs space-y-1">
+                  <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide">
+                    Included / Structure:
+                  </p>
+                  {dealType === "combo" ? (
+                    comboRows.length === 0 ? (
+                      <p className="text-muted-foreground italic text-[11px]">
+                        No items added
+                      </p>
+                    ) : (
+                      comboRows.map((r, i) => {
+                        const it = menuItems.find((m) => m.id === r.itemId);
+                        return (
+                          <div
+                            key={i}
+                            className="flex justify-between text-[11px] text-foreground/90 font-medium"
+                          >
+                            <span>
+                              • {r.qty}x {it?.name || "Item"}
+                            </span>
+                          </div>
+                        );
+                      })
+                    )
+                  ) : dealType === "option_combo" ? (
+                    optionGroups.length === 0 ? (
+                      <p className="text-muted-foreground italic text-[11px]">
+                        No choice steps defined
+                      </p>
+                    ) : (
+                      optionGroups.map((g, i) => (
+                        <p
+                          key={i}
+                          className="text-[11px] text-foreground/90 font-medium truncate"
+                        >
+                          • {g.label} ({g.allowedItems.length} options)
+                        </p>
+                      ))
+                    )
+                  ) : dealType === "percentage" ? (
+                    <p className="text-[11px] text-emerald-600 dark:text-emerald-400 font-bold">
+                      {discountPercent}% OFF on selected items
+                    </p>
+                  ) : (
+                    <p className="text-[11px] text-foreground/90 font-medium">
+                      Buy {buyQty}x → Get {getQty}x Free
+                    </p>
+                  )}
+                </div>
 
-                          {/* Variant / Size */}
-                          <TableCell>
-                            {variants.length > 0 ? (
-                              <Select
-                                value={row.variantId || "default"}
-                                onValueChange={(val) => updateComboVariant(idx, val === "default" ? null : val)}
-                              >
-                                <SelectTrigger className="h-9 text-xs">
-                                  <SelectValue placeholder="Select Size..." />
+                {/* Pricing Footer */}
+                <div className="pt-2 border-t flex items-end justify-between">
+                  <div>
+                    {dealType === "combo" && bundleRegularValue > 0 && (
+                      <span className="text-[10px] text-muted-foreground line-through font-mono block">
+                        Rs. {bundleRegularValue.toLocaleString()}
+                      </span>
+                    )}
+                    <span className="text-xl font-black text-primary font-mono">
+                      {dealType === "combo" || dealType === "option_combo"
+                        ? `Rs. ${(dealPrice || 0).toLocaleString()}`
+                        : dealType === "percentage"
+                        ? `${discountPercent}% OFF`
+                        : "Buy X Get Y"}
+                    </span>
+                  </div>
+
+                  {dealType === "combo" && bundleSavingsPercent > 0 && (
+                    <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-2 py-0.5 rounded">
+                      SAVE {bundleSavingsPercent}%
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Ready Checklist */}
+              <div className="p-3.5 rounded-xl border bg-muted/10 space-y-2 text-xs">
+                <p className="font-bold text-foreground flex items-center gap-1.5">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                  Deal Setup Checklist:
+                </p>
+                <ul className="space-y-1 text-muted-foreground text-[11px]">
+                  <li className="flex items-center gap-1.5">
+                    {name ? (
+                      <Check className="h-3 w-3 text-emerald-500" />
+                    ) : (
+                      <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                    )}
+                    <span>Deal Name specified</span>
+                  </li>
+                  <li className="flex items-center gap-1.5">
+                    {dealType === "combo" ? (
+                      comboRows.length > 0 ? (
+                        <Check className="h-3 w-3 text-emerald-500" />
+                      ) : (
+                        <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                      )
+                    ) : (
+                      <Check className="h-3 w-3 text-emerald-500" />
+                    )}
+                    <span>
+                      {dealType === "combo"
+                        ? `${comboRows.length} item(s) in bundle`
+                        : "Format configured"}
+                    </span>
+                  </li>
+                  <li className="flex items-center gap-1.5">
+                    {dealPrice > 0 || dealType !== "combo" ? (
+                      <Check className="h-3 w-3 text-emerald-500" />
+                    ) : (
+                      <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                    )}
+                    <span>Pricing configured</span>
+                  </li>
+                </ul>
+              </div>
+
+              {/* Bottom Quick Save */}
+              <Button
+                type="button"
+                className="w-full gradient-primary text-primary-foreground font-bold shadow-md shadow-primary/20 py-5"
+                onClick={handleSave}
+                disabled={saving}
+              >
+                {saving ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Sparkles className="h-4 w-4 mr-2" />
+                )}
+                {isEdit ? "Update Deal" : "Save & Publish Deal"}
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+
+      </div>
+
+      {/* REMAINING SECTIONS — use the full page width, no longer sharing the row with the preview */}
+      <div className="space-y-6">
+
+          {/* SECTION 3: Included Bundle Items (Fixed Bundle only) — shown BEFORE pricing */}
+          {dealType === "combo" && (
+            <Card className="shadow-xs border-border/80 overflow-hidden">
+              <CardHeader className="pb-3 border-b bg-muted/20">
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <CardTitle className="text-sm font-bold uppercase tracking-wider text-foreground flex items-center gap-2">
+                      <Package className="h-4 w-4 text-primary" />
+                      3. Included Bundle Items
+                      {comboRows.length > 0 && (
+                        <span className="ml-1 px-1.5 py-0.5 rounded-md bg-primary/10 text-primary text-[10px] font-bold">
+                          {comboRows.length}
+                        </span>
+                      )}
+                    </CardTitle>
+                    <CardDescription className="text-xs mt-0.5">
+                      Add every food item included in this fixed package
+                    </CardDescription>
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={addComboRow}
+                    className="gradient-primary text-primary-foreground gap-1.5 text-xs font-bold shadow-xs shrink-0"
+                  >
+                    <Plus className="h-3.5 w-3.5" /> Add Item
+                  </Button>
+                </div>
+              </CardHeader>
+
+              <CardContent className="p-4">
+                {comboRows.length === 0 ? (
+                  <div className="text-center py-12 space-y-3 border-2 border-dashed border-border/60 rounded-xl bg-muted/10">
+                    <div className="w-12 h-12 rounded-full bg-muted/60 flex items-center justify-center mx-auto">
+                      <Package className="h-5 w-5 text-muted-foreground/50" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-foreground">No items added yet</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">Add the food items that come bundled in this deal</p>
+                    </div>
+                    <Button type="button" size="sm" variant="outline" onClick={addComboRow} className="text-xs gap-1.5">
+                      <Plus className="h-3.5 w-3.5" /> Add First Item
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {/* Header row */}
+                    <div className="grid gap-2 px-3 pb-1" style={{ gridTemplateColumns: "1.5fr 0.8fr 78px 78px 64px 36px" }}>
+                      <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Menu Item</span>
+                      <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Size / Variant</span>
+                      <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground text-right">Cost</span>
+                      <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground text-right">Selling</span>
+                      <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground text-center">Qty</span>
+                      <span />
+                    </div>
+
+                    {/* Item rows */}
+                    <div className="space-y-1.5">
+                      {comboRows.map((row, idx) => {
+                        const selectedItem = menuItems.find((m) => m.id === row.itemId);
+                        const variants = selectedItem?.variants || [];
+                        let unitPrice = Number(selectedItem?.price || 0);
+                        if (row.variantId) {
+                          const v = variants.find((vr) => vr.id === row.variantId);
+                          if (v && v.price != null) unitPrice = Number(v.price);
+                        }
+                        const unitCost = getItemCost(row.itemId, row.variantId);
+
+                        return (
+                          <div
+                            key={idx}
+                            className="grid gap-2 items-center px-3 py-2.5 rounded-lg border border-border/60 bg-background hover:bg-muted/20 transition-colors"
+                            style={{ gridTemplateColumns: "1.5fr 0.8fr 78px 78px 64px 36px" }}
+                          >
+                            {/* Item select */}
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className="text-[10px] font-mono text-muted-foreground/60 shrink-0 w-4 text-right">{idx + 1}.</span>
+                              <Select value={row.itemId} onValueChange={(val) => updateComboItem(idx, val)}>
+                                <SelectTrigger className="h-8 text-xs border-0 bg-muted/30 hover:bg-muted/50 focus:ring-1">
+                                  <SelectValue placeholder="Select item…" />
                                 </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="default" className="text-xs">Standard (Rs. {selectedItem?.price})</SelectItem>
-                                  {variants.map((v) => (
-                                    <SelectItem key={v.id} value={v.id} className="text-xs">
-                                      {v.name} (Rs. {v.price})
+                                <SelectContent className="max-h-60">
+                                  {menuItems.map((item) => (
+                                    <SelectItem key={item.id} value={item.id} className="text-xs">
+                                      {item.name}{item.category?.name ? ` (${item.category.name})` : ""}
                                     </SelectItem>
                                   ))}
                                 </SelectContent>
                               </Select>
-                            ) : (
-                              <span className="text-xs text-muted-foreground italic px-2">Standard</span>
-                            )}
-                          </TableCell>
+                            </div>
 
-                          {/* Quantity */}
-                          <TableCell>
-                            <Input
-                              type="number"
-                              min={1}
-                              value={row.qty}
-                              onChange={(e) => updateComboQty(idx, Number(e.target.value))}
-                              className="h-9 text-xs text-center font-bold"
-                            />
-                          </TableCell>
+                            {/* Variant */}
+                            <div>
+                              {variants.length > 0 ? (
+                                <Select
+                                  value={row.variantId || variants[0]?.id || ""}
+                                  onValueChange={(val) => updateComboVariant(idx, val)}
+                                >
+                                  <SelectTrigger className="h-8 text-xs border-0 bg-muted/30 hover:bg-muted/50 focus:ring-1">
+                                    <SelectValue placeholder="Select size…" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {variants.map((v) => (
+                                      <SelectItem key={v.id} value={v.id} className="text-xs">
+                                        {v.name}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              ) : (
+                                <span className="text-xs text-muted-foreground px-1">—</span>
+                              )}
+                            </div>
 
-                          {/* Unit Price */}
-                          <TableCell className="text-right text-xs font-mono text-muted-foreground">
-                            Rs. {unitPrice.toLocaleString()}
-                          </TableCell>
+                            {/* Line cost — scales with Qty (from saved recipe cost) */}
+                            <span className="text-xs font-mono text-muted-foreground text-right">
+                              {unitCost > 0 ? `Rs. ${(unitCost * row.qty).toLocaleString()}` : "—"}
+                            </span>
 
-                          {/* Subtotal */}
-                          <TableCell className="text-right text-xs font-mono font-bold text-foreground">
-                            Rs. {subtotal.toLocaleString()}
-                          </TableCell>
+                            {/* Line selling price — scales with Qty */}
+                            <span className="text-xs font-mono font-semibold text-foreground text-right">
+                              Rs. {(unitPrice * row.qty).toLocaleString()}
+                            </span>
 
-                          {/* Delete */}
-                          <TableCell className="text-center">
+                            {/* Qty stepper */}
+                            <div className="flex items-center justify-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => updateComboQty(idx, row.qty - 1)}
+                                className="w-6 h-6 rounded-md bg-muted hover:bg-primary/10 hover:text-primary text-foreground flex items-center justify-center font-bold text-sm leading-none transition-colors"
+                              >
+                                −
+                              </button>
+                              <span className="w-6 text-center text-xs font-mono font-bold">{row.qty}</span>
+                              <button
+                                type="button"
+                                onClick={() => updateComboQty(idx, row.qty + 1)}
+                                className="w-6 h-6 rounded-md bg-muted hover:bg-primary/10 hover:text-primary text-foreground flex items-center justify-center font-bold text-sm leading-none transition-colors"
+                              >
+                                +
+                              </button>
+                            </div>
+
+                            {/* Delete */}
                             <Button
                               type="button"
                               variant="ghost"
                               size="icon"
                               onClick={() => removeComboRow(idx)}
-                              className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                              className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
                             >
-                              <Trash2 className="h-4 w-4" />
+                              <Trash2 className="h-3.5 w-3.5" />
                             </Button>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      ) : dealType === "option_combo" ? (
-        /* MODE B: Customizable Pick & Choose Groups */
-        <Card className="shadow-xs border-border/80">
-          <CardHeader className="pb-3 border-b bg-muted/20 flex flex-row items-center justify-between">
-            <div>
-              <CardTitle className="text-sm font-bold uppercase tracking-wider text-foreground flex items-center gap-2">
-                <Layers className="h-4 w-4 text-primary" />
-                4. Selection Steps / Groups ({optionGroups.length})
-              </CardTitle>
-              <CardDescription className="text-xs">
-                Create steps for the customer to choose items (e.g. Choose 1st Pizza, Choose Soft Drink)
-              </CardDescription>
-            </div>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={addOptionGroup}
-              className="gap-1.5 text-xs font-semibold"
-            >
-              <Plus className="h-3.5 w-3.5" />
-              Add Step Group
-            </Button>
-          </CardHeader>
-          <CardContent className="p-4 space-y-4">
-            {optionGroups.length === 0 ? (
-              <div className="text-center py-10 space-y-3 border border-dashed rounded-xl bg-muted/10">
-                <Layers className="h-9 w-9 text-muted-foreground/40 mx-auto" />
-                <div>
-                  <p className="text-sm font-bold text-foreground">No selection steps created yet</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    Click below to create your first choice group (e.g. Choose Pizza Flavor)
-                  </p>
-                </div>
-                <Button type="button" size="sm" variant="outline" onClick={addOptionGroup} className="text-xs gap-1.5">
-                  <Plus className="h-3.5 w-3.5" /> Add First Step Group
-                </Button>
-              </div>
-            ) : (
-              optionGroups.map((group, gIdx) => {
-                const activeCat = groupCategoryFilters[group.id] || "All";
-                const displayItems = menuItems.filter(
-                  (item) => activeCat === "All" || item.category?.name === activeCat
-                );
-
-                return (
-                  <div key={group.id} className="p-4 rounded-xl border bg-muted/10 space-y-3.5">
-                    {/* Group Header */}
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b">
-                      <div className="flex items-center gap-2 flex-1">
-                        <span className="h-6 w-6 rounded-lg bg-primary/10 text-primary font-extrabold text-xs flex items-center justify-center shrink-0">
-                          #{gIdx + 1}
-                        </span>
-                        <Input
-                          value={group.label}
-                          onChange={(e) => updateGroupLabel(group.id, e.target.value)}
-                          placeholder="e.g. Choose 1st Pizza Flavor"
-                          className="h-8 text-xs font-bold max-w-sm"
-                        />
-                      </div>
-
-                      <div className="flex items-center gap-3 self-end sm:self-auto">
-                        <div className="flex items-center gap-1.5">
-                          <Label className="text-[11px] text-muted-foreground font-medium whitespace-nowrap">
-                            Max Selectable:
-                          </Label>
-                          <Input
-                            type="number"
-                            min={1}
-                            value={group.maxSelections}
-                            onChange={(e) => updateGroupMax(group.id, Number(e.target.value))}
-                            className="h-8 w-16 text-xs text-center font-bold"
-                          />
-                        </div>
-
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => removeOptionGroup(group.id)}
-                          className="h-8 text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
-                        >
-                          <Trash2 className="h-3.5 w-3.5 mr-1" /> Remove
-                        </Button>
-                      </div>
+                          </div>
+                        );
+                      })}
                     </div>
 
-                    {/* Category Filter for this group */}
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <p className="text-xs font-semibold text-muted-foreground">
-                          Click items below to include in this choice group ({group.allowedItems.length} selected):
-                        </p>
-                        <div className="flex gap-1 overflow-x-auto pb-1 max-w-[50%]">
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant={activeCat === "All" ? "default" : "outline"}
-                            onClick={() => setGroupCategoryFilters((p) => ({ ...p, [group.id]: "All" }))}
-                            className="h-6 text-[10px] px-2"
-                          >
-                            All
-                          </Button>
-                          {foodCategories.map((c) => (
-                            <Button
-                              key={c.id}
-                              type="button"
-                              size="sm"
-                              variant={activeCat === c.name ? "default" : "outline"}
-                              onClick={() => setGroupCategoryFilters((p) => ({ ...p, [group.id]: c.name }))}
-                              className="h-6 text-[10px] px-2 whitespace-nowrap"
-                            >
-                              {c.name}
-                            </Button>
-                          ))}
+                    {/* Footer — item count only */}
+                    <div className="flex items-center px-3 pt-2 border-t border-border/50 mt-1">
+                      <span className="text-xs text-muted-foreground">
+                        {comboRows.length} item{comboRows.length !== 1 ? "s" : ""} in bundle
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* SECTION 4: Pricing & Channels (combo / option_combo) */}
+          {(dealType === "combo" || dealType === "option_combo") && (
+            <Card className="shadow-xs border-border/80 overflow-hidden">
+              <CardHeader className="pb-3 border-b bg-muted/20">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                  <div>
+                    <CardTitle className="text-sm font-bold uppercase tracking-wider text-foreground flex items-center gap-2">
+                      <Sparkles className="h-4 w-4 text-primary" />
+                      4. Pricing & Cost Breakdown
+                    </CardTitle>
+                    <CardDescription className="text-xs">
+                      Analyze recipe cost price, menu selling total, and determine promotional deal pricing
+                    </CardDescription>
+                  </div>
+                  {dealType === "combo" && comboRows.length > 0 && (
+                    <Badge variant="outline" className="text-[11px] font-mono self-start sm:self-auto gap-1">
+                      <Calculator className="h-3 w-3 text-primary" />
+                      Cost-to-Price Calculator Active
+                    </Badge>
+                  )}
+                </div>
+              </CardHeader>
+
+              <CardContent className="p-5 space-y-6">
+
+                {/* ── ROW 1 · AT MENU PRICE (baseline, informational) ── */}
+                {dealType === "combo" && (
+                  <div className="space-y-2">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70 flex items-center gap-1.5">
+                      <Tag className="h-3 w-3" /> At Regular Menu Price
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+
+                      {/* Total Cost */}
+                      <div className="rounded-xl border border-border/70 bg-muted/25 p-4 flex flex-col justify-between gap-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                            <Coins className="h-3.5 w-3.5 text-muted-foreground/70" />
+                            Total Cost
+                          </span>
+                          {bundleCostPrice > 0 ? (
+                            <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                              Recipe Cost
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-[10px] text-muted-foreground/60 px-1.5 py-0">
+                              No Recipe
+                            </Badge>
+                          )}
+                        </div>
+                        <div>
+                          <p className="text-xl font-black font-mono text-foreground tracking-tight">
+                            Rs.&nbsp;{bundleCostPrice.toLocaleString()}
+                          </p>
+                          <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">
+                            {bundleCostPrice > 0
+                              ? "Raw ingredients & recipe cost"
+                              : "Set recipes in Menu Items for live cost"}
+                          </p>
                         </div>
                       </div>
 
-                      {/* Items Selectable Badges */}
-                      <div className="flex flex-wrap gap-1.5 p-3 rounded-lg border bg-background max-h-48 overflow-y-auto">
-                        {displayItems.map((item) => {
-                          const isSelected = group.allowedItems.includes(item.id);
+                      {/* Total Selling Price */}
+                      <div className="rounded-xl border border-border/70 bg-muted/25 p-4 flex flex-col justify-between gap-2">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                          <Tag className="h-3.5 w-3.5 text-muted-foreground/70" />
+                          Total Selling Price
+                        </span>
+                        <div>
+                          <p className="text-xl font-black font-mono text-foreground tracking-tight">
+                            Rs.&nbsp;{bundleRegularValue.toLocaleString()}
+                          </p>
+                          <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">
+                            Standalone menu retail value
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Total Profit % at menu price */}
+                      <div className="rounded-xl border border-border/70 bg-muted/25 p-4 flex flex-col justify-between gap-2">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                          <TrendingUp className="h-3.5 w-3.5 text-muted-foreground/70" />
+                          Total Profit %
+                        </span>
+                        <div>
+                          <p className="text-xl font-black font-mono text-foreground tracking-tight">
+                            {bundleRegularValue > 0 ? `${bundleMenuMargin}%` : "—"}
+                          </p>
+                          <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">
+                            Margin before any deal discount
+                          </p>
+                        </div>
+                      </div>
+
+                    </div>
+                  </div>
+                )}
+
+                {/* ── ROW 2 · THIS DEAL (the decision, updates live) ── */}
+                {dealType === "combo" && (
+                  <div className="space-y-2">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-primary/80 flex items-center gap-1.5">
+                      <Sparkles className="h-3 w-3" /> This Deal
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+
+                      {/* Deal Price */}
+                      <div className="rounded-xl border-2 border-primary/50 bg-primary/[0.04] p-4 flex flex-col justify-between gap-2 shadow-xs">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-primary flex items-center gap-1.5">
+                            <Sparkles className="h-3.5 w-3.5" />
+                            Deal Price
+                          </span>
+                          {bundleSavingsPercent > 0 && (
+                            <span className="text-[10px] font-bold text-primary px-1.5 py-0.5 rounded bg-primary/10">
+                              {bundleSavingsPercent}% OFF
+                            </span>
+                          )}
+                        </div>
+                        <div>
+                          <p className="text-xl font-black font-mono text-primary tracking-tight">
+                            Rs.&nbsp;{(dealPrice || 0).toLocaleString()}
+                          </p>
+                          <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">
+                            {bundleSavings > 0
+                              ? `Customer saves Rs. ${bundleSavings.toLocaleString()}`
+                              : "Customer pays at POS & Web"}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Deal Profit % */}
+                      <div className={cn(
+                        "rounded-xl border p-4 flex flex-col justify-between gap-2 transition-all",
+                        dealPrice > 0 && bundleProfit > 0
+                          ? "border-emerald-500/40 bg-emerald-500/[0.04]"
+                          : "border-border/70 bg-muted/25"
+                      )}>
+                        <span className={cn(
+                          "text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5",
+                          bundleProfit > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground"
+                        )}>
+                          <TrendingUp className="h-3.5 w-3.5" />
+                          Deal Profit %
+                        </span>
+                        <div>
+                          {dealPrice > 0 && bundleCostPrice > 0 ? (
+                            <>
+                              <div className="flex items-baseline gap-1.5">
+                                <p className={cn(
+                                  "text-xl font-black font-mono tracking-tight",
+                                  bundleProfit > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-destructive"
+                                )}>
+                                  {bundleProfitMargin}%
+                                </p>
+                                <span className="text-xs font-mono font-bold text-muted-foreground">
+                                  (Rs.&nbsp;{bundleProfit.toLocaleString()})
+                                </span>
+                              </div>
+                              <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">
+                                Profit over ingredient cost
+                              </p>
+                            </>
+                          ) : (
+                            <>
+                              <p className="text-xl font-black font-mono text-muted-foreground/40">—</p>
+                              <p className="text-[10px] text-muted-foreground mt-0.5">
+                                {dealPrice > 0 ? "Add recipes for profit %" : "Enter deal price below"}
+                              </p>
+                            </>
+                          )}
+                        </div>
+                      </div>
+
+                    </div>
+                  </div>
+                )}
+
+                {/* ── ROW 3 · SET DEAL PRICE — one Rs./% toggle drives the input and the presets ── */}
+                <div className="rounded-xl border border-border/70 bg-card p-4 space-y-4 shadow-xs">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <Label className="text-xs font-bold text-foreground uppercase tracking-wide">
+                      Set Deal Price <span className="text-destructive">*</span>
+                    </Label>
+                    <div className="inline-flex items-center rounded-lg border border-border/70 bg-muted/30 p-0.5">
+                      <button
+                        type="button"
+                        onClick={() => handlePriceModeChange("amount")}
+                        className={cn(
+                          "text-xs font-bold px-3 py-1.5 rounded-md transition-all",
+                          priceMode === "amount"
+                            ? "bg-primary text-primary-foreground shadow-xs"
+                            : "text-muted-foreground hover:text-foreground"
+                        )}
+                      >
+                        Rs. Amount
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handlePriceModeChange("percent")}
+                        className={cn(
+                          "text-xs font-bold px-3 py-1.5 rounded-md transition-all",
+                          priceMode === "percent"
+                            ? "bg-primary text-primary-foreground shadow-xs"
+                            : "text-muted-foreground hover:text-foreground"
+                        )}
+                      >
+                        % Percent
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row items-start sm:items-end gap-4">
+                    {/* Main input — shape follows the toggle above */}
+                    <div className="space-y-1 w-full sm:w-56 shrink-0">
+                      {priceMode === "amount" ? (
+                        <div className="relative">
+                          <Input
+                            type="number"
+                            min={0}
+                            placeholder="e.g. 1999"
+                            value={dealPrice || ""}
+                            onChange={(e) => setDealPrice(Math.max(0, Number(e.target.value)))}
+                            className="h-11 text-base font-extrabold font-mono border-primary/50 bg-primary/[0.02] pl-10"
+                          />
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-muted-foreground font-mono">
+                            Rs.
+                          </span>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="relative">
+                            <Input
+                              type="number"
+                              min={0}
+                              max={100}
+                              placeholder="e.g. 20"
+                              value={percentInput}
+                              onChange={(e) => handlePercentInputChange(e.target.value)}
+                              className="h-11 text-base font-extrabold font-mono border-primary/50 bg-primary/[0.02] pr-9"
+                            />
+                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-muted-foreground font-mono">
+                              %
+                            </span>
+                          </div>
+                          <p className="text-[10px] font-mono text-muted-foreground pl-0.5">
+                            = Rs. {(dealPrice || 0).toLocaleString()}
+                          </p>
+                        </>
+                      )}
+                    </div>
+
+                    {/* Percent basis — only meaningful once % mode is selected (Fixed Bundle only) */}
+                    {priceMode === "percent" && dealType === "combo" && (
+                      <div className="space-y-1">
+                        <span className="text-[10px] text-muted-foreground block">Percent of</span>
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => handleCalcModeChange("discount")}
+                            className={cn(
+                              "text-[11px] font-bold px-2.5 py-1.5 rounded-md transition-all flex items-center gap-1",
+                              calcMode === "discount"
+                                ? "bg-muted text-foreground shadow-xs"
+                                : "text-muted-foreground/70 hover:text-muted-foreground"
+                            )}
+                          >
+                            <BadgePercent className="h-3 w-3" /> Off Menu Price
+                          </button>
+                          {bundleCostPrice > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => handleCalcModeChange("margin")}
+                              className={cn(
+                                "text-[11px] font-bold px-2.5 py-1.5 rounded-md transition-all flex items-center gap-1",
+                                calcMode === "margin"
+                                  ? "bg-muted text-foreground shadow-xs"
+                                  : "text-muted-foreground/70 hover:text-muted-foreground"
+                              )}
+                            >
+                              <TrendingUp className="h-3 w-3" /> Markup on Cost
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                </div>
+
+                {/* ── CHANNEL OVERRIDES — same Rs./% toggle as the main price above ── */}
+                <div className="space-y-2.5 pt-2 border-t border-border/50">
+                  <div className="flex items-center justify-between">
+                    <p className="text-[11px] font-bold uppercase tracking-wider text-foreground">
+                      Channel Price Overrides
+                    </p>
+                    <span className="text-[10px] text-muted-foreground">
+                      {priceMode === "amount"
+                        ? `Leave empty to use base deal price (Rs. ${(dealPrice || 0).toLocaleString()})`
+                        : `Leave empty to use base deal price · % is ${calcMode === "discount" ? "off Menu Price" : "markup on Cost"}`}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    {[
+                      { key: "dineIn", label: "Dine In", Icon: UtensilsCrossed, price: dineInPrice, setPrice: setDineInPrice, pct: dineInPct, setPct: setDineInPct },
+                      { key: "takeAway", label: "Take Away", Icon: ShoppingBag, price: takeAwayPrice, setPrice: setTakeAwayPrice, pct: takeAwayPct, setPct: setTakeAwayPct },
+                      { key: "delivery", label: "Delivery", Icon: Truck, price: deliveryPrice, setPrice: setDeliveryPrice, pct: deliveryPct, setPct: setDeliveryPct },
+                      { key: "foodpanda", label: "Foodpanda", Icon: ShoppingBag, price: foodpandaPrice, setPrice: setFoodpandaPrice, pct: foodpandaPct, setPct: setFoodpandaPct },
+                    ].map((ch) => (
+                      <div key={ch.key} className="space-y-1.5">
+                        <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+                          <ch.Icon className="h-3 w-3" /> {ch.label}
+                        </Label>
+                        {priceMode === "amount" ? (
+                          <Input
+                            type="number" min={0}
+                            placeholder={`Default (${dealPrice || 0})`}
+                            value={ch.price ?? ""}
+                            onChange={(e) => ch.setPrice(e.target.value === "" ? null : Math.max(0, Number(e.target.value)))}
+                            className="h-9 text-xs font-mono"
+                          />
+                        ) : (
+                          <div className="relative">
+                            <Input
+                              type="number" min={0} max={100}
+                              placeholder="Default (0%)"
+                              value={ch.pct}
+                              onChange={(e) => applyChannelPercent(e.target.value, ch.setPct, ch.setPrice)}
+                              className="h-9 text-xs font-mono pr-6"
+                            />
+                            <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-bold text-muted-foreground">
+                              %
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+              </CardContent>
+            </Card>
+          )}
+
+          {/* SECTION 3B: Discount Scope (Percentage Mode) */}
+          {dealType === "percentage" && (
+            <Card className="shadow-xs border-border/80 overflow-hidden">
+              <CardHeader className="pb-3 border-b bg-muted/20">
+                <CardTitle className="text-sm font-bold uppercase tracking-wider text-foreground flex items-center gap-2">
+                  <Percent className="h-4 w-4 text-primary" />
+                  3. Discount Percentage & Applicable Scope
+                </CardTitle>
+                <CardDescription className="text-xs">
+                  Set the discount rate and choose qualifying categories or items
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="p-5 space-y-6">
+                <div className="space-y-2 max-w-sm">
+                  <Label className="text-xs font-bold text-primary">
+                    Discount Percentage (%) *
+                  </Label>
+                  <div className="relative">
+                    <Input
+                      type="number"
+                      min={1}
+                      max={100}
+                      placeholder="10"
+                      value={discountPercent || ""}
+                      onChange={(e) =>
+                        setDiscountPercent(
+                          Math.min(100, Math.max(0, Number(e.target.value)))
+                        )
+                      }
+                      className="h-10 text-base font-extrabold border-primary/50 bg-primary/[0.02] pr-8 font-mono"
+                    />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm font-bold text-muted-foreground">
+                      %
+                    </span>
+                  </div>
+                  {/* Preset Buttons */}
+                  <div className="flex gap-1.5 pt-1">
+                    {PERCENT_PRESETS.map((p) => (
+                      <button
+                        key={p}
+                        type="button"
+                        onClick={() => setDiscountPercent(p)}
+                        className={cn(
+                          "text-xs px-2.5 py-1 rounded-md border font-semibold transition-all",
+                          discountPercent === p
+                            ? "bg-primary text-primary-foreground border-primary"
+                            : "bg-muted/40 hover:bg-muted text-muted-foreground border-border"
+                        )}
+                      >
+                        {p}%
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="space-y-4 pt-2 border-t">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs font-bold text-foreground">
+                      Applies To Categories & Items
+                    </Label>
+                    <Badge variant="outline" className="text-[10px]">
+                      {applicableItemIds.length} item(s) +{" "}
+                      {applicableCategoryIds.length} categor(ies) selected
+                    </Badge>
+                  </div>
+
+                  {/* Whole-category toggles */}
+                  <div className="space-y-2">
+                    <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+                      Entire Categories:
+                    </p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {foodCategories.map((c) => {
+                        const selected = applicableCategoryIds.includes(c.id);
+                        return (
+                          <button
+                            key={c.id}
+                            type="button"
+                            onClick={() => toggleApplicableCategory(c.id)}
+                            className={cn(
+                              "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border transition-all cursor-pointer select-none",
+                              selected
+                                ? "bg-primary text-primary-foreground border-primary shadow-xs"
+                                : "bg-muted/30 border-border text-foreground hover:border-primary/40 hover:bg-muted/60"
+                            )}
+                          >
+                            {selected ? (
+                              <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+                            ) : (
+                              <Layers className="h-3.5 w-3.5 shrink-0 opacity-50" />
+                            )}
+                            <span>{c.name}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Specific items */}
+                  <div className="space-y-2 pt-2">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+                        Or Specific Individual Items:
+                      </p>
+                      <Select
+                        value={scopeCategoryFilter}
+                        onValueChange={setScopeCategoryFilter}
+                      >
+                        <SelectTrigger className="h-7 w-44 text-[11px]">
+                          <SelectValue placeholder="Filter by category" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="All" className="text-xs">
+                            All Categories
+                          </SelectItem>
+                          {foodCategories.map((c) => (
+                            <SelectItem
+                              key={c.id}
+                              value={c.name}
+                              className="text-xs"
+                            >
+                              {c.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5 p-3 rounded-xl border bg-background max-h-48 overflow-y-auto">
+                      {menuItems
+                        .filter(
+                          (item) =>
+                            scopeCategoryFilter === "All" ||
+                            item.category?.name === scopeCategoryFilter
+                        )
+                        .map((item) => {
+                          const isSelected = applicableItemIds.includes(item.id);
                           return (
                             <button
                               key={item.id}
                               type="button"
-                              onClick={() => toggleItemInGroup(group.id, item.id)}
+                              onClick={() => toggleApplicableItem(item.id)}
                               className={cn(
                                 "inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-all cursor-pointer select-none",
                                 isSelected
@@ -1224,114 +1800,405 @@ const DealForm = () => {
                             </button>
                           );
                         })}
-                      </div>
                     </div>
                   </div>
-                );
-              })
-            )}
-          </CardContent>
-        </Card>
-      ) : null}
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
-      {/* ── SECTION 5: Validity & Schedule ── */}
-      <Card className="shadow-xs border-border/80">
-        <CardHeader className="pb-3 border-b bg-muted/20">
-          <CardTitle className="text-sm font-bold uppercase tracking-wider text-foreground flex items-center gap-2">
-            <Calendar className="h-4 w-4 text-primary" />
-            5. Validity & Schedule
-          </CardTitle>
-          <CardDescription className="text-xs">
-            Specify start/end dates and optional happy-hour time restrictions
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="p-5 space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="space-y-1.5">
-              <Label className="text-xs font-semibold">Valid From Date</Label>
-              <Input
-                type="date"
-                value={validFrom}
-                onChange={(e) => setValidFrom(e.target.value)}
-                className="h-10 text-xs"
-              />
-            </div>
+          {/* SECTION 3C: Buy X Get Y Configuration */}
+          {dealType === "buy_x_get_y" && (
+            <Card className="shadow-xs border-border/80 overflow-hidden">
+              <CardHeader className="pb-3 border-b bg-muted/20">
+                <CardTitle className="text-sm font-bold uppercase tracking-wider text-foreground flex items-center gap-2">
+                  <Gift className="h-4 w-4 text-primary" />
+                  3. Buy X Get Y Configuration
+                </CardTitle>
+                <CardDescription className="text-xs">
+                  Define what the customer buys and what they receive for free
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="p-5">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="p-4 rounded-xl border bg-muted/10 space-y-3">
+                    <p className="text-xs font-bold text-foreground uppercase tracking-wide flex items-center gap-1.5">
+                      <ShoppingBag className="h-4 w-4 text-primary" />
+                      Customer Buys:
+                    </p>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-medium text-muted-foreground">
+                        Item
+                      </Label>
+                      <Select
+                        value={buyItemId ?? undefined}
+                        onValueChange={setBuyItemId}
+                      >
+                        <SelectTrigger className="h-9 text-xs">
+                          <SelectValue placeholder="Select item..." />
+                        </SelectTrigger>
+                        <SelectContent className="max-h-60">
+                          {menuItems.map((item) => (
+                            <SelectItem
+                              key={item.id}
+                              value={item.id}
+                              className="text-xs"
+                            >
+                              {item.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-medium text-muted-foreground">
+                        Quantity
+                      </Label>
+                      <Input
+                        type="number"
+                        min={1}
+                        value={buyQty}
+                        onChange={(e) =>
+                          setBuyQty(Math.max(1, Number(e.target.value)))
+                        }
+                        className="h-9 text-xs font-bold"
+                      />
+                    </div>
+                  </div>
 
-            <div className="space-y-1.5">
-              <Label className="text-xs font-semibold">Valid To Date</Label>
-              <Input
-                type="date"
-                disabled={alwaysActive}
-                min={validFrom}
-                value={alwaysActive ? "" : validTo}
-                onChange={(e) => setValidTo(e.target.value)}
-                className="h-10 text-xs"
-              />
-            </div>
+                  <div className="p-4 rounded-xl border bg-emerald-500/5 border-emerald-500/30 space-y-3">
+                    <p className="text-xs font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wide flex items-center gap-1.5">
+                      <Gift className="h-4 w-4 text-emerald-500" />
+                      Customer Gets Free:
+                    </p>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-medium text-muted-foreground">
+                        Item
+                      </Label>
+                      <Select
+                        value={getItemId ?? undefined}
+                        onValueChange={setGetItemId}
+                      >
+                        <SelectTrigger className="h-9 text-xs">
+                          <SelectValue placeholder="Select free item..." />
+                        </SelectTrigger>
+                        <SelectContent className="max-h-60">
+                          {menuItems.map((item) => (
+                            <SelectItem
+                              key={item.id}
+                              value={item.id}
+                              className="text-xs"
+                            >
+                              {item.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-medium text-muted-foreground">
+                        Quantity (Free)
+                      </Label>
+                      <Input
+                        type="number"
+                        min={1}
+                        value={getQty}
+                        onChange={(e) =>
+                          setGetQty(Math.max(1, Number(e.target.value)))
+                        }
+                        className="h-9 text-xs font-bold text-emerald-600 dark:text-emerald-400"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
-            <div className="flex items-center justify-between p-3 rounded-xl border bg-muted/10 self-end">
-              <div>
-                <p className="text-xs font-bold text-foreground">Never Expires</p>
-                <p className="text-[11px] text-muted-foreground">Always active indefinitely</p>
-              </div>
-              <Switch checked={alwaysActive} onCheckedChange={setAlwaysActive} />
-            </div>
-          </div>
+          {/* SECTION 4: Choice Steps & Groups (option_combo only) */}
+          {dealType === "option_combo" ? (
+            <Card className="shadow-xs border-border/80 overflow-hidden">
+              <CardHeader className="pb-3 border-b bg-muted/20 flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle className="text-sm font-bold uppercase tracking-wider text-foreground flex items-center gap-2">
+                    <Layers className="h-4 w-4 text-primary" />
+                    4. Choice Steps & Groups ({optionGroups.length})
+                  </CardTitle>
+                  <CardDescription className="text-xs">
+                    Define pick-and-choose steps (e.g. Choose 1st Pizza, Choose Soft Drink)
+                  </CardDescription>
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={addOptionGroup}
+                  className="gradient-primary text-primary-foreground gap-1.5 text-xs font-bold shadow-xs"
+                >
+                  <Plus className="h-3.5 w-3.5" /> Add Step Group
+                </Button>
+              </CardHeader>
+              <CardContent className="p-4 space-y-4">
+                {optionGroups.length === 0 ? (
+                  <div className="text-center py-10 space-y-3 border border-dashed rounded-xl bg-muted/10">
+                    <Layers className="h-9 w-9 text-muted-foreground/40 mx-auto" />
+                    <div>
+                      <p className="text-sm font-bold text-foreground">
+                        No selection steps created yet
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Create choice groups so customers can pick their flavors
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={addOptionGroup}
+                      className="text-xs gap-1.5"
+                    >
+                      <Plus className="h-3.5 w-3.5" /> Add First Step Group
+                    </Button>
+                  </div>
+                ) : (
+                  optionGroups.map((group, gIdx) => {
+                    const activeCat = groupCategoryFilters[group.id] || "All";
+                    const displayItems = menuItems.filter(
+                      (item) =>
+                        activeCat === "All" || item.category?.name === activeCat
+                    );
 
-          {/* Time restriction (Happy Hour) */}
-          <div className="pt-2 border-t space-y-3">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs font-bold text-foreground flex items-center gap-1.5">
-                  <Clock className="h-3.5 w-3.5 text-primary" />
-                  Time Slot Restriction (Optional)
-                </p>
-                <p className="text-[11px] text-muted-foreground">
-                  Restrict deal to specific hours (e.g. Midnight Deal 11PM-3AM, or Happy Hour pricing)
-                </p>
-              </div>
-              <Switch checked={hasTimeRestriction} onCheckedChange={setHasTimeRestriction} />
-            </div>
+                    return (
+                      <div
+                        key={group.id}
+                        className="p-4 rounded-xl border bg-muted/10 space-y-3.5"
+                      >
+                        {/* Group Header */}
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b">
+                          <div className="flex items-center gap-2 flex-1">
+                            <span className="h-6 w-6 rounded-lg bg-primary/10 text-primary font-extrabold text-xs flex items-center justify-center shrink-0">
+                              #{gIdx + 1}
+                            </span>
+                            <Input
+                              value={group.label}
+                              onChange={(e) =>
+                                updateGroupLabel(group.id, e.target.value)
+                              }
+                              placeholder="e.g. Choose 1st Pizza Flavor"
+                              className="h-8 text-xs font-bold max-w-sm"
+                            />
+                          </div>
 
-            {hasTimeRestriction && (
-              <div className="grid grid-cols-2 gap-4 p-3 rounded-xl border bg-muted/15 max-w-md animate-in slide-in-from-top-1">
+                          <div className="flex items-center gap-3 self-end sm:self-auto">
+                            <div className="flex items-center gap-1.5">
+                              <Label className="text-[11px] text-muted-foreground font-medium whitespace-nowrap">
+                                Pick Exact:
+                              </Label>
+                              <Input
+                                type="number"
+                                min={1}
+                                value={group.maxSelections}
+                                onChange={(e) =>
+                                  updateGroupMax(group.id, Number(e.target.value))
+                                }
+                                className="h-8 w-16 text-xs text-center font-bold"
+                              />
+                            </div>
+
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => removeOptionGroup(group.id)}
+                              className="h-8 text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
+                            >
+                              <Trash2 className="h-3.5 w-3.5 mr-1" /> Remove
+                            </Button>
+                          </div>
+                        </div>
+
+                        {/* Category Filter for this group */}
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <p className="text-xs font-semibold text-muted-foreground">
+                              Select available items ({group.allowedItems.length}{" "}
+                              chosen):
+                            </p>
+                            <div className="flex gap-1 overflow-x-auto pb-1 max-w-[55%]">
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant={
+                                  activeCat === "All" ? "default" : "outline"
+                                }
+                                onClick={() =>
+                                  setGroupCategoryFilters((p) => ({
+                                    ...p,
+                                    [group.id]: "All",
+                                  }))
+                                }
+                                className="h-6 text-[10px] px-2"
+                              >
+                                All
+                              </Button>
+                              {foodCategories.map((c) => (
+                                <Button
+                                  key={c.id}
+                                  type="button"
+                                  size="sm"
+                                  variant={
+                                    activeCat === c.name ? "default" : "outline"
+                                  }
+                                  onClick={() =>
+                                    setGroupCategoryFilters((p) => ({
+                                      ...p,
+                                      [group.id]: c.name,
+                                    }))
+                                  }
+                                  className="h-6 text-[10px] px-2 whitespace-nowrap"
+                                >
+                                  {c.name}
+                                </Button>
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* Items Selectable Badges */}
+                          <div className="flex flex-wrap gap-1.5 p-3 rounded-lg border bg-background max-h-48 overflow-y-auto">
+                            {displayItems.map((item) => {
+                              const isSelected = group.allowedItems.includes(
+                                item.id
+                              );
+                              return (
+                                <button
+                                  key={item.id}
+                                  type="button"
+                                  onClick={() =>
+                                    toggleItemInGroup(group.id, item.id)
+                                  }
+                                  className={cn(
+                                    "inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-all cursor-pointer select-none",
+                                    isSelected
+                                      ? "bg-primary/10 border-primary text-primary font-bold ring-1 ring-primary"
+                                      : "bg-muted/30 border-border text-foreground hover:border-primary/40 hover:bg-muted/60"
+                                  )}
+                                >
+                                  {isSelected ? (
+                                    <CheckCircle2 className="h-3.5 w-3.5 text-primary shrink-0" />
+                                  ) : (
+                                    <span className="h-3.5 w-3.5 rounded-full border border-muted-foreground/40 shrink-0" />
+                                  )}
+                                  <span>{item.name}</span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </CardContent>
+            </Card>
+          ) : null}
+
+          {/* SECTION 5: Validity & Schedule */}
+          <Card className="shadow-xs border-border/80 overflow-hidden">
+            <CardHeader className="pb-3 border-b bg-muted/20">
+              <CardTitle className="text-sm font-bold uppercase tracking-wider text-foreground flex items-center gap-2">
+                <Calendar className="h-4 w-4 text-primary" />
+                5. Validity Dates & Time Restrictions
+              </CardTitle>
+              <CardDescription className="text-xs">
+                Configure calendar date validity and optional happy-hour time windows
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="p-5 space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="space-y-1.5">
-                  <Label className="text-xs font-medium text-muted-foreground">Start Time</Label>
+                  <Label className="text-xs font-semibold">Valid From Date</Label>
                   <Input
-                    type="time"
-                    value={startTime}
-                    onChange={(e) => setStartTime(e.target.value)}
-                    className="h-9 text-xs"
+                    type="date"
+                    value={validFrom}
+                    onChange={(e) => setValidFrom(e.target.value)}
+                    className="h-10 text-xs"
                   />
                 </div>
+
                 <div className="space-y-1.5">
-                  <Label className="text-xs font-medium text-muted-foreground">End Time</Label>
+                  <Label className="text-xs font-semibold">Valid To Date</Label>
                   <Input
-                    type="time"
-                    value={endTime}
-                    onChange={(e) => setEndTime(e.target.value)}
-                    className="h-9 text-xs"
+                    type="date"
+                    disabled={alwaysActive}
+                    min={validFrom}
+                    value={alwaysActive ? "" : validTo}
+                    onChange={(e) => setValidTo(e.target.value)}
+                    className="h-10 text-xs"
+                  />
+                </div>
+
+                <div className="flex items-center justify-between p-3 rounded-xl border bg-muted/10 self-end">
+                  <div>
+                    <p className="text-xs font-bold text-foreground">
+                      Never Expires
+                    </p>
+                    <p className="text-[11px] text-muted-foreground">
+                      Always active indefinitely
+                    </p>
+                  </div>
+                  <Switch
+                    checked={alwaysActive}
+                    onCheckedChange={setAlwaysActive}
                   />
                 </div>
               </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
 
-      {/* Sticky Bottom Bar */}
-      <div className="flex items-center justify-between gap-3 pt-4 border-t">
-        <Button variant="outline" onClick={() => navigate("/deals")}>
-          Cancel
-        </Button>
-        <Button
-          className="gradient-primary text-primary-foreground font-semibold px-6 shadow-xs"
-          onClick={handleSave}
-          disabled={saving}
-        >
-          {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Check className="h-4 w-4 mr-2" />}
-          {isEdit ? "Update Deal" : "Save Deal"}
-        </Button>
+              {/* Time restriction (Happy Hour) */}
+              <div className="pt-2 border-t space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                      <Clock className="h-3.5 w-3.5 text-primary" />
+                      Time Slot Restriction (Happy Hour / Midnight Deal)
+                    </p>
+                    <p className="text-[11px] text-muted-foreground">
+                      Restrict deal to specific hours (e.g. Midnight 11PM–3AM, or 4PM–7PM)
+                    </p>
+                  </div>
+                  <Switch
+                    checked={hasTimeRestriction}
+                    onCheckedChange={setHasTimeRestriction}
+                  />
+                </div>
+
+                {hasTimeRestriction && (
+                  <div className="grid grid-cols-2 gap-4 p-3 rounded-xl border bg-muted/15 max-w-md animate-in slide-in-from-top-1">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-medium text-muted-foreground">
+                        Start Time
+                      </Label>
+                      <Input
+                        type="time"
+                        value={startTime}
+                        onChange={(e) => setStartTime(e.target.value)}
+                        className="h-9 text-xs"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-medium text-muted-foreground">
+                        End Time
+                      </Label>
+                      <Input
+                        type="time"
+                        value={endTime}
+                        onChange={(e) => setEndTime(e.target.value)}
+                        className="h-9 text-xs"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
       </div>
     </div>
   );

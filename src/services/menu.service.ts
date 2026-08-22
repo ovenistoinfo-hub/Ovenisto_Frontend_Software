@@ -20,6 +20,7 @@ export interface MenuItemVariant {
   takeAwayPrice: number | null;
   deliveryPrice: number | null;
   foodpandaPrice: number | null;
+  costPrice: number;
   displayOrder: number;
 }
 
@@ -34,6 +35,7 @@ export interface MenuItemRecord {
   takeAwayPrice: number | null;
   deliveryPrice: number | null;
   foodpandaPrice: number | null;
+  costPrice: number;
   available: boolean;
   image: string | null;
   tags: string[];

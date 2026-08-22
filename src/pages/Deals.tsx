@@ -151,9 +151,9 @@ const Deals = () => {
               {(
                 [
                   { key: "All", label: "All Deals" },
-                  { key: "Active", label: "🟢 Active" },
-                  { key: "Fixed", label: "📦 Fixed Bundles" },
-                  { key: "Custom", label: "🎯 Customizable" },
+                  { key: "Active", label: "Active" },
+                  { key: "Fixed", label: "Fixed Bundles" },
+                  { key: "Custom", label: "Customizable" },
                   { key: "Inactive", label: "Draft / Inactive" },
                   { key: "Expired", label: "Expired" },
                 ] as const
