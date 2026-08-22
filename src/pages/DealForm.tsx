@@ -41,6 +41,9 @@ interface OptionGroupRow {
   label: string;
   maxSelections: number;
   choices: OptionChoiceRow[];
+  /** False while the label still tracks the step's contents; set once an admin
+   *  types their own wording, which then wins over the derived text. */
+  labelEdited: boolean;
 }
 
 const PERCENT_PRESETS = [10, 15, 20, 25, 30, 50];
@@ -181,6 +184,9 @@ const DealForm = () => {
           id: g.id,
           label: g.label,
           maxSelections: g.maxSelections,
+          // A saved deal's wording is the admin's — keep it verbatim rather than
+          // re-deriving over it.
+          labelEdited: true,
           // categoryId stays empty here — for a row that already has an item, the
           // category shown is derived from that item at render time, so this never
           // races the menuItems query.
@@ -464,9 +470,10 @@ const DealForm = () => {
       ...prev,
       {
         id: crypto.randomUUID(),
-        label: `Step ${prev.length + 1}: Choose Item`,
+        label: "",
         choices: [],
         maxSelections: 1,
+        labelEdited: false,
       },
     ]);
   };
@@ -477,7 +484,7 @@ const DealForm = () => {
 
   const updateGroupLabel = (groupId: string, label: string) => {
     setOptionGroups((prev) =>
-      prev.map((g) => (g.id === groupId ? { ...g, label } : g))
+      prev.map((g) => (g.id === groupId ? { ...g, label, labelEdited: true } : g))
     );
   };
 
@@ -563,6 +570,12 @@ const DealForm = () => {
       : `Choose any ${picks} of ${group.choices.length}`;
   };
 
+  /** What this step is actually called — the admin's own wording once they've
+   *  typed one, otherwise the description derived from its contents. This is the
+   *  single string shown in the label field, the preview, and saved to the deal. */
+  const groupLabel = (group: OptionGroupRow): string =>
+    group.labelEdited && group.label.trim() ? group.label : describeGroupPicks(group);
+
   // Percentage Scope Helpers
   const toggleApplicableItem = (itemId: string) => {
     setApplicableItemIds((prev) =>
@@ -608,12 +621,12 @@ const DealForm = () => {
       }
       const emptyGroup = optionGroups.find((g) => g.choices.length === 0);
       if (emptyGroup) {
-        toast.error(`Please select at least 1 item for "${emptyGroup.label}"`);
+        toast.error(`Please select at least 1 item for "${groupLabel(emptyGroup)}"`);
         return;
       }
       const incompleteGroup = optionGroups.find((g) => g.choices.some((c) => !c.itemId));
       if (incompleteGroup) {
-        toast.error(`Pick a menu item for every choice row in "${incompleteGroup.label}"`);
+        toast.error(`Pick a menu item for every choice row in "${groupLabel(incompleteGroup)}"`);
         return;
       }
       const notEnoughGroup = optionGroups.find(
@@ -621,7 +634,7 @@ const DealForm = () => {
       );
       if (notEnoughGroup) {
         toast.error(
-          `"${notEnoughGroup.label}" needs at least ${notEnoughGroup.maxSelections} selectable item(s)`
+          `"${groupLabel(notEnoughGroup)}" needs at least ${notEnoughGroup.maxSelections} selectable item(s)`
         );
         return;
       }
@@ -687,7 +700,7 @@ const DealForm = () => {
         optionGroups:
           dealType === "option_combo"
             ? optionGroups.map((g, idx) => ({
-                label: g.label,
+                label: groupLabel(g),
                 minSelections: g.maxSelections,
                 maxSelections: g.maxSelections,
                 displayOrder: idx,
@@ -1152,7 +1165,7 @@ const DealForm = () => {
                           key={i}
                           className="text-[11px] text-foreground/90 font-medium truncate"
                         >
-                          • {describeGroupPicks(g)}
+                          • {groupLabel(g)}
                         </p>
                       ))
                     )
@@ -1483,7 +1496,7 @@ const DealForm = () => {
                               #{gIdx + 1}
                             </span>
                             <Input
-                              value={group.label}
+                              value={groupLabel(group)}
                               onChange={(e) => updateGroupLabel(group.id, e.target.value)}
                               placeholder="e.g. Choose 1st Pizza Flavor"
                               className="h-8 text-xs font-bold max-w-sm"
