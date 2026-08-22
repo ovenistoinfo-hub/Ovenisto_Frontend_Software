@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Tag, Plus, Search, Pencil, Trash2, Package, Layers, Sparkles, Clock, Calendar, Loader2 } from "lucide-react";
+import { Tag, Plus, Search, Pencil, Trash2, Package, Layers, Sparkles, Clock, Calendar, Loader2, Percent, Gift } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { TablePagination, paginate } from "@/components/TablePagination";
 import { dealService, type DealRecord } from "@/services/deal.service";
@@ -76,20 +76,38 @@ const Deals = () => {
     }
   };
 
+  const itemName = (id: string) => menuItems.find((m) => m.id === id)?.name || "Item";
+
   // Format included items preview summary
   const getIncludedItemsSummary = (deal: DealRecord) => {
     if (deal.type === "combo" && deal.components.length > 0) {
       return deal.components
-        .map((c) => {
-          const item = menuItems.find((m) => m.id === c.menuItemId);
-          return `${c.qty}x ${item?.name || "Item"}`;
-        })
+        .map((c) => `${c.qty}x ${itemName(c.menuItemId)}`)
         .join(", ");
     }
     if (deal.type === "option_combo" && deal.optionGroups.length > 0) {
       return `${deal.optionGroups.length} Choice Step(s): ${deal.optionGroups.map((g) => g.label).join(" + ")}`;
     }
+    if (deal.type === "percentage" || deal.type === "time_based") {
+      const items = deal.applicableItems.map(itemName);
+      const scope = items.length > 0 ? items.join(", ") : `${deal.applicableCategories.length} categor${deal.applicableCategories.length === 1 ? "y" : "ies"}`;
+      return `${deal.discountPercent}% off: ${scope}`;
+    }
+    if (deal.type === "buy_x_get_y" && deal.buyItemId && deal.getItemId) {
+      return `Buy ${deal.buyQty} ${itemName(deal.buyItemId)} → Get ${deal.getQty} ${itemName(deal.getItemId)} Free`;
+    }
     return deal.description || "Promotional combo deal";
+  };
+
+  // Format the offer-price column for any deal type
+  const getValueDisplay = (deal: DealRecord) => {
+    if (deal.type === "combo" || deal.type === "option_combo") {
+      return deal.price != null ? `Rs. ${deal.price.toLocaleString()}` : "—";
+    }
+    if (deal.type === "percentage" || deal.type === "time_based") {
+      return `${deal.discountPercent}% OFF`;
+    }
+    return "Free Item";
   };
 
   return (
@@ -202,7 +220,15 @@ const Deals = () => {
                   </TableHeader>
                   <TableBody>
                     {paginate(filtered, page, 10).map((deal, i) => {
-                      const isOption = deal.type === "option_combo";
+                      const formatBadge: Record<DealRecord["type"], { icon: typeof Package; label: string; className: string }> = {
+                        combo: { icon: Package, label: "Fixed Bundle", className: "bg-blue-500/15 text-blue-600 dark:text-blue-400 border-blue-500/30" },
+                        option_combo: { icon: Layers, label: "Customizable", className: "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30" },
+                        percentage: { icon: Percent, label: "Percentage Off", className: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30" },
+                        time_based: { icon: Clock, label: "Time-Based", className: "bg-purple-500/15 text-purple-600 dark:text-purple-400 border-purple-500/30" },
+                        buy_x_get_y: { icon: Gift, label: "Buy X Get Y", className: "bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/30" },
+                      };
+                      const badge = formatBadge[deal.type];
+                      const BadgeIcon = badge.icon;
 
                       return (
                         <TableRow key={deal.id} className="hover:bg-muted/20 transition-colors">
@@ -221,7 +247,7 @@ const Deals = () => {
                                 />
                               ) : (
                                 <div className="h-10 w-10 rounded-lg bg-primary/10 text-primary flex items-center justify-center text-xs font-bold shrink-0 border border-primary/20">
-                                  {isOption ? <Layers className="h-5 w-5" /> : <Package className="h-5 w-5" />}
+                                  <BadgeIcon className="h-5 w-5" />
                                 </div>
                               )}
                               <div className="space-y-0.5">
@@ -244,15 +270,9 @@ const Deals = () => {
 
                           {/* Format Badge */}
                           <TableCell>
-                            {isOption ? (
-                              <Badge variant="secondary" className="bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30 text-[11px] gap-1">
-                                <Layers className="h-3 w-3" /> Customizable
-                              </Badge>
-                            ) : (
-                              <Badge variant="secondary" className="bg-blue-500/15 text-blue-600 dark:text-blue-400 border-blue-500/30 text-[11px] gap-1">
-                                <Package className="h-3 w-3" /> Fixed Bundle
-                              </Badge>
-                            )}
+                            <Badge variant="secondary" className={`${badge.className} text-[11px] gap-1`}>
+                              <BadgeIcon className="h-3 w-3" /> {badge.label}
+                            </Badge>
                           </TableCell>
 
                           {/* Included Items Summary */}
@@ -266,7 +286,7 @@ const Deals = () => {
                           <TableCell className="text-right">
                             <div className="space-y-0.5">
                               <p className="font-mono font-extrabold text-sm text-foreground">
-                                Rs. {deal.price.toLocaleString()}
+                                {getValueDisplay(deal)}
                               </p>
                               {deal.dineInPrice || deal.deliveryPrice ? (
                                 <div className="flex items-center justify-end gap-1 text-[10px] text-muted-foreground">

@@ -29,14 +29,16 @@ export interface DealOptionGroupRecord {
   options: DealOptionItemRecord[];
 }
 
+export type DealTypeValue = 'combo' | 'option_combo' | 'percentage' | 'buy_x_get_y' | 'time_based';
+
 export interface DealRecord {
   id: string;
   name: string;
   code: string | null;
   description: string | null;
   image: string | null;
-  type: 'combo' | 'option_combo';
-  price: number;
+  type: DealTypeValue;
+  price: number | null;
   dineInPrice: number | null;
   takeAwayPrice: number | null;
   deliveryPrice: number | null;
@@ -52,6 +54,15 @@ export interface DealRecord {
   updatedAt: string;
   components: DealComponentRecord[];
   optionGroups: DealOptionGroupRecord[];
+  // percentage / time_based
+  discountPercent: number | null;
+  applicableItems: string[];
+  applicableCategories: string[];
+  // buy_x_get_y
+  buyItemId: string | null;
+  buyQty: number | null;
+  getItemId: string | null;
+  getQty: number | null;
 }
 
 export interface DealComponentInput {
@@ -81,8 +92,8 @@ export interface DealInput {
   code?: string | null;
   description?: string | null;
   image?: string | null;
-  type: 'combo' | 'option_combo';
-  price: number;
+  type: DealTypeValue;
+  price?: number | null;
   dineInPrice?: number | null;
   takeAwayPrice?: number | null;
   deliveryPrice?: number | null;
@@ -95,6 +106,15 @@ export interface DealInput {
   endTime?: string | null;
   components?: DealComponentInput[];
   optionGroups?: DealOptionGroupInput[];
+  // percentage / time_based
+  discountPercent?: number | null;
+  applicableItems?: string[];
+  applicableCategories?: string[];
+  // buy_x_get_y
+  buyItemId?: string | null;
+  buyQty?: number | null;
+  getItemId?: string | null;
+  getQty?: number | null;
 }
 
 export const dealService = {

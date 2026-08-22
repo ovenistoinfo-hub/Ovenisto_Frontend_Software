@@ -12,12 +12,12 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
 import {
   Tag, Plus, Trash2, ArrowLeft, Loader2, Upload, Sparkles,
-  Package, Check, Layers, Calendar, CheckCircle2, Clock
+  Package, Check, Layers, Calendar, CheckCircle2, Clock, Percent, Gift
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { getAccessToken } from "@/services/api";
-import { dealService, type DealInput } from "@/services/deal.service";
+import { dealService, type DealInput, type DealTypeValue } from "@/services/deal.service";
 import { menuService } from "@/services/menu.service";
 
 interface ComboItemRow {
@@ -62,10 +62,10 @@ const DealForm = () => {
   const [code, setCode] = useState("");
   const [description, setDescription] = useState("");
   const [imageUrl, setImageUrl] = useState("");
-  const [dealType, setDealType] = useState<"combo" | "option_combo">("combo");
+  const [dealType, setDealType] = useState<DealTypeValue>("combo");
   const [isActive, setIsActive] = useState(true);
 
-  // Pricing
+  // Pricing (combo / option_combo)
   const [dealPrice, setDealPrice] = useState<number>(0);
   const [dineInPrice, setDineInPrice] = useState<number | null>(null);
   const [takeAwayPrice, setTakeAwayPrice] = useState<number | null>(null);
@@ -78,6 +78,18 @@ const DealForm = () => {
   // Customizable Option Groups
   const [optionGroups, setOptionGroups] = useState<OptionGroupRow[]>([]);
   const [groupCategoryFilters, setGroupCategoryFilters] = useState<Record<string, string>>({});
+
+  // Percentage / Time-Based
+  const [discountPercent, setDiscountPercent] = useState<number>(10);
+  const [applicableItemIds, setApplicableItemIds] = useState<string[]>([]);
+  const [applicableCategoryIds, setApplicableCategoryIds] = useState<string[]>([]);
+  const [scopeCategoryFilter, setScopeCategoryFilter] = useState("All");
+
+  // Buy X Get Y
+  const [buyItemId, setBuyItemId] = useState<string | null>(null);
+  const [buyQty, setBuyQty] = useState<number>(1);
+  const [getItemId, setGetItemId] = useState<string | null>(null);
+  const [getQty, setGetQty] = useState<number>(1);
 
   // Validity & Schedule
   const todayStr = new Date().toISOString().split("T")[0];
@@ -128,6 +140,14 @@ const DealForm = () => {
       })));
     }
 
+    setDiscountPercent(existingDeal.discountPercent ?? 10);
+    setApplicableItemIds(existingDeal.applicableItems ?? []);
+    setApplicableCategoryIds(existingDeal.applicableCategories ?? []);
+    setBuyItemId(existingDeal.buyItemId ?? null);
+    setBuyQty(existingDeal.buyQty ?? 1);
+    setGetItemId(existingDeal.getItemId ?? null);
+    setGetQty(existingDeal.getQty ?? 1);
+
     setValidFrom(existingDeal.validFrom.slice(0, 10) || todayStr);
     if (!existingDeal.validTo) {
       setAlwaysActive(true);
@@ -144,6 +164,11 @@ const DealForm = () => {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isEdit, existingDeal, loadingDeal]);
+
+  // Time-Based deals always need a window — force the toggle on for that type.
+  useEffect(() => {
+    if (dealType === "time_based") setHasTimeRestriction(true);
+  }, [dealType]);
 
   // ── Image Upload ──
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -274,19 +299,35 @@ const DealForm = () => {
     );
   };
 
+  // ── Percentage / Time-Based Discount Scope Helpers ──
+  const toggleApplicableItem = (itemId: string) => {
+    setApplicableItemIds((prev) =>
+      prev.includes(itemId) ? prev.filter((id) => id !== itemId) : [...prev, itemId]
+    );
+  };
+
+  const toggleApplicableCategory = (categoryId: string) => {
+    setApplicableCategoryIds((prev) =>
+      prev.includes(categoryId) ? prev.filter((id) => id !== categoryId) : [...prev, categoryId]
+    );
+  };
+
   // ── Save Deal ──
   const handleSave = async () => {
     if (!name.trim()) {
       toast.error("Please enter a Deal Name");
       return;
     }
-    if (!dealPrice || dealPrice <= 0) {
-      toast.error("Please specify a valid Deal Price");
-      return;
-    }
     if (!alwaysActive && validTo && validTo < validFrom) {
       toast.error("Valid To date cannot be before Valid From date");
       return;
+    }
+
+    if (dealType === "combo" || dealType === "option_combo") {
+      if (!dealPrice || dealPrice <= 0) {
+        toast.error("Please specify a valid Deal Price");
+        return;
+      }
     }
 
     if (dealType === "combo") {
@@ -309,6 +350,24 @@ const DealForm = () => {
         toast.error(`"${notEnoughGroup.label}" needs at least ${notEnoughGroup.maxSelections} selectable item(s)`);
         return;
       }
+    } else if (dealType === "percentage" || dealType === "time_based") {
+      if (!discountPercent || discountPercent <= 0 || discountPercent > 100) {
+        toast.error("Please specify a discount percentage between 1 and 100");
+        return;
+      }
+      if (applicableItemIds.length === 0 && applicableCategoryIds.length === 0) {
+        toast.error("Select at least one item or category this discount applies to");
+        return;
+      }
+      if (dealType === "time_based" && (!startTime || !endTime)) {
+        toast.error("A Time-Based deal needs a start and end time");
+        return;
+      }
+    } else if (dealType === "buy_x_get_y") {
+      if (!buyItemId) { toast.error('Select the "Buy" item'); return; }
+      if (!buyQty || buyQty < 1) { toast.error('Enter a valid "Buy" quantity'); return; }
+      if (!getItemId) { toast.error('Select the "Get" item'); return; }
+      if (!getQty || getQty < 1) { toast.error('Enter a valid "Get" quantity'); return; }
     }
 
     setSaving(true);
@@ -319,7 +378,7 @@ const DealForm = () => {
         description: description.trim() || null,
         image: imageUrl || null,
         type: dealType,
-        price: Number(dealPrice),
+        price: (dealType === "combo" || dealType === "option_combo") ? Number(dealPrice) : null,
         dineInPrice: dineInPrice != null ? Number(dineInPrice) : null,
         takeAwayPrice: takeAwayPrice != null ? Number(takeAwayPrice) : null,
         deliveryPrice: deliveryPrice != null ? Number(deliveryPrice) : null,
@@ -353,6 +412,13 @@ const DealForm = () => {
               })),
             }))
           : [],
+        discountPercent: (dealType === "percentage" || dealType === "time_based") ? Number(discountPercent) : null,
+        applicableItems: (dealType === "percentage" || dealType === "time_based") ? applicableItemIds : [],
+        applicableCategories: (dealType === "percentage" || dealType === "time_based") ? applicableCategoryIds : [],
+        buyItemId: dealType === "buy_x_get_y" ? buyItemId : null,
+        buyQty: dealType === "buy_x_get_y" ? Number(buyQty) : null,
+        getItemId: dealType === "buy_x_get_y" ? getItemId : null,
+        getQty: dealType === "buy_x_get_y" ? Number(getQty) : null,
       };
 
       if (isEdit && id) {
@@ -520,75 +586,58 @@ const DealForm = () => {
           </CardDescription>
         </CardHeader>
         <CardContent className="p-5">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-            {/* Type 1: Fixed Bundle */}
-            <button
-              type="button"
-              onClick={() => setDealType("combo")}
-              className={cn(
-                "p-4 rounded-xl border-2 text-left transition-all relative flex flex-col justify-between space-y-2 select-none cursor-pointer",
-                dealType === "combo"
-                  ? "border-primary bg-primary/[0.04] shadow-xs"
-                  : "border-border hover:border-primary/40 hover:bg-muted/30"
-              )}
-            >
-              <div className="flex items-start justify-between">
-                <div className="flex items-center gap-2.5">
-                  <div className={cn("p-2 rounded-lg", dealType === "combo" ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>
-                    <Package className="h-5 w-5" />
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+            {(
+              [
+                { type: "combo" as const, icon: Package, title: "Fixed Bundle Combo", subtitle: "Pre-selected items at a bundle price", example: "1 Large Chicken Fajita Pizza + 1 Loaded Fries + 1.5L Drink for Rs. 1,499." },
+                { type: "option_combo" as const, icon: Layers, title: "Customizable Combo (Pick & Choose)", subtitle: "Customer chooses from defined steps", example: "Choose any 2 Pizza flavors + 1 Drink flavor for Rs. 999." },
+                { type: "percentage" as const, icon: Percent, title: "Percentage Discount", subtitle: "% off selected items or categories", example: "20% off all Beverages, all the time." },
+                { type: "time_based" as const, icon: Clock, title: "Time-Based Discount", subtitle: "% off, only during a set time window", example: "15% off Pizzas, 2pm–5pm daily." },
+                { type: "buy_x_get_y" as const, icon: Gift, title: "Buy X Get Y", subtitle: "Buy N of an item, get M free", example: "Buy 2 Burgers, get 1 Burger free." },
+              ] as const
+            ).map((opt) => {
+              const Icon = opt.icon;
+              const selected = dealType === opt.type;
+              return (
+                <button
+                  key={opt.type}
+                  type="button"
+                  onClick={() => setDealType(opt.type)}
+                  className={cn(
+                    "p-4 rounded-xl border-2 text-left transition-all relative flex flex-col justify-between space-y-2 select-none cursor-pointer",
+                    selected
+                      ? "border-primary bg-primary/[0.04] shadow-xs"
+                      : "border-border hover:border-primary/40 hover:bg-muted/30"
+                  )}
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <div className={cn("p-2 rounded-lg", selected ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>
+                        <Icon className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <p className="font-bold text-sm text-foreground">{opt.title}</p>
+                        <p className="text-[11px] text-muted-foreground">{opt.subtitle}</p>
+                      </div>
+                    </div>
+                    {selected && (
+                      <span className="h-5 w-5 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-[10px] shrink-0">
+                        <Check className="h-3.5 w-3.5 stroke-[3]" />
+                      </span>
+                    )}
                   </div>
-                  <div>
-                    <p className="font-bold text-sm text-foreground">Fixed Bundle Combo</p>
-                    <p className="text-[11px] text-muted-foreground">Pre-selected items at a bundle price</p>
-                  </div>
-                </div>
-                {dealType === "combo" && (
-                  <span className="h-5 w-5 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-[10px]">
-                    <Check className="h-3.5 w-3.5 stroke-[3]" />
-                  </span>
-                )}
-              </div>
-              <p className="text-xs text-muted-foreground bg-background/80 p-2 rounded-lg border border-border/60">
-                <strong>Example:</strong> 1 Large Chicken Fajita Pizza + 1 Loaded Fries + 1.5L Drink for Rs. 1,499.
-              </p>
-            </button>
-
-            {/* Type 2: Customizable Combo */}
-            <button
-              type="button"
-              onClick={() => setDealType("option_combo")}
-              className={cn(
-                "p-4 rounded-xl border-2 text-left transition-all relative flex flex-col justify-between space-y-2 select-none cursor-pointer",
-                dealType === "option_combo"
-                  ? "border-primary bg-primary/[0.04] shadow-xs"
-                  : "border-border hover:border-primary/40 hover:bg-muted/30"
-              )}
-            >
-              <div className="flex items-start justify-between">
-                <div className="flex items-center gap-2.5">
-                  <div className={cn("p-2 rounded-lg", dealType === "option_combo" ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>
-                    <Layers className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <p className="font-bold text-sm text-foreground">Customizable Combo (Pick & Choose)</p>
-                    <p className="text-[11px] text-muted-foreground">Customer chooses from defined steps</p>
-                  </div>
-                </div>
-                {dealType === "option_combo" && (
-                  <span className="h-5 w-5 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-[10px]">
-                    <Check className="h-3.5 w-3.5 stroke-[3]" />
-                  </span>
-                )}
-              </div>
-              <p className="text-xs text-muted-foreground bg-background/80 p-2 rounded-lg border border-border/60">
-                <strong>Example:</strong> Choose any 2 Pizza flavors + 1 Drink flavor for Rs. 999.
-              </p>
-            </button>
+                  <p className="text-xs text-muted-foreground bg-background/80 p-2 rounded-lg border border-border/60">
+                    <strong>Example:</strong> {opt.example}
+                  </p>
+                </button>
+              );
+            })}
           </div>
         </CardContent>
       </Card>
 
-      {/* ── SECTION 3: Pricing & Value Calculator ── */}
+      {/* ── SECTION 3: Pricing & Value Calculator (combo / option_combo) ── */}
+      {(dealType === "combo" || dealType === "option_combo") && (
       <Card className="shadow-xs border-border/80">
         <CardHeader className="pb-3 border-b bg-muted/20">
           <CardTitle className="text-sm font-bold uppercase tracking-wider text-foreground flex items-center gap-2">
@@ -691,8 +740,201 @@ const DealForm = () => {
           )}
         </CardContent>
       </Card>
+      )}
 
-      {/* ── SECTION 4: Component Items / Groups ── */}
+      {/* ── SECTION 3B: Discount Scope (percentage / time_based) ── */}
+      {(dealType === "percentage" || dealType === "time_based") && (
+        <Card className="shadow-xs border-border/80">
+          <CardHeader className="pb-3 border-b bg-muted/20">
+            <CardTitle className="text-sm font-bold uppercase tracking-wider text-foreground flex items-center gap-2">
+              <Percent className="h-4 w-4 text-primary" />
+              3. Discount & Scope
+            </CardTitle>
+            <CardDescription className="text-xs">
+              How much to discount, and which items or categories it applies to
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="p-5 space-y-5">
+            <div className="max-w-xs space-y-1.5">
+              <Label className="text-xs font-bold text-primary">Discount Percentage (%) *</Label>
+              <Input
+                type="number"
+                min={1}
+                max={100}
+                placeholder="0"
+                value={discountPercent || ""}
+                onChange={(e) => setDiscountPercent(Math.min(100, Math.max(0, Number(e.target.value))))}
+                className="h-10 text-sm font-extrabold border-primary/50 bg-primary/[0.02]"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-semibold text-muted-foreground">
+                  Applies to ({applicableItemIds.length} item{applicableItemIds.length === 1 ? "" : "s"}, {applicableCategoryIds.length} categor{applicableCategoryIds.length === 1 ? "y" : "ies"} selected):
+                </p>
+                <div className="flex gap-1 overflow-x-auto pb-1 max-w-[50%]">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={scopeCategoryFilter === "All" ? "default" : "outline"}
+                    onClick={() => setScopeCategoryFilter("All")}
+                    className="h-6 text-[10px] px-2"
+                  >
+                    All Items
+                  </Button>
+                  {foodCategories.map((c) => (
+                    <Button
+                      key={c.id}
+                      type="button"
+                      size="sm"
+                      variant={scopeCategoryFilter === c.name ? "default" : "outline"}
+                      onClick={() => setScopeCategoryFilter(c.name)}
+                      className="h-6 text-[10px] px-2 whitespace-nowrap"
+                    >
+                      {c.name}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+
+              <p className="text-[11px] text-muted-foreground">
+                Toggle whole categories, or pick individual items below. Either qualifies an item for the discount.
+              </p>
+
+              {/* Category toggles */}
+              <div className="flex flex-wrap gap-1.5">
+                {foodCategories.map((c) => {
+                  const selected = applicableCategoryIds.includes(c.id);
+                  return (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => toggleApplicableCategory(c.id)}
+                      className={cn(
+                        "inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold border transition-all cursor-pointer select-none",
+                        selected
+                          ? "bg-primary text-primary-foreground border-primary"
+                          : "bg-muted/30 border-border text-foreground hover:border-primary/40 hover:bg-muted/60"
+                      )}
+                    >
+                      {selected ? <CheckCircle2 className="h-3.5 w-3.5 shrink-0" /> : <Layers className="h-3.5 w-3.5 shrink-0 opacity-50" />}
+                      <span>{c.name} (whole category)</span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Individual item toggles */}
+              <div className="flex flex-wrap gap-1.5 p-3 rounded-lg border bg-background max-h-48 overflow-y-auto">
+                {menuItems
+                  .filter((item) => scopeCategoryFilter === "All" || item.category?.name === scopeCategoryFilter)
+                  .map((item) => {
+                    const isSelected = applicableItemIds.includes(item.id);
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => toggleApplicableItem(item.id)}
+                        className={cn(
+                          "inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-all cursor-pointer select-none",
+                          isSelected
+                            ? "bg-primary/10 border-primary text-primary font-bold ring-1 ring-primary"
+                            : "bg-muted/30 border-border text-foreground hover:border-primary/40 hover:bg-muted/60"
+                        )}
+                      >
+                        {isSelected ? (
+                          <CheckCircle2 className="h-3.5 w-3.5 text-primary shrink-0" />
+                        ) : (
+                          <span className="h-3.5 w-3.5 rounded-full border border-muted-foreground/40 shrink-0" />
+                        )}
+                        <span>{item.name}</span>
+                      </button>
+                    );
+                  })}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ── SECTION 3C: Buy X Get Y Configuration ── */}
+      {dealType === "buy_x_get_y" && (
+        <Card className="shadow-xs border-border/80">
+          <CardHeader className="pb-3 border-b bg-muted/20">
+            <CardTitle className="text-sm font-bold uppercase tracking-wider text-foreground flex items-center gap-2">
+              <Gift className="h-4 w-4 text-primary" />
+              3. Buy X Get Y Configuration
+            </CardTitle>
+            <CardDescription className="text-xs">
+              What the customer buys, and what they get free
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="p-5">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="p-4 rounded-xl border bg-muted/10 space-y-3">
+                <p className="text-xs font-bold text-foreground uppercase tracking-wide">Customer Buys</p>
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium text-muted-foreground">Item</Label>
+                  <Select value={buyItemId ?? undefined} onValueChange={setBuyItemId}>
+                    <SelectTrigger className="h-9 text-xs">
+                      <SelectValue placeholder="Select item..." />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-60">
+                      {menuItems.map((item) => (
+                        <SelectItem key={item.id} value={item.id} className="text-xs">
+                          {item.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium text-muted-foreground">Quantity</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    value={buyQty}
+                    onChange={(e) => setBuyQty(Math.max(1, Number(e.target.value)))}
+                    className="h-9 text-xs font-bold"
+                  />
+                </div>
+              </div>
+
+              <div className="p-4 rounded-xl border bg-emerald-500/5 border-emerald-500/30 space-y-3">
+                <p className="text-xs font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wide">Customer Gets Free</p>
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium text-muted-foreground">Item</Label>
+                  <Select value={getItemId ?? undefined} onValueChange={setGetItemId}>
+                    <SelectTrigger className="h-9 text-xs">
+                      <SelectValue placeholder="Select item..." />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-60">
+                      {menuItems.map((item) => (
+                        <SelectItem key={item.id} value={item.id} className="text-xs">
+                          {item.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium text-muted-foreground">Quantity (Free)</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    value={getQty}
+                    onChange={(e) => setGetQty(Math.max(1, Number(e.target.value)))}
+                    className="h-9 text-xs font-bold"
+                  />
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ── SECTION 4: Component Items / Groups (combo / option_combo only) ── */}
       {dealType === "combo" ? (
         /* MODE A: Fixed Bundle Items Table */
         <Card className="shadow-xs border-border/80">
@@ -845,7 +1087,7 @@ const DealForm = () => {
             )}
           </CardContent>
         </Card>
-      ) : (
+      ) : dealType === "option_combo" ? (
         /* MODE B: Customizable Pick & Choose Groups */
         <Card className="shadow-xs border-border/80">
           <CardHeader className="pb-3 border-b bg-muted/20 flex flex-row items-center justify-between">
@@ -996,7 +1238,7 @@ const DealForm = () => {
             )}
           </CardContent>
         </Card>
-      )}
+      ) : null}
 
       {/* ── SECTION 5: Validity & Schedule ── */}
       <Card className="shadow-xs border-border/80">
@@ -1048,11 +1290,19 @@ const DealForm = () => {
               <div>
                 <p className="text-xs font-bold text-foreground flex items-center gap-1.5">
                   <Clock className="h-3.5 w-3.5 text-primary" />
-                  Time Slot Restriction (Optional)
+                  Time Slot Restriction {dealType === "time_based" ? "(Required)" : "(Optional)"}
                 </p>
-                <p className="text-[11px] text-muted-foreground">Restrict deal to specific hours (e.g. Midnight Deal 11PM-3AM)</p>
+                <p className="text-[11px] text-muted-foreground">
+                  {dealType === "time_based"
+                    ? "A Time-Based deal is only active during this window."
+                    : "Restrict deal to specific hours (e.g. Midnight Deal 11PM-3AM)"}
+                </p>
               </div>
-              <Switch checked={hasTimeRestriction} onCheckedChange={setHasTimeRestriction} />
+              <Switch
+                checked={hasTimeRestriction}
+                disabled={dealType === "time_based"}
+                onCheckedChange={setHasTimeRestriction}
+              />
             </div>
 
             {hasTimeRestriction && (
