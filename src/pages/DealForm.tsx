@@ -1298,6 +1298,192 @@ const DealForm = () => {
             </Card>
           )}
 
+          {/* SECTION 3: Choice Steps & Groups (option_combo only) */}
+          {dealType === "option_combo" ? (
+            <Card className="shadow-xs border-border/80 overflow-hidden">
+              <CardHeader className="pb-3 border-b bg-muted/20 flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle className="text-sm font-bold uppercase tracking-wider text-foreground flex items-center gap-2">
+                    <Layers className="h-4 w-4 text-primary" />
+                    3. Choice Steps & Groups ({optionGroups.length})
+                  </CardTitle>
+                  <CardDescription className="text-xs">
+                    Define pick-and-choose steps (e.g. Choose 1st Pizza, Choose Soft Drink)
+                  </CardDescription>
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={addOptionGroup}
+                  className="gradient-primary text-primary-foreground gap-1.5 text-xs font-bold shadow-xs"
+                >
+                  <Plus className="h-3.5 w-3.5" /> Add Step Group
+                </Button>
+              </CardHeader>
+              <CardContent className="p-4 space-y-4">
+                {optionGroups.length === 0 ? (
+                  <div className="text-center py-10 space-y-3 border border-dashed rounded-xl bg-muted/10">
+                    <Layers className="h-9 w-9 text-muted-foreground/40 mx-auto" />
+                    <div>
+                      <p className="text-sm font-bold text-foreground">
+                        No selection steps created yet
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Create choice groups so customers can pick their flavors
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={addOptionGroup}
+                      className="text-xs gap-1.5"
+                    >
+                      <Plus className="h-3.5 w-3.5" /> Add First Step Group
+                    </Button>
+                  </div>
+                ) : (
+                  optionGroups.map((group, gIdx) => {
+                    const activeCat = groupCategoryFilters[group.id] || "All";
+                    const displayItems = menuItems.filter(
+                      (item) =>
+                        activeCat === "All" || item.category?.name === activeCat
+                    );
+
+                    return (
+                      <div
+                        key={group.id}
+                        className="p-4 rounded-xl border bg-muted/10 space-y-3.5"
+                      >
+                        {/* Group Header */}
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b">
+                          <div className="flex items-center gap-2 flex-1">
+                            <span className="h-6 w-6 rounded-lg bg-primary/10 text-primary font-extrabold text-xs flex items-center justify-center shrink-0">
+                              #{gIdx + 1}
+                            </span>
+                            <Input
+                              value={group.label}
+                              onChange={(e) =>
+                                updateGroupLabel(group.id, e.target.value)
+                              }
+                              placeholder="e.g. Choose 1st Pizza Flavor"
+                              className="h-8 text-xs font-bold max-w-sm"
+                            />
+                          </div>
+
+                          <div className="flex items-center gap-3 self-end sm:self-auto">
+                            <div className="flex items-center gap-1.5">
+                              <Label className="text-[11px] text-muted-foreground font-medium whitespace-nowrap">
+                                Pick Exact:
+                              </Label>
+                              <Input
+                                type="number"
+                                min={1}
+                                value={group.maxSelections}
+                                onChange={(e) =>
+                                  updateGroupMax(group.id, Number(e.target.value))
+                                }
+                                className="h-8 w-16 text-xs text-center font-bold"
+                              />
+                            </div>
+
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => removeOptionGroup(group.id)}
+                              className="h-8 text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
+                            >
+                              <Trash2 className="h-3.5 w-3.5 mr-1" /> Remove
+                            </Button>
+                          </div>
+                        </div>
+
+                        {/* Category Filter for this group */}
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <p className="text-xs font-semibold text-muted-foreground">
+                              Select available items ({group.allowedItems.length}{" "}
+                              chosen):
+                            </p>
+                            <div className="flex gap-1 overflow-x-auto pb-1 max-w-[55%]">
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant={
+                                  activeCat === "All" ? "default" : "outline"
+                                }
+                                onClick={() =>
+                                  setGroupCategoryFilters((p) => ({
+                                    ...p,
+                                    [group.id]: "All",
+                                  }))
+                                }
+                                className="h-6 text-[10px] px-2"
+                              >
+                                All
+                              </Button>
+                              {foodCategories.map((c) => (
+                                <Button
+                                  key={c.id}
+                                  type="button"
+                                  size="sm"
+                                  variant={
+                                    activeCat === c.name ? "default" : "outline"
+                                  }
+                                  onClick={() =>
+                                    setGroupCategoryFilters((p) => ({
+                                      ...p,
+                                      [group.id]: c.name,
+                                    }))
+                                  }
+                                  className="h-6 text-[10px] px-2 whitespace-nowrap"
+                                >
+                                  {c.name}
+                                </Button>
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* Items Selectable Badges */}
+                          <div className="flex flex-wrap gap-1.5 p-3 rounded-lg border bg-background max-h-48 overflow-y-auto">
+                            {displayItems.map((item) => {
+                              const isSelected = group.allowedItems.includes(
+                                item.id
+                              );
+                              return (
+                                <button
+                                  key={item.id}
+                                  type="button"
+                                  onClick={() =>
+                                    toggleItemInGroup(group.id, item.id)
+                                  }
+                                  className={cn(
+                                    "inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-all cursor-pointer select-none",
+                                    isSelected
+                                      ? "bg-primary/10 border-primary text-primary font-bold ring-1 ring-primary"
+                                      : "bg-muted/30 border-border text-foreground hover:border-primary/40 hover:bg-muted/60"
+                                  )}
+                                >
+                                  {isSelected ? (
+                                    <CheckCircle2 className="h-3.5 w-3.5 text-primary shrink-0" />
+                                  ) : (
+                                    <span className="h-3.5 w-3.5 rounded-full border border-muted-foreground/40 shrink-0" />
+                                  )}
+                                  <span>{item.name}</span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </CardContent>
+            </Card>
+          ) : null}
+
           {/* SECTION 4: Pricing & Channels (combo / option_combo) */}
           {(dealType === "combo" || dealType === "option_combo") && (
             <Card className="shadow-xs border-border/80 overflow-hidden">
@@ -1914,193 +2100,6 @@ const DealForm = () => {
               </CardContent>
             </Card>
           )}
-
-          {/* SECTION 4: Choice Steps & Groups (option_combo only) */}
-          {dealType === "option_combo" ? (
-            <Card className="shadow-xs border-border/80 overflow-hidden">
-              <CardHeader className="pb-3 border-b bg-muted/20 flex flex-row items-center justify-between">
-                <div>
-                  <CardTitle className="text-sm font-bold uppercase tracking-wider text-foreground flex items-center gap-2">
-                    <Layers className="h-4 w-4 text-primary" />
-                    4. Choice Steps & Groups ({optionGroups.length})
-                  </CardTitle>
-                  <CardDescription className="text-xs">
-                    Define pick-and-choose steps (e.g. Choose 1st Pizza, Choose Soft Drink)
-                  </CardDescription>
-                </div>
-                <Button
-                  type="button"
-                  size="sm"
-                  onClick={addOptionGroup}
-                  className="gradient-primary text-primary-foreground gap-1.5 text-xs font-bold shadow-xs"
-                >
-                  <Plus className="h-3.5 w-3.5" /> Add Step Group
-                </Button>
-              </CardHeader>
-              <CardContent className="p-4 space-y-4">
-                {optionGroups.length === 0 ? (
-                  <div className="text-center py-10 space-y-3 border border-dashed rounded-xl bg-muted/10">
-                    <Layers className="h-9 w-9 text-muted-foreground/40 mx-auto" />
-                    <div>
-                      <p className="text-sm font-bold text-foreground">
-                        No selection steps created yet
-                      </p>
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        Create choice groups so customers can pick their flavors
-                      </p>
-                    </div>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      onClick={addOptionGroup}
-                      className="text-xs gap-1.5"
-                    >
-                      <Plus className="h-3.5 w-3.5" /> Add First Step Group
-                    </Button>
-                  </div>
-                ) : (
-                  optionGroups.map((group, gIdx) => {
-                    const activeCat = groupCategoryFilters[group.id] || "All";
-                    const displayItems = menuItems.filter(
-                      (item) =>
-                        activeCat === "All" || item.category?.name === activeCat
-                    );
-
-                    return (
-                      <div
-                        key={group.id}
-                        className="p-4 rounded-xl border bg-muted/10 space-y-3.5"
-                      >
-                        {/* Group Header */}
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b">
-                          <div className="flex items-center gap-2 flex-1">
-                            <span className="h-6 w-6 rounded-lg bg-primary/10 text-primary font-extrabold text-xs flex items-center justify-center shrink-0">
-                              #{gIdx + 1}
-                            </span>
-                            <Input
-                              value={group.label}
-                              onChange={(e) =>
-                                updateGroupLabel(group.id, e.target.value)
-                              }
-                              placeholder="e.g. Choose 1st Pizza Flavor"
-                              className="h-8 text-xs font-bold max-w-sm"
-                            />
-                          </div>
-
-                          <div className="flex items-center gap-3 self-end sm:self-auto">
-                            <div className="flex items-center gap-1.5">
-                              <Label className="text-[11px] text-muted-foreground font-medium whitespace-nowrap">
-                                Pick Exact:
-                              </Label>
-                              <Input
-                                type="number"
-                                min={1}
-                                value={group.maxSelections}
-                                onChange={(e) =>
-                                  updateGroupMax(group.id, Number(e.target.value))
-                                }
-                                className="h-8 w-16 text-xs text-center font-bold"
-                              />
-                            </div>
-
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => removeOptionGroup(group.id)}
-                              className="h-8 text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
-                            >
-                              <Trash2 className="h-3.5 w-3.5 mr-1" /> Remove
-                            </Button>
-                          </div>
-                        </div>
-
-                        {/* Category Filter for this group */}
-                        <div className="space-y-2">
-                          <div className="flex items-center justify-between">
-                            <p className="text-xs font-semibold text-muted-foreground">
-                              Select available items ({group.allowedItems.length}{" "}
-                              chosen):
-                            </p>
-                            <div className="flex gap-1 overflow-x-auto pb-1 max-w-[55%]">
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant={
-                                  activeCat === "All" ? "default" : "outline"
-                                }
-                                onClick={() =>
-                                  setGroupCategoryFilters((p) => ({
-                                    ...p,
-                                    [group.id]: "All",
-                                  }))
-                                }
-                                className="h-6 text-[10px] px-2"
-                              >
-                                All
-                              </Button>
-                              {foodCategories.map((c) => (
-                                <Button
-                                  key={c.id}
-                                  type="button"
-                                  size="sm"
-                                  variant={
-                                    activeCat === c.name ? "default" : "outline"
-                                  }
-                                  onClick={() =>
-                                    setGroupCategoryFilters((p) => ({
-                                      ...p,
-                                      [group.id]: c.name,
-                                    }))
-                                  }
-                                  className="h-6 text-[10px] px-2 whitespace-nowrap"
-                                >
-                                  {c.name}
-                                </Button>
-                              ))}
-                            </div>
-                          </div>
-
-                          {/* Items Selectable Badges */}
-                          <div className="flex flex-wrap gap-1.5 p-3 rounded-lg border bg-background max-h-48 overflow-y-auto">
-                            {displayItems.map((item) => {
-                              const isSelected = group.allowedItems.includes(
-                                item.id
-                              );
-                              return (
-                                <button
-                                  key={item.id}
-                                  type="button"
-                                  onClick={() =>
-                                    toggleItemInGroup(group.id, item.id)
-                                  }
-                                  className={cn(
-                                    "inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-all cursor-pointer select-none",
-                                    isSelected
-                                      ? "bg-primary/10 border-primary text-primary font-bold ring-1 ring-primary"
-                                      : "bg-muted/30 border-border text-foreground hover:border-primary/40 hover:bg-muted/60"
-                                  )}
-                                >
-                                  {isSelected ? (
-                                    <CheckCircle2 className="h-3.5 w-3.5 text-primary shrink-0" />
-                                  ) : (
-                                    <span className="h-3.5 w-3.5 rounded-full border border-muted-foreground/40 shrink-0" />
-                                  )}
-                                  <span>{item.name}</span>
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
-              </CardContent>
-            </Card>
-          ) : null}
-
           {/* SECTION 5: Validity & Schedule */}
           <Card className="shadow-xs border-border/80 overflow-hidden">
             <CardHeader className="pb-3 border-b bg-muted/20">
