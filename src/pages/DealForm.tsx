@@ -328,6 +328,53 @@ const DealForm = () => {
     }, 0);
   }, [comboRows, menuItems]);
 
+  /**
+   * A Customizable combo has no single total — the customer's picks decide it. What
+   * it does have is a range: in each step, taking the N cheapest choices gives the
+   * floor, the N priciest gives the ceiling. Summed across steps that yields the
+   * cheapest and priciest combinations a customer can walk out with. The priciest
+   * end is the one that matters for pricing: margin has to survive it.
+   */
+  const optionComboTotals = useMemo(() => {
+    let minCost = 0;
+    let maxCost = 0;
+    let minSelling = 0;
+    let maxSelling = 0;
+
+    for (const group of optionGroups) {
+      const priced = group.choices
+        .filter((c) => c.itemId)
+        .map((c) => {
+          const item = menuItems.find((m) => m.id === c.itemId);
+          let selling = Number(item?.price || 0);
+          if (c.variantId) {
+            const v = item?.variants?.find((vr) => vr.id === c.variantId);
+            if (v && v.price != null) selling = Number(v.price);
+          }
+          return { cost: getItemCost(c.itemId, c.variantId), selling };
+        });
+      if (priced.length === 0) continue;
+
+      // Can't pick more than the step actually offers.
+      const pick = Math.min(group.maxSelections, priced.length);
+
+      const byCost = [...priced].sort((a, b) => a.cost - b.cost);
+      minCost += byCost.slice(0, pick).reduce((s, p) => s + p.cost, 0);
+      maxCost += byCost.slice(-pick).reduce((s, p) => s + p.cost, 0);
+
+      const bySelling = [...priced].sort((a, b) => a.selling - b.selling);
+      minSelling += bySelling.slice(0, pick).reduce((s, p) => s + p.selling, 0);
+      maxSelling += bySelling.slice(-pick).reduce((s, p) => s + p.selling, 0);
+    }
+
+    return { minCost, maxCost, minSelling, maxSelling };
+  }, [optionGroups, menuItems, getItemCost]);
+
+  // The figures every pricing calculation below works from. A Fixed Bundle has exact
+  // totals; a Customizable combo prices against its worst case (priciest picks).
+  const basisCost = dealType === "combo" ? bundleCostPrice : optionComboTotals.maxCost;
+  const basisValue = dealType === "combo" ? bundleRegularValue : optionComboTotals.maxSelling;
+
   // Deal Profit (Deal Price - Cost Price)
   const bundleProfit = dealPrice > 0 ? dealPrice - bundleCostPrice : 0;
   const bundleProfitMargin =
@@ -351,11 +398,11 @@ const DealForm = () => {
   // Set deal price from a percentage of either the menu total (discount) or the cost (markup)
   const applyPercent = useCallback(
     (pct: number, mode: "discount" | "margin" = calcMode) => {
-      const basis = mode === "discount" ? bundleRegularValue : bundleCostPrice;
+      const basis = mode === "discount" ? basisValue : basisCost;
       const price = basis > 0 ? Math.round(mode === "discount" ? basis * (1 - pct / 100) : basis * (1 + pct / 100)) : 0;
       setDealPrice(Math.max(0, price));
     },
-    [calcMode, bundleRegularValue, bundleCostPrice]
+    [calcMode, basisValue, basisCost]
   );
 
   const handlePercentInputChange = (val: string) => {
@@ -371,18 +418,18 @@ const DealForm = () => {
   // Back-derive a display percentage from a saved Rs. amount (used when switching into percent mode)
   const pctFromPrice = useCallback(
     (price: number | null): string => {
-      const basis = calcMode === "discount" ? bundleRegularValue : bundleCostPrice;
+      const basis = calcMode === "discount" ? basisValue : basisCost;
       if (!price || basis <= 0) return "";
       const pct = calcMode === "discount" ? Math.round((1 - price / basis) * 100) : Math.round((price / basis - 1) * 100);
       return pct > 0 ? String(pct) : "";
     },
-    [calcMode, bundleRegularValue, bundleCostPrice]
+    [calcMode, basisValue, basisCost]
   );
 
-  // Percent pricing needs a computable basis (bundle cost / menu value), which only a
-  // Fixed Bundle has — a Customizable combo's contents vary per customer pick, so it
-  // prices in Rs. only.
-  const supportsPercentPricing = dealType === "combo";
+  // Percent pricing needs a computable basis. A Fixed Bundle always has one; a
+  // Customizable combo has one only once its steps hold priced items, which is what
+  // basisValue reflects.
+  const supportsPercentPricing = basisValue > 0;
   const effectivePriceMode = supportsPercentPricing ? priceMode : "amount";
 
   // Rs./% is the single toggle governing both the main input and the channel override inputs below
@@ -406,7 +453,7 @@ const DealForm = () => {
     setPct(pctStr);
     if (pctStr === "") { setPrice(null); return; }
     const pct = Math.max(0, Number(pctStr) || 0);
-    const basis = calcMode === "discount" ? bundleRegularValue : bundleCostPrice;
+    const basis = calcMode === "discount" ? basisValue : basisCost;
     const price = basis > 0 ? Math.round(calcMode === "discount" ? basis * (1 - pct / 100) : basis * (1 + pct / 100)) : 0;
     setPrice(Math.max(0, price));
   };
@@ -1627,7 +1674,7 @@ const DealForm = () => {
                     <CardDescription className="text-xs">
                       {dealType === "combo"
                         ? "Analyze recipe cost price, menu selling total, and determine promotional deal pricing"
-                        : "Set the flat price customers pay for this combo, with optional per-channel overrides"}
+                        : "Cost and selling range across every possible pick, and the deal price you set against it"}
                     </CardDescription>
                   </div>
                   {dealType === "combo" && comboRows.length > 0 && (
@@ -1794,6 +1841,165 @@ const DealForm = () => {
                   </div>
                 )}
 
+                {/* ── CUSTOMIZABLE · the same cost/selling read-out as a Fixed Bundle, but
+                     as a range, because the customer's picks decide the real total ── */}
+                {dealType === "option_combo" && optionComboTotals.maxSelling > 0 && (
+                  <>
+                    <div className="space-y-2">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70 flex items-center gap-1.5">
+                        <Tag className="h-3 w-3" /> At Regular Menu Price
+                      </p>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+
+                        {/* Total Cost range */}
+                        <div className="rounded-xl border border-border/70 bg-muted/25 p-4 flex flex-col justify-between gap-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                              <Coins className="h-3.5 w-3.5 text-muted-foreground/70" />
+                              Total Cost
+                            </span>
+                            {optionComboTotals.maxCost > 0 ? (
+                              <Badge variant="secondary" className="text-[10px] px-1.5 py-0">Recipe Cost</Badge>
+                            ) : (
+                              <Badge variant="outline" className="text-[10px] text-muted-foreground/60 px-1.5 py-0">No Recipe</Badge>
+                            )}
+                          </div>
+                          <div>
+                            <p className="text-xl font-black font-mono text-foreground tracking-tight">
+                              {optionComboTotals.maxCost > 0
+                                ? `Rs.\u00a0${Math.round(optionComboTotals.minCost).toLocaleString()} – ${Math.round(optionComboTotals.maxCost).toLocaleString()}`
+                                : "—"}
+                            </p>
+                            <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">
+                              {optionComboTotals.maxCost > 0
+                                ? "Cheapest → priciest picks"
+                                : "Set recipes in Menu Items for live cost"}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Total Selling range */}
+                        <div className="rounded-xl border border-border/70 bg-muted/25 p-4 flex flex-col justify-between gap-2">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                            <Tag className="h-3.5 w-3.5 text-muted-foreground/70" />
+                            Total Selling Price
+                          </span>
+                          <div>
+                            <p className="text-xl font-black font-mono text-foreground tracking-tight">
+                              Rs.&nbsp;{Math.round(optionComboTotals.minSelling).toLocaleString()} – {Math.round(optionComboTotals.maxSelling).toLocaleString()}
+                            </p>
+                            <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">
+                              Standalone menu retail value
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Worst-case menu margin */}
+                        <div className="rounded-xl border border-border/70 bg-muted/25 p-4 flex flex-col justify-between gap-2">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                            <TrendingUp className="h-3.5 w-3.5 text-muted-foreground/70" />
+                            Total Profit %
+                          </span>
+                          <div>
+                            <p className="text-xl font-black font-mono text-foreground tracking-tight">
+                              {optionComboTotals.maxCost > 0
+                                ? `${Math.round(((optionComboTotals.maxSelling - optionComboTotals.maxCost) / optionComboTotals.maxSelling) * 100)}%`
+                                : "—"}
+                            </p>
+                            <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">
+                              Margin at the priciest combination
+                            </p>
+                          </div>
+                        </div>
+
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-primary/80 flex items-center gap-1.5">
+                        <Sparkles className="h-3 w-3" /> This Deal
+                      </p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+
+                        {/* Deal Price + biggest discount the customer can extract */}
+                        <div className="rounded-xl border-2 border-primary/50 bg-primary/[0.04] p-4 flex flex-col justify-between gap-2 shadow-xs">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-primary flex items-center gap-1.5">
+                              <Sparkles className="h-3.5 w-3.5" />
+                              Deal Price
+                            </span>
+                            {dealPrice > 0 && optionComboTotals.maxSelling > dealPrice && (
+                              <span className="text-[10px] font-bold text-primary px-1.5 py-0.5 rounded bg-primary/10">
+                                up to {Math.round(((optionComboTotals.maxSelling - dealPrice) / optionComboTotals.maxSelling) * 100)}% OFF
+                              </span>
+                            )}
+                          </div>
+                          <div>
+                            <p className="text-xl font-black font-mono text-primary tracking-tight">
+                              Rs.&nbsp;{(dealPrice || 0).toLocaleString()}
+                            </p>
+                            <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">
+                              {dealPrice > 0 && optionComboTotals.maxSelling > dealPrice
+                                ? `Customer saves up to Rs. ${Math.round(optionComboTotals.maxSelling - dealPrice).toLocaleString()}`
+                                : "Customer pays at POS & Web"}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Worst-case profit — the number that must stay positive */}
+                        <div className={cn(
+                          "rounded-xl border p-4 flex flex-col justify-between gap-2 transition-all",
+                          dealPrice > 0 && optionComboTotals.maxCost > 0 && dealPrice > optionComboTotals.maxCost
+                            ? "border-emerald-500/40 bg-emerald-500/[0.04]"
+                            : dealPrice > 0 && optionComboTotals.maxCost > 0
+                            ? "border-destructive/40 bg-destructive/[0.04]"
+                            : "border-border/70 bg-muted/25"
+                        )}>
+                          <span className={cn(
+                            "text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5",
+                            dealPrice > optionComboTotals.maxCost && optionComboTotals.maxCost > 0
+                              ? "text-emerald-600 dark:text-emerald-400"
+                              : "text-muted-foreground"
+                          )}>
+                            <TrendingUp className="h-3.5 w-3.5" />
+                            Worst-Case Profit %
+                          </span>
+                          <div>
+                            {dealPrice > 0 && optionComboTotals.maxCost > 0 ? (
+                              <>
+                                <div className="flex items-baseline gap-1.5">
+                                  <p className={cn(
+                                    "text-xl font-black font-mono tracking-tight",
+                                    dealPrice > optionComboTotals.maxCost
+                                      ? "text-emerald-600 dark:text-emerald-400"
+                                      : "text-destructive"
+                                  )}>
+                                    {Math.round(((dealPrice - optionComboTotals.maxCost) / dealPrice) * 100)}%
+                                  </p>
+                                  <span className="text-xs font-mono font-bold text-muted-foreground">
+                                    (Rs.&nbsp;{Math.round(dealPrice - optionComboTotals.maxCost).toLocaleString()})
+                                  </span>
+                                </div>
+                                <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">
+                                  If the customer picks the priciest options
+                                </p>
+                              </>
+                            ) : (
+                              <>
+                                <p className="text-xl font-black font-mono text-muted-foreground/40">—</p>
+                                <p className="text-[10px] text-muted-foreground mt-0.5">
+                                  {dealPrice > 0 ? "Add recipes for profit %" : "Enter deal price below"}
+                                </p>
+                              </>
+                            )}
+                          </div>
+                        </div>
+
+                      </div>
+                    </div>
+                  </>
+                )}
+
                 {/* ── ROW 3 · SET DEAL PRICE — one Rs./% toggle drives the input and the presets ── */}
                 <div className="rounded-xl border border-border/70 bg-card p-4 space-y-4 shadow-xs">
                   <div className="flex flex-wrap items-center justify-between gap-3">
@@ -1885,9 +2091,10 @@ const DealForm = () => {
                                 : "text-muted-foreground/70 hover:text-muted-foreground"
                             )}
                           >
-                            <BadgePercent className="h-3 w-3" /> Off Menu Price
+                            <BadgePercent className="h-3 w-3" />
+                            {dealType === "combo" ? "Off Menu Price" : "Off Priciest Menu Value"}
                           </button>
-                          {bundleCostPrice > 0 && (
+                          {basisCost > 0 && (
                             <button
                               type="button"
                               onClick={() => handleCalcModeChange("margin")}
@@ -1898,7 +2105,8 @@ const DealForm = () => {
                                   : "text-muted-foreground/70 hover:text-muted-foreground"
                               )}
                             >
-                              <TrendingUp className="h-3 w-3" /> Markup on Cost
+                              <TrendingUp className="h-3 w-3" />
+                              {dealType === "combo" ? "Markup on Cost" : "Markup on Priciest Cost"}
                             </button>
                           )}
                         </div>
