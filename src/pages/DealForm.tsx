@@ -537,6 +537,32 @@ const DealForm = () => {
   const updateChoiceVariant = (groupId: string, idx: number, variantId: string) =>
     patchChoice(groupId, idx, { variantId });
 
+  /**
+   * How a step reads to a customer: "Choose any 2 Pizza". The noun comes from the
+   * choices' shared category, not the step's label — the label is free text an
+   * admin can type anything into, while the category is real data. A step mixing
+   * categories has no single noun, so it falls back to a plain count.
+   */
+  const describeGroupPicks = (group: OptionGroupRow): string => {
+    const picks = group.choices.length
+      ? Math.min(group.maxSelections, group.choices.length)
+      : group.maxSelections;
+
+    const categoryIds = new Set(
+      group.choices
+        .filter((c) => c.itemId)
+        .map((c) => menuItems.find((m) => m.id === c.itemId)?.categoryId ?? "")
+    );
+    const categoryName =
+      categoryIds.size === 1
+        ? foodCategories.find((c) => c.id === [...categoryIds][0])?.name
+        : undefined;
+
+    return categoryName
+      ? `Choose any ${picks} ${categoryName}`
+      : `Choose any ${picks} of ${group.choices.length}`;
+  };
+
   // Percentage Scope Helpers
   const toggleApplicableItem = (itemId: string) => {
     setApplicableItemIds((prev) =>
@@ -1126,7 +1152,7 @@ const DealForm = () => {
                           key={i}
                           className="text-[11px] text-foreground/90 font-medium truncate"
                         >
-                          • {g.label} ({g.choices.length} options)
+                          • {describeGroupPicks(g)}
                         </p>
                       ))
                     )
@@ -1638,7 +1664,7 @@ const DealForm = () => {
                               {/* Footer — count + add another choice */}
                               <div className="flex items-center justify-between px-3 pt-2 border-t border-border/50 mt-1">
                                 <span className="text-xs text-muted-foreground">
-                                  {group.choices.length} choice{group.choices.length !== 1 ? "s" : ""} · customer picks {group.maxSelections}
+                                  {group.choices.length} choice{group.choices.length !== 1 ? "s" : ""} · {describeGroupPicks(group)}
                                 </span>
                                 <Button
                                   type="button"
