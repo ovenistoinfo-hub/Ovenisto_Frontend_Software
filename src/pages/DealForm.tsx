@@ -23,7 +23,10 @@ import { getAccessToken } from "@/services/api";
 import { dealService, type DealInput, type DealTypeValue } from "@/services/deal.service";
 import { menuService } from "@/services/menu.service";
 
+/** One item in a Fixed Bundle. `categoryId` is a UI-only filter that narrows the
+ *  row's item dropdown — it is never sent to the backend. */
 interface ComboItemRow {
+  categoryId: string;
   itemId: string;
   variantId: string | null;
   qty: number;
@@ -76,9 +79,15 @@ interface OptionGroupRow {
   labelEdited: boolean;
 }
 
-/** Column widths for the Buy X Get Y row table. Qty sits after Selling, the
- *  same place a Fixed Bundle row puts it, so both tables scan identically. */
-const BOGO_GRID = "1fr 1.4fr 0.9fr 78px 78px 84px 36px";
+/** Column widths for the deal item tables. Every format lays its rows out as
+ *  Category | Menu Item | Size / Variant | … | delete; the only difference is
+ *  whether the row carries a quantity. Defining them once is what stops a
+ *  header and its rows drifting apart. */
+const ITEM_ROW_GRID = "1fr 1.4fr 0.9fr 78px 78px 84px 36px";
+const ITEM_ROW_GRID_NO_QTY = "1fr 1.4fr 0.9fr 78px 78px 36px";
+/** The percentage deal's scope table. Same first three columns, then what the
+ *  discount does to the price rather than a cost/selling pair. */
+const SCOPE_ROW_GRID = "1fr 1.4fr 0.9fr 90px 100px 36px";
 
 /** The two halves of a Buy X Get Y offer. Both render the same row table, so
  *  they are described once here rather than duplicated in the markup. */
@@ -226,6 +235,7 @@ const DealForm = () => {
     if (existingDeal.components && existingDeal.components.length > 0) {
       setComboRows(
         existingDeal.components.map((c) => ({
+          categoryId: "",
           itemId: c.menuItemId,
           variantId: c.variantId,
           qty: c.qty,
@@ -348,7 +358,7 @@ const DealForm = () => {
     }
     setComboRows((prev) => [
       ...prev,
-      { itemId: firstItem.id, variantId: null, qty: 1 },
+      { categoryId: "", itemId: firstItem.id, variantId: null, qty: 1 },
     ]);
   };
 
@@ -359,6 +369,15 @@ const DealForm = () => {
   const updateComboItem = (idx: number, itemId: string) => {
     setComboRows((prev) =>
       prev.map((r, i) => (i === idx ? { ...r, itemId, variantId: null } : r))
+    );
+  };
+
+  // Changing the category clears the item and size under it — the old item is no
+  // longer in the narrowed dropdown, so keeping it would show a value the list
+  // doesn't contain.
+  const updateComboCategory = (idx: number, categoryId: string) => {
+    setComboRows((prev) =>
+      prev.map((r, i) => (i === idx ? { ...r, categoryId, itemId: "", variantId: null } : r))
     );
   };
 
@@ -634,9 +653,10 @@ const DealForm = () => {
   const addBogoRow = (setRows: React.Dispatch<React.SetStateAction<BogoRow[]>>) =>
     setRows((prev) => [...prev, emptyBogoRow()]);
 
-  // Never drop the last row — an empty side has nothing to add back from.
+  // Deleting the last row clears it rather than leaving the side with no rows at
+  // all — the table keeps its header and the button always visibly does something.
   const removeBogoRow = (setRows: React.Dispatch<React.SetStateAction<BogoRow[]>>, idx: number) =>
-    setRows((prev) => (prev.length <= 1 ? prev : prev.filter((_, i) => i !== idx)));
+    setRows((prev) => (prev.length <= 1 ? [emptyBogoRow()] : prev.filter((_, i) => i !== idx)));
 
   // Changing the category clears the item and size under it — the old item is no
   // longer in the narrowed dropdown.
@@ -1745,7 +1765,8 @@ const DealForm = () => {
                 ) : (
                   <div className="space-y-2">
                     {/* Header row */}
-                    <div className="grid gap-2 px-3 pb-1" style={{ gridTemplateColumns: "1.5fr 0.8fr 78px 78px 64px 36px" }}>
+                    <div className="grid gap-2 px-3 pb-1" style={{ gridTemplateColumns: ITEM_ROW_GRID }}>
+                      <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Category</span>
                       <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Menu Item</span>
                       <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Size / Variant</span>
                       <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground text-right">Cost</span>
@@ -1758,6 +1779,12 @@ const DealForm = () => {
                     <div className="space-y-1.5">
                       {comboRows.map((row, idx) => {
                         const selectedItem = menuItems.find((m) => m.id === row.itemId);
+                        // A row with an item shows that item's real category; only an
+                        // empty row falls back to whatever category was picked to filter.
+                        const activeCategoryId = selectedItem?.categoryId ?? row.categoryId;
+                        const itemChoices = activeCategoryId
+                          ? menuItems.filter((m) => m.categoryId === activeCategoryId)
+                          : menuItems;
                         const variants = selectedItem?.variants || [];
                         let unitPrice = Number(selectedItem?.price || 0);
                         if (row.variantId) {
@@ -1770,9 +1797,27 @@ const DealForm = () => {
                           <div
                             key={idx}
                             className="grid gap-2 items-center px-3 py-2.5 rounded-lg border border-border/60 bg-background hover:bg-muted/20 transition-colors"
-                            style={{ gridTemplateColumns: "1.5fr 0.8fr 78px 78px 64px 36px" }}
+                            style={{ gridTemplateColumns: ITEM_ROW_GRID }}
                           >
-                            {/* Item select */}
+                            {/* Category filter — narrows the item dropdown beside it */}
+                            <Select
+                              value={activeCategoryId || "all"}
+                              onValueChange={(val) => updateComboCategory(idx, val === "all" ? "" : val)}
+                            >
+                              <SelectTrigger className="h-8 text-xs border-0 bg-muted/30 hover:bg-muted/50 focus:ring-1">
+                                <SelectValue placeholder="All categories" />
+                              </SelectTrigger>
+                              <SelectContent className="max-h-60">
+                                <SelectItem value="all" className="text-xs">All Categories</SelectItem>
+                                {foodCategories.map((c) => (
+                                  <SelectItem key={c.id} value={c.id} className="text-xs">
+                                    {c.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+
+                            {/* Item select — only items from the category above */}
                             <div className="flex items-center gap-2 min-w-0">
                               <span className="text-[10px] font-mono text-muted-foreground/60 shrink-0 w-4 text-right">{idx + 1}.</span>
                               <Select value={row.itemId} onValueChange={(val) => updateComboItem(idx, val)}>
@@ -1780,11 +1825,17 @@ const DealForm = () => {
                                   <SelectValue placeholder="Select item…" />
                                 </SelectTrigger>
                                 <SelectContent className="max-h-60">
-                                  {menuItems.map((item) => (
-                                    <SelectItem key={item.id} value={item.id} className="text-xs">
-                                      {item.name}{item.category?.name ? ` (${item.category.name})` : ""}
-                                    </SelectItem>
-                                  ))}
+                                  {itemChoices.length === 0 ? (
+                                    <div className="px-2 py-3 text-xs text-muted-foreground text-center">
+                                      No items in this category
+                                    </div>
+                                  ) : (
+                                    itemChoices.map((item) => (
+                                      <SelectItem key={item.id} value={item.id} className="text-xs">
+                                        {item.name}
+                                      </SelectItem>
+                                    ))
+                                  )}
                                 </SelectContent>
                               </Select>
                             </div>
@@ -1976,7 +2027,7 @@ const DealForm = () => {
                           ) : (
                             <div className="space-y-2">
                               {/* Header row */}
-                              <div className="grid gap-2 px-3 pb-1" style={{ gridTemplateColumns: "1fr 1.4fr 0.9fr 78px 78px 36px" }}>
+                              <div className="grid gap-2 px-3 pb-1" style={{ gridTemplateColumns: ITEM_ROW_GRID_NO_QTY }}>
                                 <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Category</span>
                                 <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Menu Item</span>
                                 <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Size / Variant</span>
@@ -2006,7 +2057,7 @@ const DealForm = () => {
                                     <div
                                       key={cIdx}
                                       className="grid gap-2 items-center px-3 py-2.5 rounded-lg border border-border/60 bg-background hover:bg-muted/20 transition-colors"
-                                      style={{ gridTemplateColumns: "1fr 1.4fr 0.9fr 78px 78px 36px" }}
+                                      style={{ gridTemplateColumns: ITEM_ROW_GRID_NO_QTY }}
                                     >
                                       {/* Category filter — narrows the item dropdown beside it */}
                                       <Select
@@ -2776,9 +2827,10 @@ const DealForm = () => {
                     ) : (
                       <div className="space-y-2">
                         {/* Header row */}
-                        <div className="grid gap-2 px-3 pb-1" style={{ gridTemplateColumns: "1fr 1.4fr 90px 100px 36px" }}>
+                        <div className="grid gap-2 px-3 pb-1" style={{ gridTemplateColumns: SCOPE_ROW_GRID }}>
                           <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Category</span>
                           <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Menu Item</span>
+                          <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Size / Variant</span>
                           <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground text-right">Price</span>
                           <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground text-right">After {discountPercent || 0}%</span>
                           <span />
@@ -2798,8 +2850,25 @@ const DealForm = () => {
                                 !takenElsewhere.has(m.id) &&
                                 (!activeCategoryId || m.categoryId === activeCategoryId)
                             );
-                            const price = Number(selectedItem?.price || 0);
-                            const after = price * (1 - Math.min(100, Math.max(0, discountPercent || 0)) / 100);
+                            // A percentage deal is scoped per menu item, never per size,
+                            // so every size of a named item is discounted. Price the row
+                            // across all of them — showing only item.price understated a
+                            // multi-size item and disagreed with the Discount Impact
+                            // figures below, which have always walked the variants.
+                            const scopePrices = (selectedItem?.variants?.length ?? 0) > 0
+                              ? selectedItem!.variants.map((v) => Number(v.price ?? selectedItem!.price ?? 0))
+                              : [Number(selectedItem?.price || 0)];
+                            const minPrice = Math.min(...scopePrices);
+                            const maxPrice = Math.max(...scopePrices);
+                            const pctOff = Math.min(100, Math.max(0, discountPercent || 0)) / 100;
+                            const sizeCount = selectedItem?.variants?.length ?? 0;
+                            const money = (n: number) => Math.round(n).toLocaleString();
+                            const priceLabel = minPrice === maxPrice
+                              ? `Rs. ${money(minPrice)}`
+                              : `Rs. ${money(minPrice)}–${money(maxPrice)}`;
+                            const afterLabel = minPrice === maxPrice
+                              ? `Rs. ${money(minPrice * (1 - pctOff))}`
+                              : `Rs. ${money(minPrice * (1 - pctOff))}–${money(maxPrice * (1 - pctOff))}`;
                             // Already covered by a whole-category selection above.
                             const redundant =
                               !!selectedItem?.categoryId &&
@@ -2814,7 +2883,7 @@ const DealForm = () => {
                                     ? "border-amber-500/40 bg-amber-500/[0.04]"
                                     : "border-border/60 hover:bg-muted/20"
                                 )}
-                                style={{ gridTemplateColumns: "1fr 1.4fr 90px 100px 36px" }}
+                                style={{ gridTemplateColumns: SCOPE_ROW_GRID }}
                               >
                                 {/* Category filter */}
                                 <Select
@@ -2862,14 +2931,31 @@ const DealForm = () => {
                                   </Select>
                                 </div>
 
+                                {/* Size / Variant — read-only. The scope is stored per
+                                    menu item, so a discount necessarily covers every size;
+                                    a picker here would imply a choice the backend cannot keep. */}
+                                <div className="min-w-0">
+                                  {!row.itemId ? (
+                                    <span className="text-xs text-muted-foreground px-1">—</span>
+                                  ) : sizeCount > 1 ? (
+                                    <Badge variant="secondary" className="text-[10px] px-1.5 py-0 font-normal">
+                                      All {sizeCount} sizes
+                                    </Badge>
+                                  ) : (
+                                    <span className="text-xs text-muted-foreground px-1 truncate block">
+                                      {selectedItem?.variants?.[0]?.name ?? "—"}
+                                    </span>
+                                  )}
+                                </div>
+
                                 {/* Price before */}
                                 <span className="text-xs font-mono text-muted-foreground text-right line-through">
-                                  {row.itemId ? `Rs. ${price.toLocaleString()}` : "—"}
+                                  {row.itemId ? priceLabel : "—"}
                                 </span>
 
                                 {/* Price after the discount */}
                                 <span className="text-xs font-mono font-bold text-primary text-right">
-                                  {row.itemId ? `Rs. ${Math.round(after).toLocaleString()}` : "—"}
+                                  {row.itemId ? afterLabel : "—"}
                                 </span>
 
                                 {/* Delete */}
@@ -3167,7 +3253,7 @@ const DealForm = () => {
 
                       <div className="p-3 space-y-2">
                         {/* Header row */}
-                        <div className="grid gap-2 px-3 pb-1" style={{ gridTemplateColumns: BOGO_GRID }}>
+                        <div className="grid gap-2 px-3 pb-1" style={{ gridTemplateColumns: ITEM_ROW_GRID }}>
                           <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Category</span>
                           <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Menu Item</span>
                           <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Size / Variant</span>
@@ -3198,7 +3284,7 @@ const DealForm = () => {
                               <div
                                 key={idx}
                                 className="grid gap-2 items-center px-3 py-2.5 rounded-lg border border-border/60 bg-background hover:bg-muted/20 transition-colors"
-                                style={{ gridTemplateColumns: BOGO_GRID }}
+                                style={{ gridTemplateColumns: ITEM_ROW_GRID }}
                               >
                                 {/* Category filter — narrows the item dropdown beside it */}
                                 <Select
@@ -3318,9 +3404,8 @@ const DealForm = () => {
                                   type="button"
                                   variant="ghost"
                                   size="icon"
-                                  disabled={rows.length <= 1}
                                   onClick={() => removeBogoRow(setRows, idx)}
-                                  className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10 disabled:opacity-30"
+                                  className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
                                 >
                                   <Trash2 className="h-3.5 w-3.5" />
                                 </Button>
