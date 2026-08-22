@@ -365,6 +365,12 @@ const DealForm = () => {
     [calcMode, bundleRegularValue, bundleCostPrice]
   );
 
+  // Percent pricing needs a computable basis (bundle cost / menu value), which only a
+  // Fixed Bundle has — a Customizable combo's contents vary per customer pick, so it
+  // prices in Rs. only.
+  const supportsPercentPricing = dealType === "combo";
+  const effectivePriceMode = supportsPercentPricing ? priceMode : "amount";
+
   // Rs./% is the single toggle governing both the main input and the channel override inputs below
   const handlePriceModeChange = (mode: "amount" | "percent") => {
     setPriceMode(mode);
@@ -1495,7 +1501,9 @@ const DealForm = () => {
                       4. Pricing & Cost Breakdown
                     </CardTitle>
                     <CardDescription className="text-xs">
-                      Analyze recipe cost price, menu selling total, and determine promotional deal pricing
+                      {dealType === "combo"
+                        ? "Analyze recipe cost price, menu selling total, and determine promotional deal pricing"
+                        : "Set the flat price customers pay for this combo, with optional per-channel overrides"}
                     </CardDescription>
                   </div>
                   {dealType === "combo" && comboRows.length > 0 && (
@@ -1668,38 +1676,40 @@ const DealForm = () => {
                     <Label className="text-xs font-bold text-foreground uppercase tracking-wide">
                       Set Deal Price <span className="text-destructive">*</span>
                     </Label>
-                    <div className="inline-flex items-center rounded-lg border border-border/70 bg-muted/30 p-0.5">
-                      <button
-                        type="button"
-                        onClick={() => handlePriceModeChange("amount")}
-                        className={cn(
-                          "text-xs font-bold px-3 py-1.5 rounded-md transition-all",
-                          priceMode === "amount"
-                            ? "bg-primary text-primary-foreground shadow-xs"
-                            : "text-muted-foreground hover:text-foreground"
-                        )}
-                      >
-                        Rs. Amount
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handlePriceModeChange("percent")}
-                        className={cn(
-                          "text-xs font-bold px-3 py-1.5 rounded-md transition-all",
-                          priceMode === "percent"
-                            ? "bg-primary text-primary-foreground shadow-xs"
-                            : "text-muted-foreground hover:text-foreground"
-                        )}
-                      >
-                        % Percent
-                      </button>
-                    </div>
+                    {supportsPercentPricing && (
+                      <div className="inline-flex items-center rounded-lg border border-border/70 bg-muted/30 p-0.5">
+                        <button
+                          type="button"
+                          onClick={() => handlePriceModeChange("amount")}
+                          className={cn(
+                            "text-xs font-bold px-3 py-1.5 rounded-md transition-all",
+                            priceMode === "amount"
+                              ? "bg-primary text-primary-foreground shadow-xs"
+                              : "text-muted-foreground hover:text-foreground"
+                          )}
+                        >
+                          Rs. Amount
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handlePriceModeChange("percent")}
+                          className={cn(
+                            "text-xs font-bold px-3 py-1.5 rounded-md transition-all",
+                            priceMode === "percent"
+                              ? "bg-primary text-primary-foreground shadow-xs"
+                              : "text-muted-foreground hover:text-foreground"
+                          )}
+                        >
+                          % Percent
+                        </button>
+                      </div>
+                    )}
                   </div>
 
                   <div className="flex flex-col sm:flex-row items-start sm:items-end gap-4">
                     {/* Main input — shape follows the toggle above */}
                     <div className="space-y-1 w-full sm:w-56 shrink-0">
-                      {priceMode === "amount" ? (
+                      {effectivePriceMode === "amount" ? (
                         <div className="relative">
                           <Input
                             type="number"
@@ -1737,7 +1747,7 @@ const DealForm = () => {
                     </div>
 
                     {/* Percent basis — only meaningful once % mode is selected (Fixed Bundle only) */}
-                    {priceMode === "percent" && dealType === "combo" && (
+                    {effectivePriceMode === "percent" && (
                       <div className="space-y-1">
                         <span className="text-[10px] text-muted-foreground block">Percent of</span>
                         <div className="flex items-center gap-1">
@@ -1781,7 +1791,7 @@ const DealForm = () => {
                       Channel Price Overrides
                     </p>
                     <span className="text-[10px] text-muted-foreground">
-                      {priceMode === "amount"
+                      {effectivePriceMode === "amount"
                         ? `Leave empty to use base deal price (Rs. ${(dealPrice || 0).toLocaleString()})`
                         : `Leave empty to use base deal price · % is ${calcMode === "discount" ? "off Menu Price" : "markup on Cost"}`}
                     </span>
@@ -1798,7 +1808,7 @@ const DealForm = () => {
                         <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1">
                           <ch.Icon className="h-3 w-3" /> {ch.label}
                         </Label>
-                        {priceMode === "amount" ? (
+                        {effectivePriceMode === "amount" ? (
                           <Input
                             type="number" min={0}
                             placeholder={`Default (${dealPrice || 0})`}
