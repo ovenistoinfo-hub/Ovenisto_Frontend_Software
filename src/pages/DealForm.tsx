@@ -37,6 +37,13 @@ interface OptionChoiceRow {
   variantId: string | null;
 }
 
+/** An individually-named item in a percentage deal's scope. `categoryId` is a
+ *  UI-only filter for the row's item dropdown and is never sent to the backend. */
+interface ScopeItemRow {
+  categoryId: string;
+  itemId: string;
+}
+
 interface OptionGroupRow {
   id: string;
   label: string;
@@ -126,9 +133,10 @@ const DealForm = () => {
 
   // Percentage
   const [discountPercent, setDiscountPercent] = useState<number>(10);
-  const [applicableItemIds, setApplicableItemIds] = useState<string[]>([]);
+  /** One row per individually-named item in a percentage deal's scope.
+   *  `categoryId` only narrows the row's item dropdown; it is never persisted. */
+  const [scopeItemRows, setScopeItemRows] = useState<ScopeItemRow[]>([]);
   const [applicableCategoryIds, setApplicableCategoryIds] = useState<string[]>([]);
-  const [scopeCategoryFilter, setScopeCategoryFilter] = useState("All");
 
   // Buy X Get Y
   const [buyItemId, setBuyItemId] = useState<string | null>(null);
@@ -201,7 +209,9 @@ const DealForm = () => {
     }
 
     setDiscountPercent(existingDeal.discountPercent ?? 10);
-    setApplicableItemIds(existingDeal.applicableItems ?? []);
+    setScopeItemRows(
+      (existingDeal.applicableItems ?? []).map((itemId) => ({ categoryId: "", itemId }))
+    );
     setApplicableCategoryIds(existingDeal.applicableCategories ?? []);
     setBuyItemId(existingDeal.buyItemId ?? null);
     setBuyQty(existingDeal.buyQty ?? 1);
@@ -577,6 +587,12 @@ const DealForm = () => {
   const groupLabel = (group: OptionGroupRow): string =>
     group.labelEdited && group.label.trim() ? group.label : describeGroupPicks(group);
 
+  /** The rows that name a real item, de-duplicated — what actually gets saved. */
+  const applicableItemIds = useMemo(
+    () => Array.from(new Set(scopeItemRows.map((r) => r.itemId).filter(Boolean))),
+    [scopeItemRows]
+  );
+
   /**
    * What a percentage deal actually discounts, by the same rule the server
    * enforces in deal.pricing.ts's isItemEligibleForDiscount: an item qualifies by
@@ -658,11 +674,21 @@ const DealForm = () => {
   const validitySectionNumber = dealType === "buy_x_get_y" ? 4 : 5;
 
   // Percentage Scope Helpers
-  const toggleApplicableItem = (itemId: string) => {
-    setApplicableItemIds((prev) =>
-      prev.includes(itemId) ? prev.filter((id) => id !== itemId) : [...prev, itemId]
+  const addScopeItemRow = () =>
+    setScopeItemRows((prev) => [...prev, { categoryId: "", itemId: "" }]);
+
+  const removeScopeItemRow = (idx: number) =>
+    setScopeItemRows((prev) => prev.filter((_, i) => i !== idx));
+
+  // Changing the category clears the item under it — the old item is no longer in
+  // the narrowed dropdown, so keeping it would display a value the list lacks.
+  const updateScopeRowCategory = (idx: number, categoryId: string) =>
+    setScopeItemRows((prev) =>
+      prev.map((r, i) => (i === idx ? { categoryId, itemId: "" } : r))
     );
-  };
+
+  const updateScopeRowItem = (idx: number, itemId: string) =>
+    setScopeItemRows((prev) => prev.map((r, i) => (i === idx ? { ...r, itemId } : r)));
 
   const toggleApplicableCategory = (categoryId: string) => {
     setApplicableCategoryIds((prev) =>
@@ -2346,25 +2372,31 @@ const DealForm = () => {
                   </div>
                 </div>
 
-                <div className="space-y-4 pt-2 border-t">
-                  <div className="flex items-center justify-between">
+                <div className="space-y-5 pt-2 border-t">
+                  <div className="flex items-center justify-between gap-3">
                     <Label className="text-xs font-bold text-foreground">
-                      Applies To Categories & Items
+                      Applies To Categories & Items <span className="text-destructive">*</span>
                     </Label>
-                    <Badge variant="outline" className="text-[10px]">
-                      {applicableItemIds.length} item(s) +{" "}
-                      {applicableCategoryIds.length} categor(ies) selected
+                    <Badge
+                      variant="outline"
+                      className={cn(
+                        "text-[10px]",
+                        discountScopeItems.length > 0 && "border-primary/50 text-primary"
+                      )}
+                    >
+                      {discountScopeItems.length} item{discountScopeItems.length !== 1 ? "s" : ""} in scope
                     </Badge>
                   </div>
 
-                  {/* Whole-category toggles */}
+                  {/* Whole-category toggles — the bulk path */}
                   <div className="space-y-2">
                     <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
-                      Entire Categories:
+                      Entire Categories
                     </p>
                     <div className="flex flex-wrap gap-1.5">
                       {foodCategories.map((c) => {
                         const selected = applicableCategoryIds.includes(c.id);
+                        const count = menuItems.filter((m) => m.categoryId === c.id).length;
                         return (
                           <button
                             key={c.id}
@@ -2383,72 +2415,168 @@ const DealForm = () => {
                               <Layers className="h-3.5 w-3.5 shrink-0 opacity-50" />
                             )}
                             <span>{c.name}</span>
+                            <span className={cn(
+                              "text-[10px] font-mono px-1 rounded",
+                              selected ? "bg-primary-foreground/20" : "bg-muted-foreground/10 text-muted-foreground"
+                            )}>
+                              {count}
+                            </span>
                           </button>
                         );
                       })}
                     </div>
                   </div>
 
-                  {/* Specific items */}
-                  <div className="space-y-2 pt-2">
+                  {/* Individually-named items — same row layout as the other sections */}
+                  <div className="space-y-2">
                     <div className="flex items-center justify-between gap-3">
                       <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
-                        Or Specific Individual Items:
+                        Or Specific Individual Items
                       </p>
-                      <Select
-                        value={scopeCategoryFilter}
-                        onValueChange={setScopeCategoryFilter}
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={addScopeItemRow}
+                        className="h-7 text-xs gap-1.5"
                       >
-                        <SelectTrigger className="h-7 w-44 text-[11px]">
-                          <SelectValue placeholder="Filter by category" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="All" className="text-xs">
-                            All Categories
-                          </SelectItem>
-                          {foodCategories.map((c) => (
-                            <SelectItem
-                              key={c.id}
-                              value={c.name}
-                              className="text-xs"
-                            >
-                              {c.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                        <Plus className="h-3.5 w-3.5" /> Add Item
+                      </Button>
                     </div>
-                    <div className="flex flex-wrap gap-1.5 p-3 rounded-xl border bg-background max-h-48 overflow-y-auto">
-                      {menuItems
-                        .filter(
-                          (item) =>
-                            scopeCategoryFilter === "All" ||
-                            item.category?.name === scopeCategoryFilter
-                        )
-                        .map((item) => {
-                          const isSelected = applicableItemIds.includes(item.id);
-                          return (
-                            <button
-                              key={item.id}
-                              type="button"
-                              onClick={() => toggleApplicableItem(item.id)}
-                              className={cn(
-                                "inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-all cursor-pointer select-none",
-                                isSelected
-                                  ? "bg-primary/10 border-primary text-primary font-bold ring-1 ring-primary"
-                                  : "bg-muted/30 border-border text-foreground hover:border-primary/40 hover:bg-muted/60"
-                              )}
-                            >
-                              {isSelected ? (
-                                <CheckCircle2 className="h-3.5 w-3.5 text-primary shrink-0" />
-                              ) : (
-                                <span className="h-3.5 w-3.5 rounded-full border border-muted-foreground/40 shrink-0" />
-                              )}
-                              <span>{item.name}</span>
-                            </button>
-                          );
-                        })}
-                    </div>
+
+                    {scopeItemRows.length === 0 ? (
+                      <div className="text-center py-8 border border-dashed border-border/60 rounded-lg bg-muted/10">
+                        <p className="text-xs text-muted-foreground">
+                          {applicableCategoryIds.length > 0
+                            ? "Whole categories selected above. Add single items here only to widen the scope further."
+                            : "No individual items added — pick whole categories above, or add items one by one."}
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {/* Header row */}
+                        <div className="grid gap-2 px-3 pb-1" style={{ gridTemplateColumns: "1fr 1.4fr 90px 100px 36px" }}>
+                          <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Category</span>
+                          <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Menu Item</span>
+                          <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground text-right">Price</span>
+                          <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground text-right">After {discountPercent || 0}%</span>
+                          <span />
+                        </div>
+
+                        <div className="space-y-1.5">
+                          {scopeItemRows.map((row, idx) => {
+                            const selectedItem = menuItems.find((m) => m.id === row.itemId);
+                            const activeCategoryId = selectedItem?.categoryId ?? row.categoryId;
+                            // Hide items already named on another row — picking the same
+                            // item twice adds nothing to the scope.
+                            const takenElsewhere = new Set(
+                              scopeItemRows.filter((_, i) => i !== idx).map((r) => r.itemId).filter(Boolean)
+                            );
+                            const itemChoices = menuItems.filter(
+                              (m) =>
+                                !takenElsewhere.has(m.id) &&
+                                (!activeCategoryId || m.categoryId === activeCategoryId)
+                            );
+                            const price = Number(selectedItem?.price || 0);
+                            const after = price * (1 - Math.min(100, Math.max(0, discountPercent || 0)) / 100);
+                            // Already covered by a whole-category selection above.
+                            const redundant =
+                              !!selectedItem?.categoryId &&
+                              applicableCategoryIds.includes(selectedItem.categoryId);
+
+                            return (
+                              <div
+                                key={idx}
+                                className={cn(
+                                  "grid gap-2 items-center px-3 py-2.5 rounded-lg border bg-background transition-colors",
+                                  redundant
+                                    ? "border-amber-500/40 bg-amber-500/[0.04]"
+                                    : "border-border/60 hover:bg-muted/20"
+                                )}
+                                style={{ gridTemplateColumns: "1fr 1.4fr 90px 100px 36px" }}
+                              >
+                                {/* Category filter */}
+                                <Select
+                                  value={activeCategoryId || "all"}
+                                  onValueChange={(val) =>
+                                    updateScopeRowCategory(idx, val === "all" ? "" : val)
+                                  }
+                                >
+                                  <SelectTrigger className="h-8 text-xs border-0 bg-muted/30 hover:bg-muted/50 focus:ring-1">
+                                    <SelectValue placeholder="All categories" />
+                                  </SelectTrigger>
+                                  <SelectContent className="max-h-60">
+                                    <SelectItem value="all" className="text-xs">All Categories</SelectItem>
+                                    {foodCategories.map((c) => (
+                                      <SelectItem key={c.id} value={c.id} className="text-xs">
+                                        {c.name}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+
+                                {/* Item select */}
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <span className="text-[10px] font-mono text-muted-foreground/60 shrink-0 w-4 text-right">{idx + 1}.</span>
+                                  <Select
+                                    value={row.itemId}
+                                    onValueChange={(val) => updateScopeRowItem(idx, val)}
+                                  >
+                                    <SelectTrigger className="h-8 text-xs border-0 bg-muted/30 hover:bg-muted/50 focus:ring-1">
+                                      <SelectValue placeholder="Select item…" />
+                                    </SelectTrigger>
+                                    <SelectContent className="max-h-60">
+                                      {itemChoices.length === 0 ? (
+                                        <div className="px-2 py-3 text-xs text-muted-foreground text-center">
+                                          No items left in this category
+                                        </div>
+                                      ) : (
+                                        itemChoices.map((item) => (
+                                          <SelectItem key={item.id} value={item.id} className="text-xs">
+                                            {item.name}
+                                          </SelectItem>
+                                        ))
+                                      )}
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+
+                                {/* Price before */}
+                                <span className="text-xs font-mono text-muted-foreground text-right line-through">
+                                  {row.itemId ? `Rs. ${price.toLocaleString()}` : "—"}
+                                </span>
+
+                                {/* Price after the discount */}
+                                <span className="text-xs font-mono font-bold text-primary text-right">
+                                  {row.itemId ? `Rs. ${Math.round(after).toLocaleString()}` : "—"}
+                                </span>
+
+                                {/* Delete */}
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => removeScopeItemRow(idx)}
+                                  className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </Button>
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        {scopeItemRows.some((r) => {
+                          const it = menuItems.find((m) => m.id === r.itemId);
+                          return !!it?.categoryId && applicableCategoryIds.includes(it.categoryId);
+                        }) && (
+                          <p className="text-[10px] text-amber-600 dark:text-amber-500 flex items-center gap-1.5 px-3 pt-1">
+                            <AlertTriangle className="h-3 w-3 shrink-0" />
+                            Highlighted rows are already covered by a category selected above — they change nothing.
+                          </p>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
               </CardContent>
