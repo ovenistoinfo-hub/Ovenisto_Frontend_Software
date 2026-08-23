@@ -38,6 +38,8 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Progress } from "@/components/ui/progress";
+import { DatePicker } from "@/components/ui/date-picker";
+import { TimePicker } from "@/components/ui/time-picker";
 import { toast } from "sonner";
 import { Link, useLocation } from "react-router-dom";
 import { cn, formatPakistaniPhone, isValidPakistaniPhone } from "@/lib/utils";
@@ -3699,13 +3701,13 @@ const POS = () => {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <Label className="text-xs font-medium">Scheduled Date *</Label>
-                  <Input type="date" value={futureScheduledDate} onChange={e => setFutureScheduledDate(e.target.value)}
+                  <DatePicker value={futureScheduledDate} onChange={setFutureScheduledDate}
                     min={new Date().toISOString().split("T")[0]}
                     className="mt-1 h-9 text-sm" />
                 </div>
                 <div>
                   <Label className="text-xs font-medium">Scheduled Time *</Label>
-                  <Input type="time" value={futureScheduledTime} onChange={e => setFutureScheduledTime(e.target.value)}
+                  <TimePicker value={futureScheduledTime} onChange={setFutureScheduledTime}
                     className="mt-1 h-9 text-sm" />
                 </div>
               </div>

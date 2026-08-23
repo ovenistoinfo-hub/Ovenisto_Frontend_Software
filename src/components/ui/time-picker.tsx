@@ -22,6 +22,8 @@ export interface TimePickerProps {
   value: string;
   onChange: (value: string) => void;
   disabled?: boolean;
+  /** Set when a sibling <Label htmlFor> points at this field. */
+  id?: string;
   className?: string;
 }
 
@@ -59,7 +61,7 @@ export function formatTimeLabel(value: string): string {
   return `${hour12}:${String(minute).padStart(2, "0")} ${meridiem}`;
 }
 
-export function TimePicker({ value, onChange, disabled, className }: TimePickerProps) {
+export function TimePicker({ value, onChange, disabled, id, className }: TimePickerProps) {
   const [open, setOpen] = React.useState(false);
   const parts = parseTime(value);
 
@@ -83,6 +85,7 @@ export function TimePicker({ value, onChange, disabled, className }: TimePickerP
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button
+          id={id}
           type="button"
           variant="outline"
           disabled={disabled}

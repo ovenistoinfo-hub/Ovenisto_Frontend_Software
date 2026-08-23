@@ -7,7 +7,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -15,6 +14,7 @@ import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PageHeader } from "@/components/ui/page-header";
+import { DatePicker } from "@/components/ui/date-picker";
 import { useAuth } from "@/contexts/AuthContext";
 import { useData } from "@/contexts/DataContext";
 import { toast } from "sonner";
@@ -629,11 +629,11 @@ export default function EmployeePortal() {
               <div className="flex flex-wrap gap-4 items-end">
                 <div>
                   <Label className="text-xs">From</Label>
-                  <Input type="date" value={attFrom} onChange={e => setAttFrom(e.target.value)} className="mt-1 w-40" />
+                  <DatePicker value={attFrom} onChange={setAttFrom} className="mt-1 w-40" />
                 </div>
                 <div>
                   <Label className="text-xs">To</Label>
-                  <Input type="date" value={attTo} onChange={e => setAttTo(e.target.value)} className="mt-1 w-40" />
+                  <DatePicker value={attTo} onChange={setAttTo} min={attFrom} className="mt-1 w-40" />
                 </div>
                 <Button size="sm" variant="outline" onClick={() => { setAttFrom(thirtyDaysAgo); setAttTo(today); }}>
                   Last 30 Days
@@ -814,11 +814,11 @@ export default function EmployeePortal() {
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <Label>Start Date</Label>
-                    <Input type="date" value={leaveForm.startDate} onChange={e => setLeaveForm(f => ({ ...f, startDate: e.target.value }))} className="mt-1" />
+                    <DatePicker value={leaveForm.startDate} onChange={v => setLeaveForm(f => ({ ...f, startDate: v }))} className="mt-1" />
                   </div>
                   <div>
                     <Label>End Date</Label>
-                    <Input type="date" value={leaveForm.endDate} onChange={e => setLeaveForm(f => ({ ...f, endDate: e.target.value }))} className="mt-1" />
+                    <DatePicker value={leaveForm.endDate} onChange={v => setLeaveForm(f => ({ ...f, endDate: v }))} min={leaveForm.startDate} className="mt-1" />
                   </div>
                 </div>
                 <div>
@@ -841,11 +841,11 @@ export default function EmployeePortal() {
               <div className="flex flex-wrap gap-3 items-end">
                 <div>
                   <Label className="text-xs">From</Label>
-                  <Input type="date" value={leaveFrom} onChange={e => setLeaveFrom(e.target.value)} className="mt-1 w-40" />
+                  <DatePicker value={leaveFrom} onChange={setLeaveFrom} className="mt-1 w-40" />
                 </div>
                 <div>
                   <Label className="text-xs">To</Label>
-                  <Input type="date" value={leaveTo} onChange={e => setLeaveTo(e.target.value)} className="mt-1 w-40" />
+                  <DatePicker value={leaveTo} onChange={setLeaveTo} min={leaveFrom} className="mt-1 w-40" />
                 </div>
                 <Button size="sm" variant="outline" onClick={() => { setLeaveFrom(leaveYearStart); setLeaveTo(today); }}>This Year</Button>
                 <Button size="sm" variant="outline" onClick={() => {

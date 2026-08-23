@@ -9,12 +9,13 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { Input } from "@/components/ui/input";
 import { Send, MessageSquare } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { useData } from "@/contexts/DataContext";
 import { PageHeader } from "@/components/ui/page-header";
+import { DatePicker } from "@/components/ui/date-picker";
+import { TimePicker } from "@/components/ui/time-picker";
 
 const templates = [
   { id: "1", name: "Weekend Offer", text: "🍕 50% OFF on all Pizzas this weekend! Visit Ovenisto now." },
@@ -29,6 +30,10 @@ const SMS = () => {
   const [recipientType, setRecipientType] = useState("all");
   const [selectedCustomers, setSelectedCustomers] = useState<string[]>([]);
   const [schedule, setSchedule] = useState(false);
+  // Were `defaultValue` on uncontrolled inputs, so nothing typed here ever
+  // reached handleSend — they are real state now the pickers need a value.
+  const [scheduleDate, setScheduleDate] = useState("");
+  const [scheduleTime, setScheduleTime] = useState("10:00");
   const [template, setTemplate] = useState("");
   const [loading, setLoading] = useState(true);
   useEffect(() => { const t = setTimeout(() => setLoading(false), 500); return () => clearTimeout(t); }, []);
@@ -62,7 +67,7 @@ const SMS = () => {
             <Select value={template} onValueChange={handleTemplateChange}><SelectTrigger><SelectValue placeholder="Select template..." /></SelectTrigger><SelectContent>{templates.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}</SelectContent></Select>
             <Textarea placeholder="Type your message..." value={message} onChange={(e) => setMessage(e.target.value)} rows={4} /><p className="text-xs text-muted-foreground">{message.length}/160 characters</p>
             <div className="flex items-center gap-3"><Switch checked={schedule} onCheckedChange={setSchedule} /><span className="text-sm">{schedule ? "Schedule" : "Send Now"}</span></div>
-            {schedule && (<div className="grid grid-cols-2 gap-2"><Input type="date" defaultValue="2026-03-10" /><Input type="time" defaultValue="10:00" /></div>)}
+            {schedule && (<div className="grid grid-cols-2 gap-2"><DatePicker value={scheduleDate} onChange={setScheduleDate} /><TimePicker value={scheduleTime} onChange={setScheduleTime} /></div>)}
             <Button className="gradient-primary text-primary-foreground w-full" onClick={handleSend}><Send className="h-4 w-4 mr-2" />{schedule ? "Schedule SMS" : `Send to ${recipientCount} Customers`}</Button>
           </CardContent></Card>
         </div>

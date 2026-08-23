@@ -220,8 +220,12 @@ plus a body explaining _why_ the change was made when that is not obvious.
   exported `formatDateLabel`/`formatTimeLabel` (use those for any summary text too, so a date reads
   the same wherever it appears). `DatePicker` parses through local Y/M/D parts, never
   `new Date(str)`, which reads a bare date as UTC midnight and lands a day early in Pakistan.
-  `DealForm.tsx`'s schedule card is converted; the ~20 other native inputs across Attendance,
-  EmployeePortal, Coupons, CashHub etc. are not yet — convert them as you touch them.
+  Every date/time field in `src/pages/` goes through them as of 2026-08-23 — a `grep` for
+  `type="date"` there should stay at zero. `DatePicker` also takes `min` (earliest selectable date),
+  `clearable` (an inline ✕ for a field that may legitimately be empty), `placeholder` and `id`; both
+  take `className`, which `cn` merges last so a caller's `h-8 w-36` wins over the `h-10 w-full`
+  default. Two fields were silently uncontrolled before the conversion (SMS's schedule inputs used
+  `defaultValue`, Attendance's "Jump to date" had only an `onChange`) and now carry real state.
 - **A deal's schedule is three independent gates, all in the last card** (`Availability & Schedule`,
   shared by all four formats): the `validFrom`/`validTo` date range, `activeDays` (weekday chips,
   added 2026-08-23), and the optional `startTime`/`endTime` window. The form always shows an

@@ -10,9 +10,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PageHeader } from "@/components/ui/page-header";
+import { DatePicker } from "@/components/ui/date-picker";
 import { warehouseDashboardService } from "@/services/warehouseDashboard.service";
 import { useAuth } from "@/contexts/AuthContext";
 import { useOutletFilter } from "@/hooks/useOutletFilter";
@@ -200,16 +200,14 @@ export default function WarehouseDashboard() {
             </div>
             <div className="space-y-1">
               <Label className="text-xs">From Date</Label>
-              <Input type="date" className="h-9 w-[160px]" value={startDate} onChange={e => {
-                const val = e.target.value;
+              <DatePicker className="h-9 w-[160px]" value={startDate} clearable onChange={val => {
                 setStartDate(val);
                 setFilters(p => ({ ...p, startDate: val || undefined }));
               }} />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">To Date</Label>
-              <Input type="date" className="h-9 w-[160px]" value={endDate} onChange={e => {
-                const val = e.target.value;
+              <DatePicker className="h-9 w-[160px]" value={endDate} min={startDate} clearable onChange={val => {
                 setEndDate(val);
                 setFilters(p => ({ ...p, endDate: val || undefined }));
               }} />

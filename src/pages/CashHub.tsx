@@ -37,6 +37,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PageHeader } from "@/components/ui/page-header";
+import { DatePicker } from "@/components/ui/date-picker";
 import { toast } from "sonner";
 
 import {
@@ -714,11 +715,12 @@ const CashHub = () => {
                   </SelectContent>
                 </Select>
 
-                <Input
-                  type="date"
+                <DatePicker
                   value={dateFilter}
-                  onChange={(e) => setDateFilter(e.target.value)}
-                  className="w-full sm:w-[160px] h-9 text-xs rounded-xl bg-background font-semibold"
+                  onChange={setDateFilter}
+                  clearable
+                  placeholder="Any date"
+                  className="w-full sm:w-[160px] h-9 text-xs rounded-xl font-semibold"
                 />
 
                 {(searchQuery || roleFilter !== "all" || dateFilter) && (

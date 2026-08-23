@@ -15,6 +15,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Plus, Search, Pencil, IdCard, ChevronUp, ChevronLeft, ChevronRight, Upload, Loader2, Trash2, Eye } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PageHeader } from "@/components/ui/page-header";
+import { DatePicker } from "@/components/ui/date-picker";
 import { TablePagination, paginate } from "@/components/TablePagination";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
@@ -592,7 +593,7 @@ const Employees = () => {
                       <SelectContent>{DUTY_TYPES.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}</SelectContent>
                     </Select>
                   </div>
-                  <div className="space-y-1.5"><Label>Hire Date <span className="text-destructive">*</span></Label><Input type="date" value={form.hireDate} onChange={(e) => setForm(p => ({ ...p, hireDate: e.target.value }))} /></div>
+                  <div className="space-y-1.5"><Label>Hire Date <span className="text-destructive">*</span></Label><DatePicker value={form.hireDate} onChange={(v) => setForm(p => ({ ...p, hireDate: v }))} /></div>
                   <div className="space-y-1.5">
                     <Label>Rate Type <span className="text-destructive">*</span></Label>
                     <Select value={form.rateType} onValueChange={(v) => setForm(p => ({ ...p, rateType: v as EmployeeInput["rateType"] }))}>
@@ -658,7 +659,7 @@ const Employees = () => {
 
               <TabsContent value="biographical" className="mt-4 space-y-3">
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                  <div className="space-y-1.5"><Label>Date of Birth <span className="text-destructive">*</span></Label><Input type="date" value={form.dateOfBirth ?? ""} onChange={(e) => setForm(p => ({ ...p, dateOfBirth: e.target.value }))} /></div>
+                  <div className="space-y-1.5"><Label>Date of Birth <span className="text-destructive">*</span></Label><DatePicker value={form.dateOfBirth ?? ""} onChange={(v) => setForm(p => ({ ...p, dateOfBirth: v }))} /></div>
                   <div className="space-y-1.5">
                     <Label>Gender <span className="text-destructive">*</span></Label>
                     <Select value={form.gender ?? ""} onValueChange={(v) => setForm(p => ({ ...p, gender: v }))}>
@@ -904,11 +905,10 @@ const Employees = () => {
             <div className="grid grid-cols-1 gap-3">
               <div className="space-y-1.5">
                 <Label htmlFor="rehire-date">New Hire Date <span className="text-destructive">*</span></Label>
-                <Input
+                <DatePicker
                   id="rehire-date"
-                  type="date"
                   value={rehireDate}
-                  onChange={(e) => setRehireDate(e.target.value)}
+                  onChange={setRehireDate}
                 />
               </div>
               <div className="space-y-1.5">

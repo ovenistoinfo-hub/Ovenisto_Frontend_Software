@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Separator } from "@/components/ui/separator";
 import { Search, Eye, Printer, Download, Flame, Receipt, FileX, Loader2, RefreshCw } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
+import { DatePicker } from "@/components/ui/date-picker";
 import { generateInvoicePDF } from "@/lib/generate-invoice-pdf";
 import { TablePagination } from "@/components/TablePagination";
 import { ORDER_STATUS_COLORS, ORDER_TYPE_COLORS } from "@/lib/constants";
@@ -112,10 +113,10 @@ const Sales = () => {
                     className={`capitalize ${statusFilter === s ? "gradient-primary text-primary-foreground" : ""}`}>{s}</Button>
                 ))}
               </div>
-              <Input
-                type="date"
+              <DatePicker
                 value={dateFilter}
-                onChange={(e) => handleDate(e.target.value)}
+                onChange={handleDate}
+                placeholder="Any date"
                 className="h-8 w-40 text-sm"
               />
               {dateFilter && (

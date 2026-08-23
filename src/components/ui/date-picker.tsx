@@ -27,6 +27,8 @@ export interface DatePickerProps {
   onChange: (value: string) => void;
   disabled?: boolean;
   placeholder?: string;
+  /** Set when a sibling <Label htmlFor> points at this field. */
+  id?: string;
   /** Earliest selectable date, "YYYY-MM-DD". */
   min?: string;
   /** Show an inline clear button once a date is set. */
@@ -57,6 +59,7 @@ export function DatePicker({
   value,
   onChange,
   disabled,
+  id,
   placeholder = "Pick a date",
   min,
   clearable,
@@ -71,6 +74,7 @@ export function DatePicker({
       <div className="relative">
         <PopoverTrigger asChild>
           <Button
+            id={id}
             type="button"
             variant="outline"
             disabled={disabled}

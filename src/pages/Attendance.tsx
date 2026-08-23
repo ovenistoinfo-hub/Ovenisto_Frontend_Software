@@ -14,6 +14,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PageHeader } from "@/components/ui/page-header";
+import { DatePicker } from "@/components/ui/date-picker";
+import { TimePicker } from "@/components/ui/time-picker";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { attendanceService, type AttendanceRecord } from "@/services/attendance.service";
@@ -145,6 +147,9 @@ export default function AttendancePage() {
 
   // Attendance filters
   const [attFrom, setAttFrom]         = useState(today);
+  // "Jump to date" used to be a write-only uncontrolled input; the picker needs
+  // a value, and showing the date that was jumped to is better anyway.
+  const [jumpToDate, setJumpToDate]   = useState("");
   const [attTo, setAttTo]             = useState(today);
   const [attUserFilter, setAttUserFilter] = useState("all");
   const [editRow, setEditRow]         = useState<string | null>(null);
@@ -573,11 +578,11 @@ export default function AttendancePage() {
           <div className="flex flex-wrap gap-3 items-end">
             <div>
               <Label className="text-xs">From</Label>
-              <Input type="date" value={attFrom} onChange={e => setAttFrom(e.target.value)} className="mt-1 w-40" />
+              <DatePicker value={attFrom} onChange={setAttFrom} className="mt-1 w-40" />
             </div>
             <div>
               <Label className="text-xs">To</Label>
-              <Input type="date" value={attTo} onChange={e => setAttTo(e.target.value)} className="mt-1 w-40" />
+              <DatePicker value={attTo} onChange={setAttTo} min={attFrom} className="mt-1 w-40" />
             </div>
             <div>
               <Label className="text-xs">Employee</Label>
@@ -643,12 +648,12 @@ export default function AttendancePage() {
                       </TableCell>
                       <TableCell className="text-sm">
                         {editRow === r.id
-                          ? <Input type="time" value={editData.clockIn} onChange={e => setEditData(d => ({ ...d, clockIn: e.target.value }))} className="h-7 w-28" />
+                          ? <TimePicker value={editData.clockIn} onChange={v => setEditData(d => ({ ...d, clockIn: v }))} className="h-7 w-28" />
                           : formatTime(r.clockIn)}
                       </TableCell>
                       <TableCell className="text-sm">
                         {editRow === r.id
-                          ? <Input type="time" value={editData.clockOut} onChange={e => setEditData(d => ({ ...d, clockOut: e.target.value }))} className="h-7 w-28" />
+                          ? <TimePicker value={editData.clockOut} onChange={v => setEditData(d => ({ ...d, clockOut: v }))} className="h-7 w-28" />
                           : formatTime(r.clockOut)}
                       </TableCell>
                       <TableCell className="text-sm">{hoursWorked(r.clockIn, r.clockOut)}</TableCell>
@@ -708,11 +713,11 @@ export default function AttendancePage() {
           <div className="flex flex-wrap gap-3 items-end">
             <div>
               <Label className="text-xs">From</Label>
-              <Input type="date" value={leaveFrom} onChange={e => setLeaveFrom(e.target.value)} disabled={leaveFilter === "pending"} className="mt-1 w-40 disabled:opacity-50" />
+              <DatePicker value={leaveFrom} onChange={setLeaveFrom} disabled={leaveFilter === "pending"} className="mt-1 w-40" />
             </div>
             <div>
               <Label className="text-xs">To</Label>
-              <Input type="date" value={leaveTo} onChange={e => setLeaveTo(e.target.value)} disabled={leaveFilter === "pending"} className="mt-1 w-40 disabled:opacity-50" />
+              <DatePicker value={leaveTo} onChange={setLeaveTo} min={leaveFrom} disabled={leaveFilter === "pending"} className="mt-1 w-40" />
             </div>
             <Button size="sm" variant="outline" disabled={leaveFilter === "pending"} onClick={() => { setLeaveFrom(yearStart); setLeaveTo(today); }}>This Year</Button>
             <Button size="sm" variant="outline" disabled={leaveFilter === "pending"} onClick={() => {
@@ -944,15 +949,15 @@ export default function AttendancePage() {
                         <div className="space-y-1.5" onClick={e => e.stopPropagation()}>
                           <div className="flex items-center gap-2">
                             <Label className="text-[10px] w-8 shrink-0">Start</Label>
-                            <Input type="time" value={shiftConfigDraft[shift].start}
-                              onChange={e => setShiftConfigDraft(c => ({ ...c, [shift]: { ...c[shift], start: e.target.value } }))}
-                              className="h-7 text-xs bg-background" />
+                            <TimePicker value={shiftConfigDraft[shift].start}
+                              onChange={v => setShiftConfigDraft(c => ({ ...c, [shift]: { ...c[shift], start: v } }))}
+                              className="h-7 text-xs" />
                           </div>
                           <div className="flex items-center gap-2">
                             <Label className="text-[10px] w-8 shrink-0">End</Label>
-                            <Input type="time" value={shiftConfigDraft[shift].end}
-                              onChange={e => setShiftConfigDraft(c => ({ ...c, [shift]: { ...c[shift], end: e.target.value } }))}
-                              className="h-7 text-xs bg-background" />
+                            <TimePicker value={shiftConfigDraft[shift].end}
+                              onChange={v => setShiftConfigDraft(c => ({ ...c, [shift]: { ...c[shift], end: v } }))}
+                              className="h-7 text-xs" />
                           </div>
                         </div>
                       ) : (
@@ -1030,9 +1035,10 @@ export default function AttendancePage() {
               </div>
               <div>
                 <Label className="text-xs">Jump to date</Label>
-                <Input type="date" className="mt-1 h-8 w-40 text-sm" onChange={e => {
-                  if (!e.target.value) return;
-                  const d = new Date(e.target.value + "T00:00:00Z");
+                <DatePicker value={jumpToDate} className="mt-1 h-8 w-40 text-sm" onChange={val => {
+                  setJumpToDate(val);
+                  if (!val) return;
+                  const d = new Date(val + "T00:00:00Z");
                   const day = d.getUTCDay();
                   const diff = day === 0 ? -6 : 1 - day;
                   const pickedMon = new Date(d.getTime() + diff * 86_400_000).toISOString().split("T")[0];

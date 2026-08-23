@@ -19,6 +19,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { PageHeader } from "@/components/ui/page-header";
+import { DatePicker } from "@/components/ui/date-picker";
+import { TimePicker } from "@/components/ui/time-picker";
 import { reservationService, type Reservation, type CreateReservationInput, type PreOrderItem } from "@/services/reservation.service";
 import { tableService } from "@/services/table.service";
 import { customerService, type CustomerRecord } from "@/services/customer.service";
@@ -821,21 +823,19 @@ const Reservations = () => {
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
                 <Label className="text-xs font-semibold">Date *</Label>
-                <Input
-                  type="date"
+                <DatePicker
                   min={today}
                   value={form.date || ""}
-                  onChange={e => setForm(p => ({ ...p, date: e.target.value }))}
-                  className="mt-1 [color-scheme:dark] bg-background border-border text-foreground font-semibold"
+                  onChange={v => setForm(p => ({ ...p, date: v }))}
+                  className="mt-1 font-semibold"
                 />
               </div>
               <div>
                 <Label className="text-xs font-semibold">Time *</Label>
-                <Input
-                  type="time"
+                <TimePicker
                   value={form.time || ""}
-                  onChange={e => setForm(p => ({ ...p, time: e.target.value }))}
-                  className="mt-1 [color-scheme:dark] bg-background border-border text-foreground font-semibold"
+                  onChange={v => setForm(p => ({ ...p, time: v }))}
+                  className="mt-1 font-semibold"
                 />
               </div>
 
@@ -1051,20 +1051,19 @@ const Reservations = () => {
             <div className="flex items-center gap-2 bg-muted/40 p-1.5 rounded-xl border border-primary/20 animate-in fade-in slide-in-from-top-1 duration-200">
               <div className="flex items-center gap-1.5">
                 <Label className="text-[11px] font-semibold text-muted-foreground">From:</Label>
-                <Input
-                  type="date"
+                <DatePicker
                   value={startDate}
-                  onChange={e => setStartDate(e.target.value)}
-                  className="h-8 text-xs w-36 bg-background rounded-lg border-primary/30 [color-scheme:dark]"
+                  onChange={setStartDate}
+                  className="h-8 text-xs w-36 rounded-lg border-primary/30"
                 />
               </div>
               <div className="flex items-center gap-1.5">
                 <Label className="text-[11px] font-semibold text-muted-foreground">To:</Label>
-                <Input
-                  type="date"
+                <DatePicker
                   value={endDate}
-                  onChange={e => setEndDate(e.target.value)}
-                  className="h-8 text-xs w-36 bg-background rounded-lg border-primary/30 [color-scheme:dark]"
+                  min={startDate}
+                  onChange={setEndDate}
+                  className="h-8 text-xs w-36 rounded-lg border-primary/30"
                 />
               </div>
             </div>

@@ -13,6 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { PageHeader } from "@/components/ui/page-header";
+import { DatePicker } from "@/components/ui/date-picker";
 import { useData } from "@/contexts/DataContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
@@ -888,8 +889,8 @@ const Shifts = () => {
             </Select>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <div><Label>Start Date</Label><Input type="date" value={leaveForm.startDate} onChange={e => setLeaveForm(p => ({ ...p, startDate: e.target.value }))} /></div>
-            <div><Label>End Date</Label><Input type="date" value={leaveForm.endDate} onChange={e => setLeaveForm(p => ({ ...p, endDate: e.target.value }))} /></div>
+            <div><Label>Start Date</Label><DatePicker value={leaveForm.startDate} onChange={v => setLeaveForm(p => ({ ...p, startDate: v }))} /></div>
+            <div><Label>End Date</Label><DatePicker value={leaveForm.endDate} onChange={v => setLeaveForm(p => ({ ...p, endDate: v }))} min={leaveForm.startDate} /></div>
           </div>
           <div><Label>Reason</Label><Textarea value={leaveForm.reason} onChange={e => setLeaveForm(p => ({ ...p, reason: e.target.value }))} placeholder="Reason for leave..." /></div>
           {leaveForm.employeeId && (() => {
