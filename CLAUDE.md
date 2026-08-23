@@ -155,6 +155,14 @@ plus a body explaining _why_ the change was made when that is not obvious.
   (`useData()`) some older pages still read/write directly; newer pages (e.g. `Deals.tsx`/
   `DealForm.tsx`) use a dedicated `*.service.ts` + react-query instead. Check which pattern a page
   already uses before extending it; don't mix the two within one page.
+- **A deploy breaks any tab that was already open, and the app now recovers by itself** — all 47
+  pages are `lazy()`-imported, so a route's chunk is only fetched on navigation; a deploy rewrites
+  every asset hash, so an open tab asks for a filename the server no longer has and dies on
+  "Failed to fetch dynamically imported module". `src/lib/chunk-reload.ts` handles both paths into
+  that failure — Vite's `vite:preloadError` event (wired in `main.tsx`) and `ErrorBoundary`'s
+  `componentDidCatch` — by reloading once. The guard is a timestamp in `sessionStorage`, not a
+  boolean flag: a flag cleared on successful boot would loop forever when a chunk is genuinely
+  missing rather than merely renamed. A second failure inside 10s falls through to the error screen.
 - **The react-query cache persists to `localStorage`** (`App.tsx`'s `PersistQueryClientProvider`,
   key `ovenisto-rq-cache`). A breaking change to a query's returned data shape needs the `buster`
   string there bumped, or a stale cached shape can crash a page on load before it refetches.
@@ -189,8 +197,9 @@ plus a body explaining _why_ the change was made when that is not obvious.
 - **Every deal format reports money through the same two-row ladder**, inside a card all four title
   `4. Pricing & Cost Breakdown` — `ROW 1 · At Regular Menu Price` (Total Cost | Total Selling Price |
   Total Profit %, muted `border-border/70 bg-muted/25` cards) then `ROW 2 · This Deal` (Deal Price in
-  the primary `border-2 border-primary/50` card with an `X% OFF` badge and a "Customer saves Rs. Y"
-  subtitle, beside Deal Profit % tinted emerald or destructive), then `ROW 3 · SET …` — the input the
+  the `border-primary bg-primary/[0.06]` card with an `X% OFF` badge and a "Customer saves Rs. Y"
+  subtitle, beside Deal Profit % — plain foreground when positive, destructive when
+  negative), then `ROW 3 · SET …` — the input the
   rows above react to — with the channel overrides directly under it. All four formats use those exact
   labels; don't invent new wording for a new format, reuse this ladder. Two formats used to read as
   different products and no longer do: Buy X Get Y had its own vocabulary ("Customer Pays" / "You Give
