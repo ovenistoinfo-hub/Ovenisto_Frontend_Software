@@ -11,11 +11,9 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
 import {
-  Tag, Plus, Trash2, ArrowLeft, Loader2, Upload, Sparkles,
-  Package, Check, Layers, Calendar, CheckCircle2, Clock, Percent, Gift,
-  ShoppingBag, UtensilsCrossed, Truck, Eye, Image as ImageIcon,
-  Coins, TrendingUp, Calculator, ArrowUpRight, ArrowDownRight, RefreshCw, BadgePercent, HelpCircle,
-  AlertTriangle, CalendarDays
+  Tag, Plus, Trash2, ArrowLeft, Loader2, Upload, Sparkles, Package, Check, Layers,
+  Calendar, CheckCircle2, Percent, Gift, ShoppingBag, Eye, Image as ImageIcon,
+  Calculator, AlertTriangle, UtensilsCrossed, Truck
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -1295,18 +1293,18 @@ const DealForm = () => {
           </Button>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-xl sm:text-2xl font-black tracking-tight text-foreground">
+              <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-foreground">
                 {isEdit ? "Edit Deal & Combo" : "Create New Deal & Combo"}
               </h1>
               <Badge
                 variant={isActive ? "default" : "secondary"}
                 className={
                   isActive
-                    ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 font-semibold gap-1.5"
+                    ? "bg-muted text-foreground border-border font-medium gap-1.5"
                     : "text-muted-foreground gap-1.5"
                 }
               >
-                <span className={cn("h-1.5 w-1.5 rounded-full", isActive ? "bg-emerald-500" : "bg-muted-foreground")} />
+                <span className={cn("h-1.5 w-1.5 rounded-full", isActive ? "bg-primary" : "bg-muted-foreground/50")} />
                 {isActive ? "Active" : "Draft"}
               </Badge>
             </div>
@@ -1323,15 +1321,11 @@ const DealForm = () => {
           </Button>
           <Button
             size="sm"
-            className="gradient-primary text-primary-foreground font-bold shadow-md shadow-primary/20 px-5"
+            className="bg-primary text-primary-foreground hover:bg-primary/90 font-semibold px-5"
             onClick={handleSave}
             disabled={saving}
           >
-            {saving ? (
-              <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
-            ) : (
-              <Sparkles className="h-4 w-4 mr-1.5" />
-            )}
+            {saving && <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />}
             {isEdit ? "Update Deal" : "Publish Deal"}
           </Button>
         </div>
@@ -1348,8 +1342,8 @@ const DealForm = () => {
             <CardHeader className="pb-3 border-b bg-muted/20">
               <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle className="text-sm font-bold uppercase tracking-wider text-foreground flex items-center gap-2">
-                    <Tag className="h-4 w-4 text-primary" />
+                  <CardTitle className="text-sm font-semibold uppercase tracking-wider text-foreground flex items-center gap-2">
+                    <Tag className="h-4 w-4 text-muted-foreground" />
                     1. General Information
                   </CardTitle>
                   <CardDescription className="text-xs">
@@ -1375,7 +1369,7 @@ const DealForm = () => {
                       placeholder="e.g. Mega Crunch Duo Combo, Family Feast Pizza Pack"
                       value={name}
                       onChange={(e) => handleNameChange(e.target.value)}
-                      className="h-11 text-sm font-bold placeholder:font-normal"
+                      className="h-11 text-sm font-semibold placeholder:font-normal"
                     />
                   </div>
 
@@ -1504,8 +1498,8 @@ const DealForm = () => {
           {/* SECTION 2: Choose Deal Format */}
           <Card className="shadow-xs border-border/80 overflow-hidden">
             <CardHeader className="pb-3 border-b bg-muted/20">
-              <CardTitle className="text-sm font-bold uppercase tracking-wider text-foreground flex items-center gap-2">
-                <Layers className="h-4 w-4 text-primary" />
+              <CardTitle className="text-sm font-semibold uppercase tracking-wider text-foreground flex items-center gap-2">
+                <Layers className="h-4 w-4 text-muted-foreground" />
                 2. Choose Deal Format
               </CardTitle>
               <CardDescription className="text-xs">
@@ -1522,7 +1516,6 @@ const DealForm = () => {
                       title: "Fixed Bundle",
                       subtitle: "Pre-set items at a special price",
                       example: "e.g. 1 Pizza + 1 Fries + 1 Drink for Rs. 1,499",
-                      accent: "#3b82f6", // blue-500
                     },
                     {
                       type: "option_combo" as const,
@@ -1530,7 +1523,6 @@ const DealForm = () => {
                       title: "Customizable",
                       subtitle: "Customer picks items from defined steps",
                       example: "e.g. Choose 1 Pizza + 2 Drinks for Rs. 999",
-                      accent: "#8b5cf6", // violet-500
                     },
                     {
                       type: "percentage" as const,
@@ -1538,7 +1530,6 @@ const DealForm = () => {
                       title: "% Discount",
                       subtitle: "Percentage off selected items or categories",
                       example: "e.g. 20% off all Burgers & Beverages",
-                      accent: "#f59e0b", // amber-500
                     },
                     {
                       type: "buy_x_get_y" as const,
@@ -1546,7 +1537,6 @@ const DealForm = () => {
                       title: "Buy X Get Y",
                       subtitle: "Buy N items, get M free",
                       example: "e.g. Buy 2 Pizzas, Get 1 Cold Drink Free",
-                      accent: "#10b981", // emerald-500
                     },
                   ] as const
                 ).map((opt) => {
@@ -1557,40 +1547,34 @@ const DealForm = () => {
                       key={opt.type}
                       type="button"
                       onClick={() => setDealType(opt.type)}
-                      className="relative p-4 rounded-xl border-2 text-left transition-all flex flex-col gap-3 select-none cursor-pointer"
-                      style={selected ? {
-                        borderColor: opt.accent,
-                        backgroundColor: `${opt.accent}14`,
-                        boxShadow: `0 0 0 1px ${opt.accent}30`,
-                      } : {
-                        borderColor: "hsl(var(--border))",
-                        backgroundColor: "transparent",
-                      }}
+                      className={cn(
+                        "relative p-4 rounded-xl border text-left transition-colors flex flex-col gap-3 select-none cursor-pointer",
+                        selected
+                          ? "border-primary bg-primary/[0.06]"
+                          : "border-border bg-transparent hover:border-primary/40 hover:bg-muted/30"
+                      )}
                     >
                       {/* Selected checkmark */}
                       {selected && (
-                        <span
-                          className="absolute top-3 right-3 h-5 w-5 rounded-full flex items-center justify-center shadow-sm"
-                          style={{ backgroundColor: opt.accent, color: "#fff" }}
-                        >
+                        <span className="absolute top-3 right-3 h-5 w-5 rounded-full bg-primary text-primary-foreground flex items-center justify-center">
                           <Check className="h-3 w-3 stroke-[3]" />
                         </span>
                       )}
 
-                      {/* Icon */}
+                      {/* Icon — the format is named right below it, so the icon is
+                          an anchor, not a colour code: one accent, not four. */}
                       <div
-                        className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 transition-all"
-                        style={selected
-                          ? { backgroundColor: opt.accent, color: "#fff" }
-                          : { backgroundColor: `${opt.accent}18`, color: opt.accent }
-                        }
+                        className={cn(
+                          "w-9 h-9 rounded-lg flex items-center justify-center shrink-0 transition-colors",
+                          selected ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
+                        )}
                       >
                         <Icon className="h-4 w-4" />
                       </div>
 
                       {/* Text */}
                       <div className="space-y-0.5 min-w-0">
-                        <p className="font-bold text-[13px] leading-tight text-foreground">
+                        <p className="font-semibold text-[13px] leading-tight text-foreground">
                           {opt.title}
                         </p>
                         <p className="text-[11px] text-muted-foreground leading-snug">
@@ -1613,11 +1597,11 @@ const DealForm = () => {
 
         {/* RIGHT STICKY PREVIEW (4 COLS) — paired with Sections 1–2 only */}
         <div className="lg:col-span-4 space-y-4 lg:sticky lg:top-6">
-          <Card className="shadow-lg border-primary/30 bg-gradient-to-br from-card via-card to-primary/[0.03] overflow-hidden">
+          <Card className="shadow-xs border-border/80 overflow-hidden">
             <CardHeader className="pb-3 border-b bg-muted/30">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-xs font-bold uppercase tracking-wider text-foreground flex items-center gap-1.5">
-                  <Eye className="h-4 w-4 text-primary" />
+                  <Eye className="h-4 w-4 text-muted-foreground" />
                   Live POS Card Preview
                 </CardTitle>
                 <Badge variant="outline" className="text-[10px] font-mono">
@@ -1627,7 +1611,7 @@ const DealForm = () => {
             </CardHeader>
             <CardContent className="p-5 space-y-4">
               {/* Promotional Card */}
-              <div className="rounded-2xl border-2 border-primary/40 bg-card p-4 shadow-md space-y-3">
+              <div className="rounded-xl border border-border bg-card p-4 space-y-3">
                 {imageUrl ? (
                   <div className="h-32 w-full rounded-xl overflow-hidden border">
                     <img
@@ -1645,10 +1629,10 @@ const DealForm = () => {
 
                 <div>
                   <div className="flex items-center justify-between gap-2">
-                    <h3 className="font-extrabold text-sm text-foreground leading-snug">
+                    <h3 className="font-semibold text-sm text-foreground leading-snug">
                       {name || "Untitled Deal Name"}
                     </h3>
-                    <Badge className="gradient-primary text-primary-foreground text-[10px] px-2 py-0.5 font-bold">
+                    <Badge className="bg-primary text-primary-foreground hover:bg-primary/90 text-[10px] px-2 py-0.5 font-bold">
                       {dealType === "combo"
                         ? "Bundle"
                         : dealType === "option_combo"
@@ -1725,7 +1709,7 @@ const DealForm = () => {
                         </p>
                       ))}
                       {bogoImpact.give.map((r, i) => (
-                        <p key={`g${i}`} className="text-[11px] text-emerald-600 dark:text-emerald-400 font-bold truncate">
+                        <p key={`g${i}`} className="text-[11px] text-foreground/90 font-medium truncate">
                           • Get {r.qty} × {r.item.name}
                           {r.label ? ` (${r.label})` : ""} free
                         </p>
@@ -1760,7 +1744,7 @@ const DealForm = () => {
                         Rs. {Math.round(bogoImpact.regularValue).toLocaleString()}
                       </span>
                     )}
-                    <span className="text-xl font-black text-primary font-mono">
+                    <span className="text-xl font-semibold text-primary font-mono">
                       {dealType === "combo" || dealType === "option_combo"
                         ? `Rs. ${(dealPrice || 0).toLocaleString()}`
                         : dealType === "percentage"
@@ -1774,19 +1758,19 @@ const DealForm = () => {
                   </div>
 
                   {dealType === "combo" && bundleSavingsPercent > 0 && (
-                    <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-2 py-0.5 rounded">
+                    <span className="text-[10px] font-semibold text-primary bg-primary/10 border border-primary/30 px-2 py-0.5 rounded">
                       SAVE {bundleSavingsPercent}%
                     </span>
                   )}
 
                   {dealType === "percentage" && (discountPercent || 0) > 0 && (
-                    <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-2 py-0.5 rounded shrink-0">
+                    <span className="text-[10px] font-semibold text-primary bg-primary/10 border border-primary/30 px-2 py-0.5 rounded shrink-0">
                       SAVE {discountPercent}%
                     </span>
                   )}
 
                   {dealType === "buy_x_get_y" && bogoImpact && bogoImpact.savingsPercent > 0 && (
-                    <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-2 py-0.5 rounded shrink-0">
+                    <span className="text-[10px] font-semibold text-primary bg-primary/10 border border-primary/30 px-2 py-0.5 rounded shrink-0">
                       SAVE {bogoImpact.savingsPercent}%
                     </span>
                   )}
@@ -1796,31 +1780,31 @@ const DealForm = () => {
               {/* Ready Checklist */}
               <div className="p-3.5 rounded-xl border bg-muted/10 space-y-2 text-xs">
                 <p className="font-bold text-foreground flex items-center gap-1.5">
-                  <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                  <CheckCircle2 className="h-4 w-4 text-muted-foreground" />
                   Deal Setup Checklist:
                 </p>
                 <ul className="space-y-1 text-muted-foreground text-[11px]">
-                  <li className="flex items-center gap-1.5">
+                  <li className="">
                     {name ? (
-                      <Check className="h-3 w-3 text-emerald-500" />
+                      <Check className="h-3 w-3 text-foreground" />
                     ) : (
-                      <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                      <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/40" />
                     )}
                     <span>Deal Name specified</span>
                   </li>
-                  <li className="flex items-center gap-1.5">
+                  <li className="">
                     {formatChecklist.done ? (
-                      <Check className="h-3 w-3 text-emerald-500" />
+                      <Check className="h-3 w-3 text-foreground" />
                     ) : (
-                      <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                      <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/40" />
                     )}
                     <span>{formatChecklist.label}</span>
                   </li>
-                  <li className="flex items-center gap-1.5">
+                  <li className="">
                     {dealPrice > 0 || dealType !== "combo" ? (
-                      <Check className="h-3 w-3 text-emerald-500" />
+                      <Check className="h-3 w-3 text-foreground" />
                     ) : (
-                      <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                      <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/40" />
                     )}
                     <span>Pricing configured</span>
                   </li>
@@ -1830,15 +1814,11 @@ const DealForm = () => {
               {/* Bottom Quick Save */}
               <Button
                 type="button"
-                className="w-full gradient-primary text-primary-foreground font-bold shadow-md shadow-primary/20 py-5"
+                className="w-full bg-primary text-primary-foreground hover:bg-primary/90 font-semibold py-5"
                 onClick={handleSave}
                 disabled={saving}
               >
-                {saving ? (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                ) : (
-                  <Sparkles className="h-4 w-4 mr-2" />
-                )}
+                {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                 {isEdit ? "Update Deal" : "Save & Publish Deal"}
               </Button>
             </CardContent>
@@ -1856,8 +1836,8 @@ const DealForm = () => {
               <CardHeader className="pb-3 border-b bg-muted/20">
                 <div className="flex items-center justify-between gap-2">
                   <div>
-                    <CardTitle className="text-sm font-bold uppercase tracking-wider text-foreground flex items-center gap-2">
-                      <Package className="h-4 w-4 text-primary" />
+                    <CardTitle className="text-sm font-semibold uppercase tracking-wider text-foreground flex items-center gap-2">
+                      <Package className="h-4 w-4 text-muted-foreground" />
                       3. Included Bundle Items
                       {comboRows.length > 0 && (
                         <span className="ml-1 px-1.5 py-0.5 rounded-md bg-primary/10 text-primary text-[10px] font-bold">
@@ -1873,7 +1853,7 @@ const DealForm = () => {
                     type="button"
                     size="sm"
                     onClick={addComboRow}
-                    className="gradient-primary text-primary-foreground gap-1.5 text-xs font-bold shadow-xs shrink-0"
+                    className="bg-primary text-primary-foreground hover:bg-primary/90 gap-1.5 text-xs font-bold shadow-xs shrink-0"
                   >
                     <Plus className="h-3.5 w-3.5" /> Add Item
                   </Button>
@@ -1887,7 +1867,7 @@ const DealForm = () => {
                       <Package className="h-5 w-5 text-muted-foreground/50" />
                     </div>
                     <div>
-                      <p className="text-sm font-bold text-foreground">No items added yet</p>
+                      <p className="text-sm font-semibold text-foreground">No items added yet</p>
                       <p className="text-xs text-muted-foreground mt-0.5">Add the food items that come bundled in this deal</p>
                     </div>
                     <Button type="button" size="sm" variant="outline" onClick={addComboRow} className="text-xs gap-1.5">
@@ -2010,7 +1990,7 @@ const DealForm = () => {
                               <button
                                 type="button"
                                 onClick={() => updateComboQty(idx, row.qty - 1)}
-                                className="w-6 h-6 rounded-md bg-muted hover:bg-primary/10 hover:text-primary text-foreground flex items-center justify-center font-bold text-sm leading-none transition-colors"
+                                className="w-6 h-6 rounded-md bg-muted hover:bg-primary/10 hover:text-primary text-foreground flex items-center justify-center font-semibold text-sm leading-none transition-colors"
                               >
                                 −
                               </button>
@@ -2018,7 +1998,7 @@ const DealForm = () => {
                               <button
                                 type="button"
                                 onClick={() => updateComboQty(idx, row.qty + 1)}
-                                className="w-6 h-6 rounded-md bg-muted hover:bg-primary/10 hover:text-primary text-foreground flex items-center justify-center font-bold text-sm leading-none transition-colors"
+                                className="w-6 h-6 rounded-md bg-muted hover:bg-primary/10 hover:text-primary text-foreground flex items-center justify-center font-semibold text-sm leading-none transition-colors"
                               >
                                 +
                               </button>
@@ -2057,8 +2037,8 @@ const DealForm = () => {
               <CardHeader className="pb-3 border-b bg-muted/20">
                 <div className="flex items-center justify-between gap-2">
                   <div>
-                    <CardTitle className="text-sm font-bold uppercase tracking-wider text-foreground flex items-center gap-2">
-                      <Layers className="h-4 w-4 text-primary" />
+                    <CardTitle className="text-sm font-semibold uppercase tracking-wider text-foreground flex items-center gap-2">
+                      <Layers className="h-4 w-4 text-muted-foreground" />
                       3. Choice Steps & Groups
                       {optionGroups.length > 0 && (
                         <span className="ml-1 px-1.5 py-0.5 rounded-md bg-primary/10 text-primary text-[10px] font-bold">
@@ -2074,7 +2054,7 @@ const DealForm = () => {
                     type="button"
                     size="sm"
                     onClick={addOptionGroup}
-                    className="gradient-primary text-primary-foreground gap-1.5 text-xs font-bold shadow-xs shrink-0"
+                    className="bg-primary text-primary-foreground hover:bg-primary/90 gap-1.5 text-xs font-bold shadow-xs shrink-0"
                   >
                     <Plus className="h-3.5 w-3.5" /> Add Step Group
                   </Button>
@@ -2088,7 +2068,7 @@ const DealForm = () => {
                       <Layers className="h-5 w-5 text-muted-foreground/50" />
                     </div>
                     <div>
-                      <p className="text-sm font-bold text-foreground">No selection steps created yet</p>
+                      <p className="text-sm font-semibold text-foreground">No selection steps created yet</p>
                       <p className="text-xs text-muted-foreground mt-0.5">Create choice groups so customers can pick their own items</p>
                     </div>
                     <Button type="button" size="sm" variant="outline" onClick={addOptionGroup} className="text-xs gap-1.5">
@@ -2103,7 +2083,7 @@ const DealForm = () => {
                         {/* Group header — label, how many the customer picks, remove */}
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-3 py-2.5 border-b border-border/50 bg-muted/20">
                           <div className="flex items-center gap-2 flex-1 min-w-0">
-                            <span className="h-6 w-6 rounded-lg bg-primary/10 text-primary font-extrabold text-xs flex items-center justify-center shrink-0">
+                            <span className="h-6 w-6 rounded-lg bg-primary/10 text-primary font-semibold text-xs flex items-center justify-center shrink-0">
                               #{gIdx + 1}
                             </span>
                             <Input
@@ -2317,8 +2297,8 @@ const DealForm = () => {
               <CardHeader className="pb-3 border-b bg-muted/20">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
                   <div>
-                    <CardTitle className="text-sm font-bold uppercase tracking-wider text-foreground flex items-center gap-2">
-                      <Sparkles className="h-4 w-4 text-primary" />
+                    <CardTitle className="text-sm font-semibold uppercase tracking-wider text-foreground flex items-center gap-2">
+                      <Sparkles className="h-4 w-4 text-muted-foreground" />
                       4. Pricing & Cost Breakdown
                     </CardTitle>
                     <CardDescription className="text-xs">
@@ -2329,7 +2309,7 @@ const DealForm = () => {
                   </div>
                   {dealType === "combo" && comboRows.length > 0 && (
                     <Badge variant="outline" className="text-[11px] font-mono self-start sm:self-auto gap-1">
-                      <Calculator className="h-3 w-3 text-primary" />
+                      <Calculator className="h-3 w-3 text-muted-foreground" />
                       Cost-to-Price Calculator Active
                     </Badge>
                   )}
@@ -2341,16 +2321,13 @@ const DealForm = () => {
                 {/* ── ROW 1 · AT MENU PRICE (baseline, informational) ── */}
                 {dealType === "combo" && (
                   <div className="space-y-2">
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70 flex items-center gap-1.5">
-                      <Tag className="h-3 w-3" /> At Regular Menu Price
-                    </p>
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70">At Regular Menu Price</p>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
 
                       {/* Total Cost */}
                       <div className="rounded-xl border border-border/70 bg-muted/25 p-4 flex flex-col justify-between gap-2">
                         <div className="flex items-center justify-between">
-                          <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                            <Coins className="h-3.5 w-3.5 text-muted-foreground/70" />
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
                             Total Cost
                           </span>
                           {bundleCostPrice > 0 ? (
@@ -2364,7 +2341,7 @@ const DealForm = () => {
                           )}
                         </div>
                         <div>
-                          <p className="text-xl font-black font-mono text-foreground tracking-tight">
+                          <p className="text-xl font-semibold font-mono text-foreground tracking-tight">
                             Rs.&nbsp;{bundleCostPrice.toLocaleString()}
                           </p>
                           <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">
@@ -2377,12 +2354,11 @@ const DealForm = () => {
 
                       {/* Total Selling Price */}
                       <div className="rounded-xl border border-border/70 bg-muted/25 p-4 flex flex-col justify-between gap-2">
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                          <Tag className="h-3.5 w-3.5 text-muted-foreground/70" />
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
                           Total Selling Price
                         </span>
                         <div>
-                          <p className="text-xl font-black font-mono text-foreground tracking-tight">
+                          <p className="text-xl font-semibold font-mono text-foreground tracking-tight">
                             Rs.&nbsp;{bundleRegularValue.toLocaleString()}
                           </p>
                           <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">
@@ -2393,12 +2369,11 @@ const DealForm = () => {
 
                       {/* Total Profit % at menu price */}
                       <div className="rounded-xl border border-border/70 bg-muted/25 p-4 flex flex-col justify-between gap-2">
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                          <TrendingUp className="h-3.5 w-3.5 text-muted-foreground/70" />
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
                           Total Profit %
                         </span>
                         <div>
-                          <p className="text-xl font-black font-mono text-foreground tracking-tight">
+                          <p className="text-xl font-semibold font-mono text-foreground tracking-tight">
                             {bundleRegularValue > 0 ? `${bundleMenuMargin}%` : "—"}
                           </p>
                           <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">
@@ -2414,16 +2389,13 @@ const DealForm = () => {
                 {/* ── ROW 2 · THIS DEAL (the decision, updates live) ── */}
                 {dealType === "combo" && (
                   <div className="space-y-2">
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-primary/80 flex items-center gap-1.5">
-                      <Sparkles className="h-3 w-3" /> This Deal
-                    </p>
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-primary/80">This Deal</p>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
 
                       {/* Deal Price */}
-                      <div className="rounded-xl border-2 border-primary/50 bg-primary/[0.04] p-4 flex flex-col justify-between gap-2 shadow-xs">
+                      <div className="rounded-xl border border-primary bg-primary/[0.06] p-4 flex flex-col justify-between gap-2">
                         <div className="flex items-center justify-between">
-                          <span className="text-[10px] font-bold uppercase tracking-wider text-primary flex items-center gap-1.5">
-                            <Sparkles className="h-3.5 w-3.5" />
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-primary">
                             Deal Price
                           </span>
                           {bundleSavingsPercent > 0 && (
@@ -2433,7 +2405,7 @@ const DealForm = () => {
                           )}
                         </div>
                         <div>
-                          <p className="text-xl font-black font-mono text-primary tracking-tight">
+                          <p className="text-xl font-semibold font-mono text-primary tracking-tight">
                             Rs.&nbsp;{(dealPrice || 0).toLocaleString()}
                           </p>
                           <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">
@@ -2448,14 +2420,13 @@ const DealForm = () => {
                       <div className={cn(
                         "rounded-xl border p-4 flex flex-col justify-between gap-2 transition-all",
                         dealPrice > 0 && bundleProfit > 0
-                          ? "border-emerald-500/40 bg-emerald-500/[0.04]"
+                          ? "border-border/70 bg-muted/25"
                           : "border-border/70 bg-muted/25"
                       )}>
                         <span className={cn(
                           "text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5",
-                          bundleProfit > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground"
+                          bundleProfit > 0 ? "text-foreground" : "text-muted-foreground"
                         )}>
-                          <TrendingUp className="h-3.5 w-3.5" />
                           Deal Profit %
                         </span>
                         <div>
@@ -2463,8 +2434,8 @@ const DealForm = () => {
                             <>
                               <div className="flex items-baseline gap-1.5">
                                 <p className={cn(
-                                  "text-xl font-black font-mono tracking-tight",
-                                  bundleProfit > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-destructive"
+                                  "text-xl font-semibold font-mono tracking-tight",
+                                  bundleProfit > 0 ? "text-foreground" : "text-destructive"
                                 )}>
                                   {bundleProfitMargin}%
                                 </p>
@@ -2478,7 +2449,7 @@ const DealForm = () => {
                             </>
                           ) : (
                             <>
-                              <p className="text-xl font-black font-mono text-muted-foreground/40">—</p>
+                              <p className="text-xl font-semibold font-mono text-muted-foreground/40">—</p>
                               <p className="text-[10px] text-muted-foreground mt-0.5">
                                 {dealPrice > 0 ? "Add recipes for profit %" : "Enter deal price below"}
                               </p>
@@ -2496,16 +2467,13 @@ const DealForm = () => {
                 {dealType === "option_combo" && optionComboTotals.maxSelling > 0 && (
                   <>
                     <div className="space-y-2">
-                      <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70 flex items-center gap-1.5">
-                        <Tag className="h-3 w-3" /> At Regular Menu Price
-                      </p>
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70">At Regular Menu Price</p>
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
 
                         {/* Total Cost range */}
                         <div className="rounded-xl border border-border/70 bg-muted/25 p-4 flex flex-col justify-between gap-2">
                           <div className="flex items-center justify-between">
-                            <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                              <Coins className="h-3.5 w-3.5 text-muted-foreground/70" />
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
                               Total Cost
                             </span>
                             {optionComboTotals.maxCost > 0 ? (
@@ -2515,7 +2483,7 @@ const DealForm = () => {
                             )}
                           </div>
                           <div>
-                            <p className="text-xl font-black font-mono text-foreground tracking-tight">
+                            <p className="text-xl font-semibold font-mono text-foreground tracking-tight">
                               {optionComboTotals.maxCost > 0
                                 ? `Rs.\u00a0${Math.round(optionComboTotals.minCost).toLocaleString()} – ${Math.round(optionComboTotals.maxCost).toLocaleString()}`
                                 : "—"}
@@ -2530,12 +2498,11 @@ const DealForm = () => {
 
                         {/* Total Selling range */}
                         <div className="rounded-xl border border-border/70 bg-muted/25 p-4 flex flex-col justify-between gap-2">
-                          <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                            <Tag className="h-3.5 w-3.5 text-muted-foreground/70" />
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
                             Total Selling Price
                           </span>
                           <div>
-                            <p className="text-xl font-black font-mono text-foreground tracking-tight">
+                            <p className="text-xl font-semibold font-mono text-foreground tracking-tight">
                               Rs.&nbsp;{Math.round(optionComboTotals.minSelling).toLocaleString()} – {Math.round(optionComboTotals.maxSelling).toLocaleString()}
                             </p>
                             <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">
@@ -2546,12 +2513,11 @@ const DealForm = () => {
 
                         {/* Worst-case menu margin */}
                         <div className="rounded-xl border border-border/70 bg-muted/25 p-4 flex flex-col justify-between gap-2">
-                          <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                            <TrendingUp className="h-3.5 w-3.5 text-muted-foreground/70" />
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
                             Total Profit %
                           </span>
                           <div>
-                            <p className="text-xl font-black font-mono text-foreground tracking-tight">
+                            <p className="text-xl font-semibold font-mono text-foreground tracking-tight">
                               {optionComboTotals.maxCost > 0
                                 ? `${Math.round(((optionComboTotals.maxSelling - optionComboTotals.maxCost) / optionComboTotals.maxSelling) * 100)}%`
                                 : "—"}
@@ -2566,16 +2532,13 @@ const DealForm = () => {
                     </div>
 
                     <div className="space-y-2">
-                      <p className="text-[10px] font-bold uppercase tracking-wider text-primary/80 flex items-center gap-1.5">
-                        <Sparkles className="h-3 w-3" /> This Deal
-                      </p>
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-primary/80">This Deal</p>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
 
                         {/* Deal Price + biggest discount the customer can extract */}
-                        <div className="rounded-xl border-2 border-primary/50 bg-primary/[0.04] p-4 flex flex-col justify-between gap-2 shadow-xs">
+                        <div className="rounded-xl border border-primary bg-primary/[0.06] p-4 flex flex-col justify-between gap-2">
                           <div className="flex items-center justify-between">
-                            <span className="text-[10px] font-bold uppercase tracking-wider text-primary flex items-center gap-1.5">
-                              <Sparkles className="h-3.5 w-3.5" />
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-primary">
                               Deal Price
                             </span>
                             {dealPrice > 0 && optionComboTotals.maxSelling > dealPrice && (
@@ -2585,7 +2548,7 @@ const DealForm = () => {
                             )}
                           </div>
                           <div>
-                            <p className="text-xl font-black font-mono text-primary tracking-tight">
+                            <p className="text-xl font-semibold font-mono text-primary tracking-tight">
                               Rs.&nbsp;{(dealPrice || 0).toLocaleString()}
                             </p>
                             <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">
@@ -2600,7 +2563,7 @@ const DealForm = () => {
                         <div className={cn(
                           "rounded-xl border p-4 flex flex-col justify-between gap-2 transition-all",
                           dealPrice > 0 && optionComboTotals.maxCost > 0 && dealPrice > optionComboTotals.maxCost
-                            ? "border-emerald-500/40 bg-emerald-500/[0.04]"
+                            ? "border-border/70 bg-muted/25"
                             : dealPrice > 0 && optionComboTotals.maxCost > 0
                             ? "border-destructive/40 bg-destructive/[0.04]"
                             : "border-border/70 bg-muted/25"
@@ -2608,10 +2571,9 @@ const DealForm = () => {
                           <span className={cn(
                             "text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5",
                             dealPrice > optionComboTotals.maxCost && optionComboTotals.maxCost > 0
-                              ? "text-emerald-600 dark:text-emerald-400"
+                              ? "text-foreground"
                               : "text-muted-foreground"
                           )}>
-                            <TrendingUp className="h-3.5 w-3.5" />
                             Worst-Case Profit %
                           </span>
                           <div>
@@ -2619,9 +2581,9 @@ const DealForm = () => {
                               <>
                                 <div className="flex items-baseline gap-1.5">
                                   <p className={cn(
-                                    "text-xl font-black font-mono tracking-tight",
+                                    "text-xl font-semibold font-mono tracking-tight",
                                     dealPrice > optionComboTotals.maxCost
-                                      ? "text-emerald-600 dark:text-emerald-400"
+                                      ? "text-foreground"
                                       : "text-destructive"
                                   )}>
                                     {Math.round(((dealPrice - optionComboTotals.maxCost) / dealPrice) * 100)}%
@@ -2636,7 +2598,7 @@ const DealForm = () => {
                               </>
                             ) : (
                               <>
-                                <p className="text-xl font-black font-mono text-muted-foreground/40">—</p>
+                                <p className="text-xl font-semibold font-mono text-muted-foreground/40">—</p>
                                 <p className="text-[10px] text-muted-foreground mt-0.5">
                                   {dealPrice > 0 ? "Add recipes for profit %" : "Enter deal price below"}
                                 </p>
@@ -2697,7 +2659,7 @@ const DealForm = () => {
                             placeholder="e.g. 1999"
                             value={dealPrice || ""}
                             onChange={(e) => setDealPrice(Math.max(0, Number(e.target.value)))}
-                            className="h-11 text-base font-extrabold font-mono border-primary/50 bg-primary/[0.02] pl-10"
+                            className="h-11 text-base font-semibold font-mono border-primary/50 bg-primary/[0.02] pl-10"
                           />
                           <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-muted-foreground font-mono">
                             Rs.
@@ -2713,7 +2675,7 @@ const DealForm = () => {
                               placeholder="e.g. 20"
                               value={percentInput}
                               onChange={(e) => handlePercentInputChange(e.target.value)}
-                              className="h-11 text-base font-extrabold font-mono border-primary/50 bg-primary/[0.02] pr-9"
+                              className="h-11 text-base font-semibold font-mono border-primary/50 bg-primary/[0.02] pr-9"
                             />
                             <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-muted-foreground font-mono">
                               %
@@ -2741,7 +2703,6 @@ const DealForm = () => {
                                 : "text-muted-foreground/70 hover:text-muted-foreground"
                             )}
                           >
-                            <BadgePercent className="h-3 w-3" />
                             {dealType === "combo" ? "Off Menu Price" : "Off Priciest Menu Value"}
                           </button>
                           {basisCost > 0 && (
@@ -2755,7 +2716,6 @@ const DealForm = () => {
                                   : "text-muted-foreground/70 hover:text-muted-foreground"
                               )}
                             >
-                              <TrendingUp className="h-3 w-3" />
                               {dealType === "combo" ? "Markup on Cost" : "Markup on Priciest Cost"}
                             </button>
                           )}
@@ -2825,8 +2785,8 @@ const DealForm = () => {
           {dealType === "percentage" && (
             <Card className="shadow-xs border-border/80 overflow-hidden">
               <CardHeader className="pb-3 border-b bg-muted/20">
-                <CardTitle className="text-sm font-bold uppercase tracking-wider text-foreground flex items-center gap-2">
-                  <Percent className="h-4 w-4 text-primary" />
+                <CardTitle className="text-sm font-semibold uppercase tracking-wider text-foreground flex items-center gap-2">
+                  <Percent className="h-4 w-4 text-muted-foreground" />
                   3. Applicable Scope
                 </CardTitle>
                 <CardDescription className="text-xs">
@@ -2970,7 +2930,7 @@ const DealForm = () => {
                                 className={cn(
                                   "grid gap-2 items-center px-3 py-2.5 rounded-lg border bg-background transition-colors",
                                   redundant
-                                    ? "border-amber-500/40 bg-amber-500/[0.04]"
+                                    ? "border-destructive/40 bg-destructive/[0.04]"
                                     : "border-border/60 hover:bg-muted/20"
                                 )}
                                 style={{ gridTemplateColumns: SCOPE_ROW_GRID }}
@@ -3067,7 +3027,7 @@ const DealForm = () => {
                           const it = menuItems.find((m) => m.id === r.itemId);
                           return !!it?.categoryId && applicableCategoryIds.includes(it.categoryId);
                         }) && (
-                          <p className="text-[10px] text-amber-600 dark:text-amber-500 flex items-center gap-1.5 px-3 pt-1">
+                          <p className="text-[10px] text-muted-foreground flex items-center gap-1.5 px-3 pt-1">
                             <AlertTriangle className="h-3 w-3 shrink-0" />
                             Highlighted rows are already covered by a category selected above — they change nothing.
                           </p>
@@ -3086,8 +3046,8 @@ const DealForm = () => {
           {dealType === "percentage" && (
             <Card className="shadow-xs border-border/80 overflow-hidden">
               <CardHeader className="pb-3 border-b bg-muted/20">
-                <CardTitle className="text-sm font-bold uppercase tracking-wider text-foreground flex items-center gap-2">
-                  <Sparkles className="h-4 w-4 text-primary" />
+                <CardTitle className="text-sm font-semibold uppercase tracking-wider text-foreground flex items-center gap-2">
+                  <Sparkles className="h-4 w-4 text-muted-foreground" />
                   4. Pricing & Cost Breakdown
                 </CardTitle>
                 <CardDescription className="text-xs">
@@ -3101,7 +3061,7 @@ const DealForm = () => {
                     <div className="w-12 h-12 rounded-full bg-muted/60 flex items-center justify-center mx-auto">
                       <Percent className="h-5 w-5 text-muted-foreground/50" />
                     </div>
-                    <p className="text-sm font-bold text-foreground">Nothing in scope yet</p>
+                    <p className="text-sm font-semibold text-foreground">Nothing in scope yet</p>
                     <p className="text-xs text-muted-foreground">
                       Pick a category or some items above to see what this discount costs you
                     </p>
@@ -3113,16 +3073,13 @@ const DealForm = () => {
                     deal just carries ranges, since each item in scope is priced
                     on its own rather than summing into one bundle total. */}
                 <div className="space-y-2">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70 flex items-center gap-1.5">
-                    <Tag className="h-3 w-3" /> At Regular Menu Price
-                  </p>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70">At Regular Menu Price</p>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
 
                     {/* Total Cost */}
                     <div className="rounded-xl border border-border/70 bg-muted/25 p-4 flex flex-col justify-between gap-2">
                       <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                          <Coins className="h-3.5 w-3.5 text-muted-foreground/70" />
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
                           Total Cost
                         </span>
                         {discountImpact.hasCost ? (
@@ -3132,7 +3089,7 @@ const DealForm = () => {
                         )}
                       </div>
                       <div>
-                        <p className="text-xl font-black font-mono text-foreground tracking-tight">
+                        <p className="text-xl font-semibold font-mono text-foreground tracking-tight">
                           {discountImpact.hasCost
                             ? moneyRange(discountImpact.minCost, discountImpact.maxCost)
                             : "—"}
@@ -3147,12 +3104,11 @@ const DealForm = () => {
 
                     {/* Total Selling Price */}
                     <div className="rounded-xl border border-border/70 bg-muted/25 p-4 flex flex-col justify-between gap-2">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                        <Tag className="h-3.5 w-3.5 text-muted-foreground/70" />
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
                         Total Selling Price
                       </span>
                       <div>
-                        <p className="text-xl font-black font-mono text-foreground tracking-tight">
+                        <p className="text-xl font-semibold font-mono text-foreground tracking-tight">
                           {moneyRange(discountImpact.minBefore, discountImpact.maxBefore)}
                         </p>
                         <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">
@@ -3163,12 +3119,11 @@ const DealForm = () => {
 
                     {/* Total Profit % at menu price */}
                     <div className="rounded-xl border border-border/70 bg-muted/25 p-4 flex flex-col justify-between gap-2">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                        <TrendingUp className="h-3.5 w-3.5 text-muted-foreground/70" />
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
                         Total Profit %
                       </span>
                       <div>
-                        <p className="text-xl font-black font-mono text-foreground tracking-tight">
+                        <p className="text-xl font-semibold font-mono text-foreground tracking-tight">
                           {discountImpact.avgMenuMargin != null ? `${discountImpact.avgMenuMargin}%` : "—"}
                         </p>
                         <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">
@@ -3184,16 +3139,13 @@ const DealForm = () => {
 
                 {/* ── ROW 2 · THIS DEAL (the decision, updates live) ── */}
                 <div className="space-y-2">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-primary/80 flex items-center gap-1.5">
-                    <Sparkles className="h-3 w-3" /> This Deal
-                  </p>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-primary/80">This Deal</p>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
 
                     {/* Deal Price — what the customer actually pays, per item */}
-                    <div className="rounded-xl border-2 border-primary/50 bg-primary/[0.04] p-4 flex flex-col justify-between gap-2 shadow-xs">
+                    <div className="rounded-xl border border-primary bg-primary/[0.06] p-4 flex flex-col justify-between gap-2">
                       <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-primary flex items-center gap-1.5">
-                          <Sparkles className="h-3.5 w-3.5" />
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-primary">
                           Deal Price
                         </span>
                         {(discountPercent || 0) > 0 && (
@@ -3203,7 +3155,7 @@ const DealForm = () => {
                         )}
                       </div>
                       <div>
-                        <p className="text-xl font-black font-mono text-primary tracking-tight">
+                        <p className="text-xl font-semibold font-mono text-primary tracking-tight">
                           {moneyRange(discountImpact.minAfter, discountImpact.maxAfter)}
                         </p>
                         <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">
@@ -3220,21 +3172,20 @@ const DealForm = () => {
                     <div className={cn(
                       "rounded-xl border p-4 flex flex-col justify-between gap-2 transition-all",
                       discountImpact.avgMargin != null && discountImpact.avgMargin > 0
-                        ? "border-emerald-500/40 bg-emerald-500/[0.04]"
+                        ? "border-border/70 bg-muted/25"
                         : "border-border/70 bg-muted/25"
                     )}>
                       <div className="flex items-center justify-between gap-2">
                         <span className={cn(
                           "text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5",
                           discountImpact.avgMargin != null && discountImpact.avgMargin > 0
-                            ? "text-emerald-600 dark:text-emerald-400"
+                            ? "text-foreground"
                             : "text-muted-foreground"
                         )}>
-                          <TrendingUp className="h-3.5 w-3.5" />
                           Deal Profit %
                         </span>
                         {discountImpact.belowCost.length > 0 && (
-                          <span className="text-[10px] font-bold text-amber-600 dark:text-amber-500 px-1.5 py-0.5 rounded bg-amber-500/10 shrink-0">
+                          <span className="text-[10px] font-semibold text-destructive px-1.5 py-0.5 rounded bg-destructive/10 shrink-0">
                             {discountImpact.belowCost.length} at a loss
                           </span>
                         )}
@@ -3243,9 +3194,9 @@ const DealForm = () => {
                         {discountImpact.avgMargin != null ? (
                           <>
                             <p className={cn(
-                              "text-xl font-black font-mono tracking-tight",
+                              "text-xl font-semibold font-mono tracking-tight",
                               discountImpact.avgMargin > 0
-                                ? "text-emerald-600 dark:text-emerald-400"
+                                ? "text-foreground"
                                 : "text-destructive"
                             )}>
                               {discountImpact.avgMargin}%
@@ -3256,7 +3207,7 @@ const DealForm = () => {
                           </>
                         ) : (
                           <>
-                            <p className="text-xl font-black font-mono text-muted-foreground/40">—</p>
+                            <p className="text-xl font-semibold font-mono text-muted-foreground/40">—</p>
                             <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">
                               Set recipes in Menu Items for live margin
                             </p>
@@ -3272,9 +3223,7 @@ const DealForm = () => {
                     percentage deal has that a bundle does not, kept below the
                     ladder the way Buy X Get Y keeps its giveaway list. */}
                 <div className="rounded-xl border border-border/70 bg-muted/20 px-4 py-3 flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                    <Package className="h-3 w-3 text-muted-foreground/70" /> Items In Scope
-                  </p>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Items In Scope</p>
                   <p className="text-xs font-mono text-foreground/90">
                     {[
                       `${discountImpact.itemCount} item${discountImpact.itemCount !== 1 ? "s" : ""}`,
@@ -3369,7 +3318,7 @@ const DealForm = () => {
                               Math.min(100, Math.max(0, Number(e.target.value)))
                             )
                           }
-                          className="h-11 text-base font-extrabold font-mono border-primary/50 bg-primary/[0.02] pr-9"
+                          className="h-11 text-base font-semibold font-mono border-primary/50 bg-primary/[0.02] pr-9"
                         />
                         <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-muted-foreground font-mono">
                           %
@@ -3417,8 +3366,8 @@ const DealForm = () => {
           {dealType === "buy_x_get_y" && (
             <Card className="shadow-xs border-border/80 overflow-hidden">
               <CardHeader className="pb-3 border-b bg-muted/20">
-                <CardTitle className="text-sm font-bold uppercase tracking-wider text-foreground flex items-center gap-2">
-                  <Gift className="h-4 w-4 text-primary" />
+                <CardTitle className="text-sm font-semibold uppercase tracking-wider text-foreground flex items-center gap-2">
+                  <Gift className="h-4 w-4 text-muted-foreground" />
                   3. Buy X Get Y Configuration
                 </CardTitle>
                 <CardDescription className="text-xs">
@@ -3439,7 +3388,7 @@ const DealForm = () => {
                       className={cn(
                         "rounded-xl border overflow-hidden",
                         side.key === "get"
-                          ? "border-emerald-500/30 bg-emerald-500/5"
+                          ? "border-border/70 bg-muted/20"
                           : "border-border/60 bg-muted/10"
                       )}
                     >
@@ -3448,7 +3397,7 @@ const DealForm = () => {
                         className={cn(
                           "flex items-center justify-between gap-3 px-3 py-2.5 border-b",
                           side.key === "get"
-                            ? "border-emerald-500/20 bg-emerald-500/10"
+                            ? "border-border/60 bg-muted/40"
                             : "border-border/50 bg-muted/20"
                         )}
                       >
@@ -3456,14 +3405,14 @@ const DealForm = () => {
                           className={cn(
                             "text-xs font-bold uppercase tracking-wide flex items-center gap-1.5",
                             side.key === "get"
-                              ? "text-emerald-600 dark:text-emerald-400"
+                              ? "text-foreground"
                               : "text-foreground"
                           )}
                         >
                           <SideIcon
                             className={cn(
                               "h-4 w-4",
-                              side.key === "get" ? "text-emerald-500" : "text-primary"
+                              "text-muted-foreground"
                             )}
                           />
                           {side.title}
@@ -3472,7 +3421,7 @@ const DealForm = () => {
                           variant="outline"
                           className={cn(
                             "text-[10px] font-mono px-1.5 py-0 shrink-0",
-                            side.key === "get" && "border-emerald-500/40 text-emerald-600 dark:text-emerald-400"
+                            side.key === "get" && "border-border text-muted-foreground"
                           )}
                         >
                           {filledCount} item{filledCount !== 1 ? "s" : ""}
@@ -3573,7 +3522,7 @@ const DealForm = () => {
                                       <SelectTrigger
                                         className={cn(
                                           "h-8 text-xs border-0 bg-muted/30 hover:bg-muted/50 focus:ring-1",
-                                          !row.variantId && "ring-1 ring-amber-500/60"
+                                          !row.variantId && "ring-1 ring-destructive/50"
                                         )}
                                       >
                                         <SelectValue placeholder="Pick size…" />
@@ -3601,7 +3550,7 @@ const DealForm = () => {
                                   className={cn(
                                     "text-xs font-mono font-semibold text-right",
                                     side.key === "get"
-                                      ? "text-emerald-600 dark:text-emerald-400"
+                                      ? "text-foreground"
                                       : "text-foreground"
                                   )}
                                 >
@@ -3613,7 +3562,7 @@ const DealForm = () => {
                                   <button
                                     type="button"
                                     onClick={() => updateBogoQty(setRows, idx, row.qty - 1)}
-                                    className="w-6 h-6 rounded-md bg-muted hover:bg-primary/10 hover:text-primary text-foreground flex items-center justify-center font-bold text-sm leading-none transition-colors"
+                                    className="w-6 h-6 rounded-md bg-muted hover:bg-primary/10 hover:text-primary text-foreground flex items-center justify-center font-semibold text-sm leading-none transition-colors"
                                   >
                                     −
                                   </button>
@@ -3621,7 +3570,7 @@ const DealForm = () => {
                                   <button
                                     type="button"
                                     onClick={() => updateBogoQty(setRows, idx, row.qty + 1)}
-                                    className="w-6 h-6 rounded-md bg-muted hover:bg-primary/10 hover:text-primary text-foreground flex items-center justify-center font-bold text-sm leading-none transition-colors"
+                                    className="w-6 h-6 rounded-md bg-muted hover:bg-primary/10 hover:text-primary text-foreground flex items-center justify-center font-semibold text-sm leading-none transition-colors"
                                   >
                                     +
                                   </button>
@@ -3675,8 +3624,8 @@ const DealForm = () => {
               <CardHeader className="pb-3 border-b bg-muted/20">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
                   <div>
-                    <CardTitle className="text-sm font-bold uppercase tracking-wider text-foreground flex items-center gap-2">
-                      <Sparkles className="h-4 w-4 text-primary" />
+                    <CardTitle className="text-sm font-semibold uppercase tracking-wider text-foreground flex items-center gap-2">
+                      <Sparkles className="h-4 w-4 text-muted-foreground" />
                       4. Pricing & Cost Breakdown
                     </CardTitle>
                     <CardDescription className="text-xs">
@@ -3685,7 +3634,7 @@ const DealForm = () => {
                   </div>
                   {bogoImpact && (
                     <Badge variant="outline" className="text-[11px] font-mono self-start sm:self-auto gap-1">
-                      <Calculator className="h-3 w-3 text-primary" />
+                      <Calculator className="h-3 w-3 text-muted-foreground" />
                       Price Set By Items Bought
                     </Badge>
                   )}
@@ -3698,7 +3647,7 @@ const DealForm = () => {
                     <div className="w-12 h-12 rounded-full bg-muted/60 flex items-center justify-center mx-auto">
                       <Gift className="h-5 w-5 text-muted-foreground/50" />
                     </div>
-                    <p className="text-sm font-bold text-foreground">Nothing configured yet</p>
+                    <p className="text-sm font-semibold text-foreground">Nothing configured yet</p>
                     <p className="text-xs text-muted-foreground">
                       Pick what the customer buys and what they get free to see what this offer costs you
                     </p>
@@ -3707,16 +3656,13 @@ const DealForm = () => {
                   <>
                     {/* ── ROW 1 · AT MENU PRICE (baseline, informational) ── */}
                     <div className="space-y-2">
-                      <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70 flex items-center gap-1.5">
-                        <Tag className="h-3 w-3" /> At Regular Menu Price
-                      </p>
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70">At Regular Menu Price</p>
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
 
                         {/* Total Cost */}
                         <div className="rounded-xl border border-border/70 bg-muted/25 p-4 flex flex-col justify-between gap-2">
                           <div className="flex items-center justify-between">
-                            <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                              <Coins className="h-3.5 w-3.5 text-muted-foreground/70" />
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
                               Total Cost
                             </span>
                             {bogoImpact.hasCost ? (
@@ -3726,7 +3672,7 @@ const DealForm = () => {
                             )}
                           </div>
                           <div>
-                            <p className="text-xl font-black font-mono text-foreground tracking-tight">
+                            <p className="text-xl font-semibold font-mono text-foreground tracking-tight">
                               Rs.&nbsp;{Math.round(bogoImpact.totalCost).toLocaleString()}
                             </p>
                             <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">
@@ -3739,12 +3685,11 @@ const DealForm = () => {
 
                         {/* Total Selling Price */}
                         <div className="rounded-xl border border-border/70 bg-muted/25 p-4 flex flex-col justify-between gap-2">
-                          <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                            <Tag className="h-3.5 w-3.5 text-muted-foreground/70" />
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
                             Total Selling Price
                           </span>
                           <div>
-                            <p className="text-xl font-black font-mono text-foreground tracking-tight">
+                            <p className="text-xl font-semibold font-mono text-foreground tracking-tight">
                               Rs.&nbsp;{Math.round(bogoImpact.regularValue).toLocaleString()}
                             </p>
                             <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">
@@ -3755,12 +3700,11 @@ const DealForm = () => {
 
                         {/* Total Profit % at menu price */}
                         <div className="rounded-xl border border-border/70 bg-muted/25 p-4 flex flex-col justify-between gap-2">
-                          <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                            <TrendingUp className="h-3.5 w-3.5 text-muted-foreground/70" />
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
                             Total Profit %
                           </span>
                           <div>
-                            <p className="text-xl font-black font-mono text-foreground tracking-tight">
+                            <p className="text-xl font-semibold font-mono text-foreground tracking-tight">
                               {bogoImpact.hasCost && bogoImpact.menuMargin != null ? `${bogoImpact.menuMargin}%` : "—"}
                             </p>
                             <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">
@@ -3774,16 +3718,13 @@ const DealForm = () => {
 
                     {/* ── ROW 2 · THIS DEAL (the decision) ── */}
                     <div className="space-y-2">
-                      <p className="text-[10px] font-bold uppercase tracking-wider text-primary/80 flex items-center gap-1.5">
-                        <Sparkles className="h-3 w-3" /> This Deal
-                      </p>
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-primary/80">This Deal</p>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
 
                         {/* Deal Price — derived from what they buy, not typed */}
-                        <div className="rounded-xl border-2 border-primary/50 bg-primary/[0.04] p-4 flex flex-col justify-between gap-2 shadow-xs">
+                        <div className="rounded-xl border border-primary bg-primary/[0.06] p-4 flex flex-col justify-between gap-2">
                           <div className="flex items-center justify-between gap-2">
-                            <span className="text-[10px] font-bold uppercase tracking-wider text-primary flex items-center gap-1.5">
-                              <Sparkles className="h-3.5 w-3.5" />
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-primary">
                               Deal Price
                             </span>
                             {bogoImpact.savingsPercent > 0 && (
@@ -3793,7 +3734,7 @@ const DealForm = () => {
                             )}
                           </div>
                           <div>
-                            <p className="text-xl font-black font-mono text-primary tracking-tight">
+                            <p className="text-xl font-semibold font-mono text-primary tracking-tight">
                               Rs.&nbsp;{Math.round(bogoImpact.dealPrice).toLocaleString()}
                             </p>
                             <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">
@@ -3810,7 +3751,7 @@ const DealForm = () => {
                           !bogoImpact.hasCost
                             ? "border-border/70 bg-muted/25"
                             : bogoImpact.profit > 0
-                            ? "border-emerald-500/40 bg-emerald-500/[0.04]"
+                            ? "border-border/70 bg-muted/25"
                             : "border-destructive/40 bg-destructive/[0.04]"
                         )}>
                           <span className={cn(
@@ -3818,10 +3759,9 @@ const DealForm = () => {
                             !bogoImpact.hasCost
                               ? "text-muted-foreground"
                               : bogoImpact.profit > 0
-                              ? "text-emerald-600 dark:text-emerald-400"
+                              ? "text-foreground"
                               : "text-destructive"
                           )}>
-                            <TrendingUp className="h-3.5 w-3.5" />
                             Deal Profit %
                           </span>
                           <div>
@@ -3829,9 +3769,9 @@ const DealForm = () => {
                               <>
                                 <div className="flex items-baseline gap-1.5">
                                   <p className={cn(
-                                    "text-xl font-black font-mono tracking-tight",
+                                    "text-xl font-semibold font-mono tracking-tight",
                                     bogoImpact.profit > 0
-                                      ? "text-emerald-600 dark:text-emerald-400"
+                                      ? "text-foreground"
                                       : "text-destructive"
                                   )}>
                                     {bogoImpact.margin}%
@@ -3846,7 +3786,7 @@ const DealForm = () => {
                               </>
                             ) : (
                               <>
-                                <p className="text-xl font-black font-mono text-muted-foreground/40">—</p>
+                                <p className="text-xl font-semibold font-mono text-muted-foreground/40">—</p>
                                 <p className="text-[10px] text-muted-foreground mt-0.5">
                                   Add recipes for profit %
                                 </p>
@@ -3862,9 +3802,7 @@ const DealForm = () => {
                         Bundle has no equivalent for, so it is spelled out rather
                         than left implicit in "Customer saves". */}
                     <div className="rounded-xl border border-border/70 bg-muted/20 px-4 py-3 space-y-1.5">
-                      <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                        <Gift className="h-3 w-3 text-muted-foreground/70" /> Given Away Free
-                      </p>
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Given Away Free</p>
                       {bogoImpact.give.map((r, i) => (
                         <div key={i} className="flex items-center justify-between gap-3 text-xs">
                           <span className="text-foreground/90 truncate">
@@ -3900,7 +3838,7 @@ const DealForm = () => {
 
                     {/* Unpinned sizes make these figures a worst case, not a fact */}
                     {bogoImpact.variantSpread && (
-                      <p className="text-[11px] text-amber-600 dark:text-amber-400 leading-relaxed">
+                      <p className="text-[11px] text-muted-foreground leading-relaxed">
                         A size is still unpinned, so any size qualifies — these figures assume the worst case: bought at the cheapest size, taken free at the priciest. Pick a size on every row for the real numbers.
                       </p>
                     )}
@@ -3924,8 +3862,8 @@ const DealForm = () => {
               whatever the chosen deal type rendered above it. */}
           <Card className="shadow-xs border-border/80 overflow-hidden">
             <CardHeader className="pb-3 border-b bg-muted/20">
-              <CardTitle className="text-sm font-bold uppercase tracking-wider text-foreground flex items-center gap-2">
-                <Calendar className="h-4 w-4 text-primary" />
+              <CardTitle className="text-sm font-semibold uppercase tracking-wider text-foreground flex items-center gap-2">
+                <Calendar className="h-4 w-4 text-muted-foreground" />
                 {validitySectionNumber}. Availability & Schedule
               </CardTitle>
               <CardDescription className="text-xs">
@@ -3936,9 +3874,7 @@ const DealForm = () => {
 
               {/* ── DATE RANGE ── */}
               <div className="space-y-2">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70 flex items-center gap-1.5">
-                  <Calendar className="h-3 w-3" /> Date Range
-                </p>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70">Date Range</p>
                 <div className="rounded-xl border border-border/70 bg-card p-4 shadow-xs">
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div className="space-y-1.5">
@@ -3979,9 +3915,7 @@ const DealForm = () => {
                   ticked is the default and saves as "no restriction". */}
               <div className="space-y-2">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70 flex items-center gap-1.5">
-                    <CalendarDays className="h-3 w-3" /> Days Of The Week
-                  </p>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70">Days Of The Week</p>
                   <span className={cn(
                     "text-[10px] font-bold",
                     activeDays.length === 0 ? "text-destructive" : "text-muted-foreground"
@@ -4049,9 +3983,7 @@ const DealForm = () => {
 
               {/* ── TIME SLOT ── */}
               <div className="space-y-2">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70 flex items-center gap-1.5">
-                  <Clock className="h-3 w-3" /> Time Slot
-                </p>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70">Time Slot</p>
                 <div className="rounded-xl border border-border/70 bg-card p-4 space-y-3 shadow-xs">
                   <div className="flex items-center justify-between gap-3">
                     <div className="min-w-0">
@@ -4083,8 +4015,7 @@ const DealForm = () => {
                       {/* A window that runs past midnight belongs to the day it
                           opened on, so the day chips above still read correctly. */}
                       {startTime > endTime && (
-                        <p className="text-[11px] text-muted-foreground flex items-center gap-1.5">
-                          <Clock className="h-3 w-3 shrink-0 text-muted-foreground/70" />
+                        <p className="text-[11px] text-muted-foreground">
                           Runs past midnight — a {activeDaysLabel(activeDays)} deal stays live into the small hours of the next morning.
                         </p>
                       )}
@@ -4096,8 +4027,7 @@ const DealForm = () => {
               {/* One line saying exactly when this deal is orderable, so the
                   three blocks above don't have to be re-read to find out. */}
               <div className="rounded-xl border border-primary/40 bg-primary/[0.04] px-4 py-3 flex flex-wrap items-center gap-x-2 gap-y-1">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-primary flex items-center gap-1.5">
-                  <Calendar className="h-3 w-3" /> Orderable
+                <span className="text-[10px] font-bold uppercase tracking-wider text-primary">Orderable
                 </span>
                 <span className="text-xs font-mono text-foreground/90">
                   {[

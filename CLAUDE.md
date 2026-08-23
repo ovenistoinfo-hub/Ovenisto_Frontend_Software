@@ -158,6 +158,22 @@ plus a body explaining _why_ the change was made when that is not obvious.
 - **The react-query cache persists to `localStorage`** (`App.tsx`'s `PersistQueryClientProvider`,
   key `ovenisto-rq-cache`). A breaking change to a query's returned data shape needs the `buster`
   string there bumped, or a stale cached shape can crash a page on load before it refetches.
+- **Three colours, and each one means something** (`DealForm.tsx`, 2026-08-23) — neutral tokens
+  (`muted`/`foreground`/`border`) carry all structure and every normal value; `primary` marks the
+  one thing the user is choosing right now (the selected format card, the Deal Price tile, a ticked
+  day chip) and nothing else; `destructive` marks a real problem only (below cost, negative margin,
+  a failed check). **No raw palette colours** — a `grep` for `text-emerald-`/`bg-amber-`/hex accents
+  in this file should stay at zero. The form previously ran six accents: emerald for "healthy
+  margin", amber as a third severity, and four hardcoded hex accents (blue/violet/amber/emerald) on
+  the deal-format cards. A healthy margin is the *normal* case, so colouring it lit up most of the
+  screen and left nothing for the exceptions to stand out against — positive numbers are now plain
+  `text-foreground`, and only the loss cases are coloured.
+- **Weight and decoration are part of that budget too** — `font-black`/`font-extrabold` are not used
+  (bold at `text-sm`+ reads as shouting; `font-bold` is for the small uppercase section labels
+  only, `font-semibold` for everything larger), gradients and coloured shadows are not used
+  (`gradient-primary`, `shadow-primary/20`), and an icon must do work: one per card header, plus
+  genuinely functional ones (add, delete, spinner, selection tick). A stat tile labelled "Total
+  Cost" does not also need a coin glyph — that pass removed 36 decorative icons and 8 dead imports.
 - **Strict Professional Icons (Zero Emojis)**: NEVER use raw Unicode emojis (e.g. 🔥, 🟢, 📦, 🐼, 🛒, 👑, ⚡, 🥪) in UI components, badges, action buttons, table filter tabs, presets, or status labels. Always import and render professional vector icons from `lucide-react` with explicit sizing (e.g., `h-4 w-4`) and semantic Tailwind text/bg color tokens (e.g., `text-emerald-500 bg-emerald-500/10`).
 - **Direct Image Upload & Visual Preview Only**: All image upload fields across forms (Deals & Combos, Menu Items, Outlets, Users) MUST use direct file uploading (`/api/upload/image`) with an interactive dashed dropzone and visual thumbnail preview card (including `Replace` and `Remove` actions). NEVER provide a manual text URL input field for pasting image links.
 - **`FoodMenuItem.costPrice` / `FoodMenuVariant.costPrice`** (added 2026-08-22) are a persisted
