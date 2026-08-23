@@ -415,11 +415,55 @@ const DealForm = () => {
   }, [isDirty]);
 
   // Leaving via the back arrow or Cancel: ask first if there is anything to lose.
+  // pendingHref carries where the user was heading, so "Discard changes" resumes
+  // that journey instead of always dumping them on the deals list.
   const [confirmLeave, setConfirmLeave] = useState(false);
-  const leaveForm = () => {
-    if (isDirty) { setConfirmLeave(true); return; }
-    navigate("/deals");
+  const [pendingHref, setPendingHref] = useState<string | null>(null);
+  const leaveForm = (href = "/deals") => {
+    if (isDirty) { setPendingHref(href); setConfirmLeave(true); return; }
+    navigate(href);
   };
+
+  /**
+   * The sidebar, breadcrumb and header links are all react-router <Link>s, which
+   * render real <a href> elements. App.tsx uses BrowserRouter rather than a data
+   * router, so useBlocker does not exist here — but a capture-phase listener on
+   * the document sees the click before react-router's own bubble-phase handler
+   * and can stop it, which gets the same result without moving 47 routes onto
+   * createBrowserRouter.
+   *
+   * Deliberately left alone: modified clicks and target=_blank (the user is
+   * opening a second tab, not leaving this one), off-origin links and full page
+   * loads (beforeunload covers those), and in-page anchors.
+   */
+  useEffect(() => {
+    if (!isDirty) return;
+
+    const interceptLinkClick = (event: MouseEvent) => {
+      if (event.defaultPrevented || event.button !== 0) return;
+      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+
+      const anchor = (event.target as HTMLElement | null)?.closest?.("a[href]") as HTMLAnchorElement | null;
+      if (!anchor || (anchor.target && anchor.target !== "_self")) return;
+      if (anchor.hasAttribute("download")) return;
+
+      const href = anchor.getAttribute("href");
+      if (!href || href.startsWith("#")) return;
+
+      const target = new URL(anchor.href, window.location.href);
+      if (target.origin !== window.location.origin) return;
+      if (target.pathname === window.location.pathname) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+      leaveForm(target.pathname + target.search);
+    };
+
+    document.addEventListener("click", interceptLinkClick, true);
+    return () => document.removeEventListener("click", interceptLinkClick, true);
+    // leaveForm closes over isDirty, which is the only thing that changes here.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isDirty]);
 
   // Direct File Image Upload
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -554,7 +598,19 @@ const DealForm = () => {
     let minSelling = 0;
     let maxSelling = 0;
 
-    for (const group of optionGroups) {
+    // Per step, so the card below can say which step actually varies. In practice
+    // most steps are uniform ("choose any 1 pizza", every pizza Rs. 599) — the
+    // range wording above only earns its place when something really does vary.
+    const steps: {
+      groupIndex: number;
+      pick: number;
+      count: number;
+      minSelling: number;
+      maxSelling: number;
+      uniform: boolean;
+    }[] = [];
+
+    for (const [groupIndex, group] of optionGroups.entries()) {
       const priced = group.choices
         .filter((c) => c.itemId)
         .map((c) => {
@@ -576,11 +632,29 @@ const DealForm = () => {
       maxCost += byCost.slice(-pick).reduce((s, p) => s + p.cost, 0);
 
       const bySelling = [...priced].sort((a, b) => a.selling - b.selling);
-      minSelling += bySelling.slice(0, pick).reduce((s, p) => s + p.selling, 0);
-      maxSelling += bySelling.slice(-pick).reduce((s, p) => s + p.selling, 0);
+      const stepMin = bySelling.slice(0, pick).reduce((s, p) => s + p.selling, 0);
+      const stepMax = bySelling.slice(-pick).reduce((s, p) => s + p.selling, 0);
+      minSelling += stepMin;
+      maxSelling += stepMax;
+
+      steps.push({
+        groupIndex,
+        pick,
+        count: priced.length,
+        minSelling: stepMin,
+        maxSelling: stepMax,
+        uniform: Math.round(stepMin) === Math.round(stepMax),
+      });
     }
 
-    return { minCost, maxCost, minSelling, maxSelling };
+    return {
+      minCost, maxCost, minSelling, maxSelling, steps,
+      // No spread means every combination costs the customer the same, so
+      // "cheapest → priciest" and "worst case" describe a choice nobody has.
+      hasSpread:
+        Math.round(minSelling) !== Math.round(maxSelling) ||
+        Math.round(minCost) !== Math.round(maxCost),
+    };
   }, [optionGroups, menuItems, getItemCost]);
 
   // The figures every pricing calculation below works from. A Fixed Bundle has exact
@@ -1356,7 +1430,7 @@ const DealForm = () => {
           <Button
             variant="ghost"
             size="icon"
-            onClick={leaveForm}
+            onClick={() => leaveForm()}
             className="rounded-xl hover:bg-muted/80"
           >
             <ArrowLeft className="h-5 w-5" />
@@ -1374,7 +1448,7 @@ const DealForm = () => {
           {isDirty && (
             <span className="text-[11px] text-muted-foreground mr-1">Unsaved changes</span>
           )}
-          <Button variant="outline" size="sm" onClick={leaveForm}>
+          <Button variant="outline" size="sm" onClick={() => leaveForm()}>
             Cancel
           </Button>
           <Button
@@ -2533,13 +2607,15 @@ const DealForm = () => {
                           <div>
                             <p className="text-xl font-semibold font-mono text-foreground tracking-tight">
                               {optionComboTotals.maxCost > 0
-                                ? `Rs.\u00a0${Math.round(optionComboTotals.minCost).toLocaleString()} – ${Math.round(optionComboTotals.maxCost).toLocaleString()}`
+                                ? moneyRange(optionComboTotals.minCost, optionComboTotals.maxCost)
                                 : "—"}
                             </p>
                             <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">
-                              {optionComboTotals.maxCost > 0
+                              {optionComboTotals.maxCost === 0
+                                ? "Set recipes in Menu Items for live cost"
+                                : optionComboTotals.hasSpread
                                 ? "Cheapest → priciest picks"
-                                : "Set recipes in Menu Items for live cost"}
+                                : "Same whichever options are picked"}
                             </p>
                           </div>
                         </div>
@@ -2551,10 +2627,12 @@ const DealForm = () => {
                           </span>
                           <div>
                             <p className="text-xl font-semibold font-mono text-foreground tracking-tight">
-                              Rs.&nbsp;{Math.round(optionComboTotals.minSelling).toLocaleString()} – {Math.round(optionComboTotals.maxSelling).toLocaleString()}
+                              {moneyRange(optionComboTotals.minSelling, optionComboTotals.maxSelling)}
                             </p>
                             <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">
-                              Standalone menu retail value
+                              {optionComboTotals.hasSpread
+                                ? "Standalone menu retail value, cheapest → priciest"
+                                : "Standalone menu retail value"}
                             </p>
                           </div>
                         </div>
@@ -2571,7 +2649,9 @@ const DealForm = () => {
                                 : "—"}
                             </p>
                             <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">
-                              Margin at the priciest combination
+                              {optionComboTotals.hasSpread
+                                ? "Margin at the priciest combination"
+                                : "Margin before any deal discount"}
                             </p>
                           </div>
                         </div>
@@ -2622,7 +2702,7 @@ const DealForm = () => {
                               ? "text-foreground"
                               : "text-muted-foreground"
                           )}>
-                            Worst-Case Profit %
+                            {optionComboTotals.hasSpread ? "Worst-Case Profit %" : "Deal Profit %"}
                           </span>
                           <div>
                             {dealPrice > 0 && optionComboTotals.maxCost > 0 ? (
@@ -2641,7 +2721,9 @@ const DealForm = () => {
                                   </span>
                                 </div>
                                 <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">
-                                  If the customer picks the priciest options
+                                  {optionComboTotals.hasSpread
+                                    ? "If the customer picks the priciest options"
+                                    : "Profit over ingredient cost"}
                                 </p>
                               </>
                             ) : (
@@ -2658,6 +2740,53 @@ const DealForm = () => {
                       </div>
                     </div>
                   </>
+                )}
+
+                {/* Which step is responsible for any spread. A step whose choices are
+                    all the same price is the ordinary case and says so plainly;
+                    a step that varies is the one to look at when the totals above
+                    read as a range rather than a figure. */}
+                {dealType === "option_combo" && optionComboTotals.steps.length > 0 && (
+                  <div className="rounded-xl border border-border/70 bg-muted/20 px-4 py-3 space-y-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                        Price Per Step
+                      </p>
+                      <span className="text-[10px] text-muted-foreground">
+                        {optionComboTotals.hasSpread
+                          ? "One step or more varies, so the totals above are a range"
+                          : "Every step is one fixed price, so the totals above are exact"}
+                      </span>
+                    </div>
+
+                    {optionComboTotals.steps.map((step) => {
+                      const group = optionGroups[step.groupIndex];
+                      return (
+                        <div
+                          key={step.groupIndex}
+                          className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs"
+                        >
+                          <span className="text-foreground/90 truncate">
+                            <span className="font-mono text-muted-foreground/60 mr-1.5">
+                              #{step.groupIndex + 1}
+                            </span>
+                            {group ? groupLabel(group) : `Step ${step.groupIndex + 1}`}
+                            <span className="text-muted-foreground">
+                              {" "}· {step.count} option{step.count !== 1 ? "s" : ""}, picks {step.pick}
+                            </span>
+                          </span>
+                          <span className="font-mono shrink-0">
+                            <span className="text-foreground">
+                              {moneyRange(step.minSelling, step.maxSelling)}
+                            </span>
+                            {!step.uniform && (
+                              <span className="text-muted-foreground"> · varies by option</span>
+                            )}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
                 )}
 
                 {/* ── ROW 3 · SET DEAL PRICE — one Rs./% toggle drives the input and the presets ── */}
@@ -4096,7 +4225,10 @@ const DealForm = () => {
           </Card>
       </div>
 
-      <AlertDialog open={confirmLeave} onOpenChange={setConfirmLeave}>
+      <AlertDialog
+        open={confirmLeave}
+        onOpenChange={(open) => { setConfirmLeave(open); if (!open) setPendingHref(null); }}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Leave without saving?</AlertDialogTitle>
@@ -4109,7 +4241,7 @@ const DealForm = () => {
           <AlertDialogFooter>
             <AlertDialogCancel>Keep editing</AlertDialogCancel>
             <AlertDialogAction
-              onClick={() => navigate("/deals")}
+              onClick={() => navigate(pendingHref ?? "/deals")}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               Discard changes

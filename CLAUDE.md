@@ -212,6 +212,14 @@ plus a body explaining _why_ the change was made when that is not obvious.
   `discountImpact` computes all of it. Its scope summary and below-cost table sit *below* the ladder,
   the way Buy X Get Y keeps its giveaway list there — format-specific extras go after the two rows,
   never in place of them. Its card 3 is scope only (`3. Applicable Scope`).
+- **Customizable's ladder only speaks in ranges when something actually varies** — in practice a
+  step is uniform ("choose any 1 pizza", every pizza Rs. 599), so `optionComboTotals.hasSpread` is
+  false and the tiles read exactly like a Fixed Bundle: `moneyRange` collapses `Rs. 515 – 515` to
+  `Rs. 515`, the subtitles drop "cheapest → priciest", and `Worst-Case Profit %` becomes
+  `Deal Profit %` — there is no worse case to warn about. `optionComboTotals.steps` carries each
+  step's own min/max and a `uniform` flag, rendered as a `Price Per Step` panel below the ladder
+  (the same slot Buy X Get Y uses for its giveaway list), so when the totals *are* a range it is
+  obvious which step caused it.
 - **Buy X Get Y alone has no `ROW 3`** — its Deal Price is derived (the customer pays menu price for
   what they buy), so there is no deal-price input to put there. It still gets channel overrides,
   just as a free-item coverage % rather than a price.
@@ -261,12 +269,17 @@ plus a body explaining _why_ the change was made when that is not obvious.
   day it opened on, so a Saturday 23:00–03:00 deal is still live at 01:00 on Sunday. Keep the two
   copies in step — `Deals.tsx`'s Live badge and Active filter both read the mirror, so a weekend-only
   deal would read as plain "expired" on a Tuesday if the mirror lagged.
-- **A form guards its own exits; the app cannot guard them for it** — `App.tsx` uses `BrowserRouter`,
-  not a data router, so react-router's `useBlocker`/`usePrompt` are unavailable and there is no way
-  to intercept a sidebar link. `DealForm.tsx` therefore guards what it owns: the back arrow and
-  Cancel both call `leaveForm()`, which opens an AlertDialog when dirty, and a `beforeunload`
-  listener covers closing or reloading the tab. Sidebar navigation still leaves silently — closing
-  that gap means moving the whole app onto `createBrowserRouter`.
+- **A form guards its own exits, by intercepting the click rather than the route** — `App.tsx` uses
+  `BrowserRouter`, not a data router, so react-router's `useBlocker`/`usePrompt` do not exist here.
+  `DealForm.tsx` covers all four ways out instead: the back arrow and Cancel call `leaveForm()`
+  directly, `beforeunload` covers closing or reloading the tab, and a **capture-phase** `click`
+  listener on `document` catches sidebar/breadcrumb/header links — they are `<Link>`s, so they render
+  real `<a href>`, and capture runs before react-router's bubble-phase handler, so
+  `preventDefault()` + `stopPropagation()` there stops the navigation. It deliberately ignores
+  modified clicks and `target=_blank` (a second tab, not leaving this one), off-origin links and
+  full page loads (`beforeunload` has those), and in-page anchors. `pendingHref` remembers where the
+  user was heading so "Discard changes" resumes that journey rather than always landing on
+  `/deals`. Not covered: browser Back, and any button that calls `navigate()` programmatically.
 - **Dirtiness is one fingerprint, not forty comparisons** — `formFingerprint` stringifies every
   editable field into one `useMemo`, compared against `savedFingerprint` (a ref). The baseline is
   taken when `formReady` flips, which the edit-load effect sets *last* so it lands in the same batch
