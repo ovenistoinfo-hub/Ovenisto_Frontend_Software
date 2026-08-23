@@ -9,6 +9,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
 import {
   Tag, Plus, Trash2, ArrowLeft, Loader2, Upload, Sparkles, Package, Check, Layers,
@@ -240,6 +244,10 @@ const DealForm = () => {
   const [startTime, setStartTime] = useState("12:00");
   const [endTime, setEndTime] = useState("23:59");
 
+  // True once the form holds what it will start from: the defaults when adding,
+  // the loaded deal when editing. Until then there is nothing to compare against.
+  const [formReady, setFormReady] = useState(!isEdit);
+
   // Load existing deal when editing
   useEffect(() => {
     if (!isEdit) return;
@@ -351,7 +359,67 @@ const DealForm = () => {
       setStartTime(existingDeal.startTime);
       setEndTime(existingDeal.endTime);
     }
+
+    // Set last, in the same batch as every setter above, so the baseline below
+    // is taken from a form that already holds the loaded deal.
+    setFormReady(true);
   }, [isEdit, existingDeal, loadingDeal]);
+
+  /**
+   * Everything the user can change, as one string.
+   *
+   * Compared against the value taken when the form finished loading, so "are
+   * there unsaved changes?" is one comparison rather than forty that would have
+   * to be kept in step by hand every time a field is added.
+   */
+  const formFingerprint = useMemo(
+    () =>
+      JSON.stringify([
+        name, code, description, imageUrl, dealType, isActive,
+        dealPrice, dineInPrice, takeAwayPrice, deliveryPrice, foodpandaPrice,
+        dineInPercent, takeAwayPercent, deliveryPercent, foodpandaPercent,
+        discountPercent, applicableCategoryIds, scopeItemRows,
+        comboRows, optionGroups, buyRows, getRows,
+        validFrom, validTo, alwaysActive, activeDays,
+        hasTimeRestriction, startTime, endTime,
+      ]),
+    [
+      name, code, description, imageUrl, dealType, isActive,
+      dealPrice, dineInPrice, takeAwayPrice, deliveryPrice, foodpandaPrice,
+      dineInPercent, takeAwayPercent, deliveryPercent, foodpandaPercent,
+      discountPercent, applicableCategoryIds, scopeItemRows,
+      comboRows, optionGroups, buyRows, getRows,
+      validFrom, validTo, alwaysActive, activeDays,
+      hasTimeRestriction, startTime, endTime,
+    ]
+  );
+
+  const savedFingerprint = useRef<string | null>(null);
+  useEffect(() => {
+    if (!formReady || savedFingerprint.current !== null) return;
+    savedFingerprint.current = formFingerprint;
+  }, [formReady, formFingerprint]);
+
+  const isDirty = savedFingerprint.current !== null && savedFingerprint.current !== formFingerprint;
+
+  // Covers closing the tab, reloading, and navigating to another site. The
+  // browser shows its own wording here — the message is not ours to set.
+  useEffect(() => {
+    if (!isDirty) return;
+    const warn = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [isDirty]);
+
+  // Leaving via the back arrow or Cancel: ask first if there is anything to lose.
+  const [confirmLeave, setConfirmLeave] = useState(false);
+  const leaveForm = () => {
+    if (isDirty) { setConfirmLeave(true); return; }
+    navigate("/deals");
+  };
 
   // Direct File Image Upload
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1262,6 +1330,8 @@ const DealForm = () => {
         toast.success(`Deal "${name}" created successfully!`);
       }
       queryClient.invalidateQueries({ queryKey: ["deals"] });
+      // The form now matches what is stored, so leaving must not warn.
+      savedFingerprint.current = formFingerprint;
       navigate("/deals");
     } catch (err: any) {
       toast.error(err.message || "Failed to save deal");
@@ -1286,37 +1356,25 @@ const DealForm = () => {
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => navigate("/deals")}
+            onClick={leaveForm}
             className="rounded-xl hover:bg-muted/80"
           >
             <ArrowLeft className="h-5 w-5" />
           </Button>
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-foreground">
-                {isEdit ? "Edit Deal & Combo" : "Create New Deal & Combo"}
-              </h1>
-              <Badge
-                variant={isActive ? "default" : "secondary"}
-                className={
-                  isActive
-                    ? "bg-muted text-foreground border-border font-medium gap-1.5"
-                    : "text-muted-foreground gap-1.5"
-                }
-              >
-                <span className={cn("h-1.5 w-1.5 rounded-full", isActive ? "bg-primary" : "bg-muted-foreground/50")} />
-                {isActive ? "Active" : "Draft"}
-              </Badge>
-            </div>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              Build combo bundles, pick-and-choose meal steps, and channel pricing
-            </p>
-          </div>
+          {/* The Active/Draft state lives on the labelled toggle in section 1, and
+              the breadcrumb above already says Add New / Edit — neither is
+              repeated here. */}
+          <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-foreground">
+            {isEdit ? "Edit Deal & Combo" : "Create New Deal & Combo"}
+          </h1>
         </div>
 
-        {/* Action Buttons */}
+        {/* Action Buttons — the only place the form is saved from */}
         <div className="flex items-center gap-2 self-end sm:self-auto">
-          <Button variant="outline" size="sm" onClick={() => navigate("/deals")}>
+          {isDirty && (
+            <span className="text-[11px] text-muted-foreground mr-1">Unsaved changes</span>
+          )}
+          <Button variant="outline" size="sm" onClick={leaveForm}>
             Cancel
           </Button>
           <Button
@@ -1811,16 +1869,6 @@ const DealForm = () => {
                 </ul>
               </div>
 
-              {/* Bottom Quick Save */}
-              <Button
-                type="button"
-                className="w-full bg-primary text-primary-foreground hover:bg-primary/90 font-semibold py-5"
-                onClick={handleSave}
-                disabled={saving}
-              >
-                {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                {isEdit ? "Update Deal" : "Save & Publish Deal"}
-              </Button>
             </CardContent>
           </Card>
         </div>
@@ -4047,6 +4095,28 @@ const DealForm = () => {
             </CardContent>
           </Card>
       </div>
+
+      <AlertDialog open={confirmLeave} onOpenChange={setConfirmLeave}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Leave without saving?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {isEdit
+                ? "Your changes to this deal have not been saved. Leaving now discards them."
+                : "This deal has not been saved. Leaving now discards it."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep editing</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => navigate("/deals")}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Discard changes
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

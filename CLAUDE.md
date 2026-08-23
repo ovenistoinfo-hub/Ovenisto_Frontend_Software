@@ -261,6 +261,21 @@ plus a body explaining _why_ the change was made when that is not obvious.
   day it opened on, so a Saturday 23:00–03:00 deal is still live at 01:00 on Sunday. Keep the two
   copies in step — `Deals.tsx`'s Live badge and Active filter both read the mirror, so a weekend-only
   deal would read as plain "expired" on a Tuesday if the mirror lagged.
+- **A form guards its own exits; the app cannot guard them for it** — `App.tsx` uses `BrowserRouter`,
+  not a data router, so react-router's `useBlocker`/`usePrompt` are unavailable and there is no way
+  to intercept a sidebar link. `DealForm.tsx` therefore guards what it owns: the back arrow and
+  Cancel both call `leaveForm()`, which opens an AlertDialog when dirty, and a `beforeunload`
+  listener covers closing or reloading the tab. Sidebar navigation still leaves silently — closing
+  that gap means moving the whole app onto `createBrowserRouter`.
+- **Dirtiness is one fingerprint, not forty comparisons** — `formFingerprint` stringifies every
+  editable field into one `useMemo`, compared against `savedFingerprint` (a ref). The baseline is
+  taken when `formReady` flips, which the edit-load effect sets *last* so it lands in the same batch
+  as the field setters and the baseline is never captured pre-hydration; a successful save re-takes
+  it so leaving afterwards does not warn. Adding a field means adding it to that one array.
+- **One save button per form** — the header pair (Cancel + Publish/Update) is the only place the
+  deal form saves from. It also had a "Save & Publish Deal" at the foot of the sticky preview card,
+  and an Active/Draft badge beside the h1 duplicating the labelled toggle in section 1 (both removed
+  2026-08-23). The preview card previews; the breadcrumb already says Add New / Edit.
 - **Rs./% shared-toggle pattern** (`DealForm.tsx`'s "Set Deal Price" + Channel Price Overrides): one
   master two-state toggle governs several inputs' *mode* at once, with a shared conversion helper
   (`applyPercent`/`pctFromPrice`-style) so switching modes back-derives a sensible value instead of
