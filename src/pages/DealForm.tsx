@@ -15,13 +15,14 @@ import {
   Package, Check, Layers, Calendar, CheckCircle2, Clock, Percent, Gift,
   ShoppingBag, UtensilsCrossed, Truck, Eye, Image as ImageIcon,
   Coins, TrendingUp, Calculator, ArrowUpRight, ArrowDownRight, RefreshCw, BadgePercent, HelpCircle,
-  AlertTriangle
+  AlertTriangle, CalendarDays
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { getAccessToken } from "@/services/api";
 import { dealService, type DealInput, type DealTypeValue } from "@/services/deal.service";
 import { menuService } from "@/services/menu.service";
+import { DAY_SHORT, activeDaysLabel } from "@/lib/deals";
 
 /** One item in a Fixed Bundle. `categoryId` is a UI-only filter that narrows the
  *  row's item dropdown — it is never sent to the backend. */
@@ -107,6 +108,14 @@ const BOGO_SIDES = [
 ];
 
 const PERCENT_PRESETS = [10, 15, 20, 25, 30, 50];
+
+/** Quick-set buttons for the weekday picker. 0 = Sunday … 6 = Saturday. */
+const DAY_PRESETS: { label: string; days: number[] }[] = [
+  { label: "Every Day", days: [0, 1, 2, 3, 4, 5, 6] },
+  { label: "Weekdays", days: [1, 2, 3, 4, 5] },
+  { label: "Weekend", days: [0, 6] },
+  { label: "Fri–Sun", days: [0, 5, 6] },
+];
 
 /** "Rs. 450" when both ends land on the same figure, "Rs. 450 – 900" otherwise.
  *  A percentage deal prices every item in scope separately, so its ladder tiles
@@ -223,6 +232,10 @@ const DealForm = () => {
   const [validFrom, setValidFrom] = useState(todayStr);
   const [validTo, setValidTo] = useState("");
   const [alwaysActive, setAlwaysActive] = useState(true);
+  // 0 = Sunday … 6 = Saturday. The form always shows an explicit selection —
+  // all seven ticked reads as "every day" far better than nothing ticked — and
+  // the payload collapses that back to [] on the way out.
+  const [activeDays, setActiveDays] = useState<number[]>([0, 1, 2, 3, 4, 5, 6]);
   const [hasTimeRestriction, setHasTimeRestriction] = useState(false);
   const [startTime, setStartTime] = useState("12:00");
   const [endTime, setEndTime] = useState("23:59");
@@ -250,6 +263,11 @@ const DealForm = () => {
     setTakeAwayPrice(existingDeal.takeAwayPrice ?? null);
     setDeliveryPrice(existingDeal.deliveryPrice ?? null);
     setFoodpandaPrice(existingDeal.foodpandaPrice ?? null);
+    setActiveDays(
+      existingDeal.activeDays && existingDeal.activeDays.length > 0
+        ? [...existingDeal.activeDays].sort((a, b) => a - b)
+        : [0, 1, 2, 3, 4, 5, 6]
+    );
     setDineInPercent(existingDeal.dineInPercent != null ? String(existingDeal.dineInPercent) : "");
     setTakeAwayPercent(existingDeal.takeAwayPercent != null ? String(existingDeal.takeAwayPercent) : "");
     setDeliveryPercent(existingDeal.deliveryPercent != null ? String(existingDeal.deliveryPercent) : "");
@@ -1087,6 +1105,11 @@ const DealForm = () => {
       return;
     }
 
+    if (activeDays.length === 0) {
+      toast.error("Pick at least one day of the week this deal runs");
+      return;
+    }
+
     if (dealType === "combo" || dealType === "option_combo") {
       if (!dealPrice || dealPrice <= 0) {
         toast.error("Please specify a valid Deal Price");
@@ -1196,6 +1219,9 @@ const DealForm = () => {
         validTo: alwaysActive ? null : validTo || null,
         startTime: hasTimeRestriction ? startTime : null,
         endTime: hasTimeRestriction ? endTime : null,
+        // All seven days is stored as "no restriction", the same thing every
+        // pre-existing row already means.
+        activeDays: activeDays.length === 7 ? [] : [...activeDays].sort((a, b) => a - b),
         components:
           dealType === "combo"
             ? comboRows.map((r, idx) => ({
@@ -3898,97 +3924,204 @@ const DealForm = () => {
             <CardHeader className="pb-3 border-b bg-muted/20">
               <CardTitle className="text-sm font-bold uppercase tracking-wider text-foreground flex items-center gap-2">
                 <Calendar className="h-4 w-4 text-primary" />
-                {validitySectionNumber}. Validity Dates & Time Restrictions
+                {validitySectionNumber}. Availability & Schedule
               </CardTitle>
               <CardDescription className="text-xs">
-                Configure calendar date validity and optional happy-hour time windows
+                When this deal can be ordered — the date range, which days of the week, and an optional happy-hour window
               </CardDescription>
             </CardHeader>
-            <CardContent className="p-5 space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div className="space-y-1.5">
-                  <Label className="text-xs font-semibold">Valid From Date</Label>
-                  <Input
-                    type="date"
-                    value={validFrom}
-                    onChange={(e) => setValidFrom(e.target.value)}
-                    className="h-10 text-xs"
-                  />
-                </div>
+            <CardContent className="p-5 space-y-5">
 
-                <div className="space-y-1.5">
-                  <Label className="text-xs font-semibold">Valid To Date</Label>
-                  <Input
-                    type="date"
-                    disabled={alwaysActive}
-                    min={validFrom}
-                    value={alwaysActive ? "" : validTo}
-                    onChange={(e) => setValidTo(e.target.value)}
-                    className="h-10 text-xs"
-                  />
-                </div>
+              {/* ── DATE RANGE ── */}
+              <div className="space-y-2">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70 flex items-center gap-1.5">
+                  <Calendar className="h-3 w-3" /> Date Range
+                </p>
+                <div className="rounded-xl border border-border/70 bg-card p-4 shadow-xs">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-medium text-muted-foreground">Valid From</Label>
+                      <Input
+                        type="date"
+                        value={validFrom}
+                        onChange={(e) => setValidFrom(e.target.value)}
+                        className="h-10 text-xs font-mono"
+                      />
+                    </div>
 
-                <div className="flex items-center justify-between p-3 rounded-xl border bg-muted/10 self-end">
-                  <div>
-                    <p className="text-xs font-bold text-foreground">
-                      Never Expires
-                    </p>
-                    <p className="text-[11px] text-muted-foreground">
-                      Always active indefinitely
-                    </p>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-medium text-muted-foreground">Valid To</Label>
+                      <Input
+                        type="date"
+                        disabled={alwaysActive}
+                        min={validFrom}
+                        value={alwaysActive ? "" : validTo}
+                        onChange={(e) => setValidTo(e.target.value)}
+                        placeholder={alwaysActive ? "No end date" : undefined}
+                        className="h-10 text-xs font-mono disabled:opacity-50"
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-between gap-3 rounded-xl border border-border/70 bg-muted/20 px-3 py-2.5 self-end">
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-foreground truncate">Never Expires</p>
+                        <p className="text-[11px] text-muted-foreground truncate">Runs until switched off</p>
+                      </div>
+                      <Switch checked={alwaysActive} onCheckedChange={setAlwaysActive} />
+                    </div>
                   </div>
-                  <Switch
-                    checked={alwaysActive}
-                    onCheckedChange={setAlwaysActive}
-                  />
                 </div>
               </div>
 
-              {/* Time restriction (Happy Hour) */}
-              <div className="pt-2 border-t space-y-3">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-xs font-bold text-foreground flex items-center gap-1.5">
-                      <Clock className="h-3.5 w-3.5 text-primary" />
-                      Time Slot Restriction (Happy Hour / Midnight Deal)
-                    </p>
-                    <p className="text-[11px] text-muted-foreground">
-                      Restrict deal to specific hours (e.g. Midnight 11PM–3AM, or 4PM–7PM)
-                    </p>
-                  </div>
-                  <Switch
-                    checked={hasTimeRestriction}
-                    onCheckedChange={setHasTimeRestriction}
-                  />
+              {/* ── DAYS OF THE WEEK ──
+                  A deal that only runs at the weekend is a weekend deal, not a
+                  deal someone has to remember to switch off on Monday. All seven
+                  ticked is the default and saves as "no restriction". */}
+              <div className="space-y-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70 flex items-center gap-1.5">
+                    <CalendarDays className="h-3 w-3" /> Days Of The Week
+                  </p>
+                  <span className={cn(
+                    "text-[10px] font-bold",
+                    activeDays.length === 0 ? "text-destructive" : "text-muted-foreground"
+                  )}>
+                    {activeDays.length === 0
+                      ? "Pick at least one day"
+                      : `Runs ${activeDaysLabel(activeDays)}`}
+                  </span>
                 </div>
 
-                {hasTimeRestriction && (
-                  <div className="grid grid-cols-2 gap-4 p-3 rounded-xl border bg-muted/15 max-w-md animate-in slide-in-from-top-1">
-                    <div className="space-y-1.5">
-                      <Label className="text-xs font-medium text-muted-foreground">
-                        Start Time
-                      </Label>
-                      <Input
-                        type="time"
-                        value={startTime}
-                        onChange={(e) => setStartTime(e.target.value)}
-                        className="h-9 text-xs"
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-xs font-medium text-muted-foreground">
-                        End Time
-                      </Label>
-                      <Input
-                        type="time"
-                        value={endTime}
-                        onChange={(e) => setEndTime(e.target.value)}
-                        className="h-9 text-xs"
-                      />
-                    </div>
+                <div className="rounded-xl border border-border/70 bg-card p-4 space-y-3 shadow-xs">
+                  <div className="flex flex-wrap gap-1.5">
+                    {DAY_SHORT.map((label, day) => {
+                      const selected = activeDays.includes(day);
+                      return (
+                        <button
+                          key={day}
+                          type="button"
+                          onClick={() =>
+                            setActiveDays((prev) =>
+                              prev.includes(day)
+                                ? prev.filter((d) => d !== day)
+                                : [...prev, day].sort((a, b) => a - b)
+                            )
+                          }
+                          aria-pressed={selected}
+                          className={cn(
+                            "h-9 min-w-[56px] px-3 rounded-lg text-xs font-bold border transition-all",
+                            selected
+                              ? "bg-primary text-primary-foreground border-primary shadow-xs"
+                              : "bg-muted/30 border-border text-muted-foreground hover:border-primary/40 hover:bg-muted/60"
+                          )}
+                        >
+                          {label}
+                        </button>
+                      );
+                    })}
                   </div>
-                )}
+
+                  <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-border/50">
+                    <span className="text-[10px] text-muted-foreground mr-1 pt-1">Quick set</span>
+                    {DAY_PRESETS.map((preset) => {
+                      const active =
+                        activeDays.length === preset.days.length &&
+                        preset.days.every((d) => activeDays.includes(d));
+                      return (
+                        <button
+                          key={preset.label}
+                          type="button"
+                          onClick={() => setActiveDays([...preset.days])}
+                          className={cn(
+                            "text-[11px] font-bold px-2.5 py-1.5 rounded-md transition-all mt-1",
+                            active
+                              ? "bg-primary text-primary-foreground shadow-xs"
+                              : "bg-muted/40 hover:bg-muted text-muted-foreground"
+                          )}
+                        >
+                          {preset.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
+
+              {/* ── TIME SLOT ── */}
+              <div className="space-y-2">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70 flex items-center gap-1.5">
+                  <Clock className="h-3 w-3" /> Time Slot
+                </p>
+                <div className="rounded-xl border border-border/70 bg-card p-4 space-y-3 shadow-xs">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold text-foreground">
+                        Happy Hour / Midnight Deal
+                      </p>
+                      <p className="text-[11px] text-muted-foreground">
+                        Limit the deal to set hours (e.g. 4PM–7PM, or 11PM–3AM)
+                      </p>
+                    </div>
+                    <Switch
+                      checked={hasTimeRestriction}
+                      onCheckedChange={setHasTimeRestriction}
+                    />
+                  </div>
+
+                  {hasTimeRestriction && (
+                    <div className="pt-3 border-t border-border/50 space-y-2 animate-in slide-in-from-top-1">
+                      <div className="grid grid-cols-2 gap-4 max-w-md">
+                        <div className="space-y-1.5">
+                          <Label className="text-xs font-medium text-muted-foreground">Start Time</Label>
+                          <Input
+                            type="time"
+                            value={startTime}
+                            onChange={(e) => setStartTime(e.target.value)}
+                            className="h-10 text-xs font-mono"
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-xs font-medium text-muted-foreground">End Time</Label>
+                          <Input
+                            type="time"
+                            value={endTime}
+                            onChange={(e) => setEndTime(e.target.value)}
+                            className="h-10 text-xs font-mono"
+                          />
+                        </div>
+                      </div>
+                      {/* A window that runs past midnight belongs to the day it
+                          opened on, so the day chips above still read correctly. */}
+                      {startTime > endTime && (
+                        <p className="text-[11px] text-muted-foreground flex items-center gap-1.5">
+                          <Clock className="h-3 w-3 shrink-0 text-muted-foreground/70" />
+                          Runs past midnight — a {activeDaysLabel(activeDays)} deal stays live into the small hours of the next morning.
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* One line saying exactly when this deal is orderable, so the
+                  three blocks above don't have to be re-read to find out. */}
+              <div className="rounded-xl border border-primary/40 bg-primary/[0.04] px-4 py-3 flex flex-wrap items-center gap-x-2 gap-y-1">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-primary flex items-center gap-1.5">
+                  <Calendar className="h-3 w-3" /> Orderable
+                </span>
+                <span className="text-xs font-mono text-foreground/90">
+                  {[
+                    activeDaysLabel(activeDays),
+                    hasTimeRestriction ? `${startTime}–${endTime}` : "all day",
+                    alwaysActive
+                      ? `from ${validFrom || "—"}, never expires`
+                      : validTo
+                      ? `${validFrom || "—"} → ${validTo}`
+                      : `from ${validFrom || "—"}`,
+                  ].join(" · ")}
+                </span>
+              </div>
+
             </CardContent>
           </Card>
       </div>

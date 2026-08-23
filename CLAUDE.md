@@ -212,6 +212,16 @@ plus a body explaining _why_ the change was made when that is not obvious.
   falls back to the worst case (bought cheapest, given away priciest) and says so in the footnote.
   Changing a row's item clears its variant — don't drop that reset, or the deal saves a size
   belonging to a different dish.
+- **A deal's schedule is three independent gates, all in the last card** (`Availability & Schedule`,
+  shared by all four formats): the `validFrom`/`validTo` date range, `activeDays` (weekday chips,
+  added 2026-08-23), and the optional `startTime`/`endTime` window. The form always shows an
+  explicit weekday selection — all seven ticked, which the payload collapses back to `[]` ("no
+  restriction", what every pre-existing row already means) — because no chips ticked would read as
+  "runs never". Saving with zero days is blocked. `src/lib/deals.ts`'s `isDealLive` mirrors the
+  server's rule exactly, including the midnight tail: a window that crosses midnight belongs to the
+  day it opened on, so a Saturday 23:00–03:00 deal is still live at 01:00 on Sunday. Keep the two
+  copies in step — `Deals.tsx`'s Live badge and Active filter both read the mirror, so a weekend-only
+  deal would read as plain "expired" on a Tuesday if the mirror lagged.
 - **Rs./% shared-toggle pattern** (`DealForm.tsx`'s "Set Deal Price" + Channel Price Overrides): one
   master two-state toggle governs several inputs' *mode* at once, with a shared conversion helper
   (`applyPercent`/`pctFromPrice`-style) so switching modes back-derives a sensible value instead of

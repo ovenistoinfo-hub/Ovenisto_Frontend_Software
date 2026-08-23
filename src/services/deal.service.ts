@@ -46,6 +46,8 @@ export interface DealRecord {
   /** Per-channel discount-% overrides. Percentage deals: replaces discountPercent
    *  on that channel. Buy X Get Y deals: how much of the free item the deal covers
    *  there (base 100 = genuinely free). Null = fall back to the base figure. */
+  /** Weekdays the deal runs, 0 = Sunday … 6 = Saturday. Empty = every day. */
+  activeDays: number[];
   dineInPercent: number | null;
   takeAwayPercent: number | null;
   deliveryPercent: number | null;
@@ -128,6 +130,7 @@ export interface DealInput {
   takeAwayPrice?: number | null;
   deliveryPrice?: number | null;
   foodpandaPrice?: number | null;
+  activeDays?: number[];
   dineInPercent?: number | null;
   takeAwayPercent?: number | null;
   deliveryPercent?: number | null;

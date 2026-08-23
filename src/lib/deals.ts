@@ -34,14 +34,32 @@ function toMinutes(hhmm: string): number {
   return h * 60 + m;
 }
 
+/** 0 = Sunday … 6 = Saturday, in Pakistan time. */
+function pktWeekday(now: Date = new Date()): number {
+  return pktNow(now).getUTCDay();
+}
+
+export const DAY_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+/** "Saturdays" / "Sat, Sun" / "Every day" — the label the admin table and the
+ *  deal form both show for a weekday schedule. */
+export function activeDaysLabel(days: number[] | null | undefined): string {
+  const sorted = [...new Set(days ?? [])].filter((d) => d >= 0 && d <= 6).sort((a, b) => a - b);
+  if (sorted.length === 0 || sorted.length === 7) return 'Every day';
+  if (sorted.length === 5 && sorted.join() === '1,2,3,4,5') return 'Mon–Fri';
+  if (sorted.length === 2 && sorted.join() === '0,6') return 'Sat & Sun';
+  return sorted.map((d) => DAY_SHORT[d]).join(', ');
+}
+
 export interface DealValidity {
   valid: boolean;
   reason?: string;
 }
 
 /** Is this deal sellable right now — active, not archived, inside its
- *  validFrom/validTo window and (if set) its startTime/endTime window.
- *  Time-window comparison supports crossing midnight (e.g. 22:00–02:00). */
+ *  validFrom/validTo window, on one of its activeDays, and (if set) inside its
+ *  startTime/endTime window. Time comparison supports crossing midnight
+ *  (e.g. 22:00–02:00). */
 export function isDealLive(deal: DealRecord, now: Date = new Date()): DealValidity {
   if (deal.status === 'archived') return { valid: false, reason: 'Archived' };
   if (!deal.isActive) return { valid: false, reason: 'Inactive' };
@@ -49,6 +67,21 @@ export function isDealLive(deal: DealRecord, now: Date = new Date()): DealValidi
   const today = pktDateStr(now);
   if (toDateStr(deal.validFrom) > today) return { valid: false, reason: `Starts ${toDateStr(deal.validFrom)}` };
   if (deal.validTo && toDateStr(deal.validTo) < today) return { valid: false, reason: 'Expired' };
+
+  // Mirrors the server: a window that crosses midnight belongs to the day it
+  // opened on, so a Saturday 23:00–03:00 deal is still the Saturday deal at 01:00.
+  const activeDays = deal.activeDays ?? [];
+  if (activeDays.length > 0 && activeDays.length < 7) {
+    const inMidnightTail =
+      !!deal.startTime &&
+      !!deal.endTime &&
+      toMinutes(deal.startTime) > toMinutes(deal.endTime) &&
+      pktMinutesOfDay(now) < toMinutes(deal.endTime);
+    const day = inMidnightTail ? (pktWeekday(now) + 6) % 7 : pktWeekday(now);
+    if (!activeDays.includes(day)) {
+      return { valid: false, reason: `Only on ${activeDaysLabel(activeDays)}` };
+    }
+  }
 
   if (deal.startTime && deal.endTime) {
     const nowMinutes = pktMinutesOfDay(now);

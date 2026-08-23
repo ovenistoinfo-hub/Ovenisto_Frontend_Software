@@ -8,12 +8,12 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Tag, Plus, Search, Pencil, Trash2, Package, Layers, Sparkles, Clock, Calendar, Loader2, Percent, Gift } from "lucide-react";
+import { Tag, Plus, Search, Pencil, Trash2, Package, Layers, Sparkles, Clock, Calendar, Loader2, Percent, Gift, CalendarDays } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { TablePagination, paginate } from "@/components/TablePagination";
 import { dealService, type DealRecord } from "@/services/deal.service";
 import { menuService } from "@/services/menu.service";
-import { isDealLive, dealExpiryLabel, pktDateStr } from "@/lib/deals";
+import { isDealLive, dealExpiryLabel, pktDateStr, activeDaysLabel } from "@/lib/deals";
 import { toast } from "sonner";
 
 const Deals = () => {
@@ -324,6 +324,14 @@ const Deals = () => {
                                   <Calendar className="h-3 w-3" />
                                   {dealExpiryLabel(deal)}
                                 </span>
+                              )}
+                              {/* A weekend-only deal reads as "expired" on a Tuesday
+                                  without this — the day schedule is why it isn't live. */}
+                              {deal.activeDays && deal.activeDays.length > 0 && deal.activeDays.length < 7 && (
+                                <p className="text-[10px] text-muted-foreground flex items-center gap-1 font-mono">
+                                  <CalendarDays className="h-2.5 w-2.5" />
+                                  {activeDaysLabel(deal.activeDays)}
+                                </p>
                               )}
                               {deal.startTime && deal.endTime && (
                                 <p className="text-[10px] text-muted-foreground flex items-center gap-1 font-mono">
