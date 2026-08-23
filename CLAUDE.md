@@ -212,6 +212,16 @@ plus a body explaining _why_ the change was made when that is not obvious.
   falls back to the worst case (bought cheapest, given away priciest) and says so in the footnote.
   Changing a row's item clears its variant — don't drop that reset, or the deal saves a size
   belonging to a different dish.
+- **Use `DatePicker`/`TimePicker`, never `<input type="date">`/`type="time"`** — the native controls
+  paint their calendar/clock glyph in the browser's own colour, which is invisible on this app's dark
+  surfaces, and their `mm/dd/yyyy` placeholder can't be themed. `src/components/ui/date-picker.tsx`
+  and `time-picker.tsx` wrap the existing Calendar/Popover/ScrollArea primitives and keep the same
+  wire values the API takes ("YYYY-MM-DD", 24-hour "HH:mm") — only the display is localised, via the
+  exported `formatDateLabel`/`formatTimeLabel` (use those for any summary text too, so a date reads
+  the same wherever it appears). `DatePicker` parses through local Y/M/D parts, never
+  `new Date(str)`, which reads a bare date as UTC midnight and lands a day early in Pakistan.
+  `DealForm.tsx`'s schedule card is converted; the ~20 other native inputs across Attendance,
+  EmployeePortal, Coupons, CashHub etc. are not yet — convert them as you touch them.
 - **A deal's schedule is three independent gates, all in the last card** (`Availability & Schedule`,
   shared by all four formats): the `validFrom`/`validTo` date range, `activeDays` (weekday chips,
   added 2026-08-23), and the optional `startTime`/`endTime` window. The form always shows an

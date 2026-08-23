@@ -23,6 +23,8 @@ import { getAccessToken } from "@/services/api";
 import { dealService, type DealInput, type DealTypeValue } from "@/services/deal.service";
 import { menuService } from "@/services/menu.service";
 import { DAY_SHORT, activeDaysLabel } from "@/lib/deals";
+import { DatePicker, formatDateLabel } from "@/components/ui/date-picker";
+import { TimePicker, formatTimeLabel } from "@/components/ui/time-picker";
 
 /** One item in a Fixed Bundle. `categoryId` is a UI-only filter that narrows the
  *  row's item dropdown — it is never sent to the backend. */
@@ -1279,7 +1281,7 @@ const DealForm = () => {
   }
 
   return (
-    <div className="space-y-6 pb-20">
+    <div className="space-y-6">
       {/* TOP PAGE HEADER */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border/80 pb-4">
         <div className="flex items-center gap-3">
@@ -3941,24 +3943,22 @@ const DealForm = () => {
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div className="space-y-1.5">
                       <Label className="text-xs font-medium text-muted-foreground">Valid From</Label>
-                      <Input
-                        type="date"
+                      <DatePicker
                         value={validFrom}
-                        onChange={(e) => setValidFrom(e.target.value)}
-                        className="h-10 text-xs font-mono"
+                        onChange={setValidFrom}
+                        placeholder="Pick a start date"
                       />
                     </div>
 
                     <div className="space-y-1.5">
                       <Label className="text-xs font-medium text-muted-foreground">Valid To</Label>
-                      <Input
-                        type="date"
+                      <DatePicker
+                        value={alwaysActive ? "" : validTo}
+                        onChange={setValidTo}
                         disabled={alwaysActive}
                         min={validFrom}
-                        value={alwaysActive ? "" : validTo}
-                        onChange={(e) => setValidTo(e.target.value)}
-                        placeholder={alwaysActive ? "No end date" : undefined}
-                        className="h-10 text-xs font-mono disabled:opacity-50"
+                        clearable
+                        placeholder={alwaysActive ? "No end date" : "Pick an end date"}
                       />
                     </div>
 
@@ -4073,21 +4073,11 @@ const DealForm = () => {
                       <div className="grid grid-cols-2 gap-4 max-w-md">
                         <div className="space-y-1.5">
                           <Label className="text-xs font-medium text-muted-foreground">Start Time</Label>
-                          <Input
-                            type="time"
-                            value={startTime}
-                            onChange={(e) => setStartTime(e.target.value)}
-                            className="h-10 text-xs font-mono"
-                          />
+                          <TimePicker value={startTime} onChange={setStartTime} />
                         </div>
                         <div className="space-y-1.5">
                           <Label className="text-xs font-medium text-muted-foreground">End Time</Label>
-                          <Input
-                            type="time"
-                            value={endTime}
-                            onChange={(e) => setEndTime(e.target.value)}
-                            className="h-10 text-xs font-mono"
-                          />
+                          <TimePicker value={endTime} onChange={setEndTime} />
                         </div>
                       </div>
                       {/* A window that runs past midnight belongs to the day it
@@ -4112,12 +4102,14 @@ const DealForm = () => {
                 <span className="text-xs font-mono text-foreground/90">
                   {[
                     activeDaysLabel(activeDays),
-                    hasTimeRestriction ? `${startTime}–${endTime}` : "all day",
+                    hasTimeRestriction
+                      ? `${formatTimeLabel(startTime)} – ${formatTimeLabel(endTime)}`
+                      : "all day",
                     alwaysActive
-                      ? `from ${validFrom || "—"}, never expires`
+                      ? `from ${formatDateLabel(validFrom)}, never expires`
                       : validTo
-                      ? `${validFrom || "—"} → ${validTo}`
-                      : `from ${validFrom || "—"}`,
+                      ? `${formatDateLabel(validFrom)} → ${formatDateLabel(validTo)}`
+                      : `from ${formatDateLabel(validFrom)}`,
                   ].join(" · ")}
                 </span>
               </div>
