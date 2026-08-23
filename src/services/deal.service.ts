@@ -43,6 +43,13 @@ export interface DealRecord {
   takeAwayPrice: number | null;
   deliveryPrice: number | null;
   foodpandaPrice: number | null;
+  /** Per-channel discount-% overrides. Percentage deals: replaces discountPercent
+   *  on that channel. Buy X Get Y deals: how much of the free item the deal covers
+   *  there (base 100 = genuinely free). Null = fall back to the base figure. */
+  dineInPercent: number | null;
+  takeAwayPercent: number | null;
+  deliveryPercent: number | null;
+  foodpandaPercent: number | null;
   isActive: boolean;
   status: string;
   outletIds: string[];
@@ -121,6 +128,10 @@ export interface DealInput {
   takeAwayPrice?: number | null;
   deliveryPrice?: number | null;
   foodpandaPrice?: number | null;
+  dineInPercent?: number | null;
+  takeAwayPercent?: number | null;
+  deliveryPercent?: number | null;
+  foodpandaPercent?: number | null;
   isActive?: boolean;
   outletIds?: string[];
   validFrom: string;

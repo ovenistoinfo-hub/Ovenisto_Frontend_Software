@@ -177,6 +177,14 @@ const DealForm = () => {
   const [deliveryPct, setDeliveryPct] = useState<string>("");
   const [foodpandaPct, setFoodpandaPct] = useState<string>("");
 
+  // Per-channel discount-% overrides (percentage / buy_x_get_y). Held as the raw
+  // typed string so an empty field keeps meaning "use the base figure" — a number
+  // state would have to invent 0, which is a real setting ("no discount here").
+  const [dineInPercent, setDineInPercent] = useState<string>("");
+  const [takeAwayPercent, setTakeAwayPercent] = useState<string>("");
+  const [deliveryPercent, setDeliveryPercent] = useState<string>("");
+  const [foodpandaPercent, setFoodpandaPercent] = useState<string>("");
+
   // Fixed Bundle Items
   const [comboRows, setComboRows] = useState<ComboItemRow[]>([]);
 
@@ -231,6 +239,10 @@ const DealForm = () => {
     setTakeAwayPrice(existingDeal.takeAwayPrice ?? null);
     setDeliveryPrice(existingDeal.deliveryPrice ?? null);
     setFoodpandaPrice(existingDeal.foodpandaPrice ?? null);
+    setDineInPercent(existingDeal.dineInPercent != null ? String(existingDeal.dineInPercent) : "");
+    setTakeAwayPercent(existingDeal.takeAwayPercent != null ? String(existingDeal.takeAwayPercent) : "");
+    setDeliveryPercent(existingDeal.deliveryPercent != null ? String(existingDeal.deliveryPercent) : "");
+    setFoodpandaPercent(existingDeal.foodpandaPercent != null ? String(existingDeal.foodpandaPercent) : "");
 
     if (existingDeal.components && existingDeal.components.length > 0) {
       setComboRows(
@@ -561,6 +573,65 @@ const DealForm = () => {
     const price = basis > 0 ? Math.round(calcMode === "discount" ? basis * (1 - pct / 100) : basis * (1 + pct / 100)) : 0;
     setPrice(Math.max(0, price));
   };
+
+  // ── Per-channel discount-% overrides ──
+  // The percentage half of the Channel Price Overrides a Fixed Bundle gets. A
+  // flat-price format varies its Rs. price per channel; % Discount and Buy X Get Y
+  // have no flat price to vary, so they vary their percentage instead.
+  const supportsChannelPercent = dealType === "percentage" || dealType === "buy_x_get_y";
+
+  const channelPercentRows = [
+    { key: "dineIn", label: "Dine In", Icon: UtensilsCrossed, value: dineInPercent, set: setDineInPercent },
+    { key: "takeAway", label: "Take Away", Icon: ShoppingBag, value: takeAwayPercent, set: setTakeAwayPercent },
+    { key: "delivery", label: "Delivery", Icon: Truck, value: deliveryPercent, set: setDeliveryPercent },
+    { key: "foodpanda", label: "Foodpanda", Icon: ShoppingBag, value: foodpandaPercent, set: setFoodpandaPercent },
+  ];
+
+  /** Empty stays null so the backend falls back to the base figure; 0 is a real
+   *  setting ("this channel gets nothing"), so it must survive the round-trip. */
+  const channelPercentValue = (raw: string): number | null =>
+    raw.trim() === "" ? null : Math.min(100, Math.max(0, Number(raw) || 0));
+
+  const renderChannelPercentOverrides = (title: string, basePercent: number, hint: string) => (
+    <div className="space-y-2.5 pt-4 border-t border-border/50">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-[11px] font-bold uppercase tracking-wider text-foreground">
+          {title}
+        </p>
+        <span className="text-[10px] text-muted-foreground">{hint}</span>
+      </div>
+
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {channelPercentRows.map((ch) => (
+          <div key={ch.key} className="space-y-1.5">
+            <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+              <ch.Icon className="h-3 w-3" /> {ch.label}
+            </Label>
+            <div className="relative">
+              <Input
+                type="number"
+                min={0}
+                max={100}
+                placeholder={`Default (${basePercent}%)`}
+                value={ch.value}
+                onChange={(e) =>
+                  ch.set(
+                    e.target.value === ""
+                      ? ""
+                      : String(Math.min(100, Math.max(0, Number(e.target.value) || 0)))
+                  )
+                }
+                className="h-9 text-xs font-mono pr-6"
+              />
+              <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-bold text-muted-foreground">
+                %
+              </span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 
   // Customizable Option Groups Helpers
   const addOptionGroup = () => {
@@ -1087,6 +1158,10 @@ const DealForm = () => {
         takeAwayPrice: takeAwayPrice != null ? Number(takeAwayPrice) : null,
         deliveryPrice: deliveryPrice != null ? Number(deliveryPrice) : null,
         foodpandaPrice: foodpandaPrice != null ? Number(foodpandaPrice) : null,
+        dineInPercent: supportsChannelPercent ? channelPercentValue(dineInPercent) : null,
+        takeAwayPercent: supportsChannelPercent ? channelPercentValue(takeAwayPercent) : null,
+        deliveryPercent: supportsChannelPercent ? channelPercentValue(deliveryPercent) : null,
+        foodpandaPercent: supportsChannelPercent ? channelPercentValue(foodpandaPercent) : null,
         isActive,
         validFrom,
         validTo: alwaysActive ? null : validTo || null,
@@ -2744,6 +2819,12 @@ const DealForm = () => {
                   </div>
                 </div>
 
+                {renderChannelPercentOverrides(
+                  "Channel Discount Overrides",
+                  Math.round(discountPercent || 0),
+                  `Leave empty to use the base discount (${Math.round(discountPercent || 0)}%)`
+                )}
+
                 <div className="space-y-5 pt-2 border-t">
                   <div className="flex items-center justify-between gap-3">
                     <Label className="text-xs font-bold text-foreground">
@@ -3677,6 +3758,16 @@ const DealForm = () => {
                       </p>
                     )}
                   </>
+                )}
+
+                {/* Buy X Get Y has no deal price to override per channel — what it
+                    can vary is how much of the free item the offer actually covers
+                    there, so 100% is the default and a lower figure charges the
+                    difference on that channel. */}
+                {renderChannelPercentOverrides(
+                  "Channel Free-Item Overrides",
+                  100,
+                  "Leave empty to give the free item away in full (100% covered)"
                 )}
               </CardContent>
             </Card>
