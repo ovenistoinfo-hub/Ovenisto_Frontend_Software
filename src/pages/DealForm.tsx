@@ -108,6 +108,17 @@ const BOGO_SIDES = [
 
 const PERCENT_PRESETS = [10, 15, 20, 25, 30, 50];
 
+/** "Rs. 450" when both ends land on the same figure, "Rs. 450 – 900" otherwise.
+ *  A percentage deal prices every item in scope separately, so its ladder tiles
+ *  carry a range where a Fixed Bundle carries one total. */
+const moneyRange = (min: number, max: number) => {
+  const lo = Math.round(min);
+  const hi = Math.round(max);
+  return lo === hi
+    ? `Rs.\u00a0${lo.toLocaleString()}`
+    : `Rs.\u00a0${lo.toLocaleString()} – ${hi.toLocaleString()}`;
+};
+
 const DealForm = () => {
   const navigate = useNavigate();
   const { id } = useParams();
@@ -840,8 +851,14 @@ const DealForm = () => {
     let maxBefore = 0;
     let minAfter = Infinity;
     let maxAfter = 0;
+    let minCost = Infinity;
+    let maxCost = 0;
     let marginSum = 0;
     let marginCount = 0;
+    // The same average taken at menu price — ROW 1's "Total Profit %", the
+    // baseline ROW 2's deal margin is judged against.
+    let menuMarginSum = 0;
+    let menuMarginCount = 0;
     const belowCost: { name: string; after: number; cost: number; loss: number }[] = [];
 
     for (const unit of units) {
@@ -853,6 +870,11 @@ const DealForm = () => {
       maxAfter = Math.max(maxAfter, after);
 
       if (unit.cost > 0) {
+        minCost = Math.min(minCost, unit.cost);
+        maxCost = Math.max(maxCost, unit.cost);
+        menuMarginSum += ((unit.price - unit.cost) / unit.price) * 100;
+        menuMarginCount += 1;
+
         if (after < unit.cost) {
           belowCost.push({ name: unit.name, after, cost: unit.cost, loss: unit.cost - after });
         }
@@ -873,8 +895,15 @@ const DealForm = () => {
       maxBefore,
       minAfter: minAfter === Infinity ? 0 : minAfter,
       maxAfter,
+      minCost: minCost === Infinity ? 0 : minCost,
+      maxCost,
+      hasCost: maxCost > 0,
+      // What the customer keeps, cheapest and priciest unit in scope.
+      minSave: (minBefore === Infinity ? 0 : minBefore) * (pct / 100),
+      maxSave: maxBefore * (pct / 100),
       belowCost,
       avgMargin: marginCount > 0 ? Math.round(marginSum / marginCount) : null,
+      avgMenuMargin: menuMarginCount > 0 ? Math.round(menuMarginSum / menuMarginCount) : null,
       pricedUnits: marginCount,
     };
   }, [discountScopeItems, discountPercent]);
@@ -1018,7 +1047,7 @@ const DealForm = () => {
   }, [applicableCategoryIds, applicableItemIds, foodCategories, menuItems]);
 
   // Every deal type now renders a section 4 — Pricing for the combo formats,
-  // Discount Impact for percentage, Offer Impact for Buy X Get Y — so validity
+  // The Pricing & Cost Breakdown read-out for percentage / Buy X Get Y — so validity
   // is always 5.
   const validitySectionNumber = 5;
 
@@ -2770,62 +2799,14 @@ const DealForm = () => {
               <CardHeader className="pb-3 border-b bg-muted/20">
                 <CardTitle className="text-sm font-bold uppercase tracking-wider text-foreground flex items-center gap-2">
                   <Percent className="h-4 w-4 text-primary" />
-                  3. Discount Percentage & Applicable Scope
+                  3. Applicable Scope
                 </CardTitle>
                 <CardDescription className="text-xs">
-                  Set the discount rate and choose qualifying categories or items
+                  Choose the categories or items this discount qualifies — the rate itself is set in the pricing card below
                 </CardDescription>
               </CardHeader>
               <CardContent className="p-5 space-y-6">
-                <div className="space-y-2 max-w-sm">
-                  <Label className="text-xs font-bold text-primary">
-                    Discount Percentage (%) *
-                  </Label>
-                  <div className="relative">
-                    <Input
-                      type="number"
-                      min={1}
-                      max={100}
-                      placeholder="10"
-                      value={discountPercent || ""}
-                      onChange={(e) =>
-                        setDiscountPercent(
-                          Math.min(100, Math.max(0, Number(e.target.value)))
-                        )
-                      }
-                      className="h-10 text-base font-extrabold border-primary/50 bg-primary/[0.02] pr-8 font-mono"
-                    />
-                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm font-bold text-muted-foreground">
-                      %
-                    </span>
-                  </div>
-                  {/* Preset Buttons */}
-                  <div className="flex gap-1.5 pt-1">
-                    {PERCENT_PRESETS.map((p) => (
-                      <button
-                        key={p}
-                        type="button"
-                        onClick={() => setDiscountPercent(p)}
-                        className={cn(
-                          "text-xs px-2.5 py-1 rounded-md border font-semibold transition-all",
-                          discountPercent === p
-                            ? "bg-primary text-primary-foreground border-primary"
-                            : "bg-muted/40 hover:bg-muted text-muted-foreground border-border"
-                        )}
-                      >
-                        {p}%
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {renderChannelPercentOverrides(
-                  "Channel Discount Overrides",
-                  Math.round(discountPercent || 0),
-                  `Leave empty to use the base discount (${Math.round(discountPercent || 0)}%)`
-                )}
-
-                <div className="space-y-5 pt-2 border-t">
+                <div className="space-y-5">
                   <div className="flex items-center justify-between gap-3">
                     <Label className="text-xs font-bold text-foreground">
                       Applies To Categories & Items <span className="text-destructive">*</span>
@@ -3071,17 +3052,18 @@ const DealForm = () => {
             </Card>
           )}
 
-          {/* SECTION 4: Discount Impact (Percentage Mode) — the margin read-out the
-              combo types get, answered for a percentage-off deal. */}
+          {/* SECTION 4: Pricing & Cost Breakdown (Percentage Mode) — same card, same
+              name and same two-row ladder as every other format, answered for a
+              percentage-off deal. */}
           {dealType === "percentage" && (
             <Card className="shadow-xs border-border/80 overflow-hidden">
               <CardHeader className="pb-3 border-b bg-muted/20">
                 <CardTitle className="text-sm font-bold uppercase tracking-wider text-foreground flex items-center gap-2">
                   <Sparkles className="h-4 w-4 text-primary" />
-                  4. Discount Impact
+                  4. Pricing & Cost Breakdown
                 </CardTitle>
                 <CardDescription className="text-xs">
-                  What {discountPercent || 0}% off does to the items in scope
+                  What the items in scope are worth at menu price, and what {discountPercent || 0}% off leaves you
                 </CardDescription>
               </CardHeader>
 
@@ -3098,118 +3080,189 @@ const DealForm = () => {
                   </div>
                 ) : (
                 <>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {/* ── ROW 1 · AT MENU PRICE (baseline, informational) ──
+                    Same ladder every other format reports through; a percentage
+                    deal just carries ranges, since each item in scope is priced
+                    on its own rather than summing into one bundle total. */}
+                <div className="space-y-2">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70 flex items-center gap-1.5">
+                    <Tag className="h-3 w-3" /> At Regular Menu Price
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
 
-                  {/* How much of the menu this touches */}
-                  <div className="rounded-xl border border-border/70 bg-muted/25 p-4 flex flex-col justify-between gap-2">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                      <Package className="h-3.5 w-3.5 text-muted-foreground/70" />
-                      Items In Scope
-                    </span>
-                    <div>
-                      <div className="flex items-baseline gap-1.5">
+                    {/* Total Cost */}
+                    <div className="rounded-xl border border-border/70 bg-muted/25 p-4 flex flex-col justify-between gap-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                          <Coins className="h-3.5 w-3.5 text-muted-foreground/70" />
+                          Total Cost
+                        </span>
+                        {discountImpact.hasCost ? (
+                          <Badge variant="secondary" className="text-[10px] px-1.5 py-0">Recipe Cost</Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-[10px] text-muted-foreground/60 px-1.5 py-0">No Recipe</Badge>
+                        )}
+                      </div>
+                      <div>
                         <p className="text-xl font-black font-mono text-foreground tracking-tight">
-                          {discountImpact.itemCount}
+                          {discountImpact.hasCost
+                            ? moneyRange(discountImpact.minCost, discountImpact.maxCost)
+                            : "—"}
                         </p>
-                        {discountImpact.unitCount !== discountImpact.itemCount && (
-                          <span className="text-xs font-mono font-bold text-muted-foreground">
-                            ({discountImpact.unitCount} sizes)
+                        <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">
+                          {discountImpact.hasCost
+                            ? "Cheapest → priciest item in scope"
+                            : "Set recipes in Menu Items for live cost"}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Total Selling Price */}
+                    <div className="rounded-xl border border-border/70 bg-muted/25 p-4 flex flex-col justify-between gap-2">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                        <Tag className="h-3.5 w-3.5 text-muted-foreground/70" />
+                        Total Selling Price
+                      </span>
+                      <div>
+                        <p className="text-xl font-black font-mono text-foreground tracking-tight">
+                          {moneyRange(discountImpact.minBefore, discountImpact.maxBefore)}
+                        </p>
+                        <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">
+                          Standalone menu retail value
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Total Profit % at menu price */}
+                    <div className="rounded-xl border border-border/70 bg-muted/25 p-4 flex flex-col justify-between gap-2">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                        <TrendingUp className="h-3.5 w-3.5 text-muted-foreground/70" />
+                        Total Profit %
+                      </span>
+                      <div>
+                        <p className="text-xl font-black font-mono text-foreground tracking-tight">
+                          {discountImpact.avgMenuMargin != null ? `${discountImpact.avgMenuMargin}%` : "—"}
+                        </p>
+                        <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">
+                          {discountImpact.avgMenuMargin != null
+                            ? "Margin before any deal discount"
+                            : "Set recipes in Menu Items for live margin"}
+                        </p>
+                      </div>
+                    </div>
+
+                  </div>
+                </div>
+
+                {/* ── ROW 2 · THIS DEAL (the decision, updates live) ── */}
+                <div className="space-y-2">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-primary/80 flex items-center gap-1.5">
+                    <Sparkles className="h-3 w-3" /> This Deal
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+
+                    {/* Deal Price — what the customer actually pays, per item */}
+                    <div className="rounded-xl border-2 border-primary/50 bg-primary/[0.04] p-4 flex flex-col justify-between gap-2 shadow-xs">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-primary flex items-center gap-1.5">
+                          <Sparkles className="h-3.5 w-3.5" />
+                          Deal Price
+                        </span>
+                        {(discountPercent || 0) > 0 && (
+                          <span className="text-[10px] font-bold text-primary px-1.5 py-0.5 rounded bg-primary/10">
+                            {discountPercent}% OFF
                           </span>
                         )}
                       </div>
-                      <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">
-                        {[
-                          applicableCategoryIds.length > 0
-                            ? `${applicableCategoryIds.length} categor${applicableCategoryIds.length !== 1 ? "ies" : "y"}`
-                            : null,
-                          applicableItemIds.length > 0
-                            ? `${applicableItemIds.length} named item${applicableItemIds.length !== 1 ? "s" : ""}`
-                            : null,
-                        ]
-                          .filter(Boolean)
-                          .join(" + ")}
-                      </p>
+                      <div>
+                        <p className="text-xl font-black font-mono text-primary tracking-tight">
+                          {moneyRange(discountImpact.minAfter, discountImpact.maxAfter)}
+                        </p>
+                        <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">
+                          {discountImpact.maxSave > 0
+                            ? `Customer saves ${moneyRange(discountImpact.minSave, discountImpact.maxSave)}`
+                            : "Customer pays at POS & Web"}
+                        </p>
+                      </div>
                     </div>
-                  </div>
 
-                  {/* What the customer ends up paying, against what they'd have paid */}
-                  <div className="rounded-xl border-2 border-primary/50 bg-primary/[0.04] p-4 flex flex-col justify-between gap-2 shadow-xs">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-primary flex items-center gap-1.5">
-                        <Tag className="h-3.5 w-3.5" />
-                        Price After Discount
-                      </span>
-                      {(discountPercent || 0) > 0 && (
-                        <span className="text-[10px] font-bold text-primary px-1.5 py-0.5 rounded bg-primary/10 shrink-0">
-                          −{discountPercent}%
+                    {/* Deal Profit % — coloured by its own value, so a healthy
+                        average stays green even while specific items are
+                        underwater; the badge carries that warning instead. */}
+                    <div className={cn(
+                      "rounded-xl border p-4 flex flex-col justify-between gap-2 transition-all",
+                      discountImpact.avgMargin != null && discountImpact.avgMargin > 0
+                        ? "border-emerald-500/40 bg-emerald-500/[0.04]"
+                        : "border-border/70 bg-muted/25"
+                    )}>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className={cn(
+                          "text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5",
+                          discountImpact.avgMargin != null && discountImpact.avgMargin > 0
+                            ? "text-emerald-600 dark:text-emerald-400"
+                            : "text-muted-foreground"
+                        )}>
+                          <TrendingUp className="h-3.5 w-3.5" />
+                          Deal Profit %
                         </span>
-                      )}
+                        {discountImpact.belowCost.length > 0 && (
+                          <span className="text-[10px] font-bold text-amber-600 dark:text-amber-500 px-1.5 py-0.5 rounded bg-amber-500/10 shrink-0">
+                            {discountImpact.belowCost.length} at a loss
+                          </span>
+                        )}
+                      </div>
+                      <div>
+                        {discountImpact.avgMargin != null ? (
+                          <>
+                            <p className={cn(
+                              "text-xl font-black font-mono tracking-tight",
+                              discountImpact.avgMargin > 0
+                                ? "text-emerald-600 dark:text-emerald-400"
+                                : "text-destructive"
+                            )}>
+                              {discountImpact.avgMargin}%
+                            </p>
+                            <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">
+                              Across {discountImpact.pricedUnits} of {discountImpact.unitCount} with a recipe cost
+                            </p>
+                          </>
+                        ) : (
+                          <>
+                            <p className="text-xl font-black font-mono text-muted-foreground/40">—</p>
+                            <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">
+                              Set recipes in Menu Items for live margin
+                            </p>
+                          </>
+                        )}
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-xl font-black font-mono text-primary tracking-tight">
-                        Rs.&nbsp;{Math.round(discountImpact.minAfter).toLocaleString()} – {Math.round(discountImpact.maxAfter).toLocaleString()}
-                      </p>
-                      <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight font-mono">
-                        was <span className="line-through">Rs. {Math.round(discountImpact.minBefore).toLocaleString()} – {Math.round(discountImpact.maxBefore).toLocaleString()}</span>
-                      </p>
-                    </div>
-                  </div>
 
-                  {/* Whether it still pays. The number is coloured by its own value —
-                      a healthy average stays green even when specific items are
-                      underwater — while the card's tint carries that warning. */}
-                  <div className={cn(
-                    "rounded-xl border p-4 flex flex-col justify-between gap-2 transition-all",
-                    discountImpact.avgMargin == null
-                      ? "border-border/70 bg-muted/25"
-                      : discountImpact.belowCost.length > 0
-                      ? "border-amber-500/40 bg-amber-500/[0.04]"
-                      : "border-emerald-500/40 bg-emerald-500/[0.04]"
-                  )}>
-                    <div className="flex items-center justify-between gap-2">
-                      <span className={cn(
-                        "text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5",
-                        discountImpact.avgMargin == null
-                          ? "text-muted-foreground"
-                          : discountImpact.belowCost.length > 0
-                          ? "text-amber-600 dark:text-amber-500"
-                          : "text-emerald-600 dark:text-emerald-400"
-                      )}>
-                        <TrendingUp className="h-3.5 w-3.5" />
-                        Avg Margin After
-                      </span>
-                      {discountImpact.belowCost.length > 0 && (
-                        <span className="text-[10px] font-bold text-amber-600 dark:text-amber-500 px-1.5 py-0.5 rounded bg-amber-500/10 shrink-0">
-                          {discountImpact.belowCost.length} at a loss
-                        </span>
-                      )}
-                    </div>
-                    <div>
-                      {discountImpact.avgMargin != null ? (
-                        <>
-                          <p className={cn(
-                            "text-xl font-black font-mono tracking-tight",
-                            discountImpact.avgMargin > 0
-                              ? "text-emerald-600 dark:text-emerald-400"
-                              : "text-destructive"
-                          )}>
-                            {discountImpact.avgMargin}%
-                          </p>
-                          <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">
-                            Across {discountImpact.pricedUnits} of {discountImpact.unitCount} with a recipe cost
-                          </p>
-                        </>
-                      ) : (
-                        <>
-                          <p className="text-xl font-black font-mono text-muted-foreground/40">—</p>
-                          <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">
-                            Set recipes in Menu Items for live margin
-                          </p>
-                        </>
-                      )}
-                    </div>
                   </div>
+                </div>
 
+                {/* What the ladder above is averaged over — the one figure a
+                    percentage deal has that a bundle does not, kept below the
+                    ladder the way Buy X Get Y keeps its giveaway list. */}
+                <div className="rounded-xl border border-border/70 bg-muted/20 px-4 py-3 flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                    <Package className="h-3 w-3 text-muted-foreground/70" /> Items In Scope
+                  </p>
+                  <p className="text-xs font-mono text-foreground/90">
+                    {[
+                      `${discountImpact.itemCount} item${discountImpact.itemCount !== 1 ? "s" : ""}`,
+                      discountImpact.unitCount !== discountImpact.itemCount
+                        ? `${discountImpact.unitCount} sizes`
+                        : null,
+                      applicableCategoryIds.length > 0
+                        ? `${applicableCategoryIds.length} categor${applicableCategoryIds.length !== 1 ? "ies" : "y"}`
+                        : null,
+                      applicableItemIds.length > 0
+                        ? `${applicableItemIds.length} named item${applicableItemIds.length !== 1 ? "s" : ""}`
+                        : null,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </p>
                 </div>
 
                 {/* The one thing worth blocking on: selling under cost */}
@@ -3258,7 +3311,73 @@ const DealForm = () => {
                     </div>
                   </div>
                 )}
+
                 </>
+                )}
+
+                {/* ── ROW 3 · SET DISCOUNT RATE — the input the ladder above reacts
+                    to, in the same card and the same place a Fixed Bundle puts its
+                    deal price. Outside the empty-state branch, so the rate can be
+                    set before anything is in scope. ── */}
+                <div className="rounded-xl border border-border/70 bg-card p-4 space-y-4 shadow-xs">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <Label className="text-xs font-bold text-foreground uppercase tracking-wide">
+                      Set Discount Rate <span className="text-destructive">*</span>
+                    </Label>
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row items-start sm:items-end gap-4">
+                    {/* Main input */}
+                    <div className="space-y-1 w-full sm:w-56 shrink-0">
+                      <div className="relative">
+                        <Input
+                          type="number"
+                          min={1}
+                          max={100}
+                          placeholder="e.g. 10"
+                          value={discountPercent || ""}
+                          onChange={(e) =>
+                            setDiscountPercent(
+                              Math.min(100, Math.max(0, Number(e.target.value)))
+                            )
+                          }
+                          className="h-11 text-base font-extrabold font-mono border-primary/50 bg-primary/[0.02] pr-9"
+                        />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-muted-foreground font-mono">
+                          %
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Presets — the same secondary-control slot the Fixed Bundle
+                        uses for its percent basis buttons. */}
+                    <div className="space-y-1">
+                      <span className="text-[10px] text-muted-foreground block">Common rates</span>
+                      <div className="flex flex-wrap gap-1.5">
+                        {PERCENT_PRESETS.map((p) => (
+                          <button
+                            key={p}
+                            type="button"
+                            onClick={() => setDiscountPercent(p)}
+                            className={cn(
+                              "text-[11px] font-bold px-2.5 py-1.5 rounded-md transition-all",
+                              discountPercent === p
+                                ? "bg-primary text-primary-foreground shadow-xs"
+                                : "bg-muted/40 hover:bg-muted text-muted-foreground"
+                            )}
+                          >
+                            {p}%
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {renderChannelPercentOverrides(
+                  "Channel Discount Overrides",
+                  Math.round(discountPercent || 0),
+                  `Leave empty to use the base discount (${Math.round(discountPercent || 0)}%)`
                 )}
               </CardContent>
             </Card>

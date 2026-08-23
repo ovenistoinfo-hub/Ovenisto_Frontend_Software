@@ -170,16 +170,33 @@ plus a body explaining _why_ the change was made when that is not obvious.
   (or similar) and lets `AppLayout.tsx`'s `<main className="p-4 md:p-6 overflow-auto">` own the
   available width. `DealForm.tsx` had picked up a stray `max-w-7xl mx-auto` that left large dead
   gutters on wide screens (removed 2026-08-22) — don't copy that pattern into a new page.
-- **Every deal format reports money through the same two-row ladder** — `ROW 1 · At Regular Menu
-  Price` (Total Cost | Total Selling Price | Total Profit %, muted `border-border/70 bg-muted/25`
-  cards) then `ROW 2 · This Deal` (Deal Price in the primary `border-2 border-primary/50` card with
-  an `X% OFF` badge and a "Customer saves Rs. Y" subtitle, beside Deal Profit % tinted emerald or
-  destructive). Fixed Bundle, Customizable and Buy X Get Y all use those exact labels; % Discount
-  uses the same card styling with its own three tiles. Buy X Get Y had its own vocabulary
-  ("Customer Pays" / "You Give Away" / "Profit Per Redemption") until 2026-08-22 and read as a
-  different product — don't invent new wording for a new format, reuse this ladder. Its Deal Price
-  is derived (the customer pays menu price for what they buy), so it alone has no deal-price input
-  or channel overrides.
+- **Every deal format reports money through the same two-row ladder**, inside a card all four title
+  `4. Pricing & Cost Breakdown` — `ROW 1 · At Regular Menu Price` (Total Cost | Total Selling Price |
+  Total Profit %, muted `border-border/70 bg-muted/25` cards) then `ROW 2 · This Deal` (Deal Price in
+  the primary `border-2 border-primary/50` card with an `X% OFF` badge and a "Customer saves Rs. Y"
+  subtitle, beside Deal Profit % tinted emerald or destructive), then `ROW 3 · SET …` — the input the
+  rows above react to — with the channel overrides directly under it. All four formats use those exact
+  labels; don't invent new wording for a new format, reuse this ladder. Two formats used to read as
+  different products and no longer do: Buy X Get Y had its own vocabulary ("Customer Pays" / "You Give
+  Away" / "Profit Per Redemption") until 2026-08-22, and % Discount had its own three tiles ("Items In
+  Scope" / "Price After Discount" / "Avg Margin After") with its rate input stranded up in the scope
+  card until 2026-08-23.
+- **% Discount's ladder carries ranges, not totals** — it prices each item in scope on its own, so
+  every tile is `moneyRange(min, max)` (collapsing to one figure when both ends match) rather than
+  one summed total, and Total/Deal Profit % are averages across the units that have a recipe cost.
+  `discountImpact` computes all of it. Its scope summary and below-cost table sit *below* the ladder,
+  the way Buy X Get Y keeps its giveaway list there — format-specific extras go after the two rows,
+  never in place of them. Its card 3 is scope only (`3. Applicable Scope`).
+- **Buy X Get Y alone has no `ROW 3`** — its Deal Price is derived (the customer pays menu price for
+  what they buy), so there is no deal-price input to put there. It still gets channel overrides,
+  just as a free-item coverage % rather than a price.
+- **Channel overrides come in two shapes, one per pricing model** — a flat-price format (Fixed Bundle,
+  Customizable) overrides the Rs. price per channel (`dineInPrice`…`foodpandaPrice`, with the Rs./%
+  toggle); the two formats that discount live menu prices override a percentage instead
+  (`dineInPercent`…`foodpandaPercent`, added 2026-08-23), rendered by the shared
+  `renderChannelPercentOverrides` helper. % Discount's base is its own rate; Buy X Get Y's base is
+  100 (fully free). Both are held as *strings* in state, because empty must stay empty — `0` is a
+  real setting ("this channel gets nothing"), and a number state would have to invent it.
 - **Every deal format edits its items through the same row table** — Category | Menu Item | Size /
   Variant | (Qty) | Cost | Selling | delete, on a `grid` with an explicit `gridTemplateColumns`.
   Fixed Bundle, Choice Steps and Buy X Get Y all use it; a new format should too rather than
