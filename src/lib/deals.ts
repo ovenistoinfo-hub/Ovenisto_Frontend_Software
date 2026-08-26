@@ -127,3 +127,120 @@ export function dealChannelPrice(record: ChannelPriced, orderType: string | unde
   const channelPrice = field ? record[field] : undefined;
   return channelPrice ?? record.price;
 }
+
+export interface ChannelDiscounted {
+  dineInPercent?: number | null;
+  takeAwayPercent?: number | null;
+  deliveryPercent?: number | null;
+  foodpandaPercent?: number | null;
+}
+
+const ORDER_TYPE_TO_PERCENT_FIELD: Record<string, keyof ChannelDiscounted> = {
+  'Dine In': 'dineInPercent',
+  'Take Away': 'takeAwayPercent',
+  'Delivery': 'deliveryPercent',
+  'Foodpanda': 'foodpandaPercent',
+};
+
+/** Channel discount % for this order type, falling back to `base` — mirrors
+ *  the backend's resolveChannelPercent. `??`, so an explicit 0 ("no discount
+ *  on Foodpanda") is honored. Clamped to 0–100. */
+export function dealChannelPercent(record: ChannelDiscounted, orderType: string | undefined, base: number): number {
+  const field = orderType ? ORDER_TYPE_TO_PERCENT_FIELD[orderType] : undefined;
+  const override = field ? record[field] : undefined;
+  return Math.min(100, Math.max(0, override ?? base));
+}
+
+function round2(n: number): number {
+  return Math.round((n + Number.EPSILON) * 100) / 100;
+}
+
+/** Splits `totalSavings` across `lineGrossAmounts` proportionally to each
+ *  line's gross value, with the rounding remainder pushed onto the
+ *  largest-weight line — mirrors the backend's allocateDealDiscount exactly,
+ *  so a Fixed Bundle/Customizable/Buy X Get Y preview in the POS cart matches
+ *  what the server will actually charge once it re-derives the same order. */
+export function allocateDealDiscount(totalSavings: number, lineGrossAmounts: number[]): number[] {
+  if (lineGrossAmounts.length === 0) return [];
+  const savings = Math.max(0, totalSavings);
+  const weights = lineGrossAmounts.map((a) => Math.max(0, a));
+  const totalWeight = weights.reduce((s, w) => s + w, 0);
+
+  const shares = totalWeight > 0
+    ? weights.map((w) => (savings * w) / totalWeight)
+    : weights.map(() => savings / weights.length);
+
+  const rounded = shares.map(round2);
+  const remainder = round2(savings - rounded.reduce((s, v) => s + v, 0));
+
+  let pivotIdx = 0;
+  for (let i = 1; i < weights.length; i++) {
+    if (weights[i] > weights[pivotIdx]) pivotIdx = i;
+  }
+  rounded[pivotIdx] = round2(rounded[pivotIdx] + remainder);
+  return rounded;
+}
+
+export interface DealBogoItemForPricing {
+  role: 'BUY' | 'GET';
+  menuItemId: string;
+  variantId: string | null;
+  qty: number;
+  displayOrder: number;
+}
+
+export interface BogoSideItem {
+  menuItemId: string;
+  variantId: string | null;
+  qty: number;
+}
+
+export interface DealForBogoSides {
+  bogoItems?: DealBogoItemForPricing[];
+  buyItemId?: string | null;
+  buyVariantId?: string | null;
+  buyQty?: number | null;
+  getItemId?: string | null;
+  getVariantId?: string | null;
+  getQty?: number | null;
+}
+
+/** The two sides of a Buy X Get Y offer, from whichever shape the deal was
+ *  saved in — mirrors the backend's resolveBogoSides. The DealBogoItem
+ *  relation wins whenever it has anything; a legacy row's single item per
+ *  side lives in the flat buyItemId/getItemId columns instead. */
+export function dealBogoSides(deal: DealForBogoSides): { buy: BogoSideItem[]; get: BogoSideItem[] } {
+  const rows = deal.bogoItems ?? [];
+
+  if (rows.length > 0) {
+    const bySide = (role: 'BUY' | 'GET') =>
+      rows
+        .filter((r) => r.role === role)
+        .slice()
+        .sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0))
+        .map((r) => ({
+          menuItemId: r.menuItemId,
+          variantId: r.variantId ?? null,
+          qty: Math.max(1, Math.trunc(r.qty || 1)),
+        }));
+    return { buy: bySide('BUY'), get: bySide('GET') };
+  }
+
+  const buy: BogoSideItem[] = deal.buyItemId
+    ? [{ menuItemId: deal.buyItemId, variantId: deal.buyVariantId ?? null, qty: Math.max(1, Math.trunc(deal.buyQty ?? 1)) }]
+    : [];
+  const get: BogoSideItem[] = deal.getItemId
+    ? [{ menuItemId: deal.getItemId, variantId: deal.getVariantId ?? null, qty: Math.max(1, Math.trunc(deal.getQty ?? 1)) }]
+    : [];
+  return { buy, get };
+}
+
+/** How much of the free line the deal actually pays for — mirrors the
+ *  backend's capFreeUnitPrice. A pinned deal (the common case for anything
+ *  saved since size-pinning existed) gives away exactly the variant it
+ *  names; an unpinned legacy deal caps the giveaway at the cheapest variant
+ *  instead of the priciest. */
+export function capFreeUnitPrice(pinnedVariantId: string | null | undefined, submittedUnitPrice: number, cheapestVariantPrice: number): number {
+  if (pinnedVariantId) return submittedUnitPrice;
+  return Math.min(submittedUnitPrice, cheapestVariantPrice);
+}

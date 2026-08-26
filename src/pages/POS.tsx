@@ -23,7 +23,7 @@ import { useQuery } from "@tanstack/react-query";
 import { cashSettlementService } from "@/services/cashSettlement.service";
 import { getSocket } from "@/lib/socket";
 import { useModuleEvents } from "@/hooks/use-module-events";
-import { Search, Plus, Minus, X, ShoppingCart, FileText, Printer, ArrowLeft, Trash2, User, Users, MapPin, Phone, Flame, Check, CreditCard, Banknote, Smartphone, RotateCcw, Download, ClipboardList, AlertTriangle, UtensilsCrossed, CalendarClock, Calendar, Timer, ChefHat, Tag, Zap, History, Monitor, BookOpen, StickyNote, Eye, Building2, Crown, CircleAlert, Bell, DollarSign, Package, Ban, Truck, ShoppingBag, Utensils, AlertCircle, CheckCircle2, Clock, Loader2, Wallet, Info, Coins, Layers } from "lucide-react";
+import { Search, Plus, Minus, X, ShoppingCart, FileText, Printer, ArrowLeft, Trash2, User, Users, MapPin, Phone, Flame, Check, CreditCard, Banknote, Smartphone, RotateCcw, Download, ClipboardList, AlertTriangle, UtensilsCrossed, CalendarClock, Calendar, Timer, ChefHat, Tag, Zap, History, Monitor, BookOpen, StickyNote, Eye, Building2, Crown, CircleAlert, Bell, DollarSign, Package, Ban, Truck, ShoppingBag, Utensils, AlertCircle, CheckCircle2, Clock, Loader2, Wallet, Info, Coins, Layers, Gift, Percent } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -49,6 +49,8 @@ import { useData } from "@/contexts/DataContext";
 import { useAuth } from "@/contexts/AuthContext";
 import type { Shift } from "@/contexts/DataContext";
 import { getRiderCollectAmount } from "@/utils/deliveryPayment";
+import { dealService, type DealRecord, type DealOptionItemRecord } from "@/services/deal.service";
+import { isDealLive, dealChannelPrice, dealChannelPercent, allocateDealDiscount, dealBogoSides, capFreeUnitPrice } from "@/lib/deals";
 
 interface CartItem extends OrderItem {
   modifiers?: string[];
@@ -57,6 +59,18 @@ interface CartItem extends OrderItem {
   notes?: string;
   menuItemId?: string;
   variantId?: string | null;
+  /** Set when this line came from a Deal — deal.revalidate.ts re-derives the
+   *  real price/discount for every deal-tagged line server-side, so these
+   *  only carry enough for the server to find the right deal/lines to
+   *  re-verify; the price/discount stored here are a client-side preview. */
+  dealId?: string | null;
+  dealName?: string | null;
+  /** Groups the several OrderItem rows one deal redemption produces. */
+  dealLineId?: string | null;
+  /** Customizable only — which option group this pick came from. */
+  dealGroupId?: string | null;
+  /** Buy X Get Y only — which side of the offer this line is. */
+  dealRole?: "buy" | "get" | null;
 }
 
 /** Resolve modifier selling price for a menu item (supports variantConfig, sellingPrice, and base price fallback) */
@@ -106,6 +120,16 @@ interface PaymentEntry {
 }
 
 const orderTypes: OrderType[] = ["Dine In", "Take Away", "Delivery"];
+
+// One accent, not four — the deal card grid's format tag is icon+label only,
+// matching Deals.tsx's admin list. order_discount is excluded from
+// sellableDeals so it never needs a badge here.
+const dealFormatBadge: Record<Exclude<DealRecord["type"], "order_discount">, { icon: typeof Package; label: string }> = {
+  combo: { icon: Package, label: "Fixed Bundle" },
+  option_combo: { icon: Layers, label: "Customizable" },
+  percentage: { icon: Percent, label: "% Discount" },
+  buy_x_get_y: { icon: Gift, label: "Buy X Get Y" },
+};
 // tableNumbers kept as fallback; backend tables loaded at runtime
 
 const getPaymentIcon = (methodName: string) => {
@@ -127,7 +151,7 @@ const CANCEL_APPROVER_ROLES = ['Admin', 'Manager'];
 const CANCEL_RESPONSIBLE_ROLES = ['Cashier', 'Kitchen Staff', 'Kitchen Manager', 'Waiter'];
 
 const POS = () => {
-  const { orders: localOrdersData, customers: customersList, foodMenuItems: localFoodMenuItems, foodCategories: localFoodCategories, modifiers: localModifiers, kitchens: localKitchens, ingredients, addItem, updateItem: updateDataItem, shifts, settings, riders: deliveryRiders, deals, updateSettings } = useData();
+  const { orders: localOrdersData, customers: customersList, foodMenuItems: localFoodMenuItems, foodCategories: localFoodCategories, modifiers: localModifiers, kitchens: localKitchens, ingredients, addItem, updateItem: updateDataItem, shifts, settings, riders: deliveryRiders, updateSettings } = useData();
   const { user } = useAuth();
   const location = useLocation();
   const { markMine, isLikelyOwnEcho } = useSelfMutationGuard();
@@ -594,10 +618,34 @@ const POS = () => {
   // Order timer
   const [orderElapsed, setOrderElapsed] = useState("00:00:00");
 
-  // Deal Selection
-  const [showDealDialog, setShowDealDialog] = useState(false);
-  const [selectedDeal, setSelectedDeal] = useState<typeof deals[0] | null>(null);
+  // Deals — real backend deals (Fixed Bundle/Customizable/%Discount/Buy X Get
+  // Y/Order Discount). Order Discount is excluded from the browsing grid: a
+  // Promo Code is entered by the customer at self-order/website checkout, not
+  // typed in by staff, and a Minimum Spend deal auto-applies with no click
+  // needed — createOrder already resolves it server-side on every order.
+  const { data: liveDeals = [] } = useQuery({
+    queryKey: ["deals", "pos"],
+    queryFn: () => dealService.getDeals(),
+    staleTime: 60_000,
+  });
+  const sellableDeals = useMemo(
+    () => liveDeals.filter((d) => d.type !== "order_discount" && isDealLive(d).valid),
+    [liveDeals]
+  );
+
+  // Customizable (option_combo): a group-selection dialog, keyed by
+  // `${menuItemId}:${variantId ?? ''}` since one option can repeat across
+  // groups but never within the same group's own selection set.
+  const [showDealCustomize, setShowDealCustomize] = useState(false);
+  const [customizingDeal, setCustomizingDeal] = useState<DealRecord | null>(null);
   const [dealGroupSelections, setDealGroupSelections] = useState<Record<string, string[]>>({});
+
+  // % Discount: pick which eligible item (and size/qty) the discount applies to.
+  const [showDealItemPicker, setShowDealItemPicker] = useState(false);
+  const [pickingDeal, setPickingDeal] = useState<DealRecord | null>(null);
+  const [pickedDealItemId, setPickedDealItemId] = useState("");
+  const [pickedDealVariantId, setPickedDealVariantId] = useState<string | null>(null);
+  const [pickedDealQty, setPickedDealQty] = useState(1);
 
   // Urgent Order
   const [isUrgent, setIsUrgent] = useState(false);
@@ -632,52 +680,216 @@ const POS = () => {
   const [cancelRefundMethod, setCancelRefundMethod] = useState("cash");
   const [cancelSubmitting, setCancelSubmitting] = useState(false);
 
-  const activeDeals = useMemo(() =>
-    deals.filter(d => d.isActive && d.type === "optionCombo" && d.optionGroups && d.optionGroups.length > 0 && (d.validTo === "always" || d.validTo >= new Date().toISOString().split("T")[0])),
-    [deals]
-  );
-
-  const openDealSelection = (deal: typeof deals[0]) => {
-    setSelectedDeal(deal);
-    const initial: Record<string, string[]> = {};
-    deal.optionGroups?.forEach(g => { initial[g.id] = []; });
-    setDealGroupSelections(initial);
-    setShowDealDialog(true);
+  /** Fixed Bundle and Buy X Get Y prescribe every item the deal contains, so
+   *  one click adds the whole redemption — no staff choice needed. Wanting
+   *  the offer twice is another click, same as adding any menu item twice. */
+  const addDealToCart = (deal: DealRecord) => {
+    if (deal.type === "combo") { addComboDealToCart(deal); return; }
+    if (deal.type === "buy_x_get_y") { addBogoDealToCart(deal); return; }
+    if (deal.type === "option_combo") { openDealCustomize(deal); return; }
+    if (deal.type === "percentage") { openDealItemPicker(deal); return; }
   };
 
-  const toggleDealItemSelection = (groupId: string, itemId: string, maxSelections: number) => {
-    setDealGroupSelections(prev => {
+  const addComboDealToCart = (deal: DealRecord) => {
+    if (deal.components.length === 0) { toast.error(`"${deal.name}" has no items configured`); return; }
+    const rows = deal.components.map((c) => {
+      const menuItem: any = foodMenuItems.find((m) => m.id === c.menuItemId);
+      const variant = c.variantId ? menuItem?.variants?.find((v: any) => v.id === c.variantId) : undefined;
+      return { component: c, menuItem, variant, unitPrice: resolvePrice(variant || menuItem, orderType) };
+    });
+    if (rows.some((r) => !r.menuItem)) { toast.error(`A menu item in "${deal.name}" is no longer available`); return; }
+
+    const grossAmounts = rows.map((r) => r.unitPrice * r.component.qty);
+    const savings = Math.max(0, grossAmounts.reduce((s, v) => s + v, 0) - dealChannelPrice(deal, orderType));
+    const discounts = allocateDealDiscount(savings, grossAmounts);
+
+    const lineId = `deal-${deal.id}-${Date.now()}`;
+    const newItems: CartItem[] = rows.map((r, idx) => ({
+      id: `${lineId}-${idx}`,
+      name: `${deal.name}: ${r.menuItem.name}${r.variant ? ` (${r.variant.name})` : ""}`,
+      price: r.unitPrice, qty: r.component.qty, discount: discounts[idx], modifiers: [],
+      menuItemId: r.component.menuItemId, variantId: r.component.variantId,
+      dealId: deal.id, dealName: deal.name, dealLineId: lineId,
+    }));
+    setCart((prev) => [...prev, ...newItems]);
+    toast.success(`${deal.name} added to cart`);
+  };
+
+  const addBogoDealToCart = (deal: DealRecord) => {
+    const { buy, get } = dealBogoSides(deal);
+    if (buy.length === 0 || get.length === 0) { toast.error(`"${deal.name}" is not configured correctly`); return; }
+
+    const lineId = `deal-${deal.id}-${Date.now()}`;
+    const newItems: CartItem[] = [];
+    for (const row of buy) {
+      const menuItem: any = foodMenuItems.find((m) => m.id === row.menuItemId);
+      if (!menuItem) { toast.error(`A menu item in "${deal.name}" is no longer available`); return; }
+      const variant = row.variantId ? menuItem.variants?.find((v: any) => v.id === row.variantId) : undefined;
+      newItems.push({
+        id: `${lineId}-buy-${newItems.length}`,
+        name: `${menuItem.name}${variant ? ` (${variant.name})` : ""}`,
+        price: resolvePrice(variant || menuItem, orderType), qty: row.qty, discount: 0, modifiers: [],
+        menuItemId: row.menuItemId, variantId: row.variantId,
+        dealId: deal.id, dealName: deal.name, dealLineId: lineId, dealRole: "buy",
+      });
+    }
+    for (const row of get) {
+      const menuItem: any = foodMenuItems.find((m) => m.id === row.menuItemId);
+      if (!menuItem) { toast.error(`A menu item in "${deal.name}" is no longer available`); return; }
+      const variant = row.variantId ? menuItem.variants?.find((v: any) => v.id === row.variantId) : undefined;
+      const unitPrice = resolvePrice(variant || menuItem, orderType);
+      const variants = menuItem.variants ?? [];
+      const cheapest = variants.length === 0 ? unitPrice : Math.min(...variants.map((v: any) => resolvePrice(v, orderType)));
+      const cappedUnitPrice = capFreeUnitPrice(row.variantId, unitPrice, cheapest);
+      const coveragePercent = dealChannelPercent(deal, orderType, 100);
+      const freeUnitPrice = Math.round(cappedUnitPrice * (coveragePercent / 100) * 100) / 100;
+      newItems.push({
+        id: `${lineId}-get-${newItems.length}`,
+        name: `${deal.name}: ${menuItem.name}${variant ? ` (${variant.name})` : ""}${freeUnitPrice <= 0 ? "" : freeUnitPrice >= unitPrice ? " (Free)" : " (Discounted)"}`,
+        price: unitPrice, qty: row.qty, discount: freeUnitPrice * row.qty, modifiers: [],
+        menuItemId: row.menuItemId, variantId: row.variantId,
+        dealId: deal.id, dealName: deal.name, dealLineId: lineId, dealRole: "get",
+      });
+    }
+    setCart((prev) => [...prev, ...newItems]);
+    toast.success(`${deal.name} added to cart`);
+  };
+
+  const dealOptionKey = (menuItemId: string, variantId: string | null) => `${menuItemId}:${variantId ?? ""}`;
+
+  const openDealCustomize = (deal: DealRecord) => {
+    setCustomizingDeal(deal);
+    const initial: Record<string, string[]> = {};
+    deal.optionGroups.forEach((g) => { initial[g.id] = []; });
+    setDealGroupSelections(initial);
+    setShowDealCustomize(true);
+  };
+
+  const toggleDealOption = (groupId: string, key: string, maxSelections: number) => {
+    setDealGroupSelections((prev) => {
       const current = prev[groupId] || [];
-      if (current.includes(itemId)) return { ...prev, [groupId]: current.filter(x => x !== itemId) };
+      if (current.includes(key)) return { ...prev, [groupId]: current.filter((k) => k !== key) };
       if (current.length >= maxSelections) {
-        if (maxSelections === 1) return { ...prev, [groupId]: [itemId] };
-        toast.error(`Max ${maxSelections} items for this group`);
+        if (maxSelections === 1) return { ...prev, [groupId]: [key] };
+        toast.error(`Max ${maxSelections} selection(s) for this step`);
         return prev;
       }
-      return { ...prev, [groupId]: [...current, itemId] };
+      return { ...prev, [groupId]: [...current, key] };
     });
   };
 
-  const confirmDealToCart = () => {
-    if (!selectedDeal?.optionGroups) return;
-    const incomplete = selectedDeal.optionGroups.find(g => (dealGroupSelections[g.id]?.length || 0) < g.maxSelections);
-    if (incomplete) { toast.error(`Select ${incomplete.maxSelections} item(s) for "${incomplete.label}"`); return; }
+  const confirmDealCustomize = () => {
+    if (!customizingDeal) return;
+    const deal = customizingDeal;
+    const incomplete = deal.optionGroups.find((g) => (dealGroupSelections[g.id]?.length || 0) < g.minSelections);
+    if (incomplete) { toast.error(`Select at least ${incomplete.minSelections} item(s) for "${incomplete.label}"`); return; }
 
-    const selectedItemNames = selectedDeal.optionGroups.map(g => {
-      return dealGroupSelections[g.id].map(itemId => foodMenuItems.find(m => m.id === itemId)?.name || "Item").join(" + ");
-    }).join(", ");
+    const picks: { groupId: string; option: DealOptionItemRecord }[] = [];
+    for (const g of deal.optionGroups) {
+      for (const key of dealGroupSelections[g.id] || []) {
+        const option = g.options.find((o) => dealOptionKey(o.menuItemId, o.variantId) === key);
+        if (option) picks.push({ groupId: g.id, option });
+      }
+    }
+    if (picks.length === 0) { toast.error("Nothing selected"); return; }
 
-    setCart(prev => [...prev, {
-      id: `deal-${selectedDeal.id}-${Date.now()}`,
-      name: `${selectedDeal.name} (${selectedItemNames})`,
-      price: selectedDeal.dealPrice || 0,
-      qty: 1,
-      discount: 0,
-      modifiers: [],
-    }]);
-    setShowDealDialog(false);
-    setSelectedDeal(null);
-    toast.success(`${selectedDeal.name} added to cart`);
+    const rows = picks.map(({ groupId, option }) => {
+      const menuItem: any = foodMenuItems.find((m) => m.id === option.menuItemId);
+      const variant = option.variantId ? menuItem?.variants?.find((v: any) => v.id === option.variantId) : undefined;
+      return { groupId, option, menuItem, variant, unitPrice: resolvePrice(variant || menuItem, orderType) + (option.extraPrice || 0) };
+    });
+    if (rows.some((r) => !r.menuItem)) { toast.error(`A menu item in "${deal.name}" is no longer available`); return; }
+
+    const grossAmounts = rows.map((r) => r.unitPrice);
+    const savings = Math.max(0, grossAmounts.reduce((s, v) => s + v, 0) - dealChannelPrice(deal, orderType));
+    const discounts = allocateDealDiscount(savings, grossAmounts);
+
+    const lineId = `deal-${deal.id}-${Date.now()}`;
+    const newItems: CartItem[] = rows.map((r, idx) => ({
+      id: `${lineId}-${idx}`,
+      name: `${deal.name}: ${r.menuItem.name}${r.variant ? ` (${r.variant.name})` : ""}`,
+      price: r.unitPrice, qty: 1, discount: discounts[idx], modifiers: [],
+      menuItemId: r.option.menuItemId, variantId: r.option.variantId,
+      dealId: deal.id, dealName: deal.name, dealLineId: lineId, dealGroupId: r.groupId,
+    }));
+    setCart((prev) => [...prev, ...newItems]);
+    setShowDealCustomize(false);
+    setCustomizingDeal(null);
+    toast.success(`${deal.name} added to cart`);
+  };
+
+  const eligibleDealItems = useMemo(() => {
+    if (!pickingDeal) return [];
+    return foodMenuItems.filter((m: any) =>
+      pickingDeal.applicableItems.includes(m.id) ||
+      (m.categoryId && pickingDeal.applicableCategories.includes(m.categoryId))
+    );
+  }, [pickingDeal, foodMenuItems]);
+
+  const openDealItemPicker = (deal: DealRecord) => {
+    setPickingDeal(deal);
+    setPickedDealItemId("");
+    setPickedDealVariantId(null);
+    setPickedDealQty(1);
+    setShowDealItemPicker(true);
+  };
+
+  const confirmDealItemPick = () => {
+    if (!pickingDeal || !pickedDealItemId) return;
+    const deal = pickingDeal;
+    const menuItem: any = foodMenuItems.find((m) => m.id === pickedDealItemId);
+    if (!menuItem) return;
+    const variant = pickedDealVariantId ? menuItem.variants?.find((v: any) => v.id === pickedDealVariantId) : undefined;
+    if ((menuItem.variants?.length ?? 0) > 0 && !variant) { toast.error("Pick a size"); return; }
+
+    const unitPrice = resolvePrice(variant || menuItem, orderType);
+    const percent = dealChannelPercent(deal, orderType, deal.discountPercent ?? 0);
+    const qty = Math.max(1, pickedDealQty);
+    const discount = Math.min(unitPrice * qty, unitPrice * qty * (percent / 100));
+
+    const lineId = `deal-${deal.id}-${Date.now()}`;
+    const newItem: CartItem = {
+      id: lineId,
+      name: `${deal.name}: ${menuItem.name}${variant ? ` (${variant.name})` : ""}`,
+      price: unitPrice, qty, discount, modifiers: [],
+      menuItemId: menuItem.id, variantId: variant?.id ?? null,
+      dealId: deal.id, dealName: deal.name, dealLineId: lineId,
+    };
+    setCart((prev) => [...prev, newItem]);
+    setShowDealItemPicker(false);
+    setPickingDeal(null);
+    toast.success(`${deal.name} added to cart`);
+  };
+
+  const dealMenuItemName = (id: string) => (foodMenuItems.find((m) => m.id === id) as any)?.name || "Item";
+
+  /** One-line "what's in it" for a deal card — same shape as Deals.tsx's
+   *  admin-table summary, trimmed for a small card instead of a table cell. */
+  const dealCardSummary = (deal: DealRecord): string => {
+    if (deal.type === "combo") {
+      return deal.components.map((c) => `${c.qty}x ${dealMenuItemName(c.menuItemId)}`).join(", ");
+    }
+    if (deal.type === "option_combo") {
+      return deal.optionGroups.map((g) => g.label).join(" + ");
+    }
+    if (deal.type === "percentage") {
+      const items = deal.applicableItems.map(dealMenuItemName);
+      return items.length > 0 ? items.join(", ") : `${deal.applicableCategories.length} categories`;
+    }
+    if (deal.type === "buy_x_get_y") {
+      const { buy, get } = dealBogoSides(deal);
+      const label = (rows: typeof buy) => rows.map((r) => `${r.qty} ${dealMenuItemName(r.menuItemId)}`).join(" + ");
+      return buy.length && get.length ? `Buy ${label(buy)} → Get ${label(get)} Free` : deal.description || "";
+    }
+    return deal.description || "";
+  };
+
+  const dealCardValue = (deal: DealRecord): string => {
+    if (deal.type === "combo" || deal.type === "option_combo") {
+      return `Rs. ${dealChannelPrice(deal, orderType).toLocaleString()}`;
+    }
+    if (deal.type === "percentage") return `${deal.discountPercent}% OFF`;
+    return "Free Item";
   };
 
   const runningOrders = allOrdersData.filter((o) => o.status === "preparing" || o.status === "pending");
@@ -1627,6 +1839,8 @@ const POS = () => {
             variantId: (c as any).variantId || null,
             name: c.name, price: c.price, qty: c.qty, discount: c.discount,
             modifiers: c.modifiers || [], modifierIds: (c as any).modifierIds || [], cookingTime: c.cookingTime || null, notes: c.notes || null,
+            dealId: c.dealId || null, dealName: c.dealName || null, dealLineId: c.dealLineId || null,
+            dealGroupId: c.dealGroupId || null, dealRole: c.dealRole || null,
           })),
           subtotal: itemsSubtotal, discount: orderDiscount, tax, total,
           advancePayment: finalAdvancePayment || undefined,
@@ -1710,8 +1924,11 @@ const POS = () => {
         type: orderType,
         items: cart.map(c => ({
           menuItemId: (c as any).menuItemId || null,
+          variantId: (c as any).variantId || null,
           name: c.name, price: c.price, qty: c.qty, discount: c.discount,
           modifiers: c.modifiers || [], cookingTime: c.cookingTime || null,
+          dealId: c.dealId || null, dealName: c.dealName || null, dealLineId: c.dealLineId || null,
+          dealGroupId: c.dealGroupId || null, dealRole: c.dealRole || null,
         })),
         subtotal: itemsSubtotal,
         discount: orderDiscount,
@@ -2359,6 +2576,24 @@ const POS = () => {
             </div>
           </div>
           <div className="flex items-center gap-1.5 border-b border-border/60 p-2 overflow-x-auto bg-muted/15 scrollbar-none">
+            <button
+              onClick={() => setActiveCategory("__deals__")}
+              className={cn(
+                "px-3 py-1.5 text-xs rounded-xl whitespace-nowrap font-medium transition-all flex items-center gap-1.5 shrink-0",
+                activeCategory === "__deals__"
+                  ? "gradient-primary text-primary-foreground shadow-md font-bold"
+                  : "bg-card border border-border/60 text-muted-foreground hover:text-foreground hover:bg-muted/50 hover:border-border"
+              )}
+            >
+              <Gift className="h-3.5 w-3.5" />
+              <span>Deals</span>
+              <span className={cn(
+                "text-[10px] px-1.5 py-0.2 rounded-full font-bold",
+                activeCategory === "__deals__" ? "bg-black/20 text-white" : "bg-muted text-muted-foreground"
+              )}>
+                {sellableDeals.length}
+              </span>
+            </button>
             {["All", ...foodCategories.map((c) => c.name)].map((cat) => {
               const count = cat === "All"
                 ? foodMenuItems.filter((i) => i.available).length
@@ -2386,7 +2621,38 @@ const POS = () => {
             })}
           </div>
           <div className="flex-1 overflow-y-auto p-2.5 sm:p-3.5 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-3 2xl:grid-cols-4 gap-3 auto-rows-max">
-            {filteredMenu.length === 0 ? (
+            {activeCategory === "__deals__" ? (
+              sellableDeals.length === 0 ? (
+                <div className="col-span-full text-center py-12 text-muted-foreground">
+                  <Gift className="h-8 w-8 mx-auto opacity-20 mb-2" />
+                  <p className="text-sm">No deals are currently running</p>
+                </div>
+              ) : (
+                sellableDeals.map((deal) => {
+                  const badge = dealFormatBadge[deal.type];
+                  const BadgeIcon = badge.icon;
+                  return (
+                    <button
+                      key={deal.id}
+                      onClick={() => addDealToCart(deal)}
+                      className="bg-card rounded-2xl border border-border/70 p-3 hover:shadow-xl hover:border-primary/40 transition-all duration-200 text-left group relative flex flex-col justify-between hover:-translate-y-0.5"
+                    >
+                      <div className="flex items-center gap-1.5 text-[10px] font-bold text-primary mb-1.5">
+                        <BadgeIcon className="h-3.5 w-3.5" />
+                        {badge.label}
+                      </div>
+                      <p className="font-bold text-sm text-foreground line-clamp-2 mb-1">{deal.name}</p>
+                      <p className="text-[11px] text-muted-foreground line-clamp-2 mb-2">
+                        {dealCardSummary(deal)}
+                      </p>
+                      <p className="font-mono font-extrabold text-sm text-primary">
+                        {dealCardValue(deal)}
+                      </p>
+                    </button>
+                  );
+                })
+              )
+            ) : filteredMenu.length === 0 ? (
               <div className="col-span-full text-center py-12 text-muted-foreground">
                 <Search className="h-8 w-8 mx-auto opacity-20 mb-2" />
                 <p className="text-sm">No items found</p>
@@ -2650,6 +2916,112 @@ const POS = () => {
         </div>
       </div>
 
+
+      {/* Customizable Deal — group-selection dialog */}
+      <Dialog open={showDealCustomize} onOpenChange={(open) => { setShowDealCustomize(open); if (!open) setCustomizingDeal(null); }}>
+        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{customizingDeal?.name}</DialogTitle>
+            <DialogDescription>Pick items for each step, then add to cart.</DialogDescription>
+          </DialogHeader>
+          {customizingDeal && (
+            <div className="space-y-4">
+              {customizingDeal.optionGroups.map((g) => {
+                const selected = dealGroupSelections[g.id] || [];
+                const need = g.minSelections === g.maxSelections ? `${g.minSelections}` : `${g.minSelections}-${g.maxSelections}`;
+                return (
+                  <div key={g.id} className="space-y-2">
+                    <p className="text-xs font-bold text-foreground">{g.label} <span className="text-muted-foreground font-normal">(pick {need})</span></p>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      {g.options.map((o) => {
+                        const key = dealOptionKey(o.menuItemId, o.variantId);
+                        const menuItem: any = foodMenuItems.find((m) => m.id === o.menuItemId);
+                        const variant = o.variantId ? menuItem?.variants?.find((v: any) => v.id === o.variantId) : undefined;
+                        const isChecked = selected.includes(key);
+                        return (
+                          <button
+                            key={key}
+                            onClick={() => toggleDealOption(g.id, key, g.maxSelections)}
+                            className={cn(
+                              "flex items-center gap-2 p-2 rounded-lg border text-left text-xs transition-colors",
+                              isChecked ? "border-primary bg-primary/5 font-semibold" : "border-border hover:bg-muted/40"
+                            )}
+                          >
+                            <Checkbox checked={isChecked} className="pointer-events-none" />
+                            <span className="truncate">{menuItem?.name || "Item"}{variant ? ` (${variant.name})` : ""}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDealCustomize(false)}>Cancel</Button>
+            <Button className="gradient-primary text-primary-foreground" onClick={confirmDealCustomize}>Add to Cart</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* % Discount Deal — eligible item picker */}
+      <Dialog open={showDealItemPicker} onOpenChange={(open) => { setShowDealItemPicker(open); if (!open) setPickingDeal(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>{pickingDeal?.name}</DialogTitle>
+            <DialogDescription>Pick which item this {pickingDeal?.discountPercent}% discount applies to.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-foreground">Item</label>
+              <Select
+                value={pickedDealItemId}
+                onValueChange={(v) => { setPickedDealItemId(v); setPickedDealVariantId(null); }}
+              >
+                <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Select an item" /></SelectTrigger>
+                <SelectContent>
+                  {eligibleDealItems.map((m: any) => (
+                    <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {(() => {
+              const menuItem: any = eligibleDealItems.find((m: any) => m.id === pickedDealItemId);
+              const variants = menuItem?.variants || [];
+              if (variants.length === 0) return null;
+              return (
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-foreground">Size</label>
+                  <Select value={pickedDealVariantId || ""} onValueChange={setPickedDealVariantId}>
+                    <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Select a size" /></SelectTrigger>
+                    <SelectContent>
+                      {variants.map((v: any) => (
+                        <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              );
+            })()}
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-foreground">Quantity</label>
+              <Input
+                type="number"
+                min={1}
+                value={pickedDealQty}
+                onChange={(e) => setPickedDealQty(Math.max(1, Number(e.target.value) || 1))}
+                className="h-9 text-xs"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDealItemPicker(false)}>Cancel</Button>
+            <Button className="gradient-primary text-primary-foreground" disabled={!pickedDealItemId} onClick={confirmDealItemPick}>Add to Cart</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Add Customer Dialog */}
       <Dialog open={showCustomerAdd} onOpenChange={setShowCustomerAdd}>
