@@ -1620,8 +1620,37 @@ const POS = () => {
   const updateQty = (id: string, delta: number) => setCart((prev) => prev.map((c) => c.id === id ? { ...c, qty: Math.max(1, c.qty + delta) } : c));
   const updateItemDiscount = (id: string, discount: number) => setCart((prev) => prev.map((c) => c.id === id ? { ...c, discount: Math.max(0, discount) } : c));
   const removeItem = (id: string) => setCart((prev) => prev.filter((c) => c.id !== id));
+  /** A deal redemption is one unit — removing any of its lines removes all of
+   *  them, or a cashier could keep half a Fixed Bundle at its bundle price. */
+  const removeDealGroup = (dealLineId: string) => setCart((prev) => prev.filter((c) => c.dealLineId !== dealLineId));
 
   const updateItemNotes = (id: string, notes: string) => setCart((prev) => prev.map((c) => c.id === id ? { ...c, notes } : c));
+
+  /** The cart table's actual render rows: a plain item is its own row, but
+   *  every CartItem sharing a dealLineId collapses into one row — the deal's
+   *  quantity and discount are fixed by its configuration, not something a
+   *  cashier edits line by line, and the group's combined total is what
+   *  should read as "the deal price" rather than components that don't
+   *  individually add up to anything meaningful. */
+  const cartDisplayRows = useMemo(() => {
+    const rows: ({ kind: "plain"; item: CartItem } | { kind: "deal"; dealLineId: string; dealName: string; items: CartItem[] })[] = [];
+    const seenLineIds = new Set<string>();
+    for (const item of cart) {
+      if (item.dealLineId) {
+        if (seenLineIds.has(item.dealLineId)) continue;
+        seenLineIds.add(item.dealLineId);
+        rows.push({
+          kind: "deal",
+          dealLineId: item.dealLineId,
+          dealName: item.dealName || "Deal",
+          items: cart.filter((c) => c.dealLineId === item.dealLineId),
+        });
+      } else {
+        rows.push({ kind: "plain", item });
+      }
+    }
+    return rows;
+  }, [cart]);
 
   const itemsSubtotal = cart.reduce((s, c) => s + (c.price * c.qty) - c.discount, 0);
   const subtotal = itemsSubtotal - orderDiscount;
@@ -2480,37 +2509,66 @@ const POS = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/40">
-                  {cart.map((item) => (
-                    <tr key={item.id} className="hover:bg-muted/30 transition-colors group">
-                      <td className="py-2.5 pr-2">
-                        <span className="font-semibold text-foreground text-xs">{item.name}</span>
-                        {item.modifiers && item.modifiers.length > 0 && (
-                          <p className="text-[10px] text-muted-foreground/90 font-medium">{item.modifiers.join(", ")}</p>
-                        )}
-                        {item.notes && (
-                          <p className="text-[10px] text-warning font-medium italic truncate max-w-[140px] mt-0.5">{item.notes}</p>
-                        )}
-                        <button onClick={() => { setEditingNotesId(item.id); setTempNotes(item.notes || ""); }} className="text-[10px] text-muted-foreground hover:text-primary mt-1 flex items-center gap-1 font-medium transition-colors">
-                          <StickyNote className="h-2.5 w-2.5" />{item.notes ? "Edit note" : "+ Note"}
-                        </button>
-                      </td>
-                      <td className="text-center py-2.5 text-xs font-medium text-muted-foreground">Rs.{item.price}</td>
-                      <td className="py-2.5">
-                        <div className="flex items-center justify-center gap-1 bg-muted/30 p-0.5 rounded-lg border border-border/40 w-max mx-auto">
-                          <Button variant="ghost" size="icon" className="h-5 w-5 rounded-md print:hidden hover:bg-background shadow-xs" onClick={() => updateQty(item.id, -1)}><Minus className="h-2.5 w-2.5" /></Button>
-                          <span className="w-5 text-center font-bold text-xs text-foreground">{item.qty}</span>
-                          <Button variant="ghost" size="icon" className="h-5 w-5 rounded-md print:hidden hover:bg-background shadow-xs" onClick={() => updateQty(item.id, 1)}><Plus className="h-2.5 w-2.5" /></Button>
-                        </div>
-                      </td>
-                      <td className="py-2.5 print:hidden">
-                        <Input type="number" value={item.discount || ""} onChange={(e) => updateItemDiscount(item.id, Number(e.target.value))} className="h-6 w-14 text-xs text-center mx-auto rounded-md bg-background border-border/60" placeholder="0" />
-                      </td>
-                      <td className="text-right py-2.5 font-bold text-xs text-foreground">Rs. {((item.price * item.qty) - item.discount).toLocaleString()}</td>
-                      <td className="py-2.5 text-right print:hidden">
-                        <button onClick={() => removeItem(item.id)} className="text-muted-foreground hover:text-destructive p-1 rounded-md transition-colors"><X className="h-3.5 w-3.5" /></button>
-                      </td>
-                    </tr>
-                  ))}
+                  {cartDisplayRows.map((row) => {
+                    if (row.kind === "deal") {
+                      const gross = row.items.reduce((s, i) => s + i.price * i.qty, 0);
+                      const discount = row.items.reduce((s, i) => s + i.discount, 0);
+                      return (
+                        <tr key={row.dealLineId} className="hover:bg-muted/30 transition-colors group bg-primary/[0.03]">
+                          <td className="py-2.5 pr-2">
+                            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-primary uppercase tracking-wide">
+                              <Gift className="h-3 w-3" /> Deal
+                            </span>
+                            <p className="font-semibold text-foreground text-xs">{row.dealName}</p>
+                            <p className="text-[10px] text-muted-foreground/90">
+                              {row.items.map((i) => `${i.qty}x ${i.name.includes(":") ? i.name.split(": ")[1] : i.name}`).join(", ")}
+                            </p>
+                          </td>
+                          <td className="text-center py-2.5 text-xs font-medium text-muted-foreground">—</td>
+                          <td className="text-center py-2.5 text-xs font-medium text-muted-foreground">—</td>
+                          <td className="text-center py-2.5 text-xs font-medium text-muted-foreground print:hidden">
+                            {discount > 0 ? `-Rs. ${discount.toLocaleString()}` : "—"}
+                          </td>
+                          <td className="text-right py-2.5 font-bold text-xs text-foreground">Rs. {(gross - discount).toLocaleString()}</td>
+                          <td className="py-2.5 text-right print:hidden">
+                            <button onClick={() => removeDealGroup(row.dealLineId)} className="text-muted-foreground hover:text-destructive p-1 rounded-md transition-colors"><X className="h-3.5 w-3.5" /></button>
+                          </td>
+                        </tr>
+                      );
+                    }
+                    const item = row.item;
+                    return (
+                      <tr key={item.id} className="hover:bg-muted/30 transition-colors group">
+                        <td className="py-2.5 pr-2">
+                          <span className="font-semibold text-foreground text-xs">{item.name}</span>
+                          {item.modifiers && item.modifiers.length > 0 && (
+                            <p className="text-[10px] text-muted-foreground/90 font-medium">{item.modifiers.join(", ")}</p>
+                          )}
+                          {item.notes && (
+                            <p className="text-[10px] text-warning font-medium italic truncate max-w-[140px] mt-0.5">{item.notes}</p>
+                          )}
+                          <button onClick={() => { setEditingNotesId(item.id); setTempNotes(item.notes || ""); }} className="text-[10px] text-muted-foreground hover:text-primary mt-1 flex items-center gap-1 font-medium transition-colors">
+                            <StickyNote className="h-2.5 w-2.5" />{item.notes ? "Edit note" : "+ Note"}
+                          </button>
+                        </td>
+                        <td className="text-center py-2.5 text-xs font-medium text-muted-foreground">Rs.{item.price}</td>
+                        <td className="py-2.5">
+                          <div className="flex items-center justify-center gap-1 bg-muted/30 p-0.5 rounded-lg border border-border/40 w-max mx-auto">
+                            <Button variant="ghost" size="icon" className="h-5 w-5 rounded-md print:hidden hover:bg-background shadow-xs" onClick={() => updateQty(item.id, -1)}><Minus className="h-2.5 w-2.5" /></Button>
+                            <span className="w-5 text-center font-bold text-xs text-foreground">{item.qty}</span>
+                            <Button variant="ghost" size="icon" className="h-5 w-5 rounded-md print:hidden hover:bg-background shadow-xs" onClick={() => updateQty(item.id, 1)}><Plus className="h-2.5 w-2.5" /></Button>
+                          </div>
+                        </td>
+                        <td className="py-2.5 print:hidden">
+                          <Input type="number" value={item.discount || ""} onChange={(e) => updateItemDiscount(item.id, Number(e.target.value))} className="h-6 w-14 text-xs text-center mx-auto rounded-md bg-background border-border/60" placeholder="0" />
+                        </td>
+                        <td className="text-right py-2.5 font-bold text-xs text-foreground">Rs. {((item.price * item.qty) - item.discount).toLocaleString()}</td>
+                        <td className="py-2.5 text-right print:hidden">
+                          <button onClick={() => removeItem(item.id)} className="text-muted-foreground hover:text-destructive p-1 rounded-md transition-colors"><X className="h-3.5 w-3.5" /></button>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             )}
@@ -2518,7 +2576,24 @@ const POS = () => {
 
           {/* Bottom Totals & Actions */}
           <div className="border-t-2 border-primary/15 bg-card p-3 space-y-2.5 print:hidden shadow-[0_-6px_24px_-8px_hsl(var(--primary)/0.12)]">
-            <div className="flex justify-between items-baseline">
+            {/* Subtotal/Tax breakdown — without this, a deal priced at Rs.
+                1,573 landing on a Rs. 1,825 total (tax added) looks like a
+                pricing bug instead of what it is. */}
+            <div className="flex justify-between text-xs text-muted-foreground">
+              <span>Subtotal</span>
+              <span className="font-mono">Rs. {itemsSubtotal.toLocaleString()}</span>
+            </div>
+            {orderDiscount > 0 && (
+              <div className="flex justify-between text-xs text-destructive">
+                <span>Discount</span>
+                <span className="font-mono">-Rs. {orderDiscount.toLocaleString()}</span>
+              </div>
+            )}
+            <div className="flex justify-between text-xs text-muted-foreground">
+              <span>Tax</span>
+              <span className="font-mono">Rs. {tax.toLocaleString()}</span>
+            </div>
+            <div className="flex justify-between items-baseline pt-1 border-t border-border/60">
               <div className="flex items-baseline gap-1.5">
                 <span className="text-sm font-semibold text-muted-foreground">Total</span>
                 <span className="text-xs text-muted-foreground font-medium">({cart.reduce((s, c) => s + c.qty, 0)} items)</span>
