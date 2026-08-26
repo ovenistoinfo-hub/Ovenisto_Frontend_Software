@@ -18,6 +18,13 @@ export interface OrderItemRecord {
   categoryName: string | null;
   status: string; // "active" | "cancelled"
   kitchenStatus?: string;
+  /** Set when this line came from a Deal. A deal's items can land on
+   *  different kitchen boards (different categories → different assigned
+   *  kitchens), so each line carries its own deal name rather than relying
+   *  on a single order-level grouping. */
+  dealId?: string | null;
+  dealName?: string | null;
+  dealLineId?: string | null;
 }
 
 export interface OrderRecord {

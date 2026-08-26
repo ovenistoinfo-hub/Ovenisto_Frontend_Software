@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Progress } from "@/components/ui/progress";
-import { ArrowLeft, Bell, Clock, Flame, ChefHat, CheckCircle2, Timer, Utensils, Loader2, Hourglass } from "lucide-react";
+import { ArrowLeft, Bell, Clock, Flame, ChefHat, CheckCircle2, Timer, Utensils, Loader2, Hourglass, Gift } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { orderService, type OrderRecord, type KitchenRecord } from "@/services/order.service";
@@ -22,7 +22,7 @@ interface KitchenOrder {
   id: string;
   orderNumber: string;
   type: string;
-  items: { name: string; qty: number; cookingTime?: number }[];
+  items: { name: string; qty: number; cookingTime?: number; dealName?: string | null }[];
   placedAt: Date;
   /** Set when "Accept Order" is clicked — null until then */
   preparingAt: Date | null;
@@ -107,6 +107,7 @@ const KitchenPanel = () => {
             name: item.name,
             qty: item.qty,
             cookingTime: item.cookingTime ?? 0,
+            dealName: item.dealName ?? null,
           }));
 
         if (!relevantItems.length) return null;
@@ -457,17 +458,37 @@ const KitchenPanel = () => {
                       ) : null}
                     </div>
 
-                    {/* Items List */}
+                    {/* Items List — each dish is its own line even when several
+                        came from one deal, since this board may only be
+                        showing this kitchen's own category slice of that
+                        deal (its other dish could be on a different
+                        kitchen's board entirely). The deal name is its own
+                        badge rather than baked into the dish name, so it
+                        still reads correctly however this kitchen's items
+                        get filtered. */}
                     <div className="px-4 pb-3 space-y-1.5 min-h-[70px]">
-                      {order.items.map((item, idx) => (
-                        <div key={idx} className="flex justify-between items-center text-sm">
-                          <span className="font-medium text-foreground">{item.name}</span>
-                          <div className="flex items-center gap-1.5">
-                            {item.cookingTime ? <span className="text-[10px] text-muted-foreground">{item.cookingTime}m</span> : null}
-                            <span className="text-xs font-bold bg-muted/60 px-2 py-0.5 rounded-full text-muted-foreground">×{item.qty}</span>
+                      {order.items.map((item, idx) => {
+                        const dealPrefix = item.dealName ? `${item.dealName}: ` : null;
+                        const displayName = dealPrefix && item.name.startsWith(dealPrefix)
+                          ? item.name.slice(dealPrefix.length)
+                          : item.name;
+                        return (
+                          <div key={idx} className="text-sm">
+                            {item.dealName && (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-bold text-primary uppercase tracking-wide mb-0.5">
+                                <Gift className="h-2.5 w-2.5" /> {item.dealName}
+                              </span>
+                            )}
+                            <div className="flex justify-between items-center">
+                              <span className="font-medium text-foreground">{displayName}</span>
+                              <div className="flex items-center gap-1.5">
+                                {item.cookingTime ? <span className="text-[10px] text-muted-foreground">{item.cookingTime}m</span> : null}
+                                <span className="text-xs font-bold bg-muted/60 px-2 py-0.5 rounded-full text-muted-foreground">×{item.qty}</span>
+                              </div>
+                            </div>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
 
                     <Separator />
