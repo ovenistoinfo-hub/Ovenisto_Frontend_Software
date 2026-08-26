@@ -466,14 +466,14 @@ const KitchenPanel = () => {
                         badge rather than baked into the dish name, so it
                         still reads correctly however this kitchen's items
                         get filtered. */}
-                    <div className="px-4 pb-3 space-y-1.5 min-h-[70px]">
+                    <div className="px-4 pb-3 space-y-2 min-h-[70px]">
                       {order.items.map((item, idx) => {
                         const dealPrefix = item.dealName ? `${item.dealName}: ` : null;
                         const displayName = dealPrefix && item.name.startsWith(dealPrefix)
                           ? item.name.slice(dealPrefix.length)
                           : item.name;
                         return (
-                          <div key={idx} className="text-sm">
+                          <div key={idx} className="text-sm rounded-lg border border-border/60 bg-muted/10 p-2">
                             {item.dealName && (
                               <span className="inline-flex items-center gap-1 text-[10px] font-bold text-primary uppercase tracking-wide mb-0.5">
                                 <Gift className="h-2.5 w-2.5" /> {item.dealName}
