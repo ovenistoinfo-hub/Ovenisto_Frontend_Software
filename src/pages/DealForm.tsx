@@ -1231,10 +1231,12 @@ const DealForm = () => {
     return parts.join(" + ");
   }, [applicableCategoryIds, applicableItemIds, foodCategories, menuItems]);
 
-  // Every deal type now renders a section 4 — Pricing for the combo formats,
-  // The Pricing & Cost Breakdown read-out for percentage / Buy X Get Y — so validity
-  // is always 5.
-  const validitySectionNumber = 5;
+  // Every other deal type renders a section 4 — Pricing for the combo formats,
+  // the Pricing & Cost Breakdown read-out for percentage / Buy X Get Y — so
+  // validity is 5 there. Order Discount has no cost/selling ladder (it isn't
+  // tied to specific items), so it never has a 4 — its schedule card is 4,
+  // not a 5 with a gap where 4 should be.
+  const validitySectionNumber = dealType === "order_discount" ? 4 : 5;
 
   // Percentage Scope Helpers
   const addScopeItemRow = () =>
@@ -1367,7 +1369,7 @@ const DealForm = () => {
         toast.error("Set a minimum spend, or switch to Promo Code");
         return;
       }
-      const usingPercent = orderDiscountMode === "min_spend" && orderDiscountValueMode === "percent";
+      const usingPercent = orderDiscountValueMode === "percent";
       if (usingPercent) {
         if (!orderDiscountPercent || Number(orderDiscountPercent) <= 0 || Number(orderDiscountPercent) > 100) {
           toast.error("Please specify a discount percentage between 1 and 100");
@@ -1392,7 +1394,7 @@ const DealForm = () => {
             : null
           : code.trim() || generateCodeFromName(name) || null;
       const usingOrderDiscountPercent =
-        dealType === "order_discount" && orderDiscountMode === "min_spend" && orderDiscountValueMode === "percent";
+        dealType === "order_discount" && orderDiscountValueMode === "percent";
       const payload: DealInput = {
         name: name.trim(),
         code: finalCode,
@@ -1967,7 +1969,7 @@ const DealForm = () => {
                           ? `Rs. ${Math.round(discountImpact.minAfter).toLocaleString()} – ${Math.round(discountImpact.maxAfter).toLocaleString()}`
                           : "—"
                         : dealType === "order_discount"
-                        ? orderDiscountMode === "min_spend" && orderDiscountValueMode === "percent"
+                        ? orderDiscountValueMode === "percent"
                           ? `${orderDiscountPercent || "0"}% OFF`
                           : `Rs. ${flatDiscountAmount || "0"} OFF`
                         : bogoImpact
@@ -4203,36 +4205,35 @@ const DealForm = () => {
                   </div>
                 )}
 
-                {/* Value — a Promo Code is flat-only by product decision; a
-                    Minimum Spend deal may use either. */}
+                {/* Value — Rs./% shared toggle, same pattern as every other
+                    amount-or-percent input group in this form. Both Promo
+                    Code and Minimum Spend may use either. */}
                 <div className="space-y-1.5">
                   <Label className="text-xs font-semibold text-foreground">Discount Value *</Label>
                   <div className="flex items-center gap-2 max-w-xs">
-                    {orderDiscountMode === "min_spend" && (
-                      <div className="flex rounded-md border border-border overflow-hidden shrink-0">
-                        <button
-                          type="button"
-                          onClick={() => setOrderDiscountValueMode("flat")}
-                          className={cn(
-                            "px-2.5 h-9 text-xs font-semibold transition-colors",
-                            orderDiscountValueMode === "flat" ? "bg-primary text-primary-foreground" : "bg-transparent text-muted-foreground hover:bg-muted/50"
-                          )}
-                        >
-                          Rs.
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setOrderDiscountValueMode("percent")}
-                          className={cn(
-                            "px-2.5 h-9 text-xs font-semibold transition-colors border-l border-border",
-                            orderDiscountValueMode === "percent" ? "bg-primary text-primary-foreground" : "bg-transparent text-muted-foreground hover:bg-muted/50"
-                          )}
-                        >
-                          %
-                        </button>
-                      </div>
-                    )}
-                    {orderDiscountMode === "min_spend" && orderDiscountValueMode === "percent" ? (
+                    <div className="flex rounded-md border border-border overflow-hidden shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => setOrderDiscountValueMode("flat")}
+                        className={cn(
+                          "px-2.5 h-9 text-xs font-semibold transition-colors",
+                          orderDiscountValueMode === "flat" ? "bg-primary text-primary-foreground" : "bg-transparent text-muted-foreground hover:bg-muted/50"
+                        )}
+                      >
+                        Rs.
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setOrderDiscountValueMode("percent")}
+                        className={cn(
+                          "px-2.5 h-9 text-xs font-semibold transition-colors border-l border-border",
+                          orderDiscountValueMode === "percent" ? "bg-primary text-primary-foreground" : "bg-transparent text-muted-foreground hover:bg-muted/50"
+                        )}
+                      >
+                        %
+                      </button>
+                    </div>
+                    {orderDiscountValueMode === "percent" ? (
                       <Input
                         type="number"
                         min={1}
@@ -4261,7 +4262,7 @@ const DealForm = () => {
                   <p className="text-xs font-semibold text-foreground">
                     {(() => {
                       const valueLabel =
-                        orderDiscountMode === "min_spend" && orderDiscountValueMode === "percent"
+                        orderDiscountValueMode === "percent"
                           ? `${orderDiscountPercent || "0"}%`
                           : `Rs. ${flatDiscountAmount || "0"}`;
                       return orderDiscountMode === "promo_code"
