@@ -31,7 +31,9 @@ const Deals = () => {
   const queryClient = useQueryClient();
 
   const [search, setSearch] = useState("");
-  const [filterTab, setFilterTab] = useState<"All" | "Active" | "Fixed" | "Custom" | "Inactive" | "Expired">("All");
+  const [filterTab, setFilterTab] = useState<
+    "All" | "Active" | "Fixed" | "Custom" | "Percentage" | "Bogo" | "OrderDiscount" | "Inactive" | "Expired"
+  >("All");
   const [page, setPage] = useState(1);
   const [togglingId, setTogglingId] = useState<string | null>(null);
 
@@ -57,6 +59,9 @@ const Deals = () => {
     if (filterTab === "Active") return isDealLive(d).valid;
     if (filterTab === "Fixed") return d.type === "combo";
     if (filterTab === "Custom") return d.type === "option_combo";
+    if (filterTab === "Percentage") return d.type === "percentage";
+    if (filterTab === "Bogo") return d.type === "buy_x_get_y";
+    if (filterTab === "OrderDiscount") return d.type === "order_discount";
     if (filterTab === "Inactive") return !d.isActive;
     if (filterTab === "Expired") return !!d.validTo && d.validTo.slice(0, 10) < pktDateStr();
 
@@ -188,6 +193,9 @@ const Deals = () => {
                   { key: "Active", label: "Active" },
                   { key: "Fixed", label: "Fixed Bundles" },
                   { key: "Custom", label: "Customizable" },
+                  { key: "Percentage", label: "% Discount" },
+                  { key: "Bogo", label: "Buy X Get Y" },
+                  { key: "OrderDiscount", label: "Order Discount" },
                   { key: "Inactive", label: "Draft / Inactive" },
                   { key: "Expired", label: "Expired" },
                 ] as const
