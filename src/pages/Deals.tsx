@@ -16,6 +16,16 @@ import { menuService } from "@/services/menu.service";
 import { isDealLive, dealExpiryLabel, pktDateStr, activeDaysLabel } from "@/lib/deals";
 import { toast } from "sonner";
 
+// One accent, not five — every format badge shares the same neutral style;
+// the icon and label are what tell formats apart, not a colour code.
+const formatBadge: Record<DealRecord["type"], { icon: typeof Package; label: string }> = {
+  combo: { icon: Package, label: "Fixed Bundle" },
+  option_combo: { icon: Layers, label: "Customizable" },
+  percentage: { icon: Percent, label: "Percentage Off" },
+  buy_x_get_y: { icon: Gift, label: "Buy X Get Y" },
+  order_discount: { icon: Ticket, label: "Order Discount" },
+};
+
 const Deals = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -143,7 +153,7 @@ const Deals = () => {
         subtitle="Manage combo meals, bundles, and promotional offers"
         actions={
           <Button
-            className="gradient-primary text-primary-foreground font-semibold shadow-xs"
+            className="bg-primary text-primary-foreground hover:bg-primary/90 font-semibold"
             onClick={() => navigate("/deals/add")}
           >
             <Plus className="h-4 w-4 mr-1.5" />
@@ -190,9 +200,7 @@ const Deals = () => {
                     setFilterTab(tab.key);
                     setPage(1);
                   }}
-                  className={`h-8 text-xs ${
-                    filterTab === tab.key ? "gradient-primary text-primary-foreground" : ""
-                  }`}
+                  className="h-8 text-xs"
                 >
                   {tab.label}
                 </Button>
@@ -211,7 +219,7 @@ const Deals = () => {
               <div className="h-12 w-12 rounded-2xl bg-primary/10 text-primary flex items-center justify-center mx-auto mb-3">
                 <Tag className="h-6 w-6" />
               </div>
-              <p className="text-sm font-bold text-foreground">No Deals & Combos Found</p>
+              <p className="text-sm font-semibold text-foreground">No Deals & Combos Found</p>
               <p className="text-xs text-muted-foreground mt-1 max-w-sm mx-auto">
                 {search
                   ? "No deals matched your search query."
@@ -219,7 +227,7 @@ const Deals = () => {
               </p>
               <Button
                 size="sm"
-                className="gradient-primary text-primary-foreground mt-4 font-semibold text-xs"
+                className="bg-primary text-primary-foreground hover:bg-primary/90 mt-4 font-semibold text-xs"
                 onClick={() => navigate("/deals/add")}
               >
                 <Plus className="h-3.5 w-3.5 mr-1" />
@@ -244,13 +252,6 @@ const Deals = () => {
                   </TableHeader>
                   <TableBody>
                     {paginate(filtered, page, 10).map((deal, i) => {
-                      const formatBadge: Record<DealRecord["type"], { icon: typeof Package; label: string; className: string }> = {
-                        combo: { icon: Package, label: "Fixed Bundle", className: "bg-blue-500/15 text-blue-600 dark:text-blue-400 border-blue-500/30" },
-                        option_combo: { icon: Layers, label: "Customizable", className: "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30" },
-                        percentage: { icon: Percent, label: "Percentage Off", className: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30" },
-                        buy_x_get_y: { icon: Gift, label: "Buy X Get Y", className: "bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/30" },
-                        order_discount: { icon: Ticket, label: "Order Discount", className: "bg-violet-500/15 text-violet-600 dark:text-violet-400 border-violet-500/30" },
-                      };
                       const badge = formatBadge[deal.type];
                       const BadgeIcon = badge.icon;
 
@@ -276,7 +277,7 @@ const Deals = () => {
                               )}
                               <div className="space-y-0.5">
                                 <div className="flex items-center gap-1.5">
-                                  <p className="font-bold text-xs text-foreground">{deal.name}</p>
+                                  <p className="font-semibold text-xs text-foreground">{deal.name}</p>
                                   {deal.code && (
                                     <Badge variant="outline" className="text-[10px] font-mono px-1 py-0 h-4">
                                       {deal.code}
@@ -294,8 +295,8 @@ const Deals = () => {
 
                           {/* Format Badge */}
                           <TableCell>
-                            <Badge variant="secondary" className={`${badge.className} text-[11px] gap-1`}>
-                              <BadgeIcon className="h-3 w-3" /> {badge.label}
+                            <Badge variant="outline" className="text-[11px] gap-1 font-medium text-foreground bg-muted/40">
+                              <BadgeIcon className="h-3 w-3 text-muted-foreground" /> {badge.label}
                             </Badge>
                           </TableCell>
 
@@ -309,7 +310,7 @@ const Deals = () => {
                           {/* Price */}
                           <TableCell className="text-right">
                             <div className="space-y-0.5">
-                              <p className="font-mono font-extrabold text-sm text-foreground">
+                              <p className="font-mono font-semibold text-sm text-foreground">
                                 {getValueDisplay(deal)}
                               </p>
                               {deal.dineInPrice || deal.deliveryPrice ? (
@@ -325,11 +326,11 @@ const Deals = () => {
                           <TableCell>
                             <div className="space-y-0.5 text-xs">
                               {!deal.validTo ? (
-                                <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-medium text-[11px]">
+                                <span className="inline-flex items-center gap-1 text-muted-foreground font-medium text-[11px]">
                                   <Sparkles className="h-3 w-3" /> Always Active
                                 </span>
                               ) : (
-                                <span className={`inline-flex items-center gap-1 text-[11px] ${!isDealLive(deal).valid ? "text-destructive font-bold" : "text-muted-foreground"}`}>
+                                <span className={`inline-flex items-center gap-1 text-[11px] ${!isDealLive(deal).valid ? "text-destructive font-semibold" : "text-muted-foreground"}`}>
                                   <Calendar className="h-3 w-3" />
                                   {dealExpiryLabel(deal)}
                                 </span>
