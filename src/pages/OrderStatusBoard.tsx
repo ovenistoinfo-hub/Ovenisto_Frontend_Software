@@ -289,7 +289,14 @@ const OrderStatusBoard = () => {
     // If no kitchen is specifically assigned to this category, return order's overall status!
     if (!assignedKitchen) return order.status === "preparing" ? "preparing" : order.status === "ready" ? "ready" : "pending";
 
-    if (order.kitchenProgress && Array.isArray(order.kitchenProgress)) {
+    // A deal dish tracks its own ready state separately from the order's shared
+    // kitchen ticket (see KitchenPanel) — prefer that when this item carries one.
+    if (item.dealId && item.dealItemKey && order.kitchenDealProgress && Array.isArray(order.kitchenDealProgress)) {
+      const dealProg = order.kitchenDealProgress.find(
+        (p: any) => p.kitchenId === assignedKitchen.id && p.dealItemKey === item.dealItemKey
+      );
+      if (dealProg) return dealProg.status as "pending" | "preparing" | "ready";
+    } else if (order.kitchenProgress && Array.isArray(order.kitchenProgress)) {
       const prog = order.kitchenProgress.find((p: any) => p.kitchenId === assignedKitchen.id);
       if (prog) return prog.status as "pending" | "preparing" | "ready";
     }
@@ -329,9 +336,12 @@ const OrderStatusBoard = () => {
     try {
       const categoryName = item.categoryName || mi?.category?.name || (item.category as any)?.name;
       const assignedKitchen = categoryName ? kitchens.find(k => (k.status === "active" || !k.status) && k.assignedCategories?.includes(categoryName)) : null;
-      const prog = (assignedKitchen && order.kitchenProgress && Array.isArray(order.kitchenProgress))
-        ? order.kitchenProgress.find((p: any) => p.kitchenId === assignedKitchen.id)
-        : null;
+      // Same deal-dish-first preference as getItemKitchenStatus above.
+      const prog = item.dealId && item.dealItemKey && assignedKitchen && order.kitchenDealProgress && Array.isArray(order.kitchenDealProgress)
+        ? order.kitchenDealProgress.find((p: any) => p.kitchenId === assignedKitchen.id && p.dealItemKey === item.dealItemKey)
+        : (assignedKitchen && order.kitchenProgress && Array.isArray(order.kitchenProgress))
+          ? order.kitchenProgress.find((p: any) => p.kitchenId === assignedKitchen.id)
+          : null;
 
       // Start elapsed calculation ONLY from when THIS kitchen accepted the order (prog.updatedAt).
       // Fallback to order.updatedAt (if order is preparing) or current time (so 0m elapsed if no timestamp exists).

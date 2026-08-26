@@ -25,6 +25,10 @@ export interface OrderItemRecord {
   dealId?: string | null;
   dealName?: string | null;
   dealLineId?: string | null;
+  /** Stable per-dish key within one deal redemption — lets the kitchen
+   *  accept/prepare/ready this specific dish independently of the rest of
+   *  the deal. Null for a plain (non-deal) item. */
+  dealItemKey?: string | null;
 }
 
 export interface OrderRecord {
@@ -73,6 +77,10 @@ export interface OrderRecord {
   updatedAt?: string;
   items: OrderItemRecord[];
   kitchenProgress?: { kitchenId: string; status: string }[];
+  /** Per-dish kitchen status for deal redemptions — a sibling to
+   *  kitchenProgress above, which still covers every non-deal item as one
+   *  shared ticket per kitchen. */
+  kitchenDealProgress?: { kitchenId: string; dealItemKey: string; status: string }[];
 }
 
 export interface KitchenRecord {
@@ -163,8 +171,11 @@ export const orderService = {
     return res.data;
   },
 
-  async updateOrderKitchenStatus(id: string, kitchenId: string, status: string): Promise<OrderRecord> {
-    const res = await api.put<{ success: boolean; data: OrderRecord }>(`/orders/${id}/kitchen-status`, { kitchenId, status });
+  /** dealItemKey targets one specific dish from a deal redemption's own
+   *  ticket instead of the order's shared per-kitchen ticket — omit it to
+   *  advance the shared ticket exactly as before. */
+  async updateOrderKitchenStatus(id: string, kitchenId: string, status: string, dealItemKey?: string): Promise<OrderRecord> {
+    const res = await api.put<{ success: boolean; data: OrderRecord }>(`/orders/${id}/kitchen-status`, { kitchenId, status, dealItemKey });
     return res.data;
   },
 
