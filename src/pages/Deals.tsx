@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Tag, Plus, Search, Pencil, Trash2, Package, Layers, Sparkles, Clock, Calendar, Loader2, Percent, Gift, CalendarDays } from "lucide-react";
+import { Tag, Plus, Search, Pencil, Trash2, Package, Layers, Sparkles, Clock, Calendar, Loader2, Percent, Gift, CalendarDays, Ticket } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { TablePagination, paginate } from "@/components/TablePagination";
 import { dealService, type DealRecord } from "@/services/deal.service";
@@ -112,6 +112,11 @@ const Deals = () => {
         return `Buy ${buys.join(" + ")} → Get ${gets.join(" + ")} Free`;
       }
     }
+    if (deal.type === "order_discount") {
+      return deal.code
+        ? `Code "${deal.code}" — enter at checkout`
+        : `Auto-applies on orders of Rs. ${(deal.minSpend ?? 0).toLocaleString()}+`;
+    }
     return deal.description || "Promotional combo deal";
   };
 
@@ -122,6 +127,9 @@ const Deals = () => {
     }
     if (deal.type === "percentage") {
       return `${deal.discountPercent}% OFF`;
+    }
+    if (deal.type === "order_discount") {
+      return deal.flatDiscount != null ? `Rs. ${deal.flatDiscount.toLocaleString()} OFF` : `${deal.discountPercent}% OFF`;
     }
     return "Free Item";
   };
@@ -241,6 +249,7 @@ const Deals = () => {
                         option_combo: { icon: Layers, label: "Customizable", className: "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30" },
                         percentage: { icon: Percent, label: "Percentage Off", className: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30" },
                         buy_x_get_y: { icon: Gift, label: "Buy X Get Y", className: "bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/30" },
+                        order_discount: { icon: Ticket, label: "Order Discount", className: "bg-violet-500/15 text-violet-600 dark:text-violet-400 border-violet-500/30" },
                       };
                       const badge = formatBadge[deal.type];
                       const BadgeIcon = badge.icon;
