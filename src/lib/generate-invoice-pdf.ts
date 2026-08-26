@@ -6,6 +6,11 @@ interface InvoiceItem {
   qty: number;
   price: number;
   discount?: number;
+  /** Set for a deal redemption grouped into one line — renders Qty/Price as
+   *  "-" and adds this as a second line under the deal name, since a
+   *  Fixed Bundle's components don't have a meaningful per-unit price of
+   *  their own (only the deal's combined total does). */
+  dealItemsLabel?: string;
 }
 
 interface InvoiceData {
@@ -77,9 +82,9 @@ export function generateInvoicePDF(data: InvoiceData) {
     margin: { left: 4, right: 4 },
     head: [["Item", "Qty", "Price", "Total"]],
     body: data.items.map((item) => [
-      item.name,
-      String(item.qty),
-      `Rs.${item.price}`,
+      item.dealItemsLabel ? `${item.name}\n${item.dealItemsLabel}` : item.name,
+      item.dealItemsLabel ? "-" : String(item.qty),
+      item.dealItemsLabel ? "-" : `Rs.${item.price}`,
       `Rs.${((item.price * item.qty) - (item.discount || 0)).toLocaleString()}`,
     ]),
     styles: { fontSize: 6.5, cellPadding: 1.5 },

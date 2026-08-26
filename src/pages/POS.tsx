@@ -706,7 +706,7 @@ const POS = () => {
     const lineId = `deal-${deal.id}-${Date.now()}`;
     const newItems: CartItem[] = rows.map((r, idx) => ({
       id: `${lineId}-${idx}`,
-      name: `${deal.name}: ${r.menuItem.name}${r.variant ? ` (${r.variant.name})` : ""}`,
+      name: `${r.menuItem.name}${r.variant ? ` (${r.variant.name})` : ""}`,
       price: r.unitPrice, qty: r.component.qty, discount: discounts[idx], modifiers: [],
       menuItemId: r.component.menuItemId, variantId: r.component.variantId,
       dealId: deal.id, dealName: deal.name, dealLineId: lineId,
@@ -745,7 +745,7 @@ const POS = () => {
       const freeUnitPrice = Math.round(cappedUnitPrice * (coveragePercent / 100) * 100) / 100;
       newItems.push({
         id: `${lineId}-get-${newItems.length}`,
-        name: `${deal.name}: ${menuItem.name}${variant ? ` (${variant.name})` : ""}${freeUnitPrice <= 0 ? "" : freeUnitPrice >= unitPrice ? " (Free)" : " (Discounted)"}`,
+        name: `${menuItem.name}${variant ? ` (${variant.name})` : ""}${freeUnitPrice <= 0 ? "" : freeUnitPrice >= unitPrice ? " (Free)" : " (Discounted)"}`,
         price: unitPrice, qty: row.qty, discount: freeUnitPrice * row.qty, modifiers: [],
         menuItemId: row.menuItemId, variantId: row.variantId,
         dealId: deal.id, dealName: deal.name, dealLineId: lineId, dealRole: "get",
@@ -807,7 +807,7 @@ const POS = () => {
     const lineId = `deal-${deal.id}-${Date.now()}`;
     const newItems: CartItem[] = rows.map((r, idx) => ({
       id: `${lineId}-${idx}`,
-      name: `${deal.name}: ${r.menuItem.name}${r.variant ? ` (${r.variant.name})` : ""}`,
+      name: `${r.menuItem.name}${r.variant ? ` (${r.variant.name})` : ""}`,
       price: r.unitPrice, qty: 1, discount: discounts[idx], modifiers: [],
       menuItemId: r.option.menuItemId, variantId: r.option.variantId,
       dealId: deal.id, dealName: deal.name, dealLineId: lineId, dealGroupId: r.groupId,
@@ -850,7 +850,7 @@ const POS = () => {
     const lineId = `deal-${deal.id}-${Date.now()}`;
     const newItem: CartItem = {
       id: lineId,
-      name: `${deal.name}: ${menuItem.name}${variant ? ` (${variant.name})` : ""}`,
+      name: `${menuItem.name}${variant ? ` (${variant.name})` : ""}`,
       price: unitPrice, qty, discount, modifiers: [],
       menuItemId: menuItem.id, variantId: variant?.id ?? null,
       dealId: deal.id, dealName: deal.name, dealLineId: lineId,
@@ -2521,7 +2521,7 @@ const POS = () => {
                             </span>
                             <p className="font-semibold text-foreground text-xs">{row.dealName}</p>
                             <p className="text-[10px] text-muted-foreground/90">
-                              {row.items.map((i) => `${i.qty}x ${i.name.includes(":") ? i.name.split(": ")[1] : i.name}`).join(", ")}
+                              {row.items.map((i) => `${i.qty}x ${i.name}`).join(", ")}
                             </p>
                           </td>
                           <td className="text-center py-2.5 text-xs font-medium text-muted-foreground">—</td>
@@ -3552,7 +3552,24 @@ const POS = () => {
             </div>
             <Table>
               <TableHeader><TableRow><TableHead className="text-xs">Item</TableHead><TableHead className="text-xs text-center">Qty</TableHead><TableHead className="text-xs text-right">Total</TableHead></TableRow></TableHeader>
-              <TableBody>{cart.map((c, i) => <TableRow key={i}><TableCell className="text-xs">{c.name}</TableCell><TableCell className="text-xs text-center">{c.qty}</TableCell><TableCell className="text-xs text-right">Rs. {((c.price * c.qty) - c.discount).toLocaleString()}</TableCell></TableRow>)}</TableBody>
+              <TableBody>{cartDisplayRows.map((row) => {
+                if (row.kind === "deal") {
+                  const gross = row.items.reduce((s, i) => s + i.price * i.qty, 0);
+                  const discount = row.items.reduce((s, i) => s + i.discount, 0);
+                  return (
+                    <TableRow key={row.dealLineId}>
+                      <TableCell className="text-xs">
+                        <span className="font-semibold text-primary">{row.dealName}</span>
+                        <p className="text-muted-foreground">{row.items.map((i) => `${i.qty}x ${i.name}`).join(", ")}</p>
+                      </TableCell>
+                      <TableCell className="text-xs text-center">—</TableCell>
+                      <TableCell className="text-xs text-right">Rs. {(gross - discount).toLocaleString()}</TableCell>
+                    </TableRow>
+                  );
+                }
+                const c = row.item;
+                return <TableRow key={c.id}><TableCell className="text-xs">{c.name}</TableCell><TableCell className="text-xs text-center">{c.qty}</TableCell><TableCell className="text-xs text-right">Rs. {((c.price * c.qty) - c.discount).toLocaleString()}</TableCell></TableRow>;
+              })}</TableBody>
             </Table>
             <div className="space-y-1 text-xs">
               <div className="flex justify-between"><span>Subtotal</span><span>Rs. {subtotal.toLocaleString()}</span></div>
@@ -3575,7 +3592,16 @@ const POS = () => {
               orderNumber: "—", date: new Date().toISOString().split("T")[0], time: new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }),
               orderType, tableNumber: tableNumber || undefined, customer: selectedCustomerData?.name || "Walk-in",
               phone: selectedCustomerData?.phone || "", staff: selectedStaff, paymentMethod: finalizeMethod,
-              items: cart.map(c => ({ name: c.name, qty: c.qty, price: c.price, discount: c.discount })),
+              items: cartDisplayRows.map((row) => row.kind === "deal"
+                ? {
+                    name: row.dealName,
+                    qty: 1,
+                    price: row.items.reduce((s, i) => s + i.price * i.qty, 0),
+                    discount: row.items.reduce((s, i) => s + i.discount, 0),
+                    dealItemsLabel: row.items.map((i) => `${i.qty}x ${i.name}`).join(", "),
+                  }
+                : { name: row.item.name, qty: row.item.qty, price: row.item.price, discount: row.item.discount }
+              ),
               subtotal, discount: orderDiscount, tax, total, advancePayment: loadedAdvancePayment || undefined,
             })}><Download className="h-4 w-4 mr-1" />PDF</Button>
             <Button className="gradient-primary text-primary-foreground" onClick={() => window.print()}><Printer className="h-4 w-4 mr-1" />Print</Button>
@@ -3608,6 +3634,9 @@ const POS = () => {
               {kotItems.length > 0 ? kotItems.map((item) => (
                 <div key={item.id} className="flex justify-between items-start">
                   <div className="flex-1">
+                    {(item as CartItem).dealName && (
+                      <p className="text-[10px] font-bold text-primary uppercase tracking-wide">{(item as CartItem).dealName}</p>
+                    )}
                     <p className="font-bold text-lg">{item.qty}x {item.name}</p>
                     {item.modifiers && item.modifiers.length > 0 && (
                       <p className="text-sm text-muted-foreground ml-4">&rarr; {item.modifiers.join(", ")}</p>
@@ -4855,7 +4884,25 @@ const POS = () => {
             </div>
             <Table>
               <TableHeader><TableRow><TableHead className="text-xs">Item</TableHead><TableHead className="text-xs text-center">Qty</TableHead><TableHead className="text-xs text-right">Price</TableHead><TableHead className="text-xs text-right">Total</TableHead></TableRow></TableHeader>
-              <TableBody>{cart.map((c, i) => <TableRow key={i}><TableCell className="text-xs">{c.name}</TableCell><TableCell className="text-xs text-center">{c.qty}</TableCell><TableCell className="text-xs text-right">{effectiveSettings.currency} {c.price}</TableCell><TableCell className="text-xs text-right">{effectiveSettings.currency} {((c.price * c.qty) - c.discount).toLocaleString()}</TableCell></TableRow>)}</TableBody>
+              <TableBody>{cartDisplayRows.map((row) => {
+                if (row.kind === "deal") {
+                  const gross = row.items.reduce((s, i) => s + i.price * i.qty, 0);
+                  const discount = row.items.reduce((s, i) => s + i.discount, 0);
+                  return (
+                    <TableRow key={row.dealLineId}>
+                      <TableCell className="text-xs">
+                        <span className="font-semibold text-primary">{row.dealName}</span>
+                        <p className="text-muted-foreground">{row.items.map((i) => `${i.qty}x ${i.name}`).join(", ")}</p>
+                      </TableCell>
+                      <TableCell className="text-xs text-center">—</TableCell>
+                      <TableCell className="text-xs text-right">—</TableCell>
+                      <TableCell className="text-xs text-right">{effectiveSettings.currency} {(gross - discount).toLocaleString()}</TableCell>
+                    </TableRow>
+                  );
+                }
+                const c = row.item;
+                return <TableRow key={c.id}><TableCell className="text-xs">{c.name}</TableCell><TableCell className="text-xs text-center">{c.qty}</TableCell><TableCell className="text-xs text-right">{effectiveSettings.currency} {c.price}</TableCell><TableCell className="text-xs text-right">{effectiveSettings.currency} {((c.price * c.qty) - c.discount).toLocaleString()}</TableCell></TableRow>;
+              })}</TableBody>
             </Table>
             <div className="space-y-1 text-xs">
               <div className="flex justify-between"><span>Subtotal</span><span>{effectiveSettings.currency} {subtotal.toLocaleString()}</span></div>
