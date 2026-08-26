@@ -19,7 +19,11 @@ import { useAuth } from "@/contexts/AuthContext";
 type KitchenOrderStatus = "new" | "preparing" | "ready" | "completed";
 
 interface KitchenOrder {
+  /** Ticket id — the order's own id for the shared (non-deal) ticket, or
+   *  `${orderId}::${dealItemKey}` for one specific deal dish's own ticket. */
   id: string;
+  /** The real order id, for API calls — see `id` above. */
+  orderId: string;
   orderNumber: string;
   type: string;
   items: { name: string; qty: number; cookingTime?: number; dealName?: string | null }[];
@@ -29,6 +33,9 @@ interface KitchenOrder {
   status: KitchenOrderStatus;
   maxCookingTime: number;
   hasPendingCancellationRequest?: boolean;
+  /** Set when this ticket is one specific dish from a deal redemption rather
+   *  than the order's shared ticket — see `id` above. */
+  dealItemKey?: string | null;
 }
 
 const typeColors = ORDER_TYPE_COLORS;
@@ -56,12 +63,17 @@ const mapKitchenStatusToApi = (status: KitchenOrderStatus): string => {
 
 /**
  * Resolves what THIS kitchen's own status is for an order — from its
- * OrderKitchenProgress row, not the order's shared status field. Falls back to the
- * order's own status for orders created before this feature existed (no progress
- * rows), so historic orders don't break.
+ * OrderKitchenProgress row, not the order's shared status field. With a
+ * dealItemKey, resolves one specific deal dish's own OrderKitchenDealProgress
+ * row instead, so that dish can be accepted/prepared/readied independently of
+ * the rest of the order. Falls back to the order's own status for orders (or
+ * dishes) with no progress row yet, so historic orders and freshly-placed
+ * deals don't break.
  */
-const getKitchenItemStatus = (order: OrderRecord, kitchenId: string): "pending" | "preparing" | "ready" => {
-  const progress = order.kitchenProgress?.find((p) => p.kitchenId === kitchenId);
+const getKitchenItemStatus = (order: OrderRecord, kitchenId: string, dealItemKey: string | null): "pending" | "preparing" | "ready" => {
+  const progress = dealItemKey
+    ? order.kitchenDealProgress?.find((p) => p.kitchenId === kitchenId && p.dealItemKey === dealItemKey)
+    : order.kitchenProgress?.find((p) => p.kitchenId === kitchenId);
   if (progress) return progress.status as "pending" | "preparing" | "ready";
   if (order.status === "preparing") return "preparing";
   if (order.status === "ready" || order.status === "completed") return "ready";
@@ -87,63 +99,94 @@ const KitchenPanel = () => {
 
   const loadSeq = useRef(0);
 
+  /** Builds one ticket for a slice of an order's items — either the shared
+   *  (non-deal) slice (dealItemKey null) or one specific deal dish
+   *  (dealItemKey set). Returns null once that ticket's own portion is ready
+   *  (hidden from the board) or if it has nothing relevant to this kitchen. */
+  const buildTicket = useCallback((
+    o: OrderRecord,
+    kitch: KitchenRecord,
+    items: OrderRecord["items"],
+    dealItemKey: string | null,
+  ): KitchenOrder | null => {
+    const relevantItems = items.map((item) => ({
+      name: item.name,
+      qty: item.qty,
+      cookingTime: item.cookingTime ?? 0,
+      dealName: item.dealName ?? null,
+    }));
+    if (!relevantItems.length) return null;
+
+    const kitchenItemStatus = getKitchenItemStatus(o, kitch.id, dealItemKey);
+    // Hide once THIS ticket's own portion is ready — another ticket on the same
+    // order (a different dish, or another kitchen) finishing first or being
+    // slower no longer affects this one's view.
+    if (kitchenItemStatus === "ready") return null;
+
+    const maxCookingTime = Math.max(...relevantItems.map(i => i.cookingTime || 0), 0);
+    const ticketId = dealItemKey ? `${o.id}::${dealItemKey}` : o.id;
+
+    // placedAt: first time we see this order — shared across every ticket it produces.
+    if (!placedAtMap.current[o.id]) {
+      placedAtMap.current[o.id] = new Date(o.createdAt || Date.now());
+    }
+
+    // preparingAt: if already "preparing" when loaded and not yet tracked, use updatedAt as best estimate
+    if (kitchenItemStatus === "preparing" && !preparingAtMap.current[ticketId]) {
+      preparingAtMap.current[ticketId] = new Date((o as any).updatedAt || o.createdAt || Date.now());
+    }
+
+    return {
+      id: ticketId,
+      orderId: o.id,
+      orderNumber: o.orderNumber,
+      type: o.type,
+      items: relevantItems,
+      placedAt: placedAtMap.current[o.id],
+      preparingAt: kitchenItemStatus === "preparing" ? preparingAtMap.current[ticketId] ?? placedAtMap.current[o.id] : null,
+      status: mapApiStatusToKitchen(kitchenItemStatus),
+      maxCookingTime,
+      hasPendingCancellationRequest: !!o.hasPendingCancellationRequest,
+      dealItemKey,
+    };
+  }, []);
+
   const buildKitchenOrders = useCallback((orders: OrderRecord[], kitch: KitchenRecord) => {
     const cats = kitch.assignedCategories ?? [];
     const hasFilter = cats.length > 0;
 
-    return orders
-      .filter((o) => o.status !== "cancelled")
+    const tickets: KitchenOrder[] = [];
+
+    for (const o of orders) {
+      if (o.status === "cancelled") continue;
       // Exclude self-orders that are still pending AND not yet accepted by a waiter —
       // once accepted (acceptedById set) it behaves exactly like any other pending order.
-      .filter((o) => !(o.type === "Self Order" && o.status === "pending" && !o.acceptedById))
-      .map((o) => {
-        // Only show items whose category matches this kitchen's assigned categories
-        const relevantItems = o.items
-          .filter((item) => {
-            if (!hasFilter) return true; // no categories assigned → show all
-            return item.categoryName ? cats.includes(item.categoryName) : false;
-          })
-          .map((item) => ({
-            name: item.name,
-            qty: item.qty,
-            cookingTime: item.cookingTime ?? 0,
-            dealName: item.dealName ?? null,
-          }));
+      if (o.type === "Self Order" && o.status === "pending" && !o.acceptedById) continue;
 
-        if (!relevantItems.length) return null;
+      // Only consider items whose category matches this kitchen's assigned categories
+      const relevantItems = o.items.filter((item) => {
+        if (!hasFilter) return true; // no categories assigned → show all
+        return item.categoryName ? cats.includes(item.categoryName) : false;
+      });
+      if (!relevantItems.length) continue;
 
-        const kitchenItemStatus = getKitchenItemStatus(o, kitch.id);
-        // Hide once THIS kitchen's own portion is ready — another kitchen on the same
-        // order finishing first (or being slower) no longer affects this kitchen's view.
-        if (kitchenItemStatus === "ready") return null;
+      // A deal dish gets its own ticket (its own Accept/Prepare/Ready), so a
+      // multi-dish deal doesn't force the kitchen to move every dish together.
+      // Every non-deal item still shares one ticket, unchanged.
+      const sharedItems = relevantItems.filter((item) => !(item.dealId && item.dealItemKey));
+      const dealItems = relevantItems.filter((item) => item.dealId && item.dealItemKey);
 
-        const maxCookingTime = Math.max(...relevantItems.map(i => i.cookingTime || 0), 0);
+      const sharedTicket = buildTicket(o, kitch, sharedItems, null);
+      if (sharedTicket) tickets.push(sharedTicket);
 
-        // placedAt: first time we see this order
-        if (!placedAtMap.current[o.id]) {
-          placedAtMap.current[o.id] = new Date(o.createdAt || Date.now());
-        }
+      for (const item of dealItems) {
+        const ticket = buildTicket(o, kitch, [item], item.dealItemKey as string);
+        if (ticket) tickets.push(ticket);
+      }
+    }
 
-        // preparingAt: if already "preparing" when loaded and not yet tracked, use updatedAt as best estimate
-        if (kitchenItemStatus === "preparing" && !preparingAtMap.current[o.id]) {
-          // Use updatedAt if available, otherwise createdAt
-          preparingAtMap.current[o.id] = new Date((o as any).updatedAt || o.createdAt || Date.now());
-        }
-
-        return {
-          id: o.id,
-          orderNumber: o.orderNumber,
-          type: o.type,
-          items: relevantItems,
-          placedAt: placedAtMap.current[o.id],
-          preparingAt: kitchenItemStatus === "preparing" ? preparingAtMap.current[o.id] ?? placedAtMap.current[o.id] : null,
-          status: mapApiStatusToKitchen(kitchenItemStatus),
-          maxCookingTime,
-          hasPendingCancellationRequest: !!o.hasPendingCancellationRequest,
-        } as KitchenOrder;
-      })
-      .filter((o): o is KitchenOrder => o !== null);
-  }, []);
+    return tickets;
+  }, [buildTicket]);
 
   const load = useCallback(async () => {
     const seq = ++loadSeq.current;
@@ -210,8 +253,8 @@ const KitchenPanel = () => {
   const getElapsedSeconds = (preparingAt: Date) =>
     Math.floor((clock.getTime() - preparingAt.getTime()) / 1000);
 
-  const advanceStatus = async (orderId: string) => {
-    const order = kitchenOrders.find(o => o.id === orderId);
+  const advanceStatus = async (ticketId: string) => {
+    const order = kitchenOrders.find(o => o.id === ticketId);
     if (!order || !kitchen) return;
 
     const nextStatusMap: Record<KitchenOrderStatus, KitchenOrderStatus> = {
@@ -223,21 +266,21 @@ const KitchenPanel = () => {
     const newKitchenStatus = nextStatusMap[order.status];
     const newApiStatus = mapKitchenStatusToApi(order.status);
 
-    setUpdatingOrderId(orderId);
+    setUpdatingOrderId(ticketId);
 
     try {
       markMine();
-      await orderService.updateOrderKitchenStatus(orderId, kitchen.id, newApiStatus);
+      await orderService.updateOrderKitchenStatus(order.orderId, kitchen.id, newApiStatus, order.dealItemKey ?? undefined);
 
       // Record preparation start timestamp upon successful backend confirmation
-      if (order.status === "new" && !preparingAtMap.current[orderId]) {
-        preparingAtMap.current[orderId] = new Date();
+      if (order.status === "new" && !preparingAtMap.current[ticketId]) {
+        preparingAtMap.current[ticketId] = new Date();
       }
 
       // Synchronized update: update card status & fire toast together after backend success
       setKitchenOrders(prev => prev.map(o =>
-        o.id === orderId
-          ? { ...o, status: newKitchenStatus, preparingAt: order.status === "new" ? (preparingAtMap.current[orderId] || new Date()) : o.preparingAt }
+        o.id === ticketId
+          ? { ...o, status: newKitchenStatus, preparingAt: order.status === "new" ? (preparingAtMap.current[ticketId] || new Date()) : o.preparingAt }
           : o
       ));
 
