@@ -92,7 +92,19 @@ export interface CreateSelfOrderInput {
   tax: number;
   total: number;
   specialInstructions?: string;
+  /** Promo Code the customer typed in, if any. Omit for a Minimum Spend
+   *  discount — that applies automatically, no code needed. */
+  dealCode?: string | null;
   items: CreateSelfOrderItemInput[];
+}
+
+/** A Promo Code (code set) or Minimum Spend (code null, auto-applied) deal
+ *  matched against the cart's current subtotal. */
+export interface SelfOrderCouponPreview {
+  dealId: string;
+  dealName: string;
+  code: string | null;
+  amount: number;
 }
 
 export interface SelfOrderStatus {
@@ -150,5 +162,17 @@ export const selfOrderService = {
 
   async getActiveOrders(tableId: string): Promise<SelfOrderActiveOrder[]> {
     return publicRequest<SelfOrderActiveOrder[]>(`/self-order/table/${tableId}/active-orders`);
+  },
+
+  /** Previews a Promo Code (pass `code`) or checks for an auto-applying
+   *  Minimum Spend deal (omit `code`) against the cart's current subtotal.
+   *  Null means nothing applies — not an error, most carts have no coupon.
+   *  A real Promo Code is re-validated again at order-creation time; this is
+   *  display-only. */
+  async validateCoupon(input: { tableId: string; code?: string; subtotal: number }): Promise<SelfOrderCouponPreview | null> {
+    return publicRequest<SelfOrderCouponPreview | null>(`/self-order/validate-coupon`, {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
   },
 };

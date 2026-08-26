@@ -3,7 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import {
   Flame, Search, ShoppingCart, Plus, Minus, Send, ChevronUp, Loader2,
   XCircle, CheckCircle2, Users, Phone, User, BellRing, Utensils, Sparkles,
-  ArrowRight, X, Receipt, FileText
+  ArrowRight, X, Receipt, FileText, Ticket
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,6 +20,7 @@ import {
   type SelfOrderMenu,
   type SelfOrderMenuItem,
   type SelfOrderStatus,
+  type SelfOrderCouponPreview,
 } from "@/services/self-order.service";
 
 interface CartItem {
@@ -417,7 +418,62 @@ const SelfOrder = () => {
 
   const cartTotal = cart.reduce((s, i) => s + i.price * i.qty, 0);
   const cartCount = cart.reduce((s, i) => s + i.qty, 0);
-  const tax = Math.round(cartTotal * (taxRate / 100));
+
+  // ── Coupon / Minimum Spend ──
+  const [couponInput, setCouponInput] = useState("");
+  const [appliedCoupon, setAppliedCoupon] = useState<SelfOrderCouponPreview | null>(null);
+  const [manualCouponApplied, setManualCouponApplied] = useState(false);
+  const [checkingCoupon, setCheckingCoupon] = useState(false);
+  const [couponError, setCouponError] = useState<string | null>(null);
+
+  // Silently checks for an auto-applying Minimum Spend deal whenever the cart
+  // total changes — the customer never has to know it exists, it just
+  // discounts the total once they've added enough to qualify. A manually
+  // entered Promo Code takes priority and pauses this check.
+  useEffect(() => {
+    if (manualCouponApplied || !table) return;
+    if (cartTotal <= 0) {
+      setAppliedCoupon(null);
+      return;
+    }
+    let cancelled = false;
+    selfOrderService
+      .validateCoupon({ tableId: table.tableId, subtotal: cartTotal })
+      .then((result) => { if (!cancelled) setAppliedCoupon(result); })
+      .catch(() => { if (!cancelled) setAppliedCoupon(null); });
+    return () => { cancelled = true; };
+  }, [cartTotal, table, manualCouponApplied]);
+
+  const applyCoupon = async () => {
+    if (!couponInput.trim() || !table) return;
+    setCheckingCoupon(true);
+    setCouponError(null);
+    try {
+      const result = await selfOrderService.validateCoupon({
+        tableId: table.tableId,
+        code: couponInput.trim(),
+        subtotal: cartTotal,
+      });
+      setAppliedCoupon(result);
+      setManualCouponApplied(true);
+    } catch (err) {
+      setCouponError(err instanceof Error ? err.message : "Invalid coupon code");
+    } finally {
+      setCheckingCoupon(false);
+    }
+  };
+
+  const removeCoupon = () => {
+    setManualCouponApplied(false);
+    setCouponInput("");
+    setCouponError(null);
+    setAppliedCoupon(null);
+  };
+
+  const discountAmount = appliedCoupon?.amount ?? 0;
+  const taxableTotal = Math.max(0, cartTotal - discountAmount);
+  const tax = Math.round(taxableTotal * (taxRate / 100));
+  const grandTotal = taxableTotal + tax;
 
   // ── Sitting Bill Calculations ──
   const nonDeclinedOrders = useMemo(
@@ -561,14 +617,16 @@ const SelfOrder = () => {
         guestCount,
         subtotal: cartTotal,
         tax,
-        total: cartTotal + tax,
+        total: grandTotal,
         specialInstructions: notes || undefined,
+        dealCode: appliedCoupon?.code ?? undefined,
         items: cart.map((i) => ({ menuItemId: i.menuItemId, variantId: i.variantId, name: i.name, price: i.price, qty: i.qty, modifierIds: i.modifierIds })),
       });
       setOrders((prev) => [...prev, { orderId, items: cart, status: { orderId, status: "pending", accepted: false, paid: false } }]);
       setCart([]);
       setCartOpen(false);
       setViewingMenu(false);
+      removeCoupon();
     } catch {
       toast.error("Failed to place order. Please try again.");
     } finally {
@@ -1553,18 +1611,66 @@ const SelfOrder = () => {
               />
             </div>
 
+            <div className="space-y-2">
+              <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                <Ticket className="h-3.5 w-3.5" /> Promo Code
+              </label>
+              {appliedCoupon?.code && manualCouponApplied ? (
+                <div className="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-primary/10 border border-primary/30">
+                  <span className="text-xs font-bold text-primary">
+                    "{appliedCoupon.code}" applied — {currency} {appliedCoupon.amount.toLocaleString()} off
+                  </span>
+                  <Button size="icon" variant="ghost" className="h-6 w-6 shrink-0" onClick={removeCoupon}>
+                    <X className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  <Input
+                    value={couponInput}
+                    onChange={(e) => { setCouponInput(e.target.value.toUpperCase()); setCouponError(null); }}
+                    placeholder="Enter a code, e.g. OVEN20"
+                    className="h-9 rounded-xl bg-muted/30 border-border/80 text-xs font-mono focus-visible:ring-primary"
+                    maxLength={20}
+                  />
+                  <Button
+                    variant="outline"
+                    className="h-9 rounded-xl text-xs font-bold shrink-0"
+                    disabled={!couponInput.trim() || checkingCoupon}
+                    onClick={applyCoupon}
+                  >
+                    {checkingCoupon ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Apply"}
+                  </Button>
+                </div>
+              )}
+              {couponError && <p className="text-[11px] text-destructive font-medium">{couponError}</p>}
+              {/* A Minimum Spend deal applies on its own, with no code typed —
+                  only surfaced here, never as an input the customer has to fill. */}
+              {appliedCoupon && !appliedCoupon.code && (
+                <p className="text-[11px] text-primary font-semibold">
+                  {appliedCoupon.dealName} applied automatically — {currency} {appliedCoupon.amount.toLocaleString()} off
+                </p>
+              )}
+            </div>
+
             <div className="bg-muted/30 rounded-xl p-3.5 border border-border/60 space-y-1.5 text-xs">
               <div className="flex justify-between text-muted-foreground">
                 <span>Subtotal</span>
                 <span>{currency} {cartTotal.toLocaleString()}</span>
               </div>
+              {discountAmount > 0 && (
+                <div className="flex justify-between text-primary font-semibold">
+                  <span>Discount</span>
+                  <span>- {currency} {discountAmount.toLocaleString()}</span>
+                </div>
+              )}
               <div className="flex justify-between text-muted-foreground">
                 <span>{taxName} ({taxRate}%)</span>
                 <span>{currency} {tax.toLocaleString()}</span>
               </div>
               <div className="flex justify-between font-extrabold text-sm pt-2 border-t border-border/60 text-foreground">
                 <span>Total Amount</span>
-                <span className="text-primary text-base">{currency} {(cartTotal + tax).toLocaleString()}</span>
+                <span className="text-primary text-base">{currency} {grandTotal.toLocaleString()}</span>
               </div>
             </div>
 

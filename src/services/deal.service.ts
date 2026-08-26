@@ -29,7 +29,7 @@ export interface DealOptionGroupRecord {
   options: DealOptionItemRecord[];
 }
 
-export type DealTypeValue = 'combo' | 'option_combo' | 'percentage' | 'buy_x_get_y';
+export type DealTypeValue = 'combo' | 'option_combo' | 'percentage' | 'buy_x_get_y' | 'order_discount';
 
 export interface DealRecord {
   id: string;
@@ -78,6 +78,12 @@ export interface DealRecord {
   /** Pins the free side to one size. Null on legacy deals, whose giveaway the server caps. */
   getVariantId: string | null;
   getQty: number | null;
+  // order_discount — `code` above doubles as the mode switch: set = Promo
+  // Code (customer enters it), null = Minimum Spend (auto-applies).
+  minSpend: number | null;
+  /** Flat Rs. off the order. Null = use discountPercent instead (Minimum
+   *  Spend only — a Promo Code is always flat). */
+  flatDiscount: number | null;
 }
 
 /** One item on one side of a Buy X Get Y offer. Both sides hold several. */
@@ -156,6 +162,9 @@ export interface DealInput {
   getItemId?: string | null;
   getVariantId?: string | null;
   getQty?: number | null;
+  // order_discount
+  minSpend?: number | null;
+  flatDiscount?: number | null;
 }
 
 export const dealService = {
