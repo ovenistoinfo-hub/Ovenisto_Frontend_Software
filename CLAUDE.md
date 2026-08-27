@@ -294,6 +294,49 @@ plus a body explaining _why_ the change was made when that is not obvious.
   (`applyPercent`/`pctFromPrice`-style) so switching modes back-derives a sensible value instead of
   clearing fields. Reuse this shape rather than inventing a new one for any future amount-or-percent
   input group.
+- **Deals are sold from three surfaces — POS.tsx, WaiterPanel.tsx, SelfOrder.tsx — each with its own
+  independent copy** of `dealFormatBadge`, `dealCardPricing`, and the `addDealToCart` family
+  (`addComboDealToCart`/`addBogoDealToCart`/`confirmDealCustomize`/`confirmDealItemPick`), not a
+  shared component (2026-08-27). All three read `allocateDealDiscount`/`dealBogoSides`/
+  `capFreeUnitPrice` from `src/lib/deals.ts`, but the deal *record* type differs per surface:
+  POS/WaiterPanel use the staff-facing `DealRecord` (per-channel `dineInPrice`…`foodpandaPrice`/
+  `dineInPercent`…`foodpandaPercent`) and resolve the current channel themselves
+  (`dealChannelPrice`/`dealChannelPercent`, "Dine In" hardcoded for WaiterPanel since every table
+  order is dine-in); self-order's `SelfOrderDeal` (`self-order.service.ts`) is a different, smaller
+  shape the backend's `mapDealOutPublic` already resolves to a single `price`/`discountPercent` — no
+  per-channel fields exist to read, so `deal.price`/`deal.discountPercent` are used directly.
+  A change to one format's pricing/validation logic needs the same change ported to all three files.
+- **Out-of-stock is a real gate, not just a warning, and it now covers deals too** — 
+  `src/utils/foodAvailability.ts`'s `calculateFoodAvailability` (per item/variant) and
+  `isFullyOutOfStock` (per item, across all its variants) are the one source of truth for "can this
+  actually be made right now" (2026-08-27). POS.tsx and WaiterPanel.tsx each source their own
+  `ingredientStockMap`/`productionStockMap` from live `warehouseService`/`stockService` queries (the
+  same stock `validateOrderStock` checks server-side) and disable the menu card, the specific
+  out-of-stock variant, and — via a per-format `isDealOutOfStock` — any deal that needs an
+  unavailable item. SelfOrder.tsx has no access to raw recipes/stock (public route), so it instead
+  reads the `available` boolean the backend's `getSelfOrderMenu` already computed per item/variant;
+  its `isDealOutOfStock`/`isMenuItemUnavailable` read that boolean rather than recomputing anything.
+  POS.tsx previously had a dead `hasLowStock`/`window.__recipes` block attempting this — `__recipes`
+  was never assigned anywhere, so it was always a no-op; removed rather than fixed in place.
+- **A dialog listing menu items must never truncate a name** — `DealForm.tsx`'s Customizable-deal
+  choice picker (mirrored in POS.tsx/WaiterPanel.tsx/SelfOrder.tsx) lists each step's options as
+  full-width single-column rows with `break-words`, not a 2-column grid with `truncate`, because
+  option/variant names routinely run long (`"BBQ Chicken Pizza (Medium (12 inch))"`). Follow this
+  shape for any future item-picker dialog rather than reintroducing a cramped grid.
+- **WaiterPanel.tsx has no `PageHeader`** (removed 2026-08-27) — the breadcrumb above it already
+  reads "Waiter Panel", so a second large title was dead vertical space. Its table-info sidebar
+  (`w-full md:w-80 lg:w-96 ... rounded-2xl`) is `md:sticky md:top-4` so it stays in view while the
+  floor plan/menu grid beside it scrolls, and is hidden entirely once `isOrderingMode` is true — the
+  cart column already occupies that slot in the ordering layout, so hiding the sidebar hands its
+  width to the item grid instead of splitting the screen three ways, matching POS.tsx's two-column
+  cart+grid layout.
+- **`normalizeApiOrder` (POS.tsx) must spread the raw item before overriding fields, never whitelist
+  them** — it once explicitly listed only `{id, name, price, qty, discount, modifiers, cookingTime,
+  notes, status}`, silently dropping `menuItemId`/`variantId`/`dealId`/`dealName`/`dealLineId` off
+  every order the moment it passed through `apiOrders` (i.e. every order shown anywhere in POS).
+  That broke reloading a running order for edit — `menuItemId`/`variantId` went out as `null` on
+  `updateOrder`, and a deal redemption lost its grouping. Fixed 2026-08-27; keep the spread-first
+  shape if this mapper changes again.
 
 <!-- code-review-graph MCP tools -->
 ## MCP Tools: code-review-graph
