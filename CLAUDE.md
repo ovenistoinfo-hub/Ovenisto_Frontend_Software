@@ -296,6 +296,40 @@ plus a body explaining _why_ the change was made when that is not obvious.
   input group.
 
 <!-- code-review-graph MCP tools -->
+## Superpowers plugin conventions
+
+The `superpowers` plugin is enabled for this repo (its skills are namespaced
+`superpowers:<name>`, e.g. `superpowers:writing-plans`). Its generic workflow needs the
+following filled in with Ovenisto specifics — read the section a skill points to before
+using it, rather than duplicating rules here:
+
+- **`superpowers:brainstorming` / `superpowers:writing-plans`** — a plan that adds a
+  page must call out all three registrations from "Frontend Dev Quick-Reference"
+  (`App.tsx` route, `AppSidebar.tsx` nav entry, `AppHeader.tsx` breadcrumb) and state
+  up front whether the page is API-backed (a `*.service.ts` + react-query) or the
+  legacy `DataContext`/`localStorage` pattern — don't let that get decided ad hoc
+  during `executing-plans`. Save plans/specs exactly where the existing ones live:
+  plans as `docs/superpowers/plans/YYYY-MM-DD-<slug>.md`, specs as
+  `docs/superpowers/specs/YYYY-MM-DD-<slug>-design.md` — note plans here have no
+  `-plan` suffix, unlike the backend repo's convention.
+- **`superpowers:test-driven-development`** — `npm test` runs vitest; match whatever
+  test style already exists for the file/module you're touching rather than
+  introducing a new one, and ask first before adding a new kind of test harness
+  (e.g. a first component-render test) that nothing in the repo uses yet.
+- **`superpowers:requesting-code-review` / `superpowers:receiving-code-review` /
+  `superpowers:subagent-driven-development` / `superpowers:dispatching-parallel-agents`**
+  — use the code-review-graph MCP tools first (below), and check any changed page
+  against "Frontend Dev Quick-Reference": the three-registration rule, the
+  `res.data` (never `res.data.data`) service envelope, zero raw-emoji/raw-palette-color
+  usage, and `DatePicker`/`TimePicker` instead of native date/time inputs — those are
+  this repo's most common review findings.
+- **`superpowers:finishing-a-development-branch` / `superpowers:using-git-worktrees`**
+  — the menu these skills present must still produce commits that follow "Git
+  conventions" above exactly: author/committer identity, no AI trailers or
+  co-author lines, and a merge subject that doesn't leak a `claude/...` branch name.
+- **`superpowers:using-superpowers`** — point new contributors at this section
+  first; it's the one place the generic skill workflow is pinned to this repo.
+
 ## MCP Tools: code-review-graph
 
 **IMPORTANT: This project has a knowledge graph. ALWAYS use the
