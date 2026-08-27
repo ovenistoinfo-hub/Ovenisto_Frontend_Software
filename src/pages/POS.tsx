@@ -2797,28 +2797,20 @@ const POS = () => {
                           <BadgeIcon className="h-3 w-3" />
                           {badge.label}
                         </div>
-                        {deal.code && (
-                          <div className="absolute top-1.5 right-1.5 text-[9px] font-mono font-semibold bg-background/80 backdrop-blur-xs text-foreground px-1.5 py-0.5 rounded-md border border-border/60 shadow-2xs">
-                            {deal.code}
-                          </div>
-                        )}
                       </div>
 
                       <div className="p-2.5 flex flex-col gap-1.5 flex-1">
-                        <p className="font-bold text-sm text-foreground line-clamp-1 group-hover:text-primary transition-colors">{deal.name}</p>
+                        <p className="font-bold text-sm text-foreground group-hover:text-primary transition-colors">{deal.name}</p>
                         {deal.description && (
-                          <p className="text-[10px] text-muted-foreground line-clamp-1">{deal.description}</p>
+                          <p className="text-[10px] text-muted-foreground">{deal.description}</p>
                         )}
 
                         {/* Included items / structure inset box */}
                         {pricing.lines.length > 0 && (
                           <div className="bg-muted/40 border border-border/60 rounded-lg px-2 py-1.5 space-y-0.5">
-                            {pricing.lines.slice(0, 3).map((line, i) => (
-                              <p key={i} className="text-[10px] text-foreground/80 font-medium truncate">• {line}</p>
+                            {pricing.lines.map((line, i) => (
+                              <p key={i} className="text-[10px] text-foreground/80 font-medium">• {line}</p>
                             ))}
-                            {pricing.lines.length > 3 && (
-                              <p className="text-[9px] text-muted-foreground font-semibold">+{pricing.lines.length - 3} more</p>
-                            )}
                           </div>
                         )}
 
