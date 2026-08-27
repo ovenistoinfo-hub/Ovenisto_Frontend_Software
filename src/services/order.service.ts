@@ -40,9 +40,17 @@ export interface OrderRecord {
   phone: string | null;
   type: string; // "Dine In", "Take Away", "Delivery", "Online", "Self Order", "Foodpanda", "Walk-in"
   subtotal: number;
+  /** Manual staff discount PLUS any order-level deal the server resolved — the
+   *  two are stored as one figure. `appliedDealName` says which deal, if any,
+   *  is part of it. */
   discount: number;
   tax: number;
   total: number;
+  /** The order-level deal (Promo Code / Minimum Spend) applied at checkout,
+   *  re-derived server-side. Null on an order that earned none. */
+  appliedDealId?: string | null;
+  appliedDealCode?: string | null;
+  appliedDealName?: string | null;
   status: string; // "pending", "preparing", "ready", "completed", "cancelled", "scheduled"
   kitchenStatus?: string;
   paymentMethod: string | null;
@@ -123,6 +131,19 @@ export interface CreateOrderInput {
   customerType?: string;
   orderSource?: string;
   cashApproved?: boolean;
+  /** Promo Code to apply to the whole order. Omit for a Minimum Spend deal —
+   *  the backend auto-resolves that one on every order, code or not. */
+  dealCode?: string | null;
+}
+
+/** An order-level discount (Promo Code, or an auto-applying Minimum Spend
+ *  deal) matched against a cart's current subtotal. `amount` is server-
+ *  derived — the client only ever displays it, never sends it back. */
+export interface OrderCouponPreview {
+  dealId: string;
+  dealName: string;
+  code: string | null;
+  amount: number;
 }
 
 export const orderService = {
@@ -158,6 +179,17 @@ export const orderService = {
 
   async createOrder(data: CreateOrderInput): Promise<OrderRecord> {
     const res = await api.post<{ success: boolean; data: OrderRecord }>('/orders', data);
+    return res.data;
+  },
+
+  /** Previews the order-level discount createOrder would apply to this cart,
+   *  so POS/Waiter can show it BEFORE the sale is finalised. Same
+   *  resolveOrderDiscount call the real order runs, so the figure shown is the
+   *  figure charged. Returns null when nothing applies. Pass `code` only when
+   *  the customer typed one — a Minimum Spend deal needs no code and resolves
+   *  from the subtotal alone. */
+  async validateCoupon(input: { subtotal: number; orderType?: string; code?: string | null }): Promise<OrderCouponPreview | null> {
+    const res = await api.post<{ success: boolean; data: OrderCouponPreview | null }>('/orders/validate-coupon', input);
     return res.data;
   },
 

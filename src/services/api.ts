@@ -185,7 +185,16 @@ const MUTATION_DEPENDENCIES: Record<string, string[]> = {
   '/orders': ['/warehouses', '/inventory'],
 };
 
+// POSTs that read rather than write. They live under a mutating base path
+// ("/orders"), so the normal base-path invalidation would blow the entire
+// orders/warehouses/inventory cache — and POS calls this one on every cart
+// change, which would defeat the GET cache this whole file exists to keep
+// (Neon compute-hours, see NEON_OPTIMIZATION.md). Nothing they touch is
+// persisted, so there is nothing to invalidate.
+const READ_ONLY_POST_PATHS = ['/orders/validate-coupon'];
+
 function invalidateCache(endpoint: string): void {
+  if (READ_ONLY_POST_PATHS.some(p => endpoint.split('?')[0] === p)) return;
   const base = getBasePath(endpoint);
   const pathsToInvalidate = [base];
 

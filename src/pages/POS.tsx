@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import type { OrderItem, Order, OrderType, CustomerType, OrderModificationLog } from "@/data/mock-data";
-import { orderService, type OrderRecord } from "@/services/order.service";
+import { orderService, type OrderRecord, type OrderCouponPreview } from "@/services/order.service";
 import { cancellationRequestService, type CancellationRequestRecord } from "@/services/cancellationRequest.service";
 import { menuService, type RecipeIngredient } from "@/services/menu.service";
 import { calculateFoodAvailability, isFullyOutOfStock } from "@/utils/foodAvailability";
@@ -504,6 +504,13 @@ const POS = () => {
 
   // Discounts
   const [orderDiscount, setOrderDiscount] = useState(0);
+
+  // Order-level deal (Promo Code / Minimum Spend). createOrder resolves one of
+  // these server-side on EVERY order, whether POS asks for it or not — so POS
+  // has to preview it, or the screen, the printed receipt and the cash
+  // actually collected would all be the pre-discount figure while the saved
+  // order is discounted (a Rs. 200 hole in the drawer, per qualifying order).
+  const [dealPreview, setDealPreview] = useState<OrderCouponPreview | null>(null);
 
   // Dialogs
   const [showConfirmOrder, setShowConfirmOrder] = useState(false);
@@ -1770,10 +1777,29 @@ const POS = () => {
   }, [cart]);
 
   const itemsSubtotal = cart.reduce((s, c) => s + (c.price * c.qty) - c.discount, 0);
-  const subtotal = itemsSubtotal - orderDiscount;
+  const dealDiscount = dealPreview?.amount ?? 0;
+  const subtotal = itemsSubtotal - orderDiscount - dealDiscount;
   const tax = Math.round(subtotal * taxRate);
   const total = subtotal + tax;
   const netPayable = Math.max(0, total - loadedAdvancePayment);
+
+  // Ask the server what order-level discount this cart earns, debounced so a
+  // burst of cart edits costs one call. The basis is itemsSubtotal, NOT
+  // `subtotal` — createOrder resolves the deal before the manual "extra
+  // discount" is applied, and this preview only means anything if it mirrors
+  // that exactly. The order payload still sends `discount: orderDiscount`
+  // (manual only); the server adds the deal amount on top itself.
+  useEffect(() => {
+    if (itemsSubtotal <= 0) { setDealPreview(null); return; }
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      orderService
+        .validateCoupon({ subtotal: itemsSubtotal, orderType })
+        .then((res) => { if (!cancelled) setDealPreview(res); })
+        .catch(() => { if (!cancelled) setDealPreview(null); });
+    }, 400);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [itemsSubtotal, orderType]);
 
   const totalPaid = paymentEntries.reduce((s, e) => s + e.amount, 0);
   const totalDue = Math.max(0, netPayable - totalPaid);
@@ -2706,6 +2732,15 @@ const POS = () => {
                 <span className="font-mono">-Rs. {orderDiscount.toLocaleString()}</span>
               </div>
             )}
+            {dealDiscount > 0 && dealPreview && (
+              <div className="flex justify-between text-xs text-emerald-600 dark:text-emerald-400 font-medium">
+                <span className="flex items-center gap-1 min-w-0">
+                  <Tag className="h-3 w-3 shrink-0" />
+                  <span className="truncate">{dealPreview.code ? `${dealPreview.dealName} (${dealPreview.code})` : dealPreview.dealName}</span>
+                </span>
+                <span className="font-mono shrink-0">-Rs. {dealDiscount.toLocaleString()}</span>
+              </div>
+            )}
             <div className="flex justify-between text-xs text-muted-foreground">
               <span>Tax</span>
               <span className="font-mono">Rs. {tax.toLocaleString()}</span>
@@ -3538,8 +3573,9 @@ const POS = () => {
 
               {/* Left Column Bill Breakdown */}
               <div className="space-y-1.5 text-xs">
-                <div className="flex justify-between text-muted-foreground"><span>Subtotal</span><span className="font-mono">Rs. {subtotal.toLocaleString()}</span></div>
+                <div className="flex justify-between text-muted-foreground"><span>Subtotal</span><span className="font-mono">Rs. {itemsSubtotal.toLocaleString()}</span></div>
                 {orderDiscount > 0 && <div className="flex justify-between text-destructive"><span>Discount</span><span className="font-mono">-Rs. {orderDiscount.toLocaleString()}</span></div>}
+                {dealDiscount > 0 && dealPreview && <div className="flex justify-between text-emerald-600 dark:text-emerald-400 font-medium"><span className="truncate pr-2">{dealPreview.code ? `${dealPreview.dealName} (${dealPreview.code})` : dealPreview.dealName}</span><span className="font-mono shrink-0">-Rs. {dealDiscount.toLocaleString()}</span></div>}
                 <div className="flex justify-between text-muted-foreground"><span>Tax</span><span className="font-mono">Rs. {tax.toLocaleString()}</span></div>
                 <Separator className="my-1 bg-border/60" />
                 <div className="flex justify-between font-bold text-sm text-foreground pt-0.5">
@@ -3774,8 +3810,9 @@ const POS = () => {
               })}</TableBody>
             </Table>
             <div className="space-y-1 text-xs">
-              <div className="flex justify-between"><span>Subtotal</span><span>Rs. {subtotal.toLocaleString()}</span></div>
+              <div className="flex justify-between"><span>Subtotal</span><span>Rs. {itemsSubtotal.toLocaleString()}</span></div>
               {orderDiscount > 0 && <div className="flex justify-between"><span>Discount</span><span className="text-destructive">-Rs. {orderDiscount.toLocaleString()}</span></div>}
+              {dealDiscount > 0 && dealPreview && <div className="flex justify-between"><span className="truncate pr-2">{dealPreview.code ? `${dealPreview.dealName} (${dealPreview.code})` : dealPreview.dealName}</span><span className="text-emerald-600 dark:text-emerald-400 shrink-0">-Rs. {dealDiscount.toLocaleString()}</span></div>}
               <div className="flex justify-between"><span>Tax</span><span>Rs. {tax.toLocaleString()}</span></div>
               <Separator />
               <div className="flex justify-between font-bold text-sm"><span>Gross Total</span><span>Rs. {total.toLocaleString()}</span></div>
@@ -3804,7 +3841,10 @@ const POS = () => {
                   }
                 : { name: row.item.name, qty: row.item.qty, price: row.item.price, discount: row.item.discount }
               ),
-              subtotal, discount: orderDiscount, tax, total, advancePayment: loadedAdvancePayment || undefined,
+              // The PDF has one discount line, so the manual discount and the
+              // order-level deal are summed into it — same as what the server
+              // stores on order.discount.
+              subtotal: itemsSubtotal, discount: orderDiscount + dealDiscount, tax, total, advancePayment: loadedAdvancePayment || undefined,
             })}><Download className="h-4 w-4 mr-1" />PDF</Button>
             <Button className="gradient-primary text-primary-foreground" onClick={() => window.print()}><Printer className="h-4 w-4 mr-1" />Print</Button>
           </DialogFooter>
@@ -5107,8 +5147,9 @@ const POS = () => {
               })}</TableBody>
             </Table>
             <div className="space-y-1 text-xs">
-              <div className="flex justify-between"><span>Subtotal</span><span>{effectiveSettings.currency} {subtotal.toLocaleString()}</span></div>
+              <div className="flex justify-between"><span>Subtotal</span><span>{effectiveSettings.currency} {itemsSubtotal.toLocaleString()}</span></div>
               {orderDiscount > 0 && <div className="flex justify-between"><span>Discount</span><span className="text-destructive">-{effectiveSettings.currency} {orderDiscount.toLocaleString()}</span></div>}
+              {dealDiscount > 0 && dealPreview && <div className="flex justify-between"><span className="truncate pr-2">{dealPreview.code ? `${dealPreview.dealName} (${dealPreview.code})` : dealPreview.dealName}</span><span className="text-emerald-600 dark:text-emerald-400 shrink-0">-{effectiveSettings.currency} {dealDiscount.toLocaleString()}</span></div>}
               <div className="flex justify-between"><span>Tax ({Math.round(taxRate * 100)}%)</span><span>{effectiveSettings.currency} {tax.toLocaleString()}</span></div>
               <Separator />
               <div className="flex justify-between font-bold text-sm"><span>Gross Estimated Total</span><span>{effectiveSettings.currency} {total.toLocaleString()}</span></div>

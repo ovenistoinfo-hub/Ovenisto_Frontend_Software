@@ -837,8 +837,23 @@ const SelfOrder = () => {
 
   const openDealItemPicker = (deal: SelfOrderDeal) => {
     setPickingDeal(deal);
-    setPickedDealItemId("");
-    setPickedDealVariantId(null);
+    const eligible = availableItems.filter((m) =>
+      deal.applicableItems.includes(m.id) ||
+      (m.categoryId && deal.applicableCategories.includes(m.categoryId))
+    );
+    if (eligible.length > 0) {
+      const first = eligible[0];
+      setPickedDealItemId(first.id);
+      if (first.variants && first.variants.length > 0) {
+        const firstAvail = first.variants.find((v) => !isMenuItemUnavailable(first.id, v.id));
+        setPickedDealVariantId(firstAvail ? firstAvail.id : first.variants[0].id);
+      } else {
+        setPickedDealVariantId(null);
+      }
+    } else {
+      setPickedDealItemId("");
+      setPickedDealVariantId(null);
+    }
     setPickedDealQty(1);
     setShowDealItemPicker(true);
   };
@@ -853,7 +868,7 @@ const SelfOrder = () => {
 
     const unitPrice = menuItemUnitPrice(menuItem, variant);
     const percent = deal.discountPercent ?? 0;
-    const qty = Math.max(1, pickedDealQty);
+    const qty = 1;
     const discount = Math.min(unitPrice * qty, unitPrice * qty * (percent / 100));
 
     const lineId = `deal-${deal.id}-${Date.now()}`;
@@ -2298,68 +2313,175 @@ const SelfOrder = () => {
         </DialogContent>
       </Dialog>
 
-      {/* % Discount Deal — eligible item picker */}
+      {/* % Discount Deal — customizable-style eligible item picker */}
       <Dialog open={showDealItemPicker} onOpenChange={(open) => { setShowDealItemPicker(open); if (!open) setPickingDeal(null); }}>
-        <DialogContent className="max-w-sm">
+        <DialogContent className="max-w-xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{pickingDeal?.name}</DialogTitle>
-            <DialogDescription>Pick which item this {pickingDeal?.discountPercent}% discount applies to.</DialogDescription>
+            <DialogTitle className="flex items-center gap-2">
+              <Percent className="h-5 w-5 text-primary shrink-0" />
+              <span>{pickingDeal?.name}</span>
+            </DialogTitle>
+            <DialogDescription>
+              Pick an eligible item below to apply this {pickingDeal?.discountPercent}% discount.
+            </DialogDescription>
           </DialogHeader>
-          <div className="space-y-3">
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-foreground">Item</label>
-              <Select
-                value={pickedDealItemId}
-                onValueChange={(v) => { setPickedDealItemId(v); setPickedDealVariantId(null); }}
-              >
-                <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Select an item" /></SelectTrigger>
-                <SelectContent>
+
+          {pickingDeal && (
+            <div className="space-y-5">
+              {/* Step 1: Select Item */}
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className="h-5 w-5 rounded-full bg-primary/10 text-primary text-[11px] font-bold flex items-center justify-center shrink-0">1</span>
+                  <p className="text-sm font-bold text-foreground">Choose Item</p>
+                  <span className="text-[11px] text-muted-foreground font-medium ml-auto shrink-0">Pick 1</span>
+                </div>
+                <div className="space-y-1.5 max-h-[220px] overflow-y-auto pr-1">
                   {eligibleDealItems.map((m) => {
+                    const isChecked = pickedDealItemId === m.id;
                     const itemVariants = m.variants || [];
-                    const itemOutOfStock = itemVariants.length === 0 ? !m.available : itemVariants.every((v) => !v.available);
+                    const itemOutOfStock = itemVariants.length === 0
+                      ? isMenuItemUnavailable(m.id, null)
+                      : itemVariants.every((v) => isMenuItemUnavailable(m.id, v.id));
+
                     return (
-                      <SelectItem key={m.id} value={m.id} disabled={itemOutOfStock}>
-                        {m.name}{itemOutOfStock && " (Out of Stock)"}
-                      </SelectItem>
+                      <button
+                        key={m.id}
+                        type="button"
+                        disabled={itemOutOfStock}
+                        onClick={() => {
+                          setPickedDealItemId(m.id);
+                          if (itemVariants.length > 0) {
+                            const firstAvail = itemVariants.find((v) => !isMenuItemUnavailable(m.id, v.id));
+                            setPickedDealVariantId(firstAvail ? firstAvail.id : itemVariants[0].id);
+                          } else {
+                            setPickedDealVariantId(null);
+                          }
+                        }}
+                        className={cn(
+                          "w-full flex items-center justify-between p-3 rounded-xl border text-left text-sm transition-all duration-150",
+                          itemOutOfStock
+                            ? "opacity-50 cursor-not-allowed border-border bg-muted/30"
+                            : isChecked ? "border-primary bg-primary/5 shadow-xs" : "border-border hover:border-primary/40 hover:bg-muted/30"
+                        )}
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className={cn(
+                            "h-4 w-4 rounded-full border flex items-center justify-center shrink-0 transition-colors",
+                            isChecked ? "border-primary bg-primary text-primary-foreground" : "border-muted-foreground/40"
+                          )}>
+                            {isChecked && <div className="h-1.5 w-1.5 rounded-full bg-white" />}
+                          </div>
+                          <div className="min-w-0">
+                            <p className={cn("leading-snug truncate", isChecked && !itemOutOfStock ? "font-semibold text-primary" : "font-medium text-foreground")}>
+                              {m.name}
+                            </p>
+                            {itemVariants.length > 0 && (
+                              <span className="text-[10px] text-muted-foreground">
+                                {itemVariants.length} sizes available
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        {itemOutOfStock && (
+                          <span className="inline-block text-[10px] font-semibold text-destructive bg-destructive/10 px-1.5 py-0.5 rounded shrink-0">
+                            Out of Stock
+                          </span>
+                        )}
+                      </button>
                     );
                   })}
-                </SelectContent>
-              </Select>
-            </div>
-            {(() => {
-              const menuItem = eligibleDealItems.find((m) => m.id === pickedDealItemId);
-              const variants = menuItem?.variants || [];
-              if (variants.length === 0) return null;
-              return (
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-foreground">Size</label>
-                  <Select value={pickedDealVariantId || ""} onValueChange={setPickedDealVariantId}>
-                    <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Select a size" /></SelectTrigger>
-                    <SelectContent>
-                      {variants.map((v) => (
-                        <SelectItem key={v.id} value={v.id} disabled={!v.available}>
-                          {v.name}{!v.available && " (Out of Stock)"}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
                 </div>
-              );
-            })()}
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-foreground">Quantity</label>
-              <Input
-                type="number"
-                min={1}
-                value={pickedDealQty}
-                onChange={(e) => setPickedDealQty(Math.max(1, Number(e.target.value) || 1))}
-                className="h-9 text-xs"
-              />
+              </div>
+
+              {/* Step 2: Select Size (if selected item has variants) */}
+              {(() => {
+                const menuItem = eligibleDealItems.find((m) => m.id === pickedDealItemId);
+                const variants = menuItem?.variants || [];
+                if (!menuItem || variants.length === 0) return null;
+
+                return (
+                  <div className="space-y-2 pt-1 border-t border-border">
+                    <div className="flex items-center gap-2">
+                      <span className="h-5 w-5 rounded-full bg-primary/10 text-primary text-[11px] font-bold flex items-center justify-center shrink-0">2</span>
+                      <p className="text-sm font-bold text-foreground">Choose Size for {menuItem.name}</p>
+                      <span className="text-[11px] text-muted-foreground font-medium ml-auto shrink-0">Pick 1</span>
+                    </div>
+                    <div className="space-y-1.5">
+                      {variants.map((v) => {
+                        const isVarSelected = pickedDealVariantId === v.id;
+                        const variantOutOfStock = isMenuItemUnavailable(menuItem.id, v.id);
+                        const rawPrice = menuItemUnitPrice(menuItem, v);
+                        const pct = pickingDeal.discountPercent ?? 0;
+                        const discPrice = Math.max(0, rawPrice - (rawPrice * pct) / 100);
+
+                        return (
+                          <button
+                            key={v.id}
+                            type="button"
+                            disabled={variantOutOfStock}
+                            onClick={() => setPickedDealVariantId(v.id)}
+                            className={cn(
+                              "w-full flex items-center justify-between p-3 rounded-xl border text-left text-sm transition-all duration-150",
+                              variantOutOfStock
+                                ? "opacity-50 cursor-not-allowed border-border bg-muted/30"
+                                : isVarSelected ? "border-primary bg-primary/5 shadow-xs" : "border-border hover:border-primary/40 hover:bg-muted/30"
+                            )}
+                          >
+                            <div className="flex items-center gap-3 min-w-0">
+                              <div className={cn(
+                                "h-4 w-4 rounded-full border flex items-center justify-center shrink-0 transition-colors",
+                                isVarSelected ? "border-primary bg-primary text-primary-foreground" : "border-muted-foreground/40"
+                              )}>
+                                {isVarSelected && <div className="h-1.5 w-1.5 rounded-full bg-white" />}
+                              </div>
+                              <span className={cn("leading-snug truncate", isVarSelected && !variantOutOfStock ? "font-semibold text-primary" : "font-medium text-foreground")}>
+                                {v.name}
+                              </span>
+                            </div>
+
+                            <div className="flex items-center gap-2 shrink-0">
+                              {variantOutOfStock ? (
+                                <span className="inline-block text-[10px] font-semibold text-destructive bg-destructive/10 px-1.5 py-0.5 rounded">
+                                  Out of Stock
+                                </span>
+                              ) : (
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-[10px] text-muted-foreground line-through font-mono">
+                                    {currency} {rawPrice.toLocaleString()}
+                                  </span>
+                                  <span className="text-xs font-bold text-primary font-mono">
+                                    {currency} {discPrice.toLocaleString()}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
-          </div>
+          )}
+
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowDealItemPicker(false)}>Cancel</Button>
-            <Button className="gradient-primary text-primary-foreground" disabled={!pickedDealItemId} onClick={confirmDealItemPick}>Add to Order</Button>
+            <Button
+              className="gradient-primary text-primary-foreground font-bold shadow-md"
+              disabled={
+                !pickedDealItemId ||
+                (() => {
+                  const sel = eligibleDealItems.find((m) => m.id === pickedDealItemId);
+                  if (!sel) return true;
+                  if (sel.variants.length > 0 && !pickedDealVariantId) return true;
+                  return isMenuItemUnavailable(sel.id, pickedDealVariantId);
+                })()
+              }
+              onClick={confirmDealItemPick}
+            >
+              Add to Order
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
