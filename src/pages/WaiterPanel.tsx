@@ -2917,20 +2917,27 @@ const WaiterPanel = () => {
 
       {/* Customizable (option_combo) Deal — choice group picker */}
       <Dialog open={showDealCustomize} onOpenChange={(open) => { setShowDealCustomize(open); if (!open) setCustomizingDeal(null); }}>
-        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{customizingDeal?.name}</DialogTitle>
-            <DialogDescription>Pick items for each step, then add to cart.</DialogDescription>
+            <DialogTitle className="flex items-center gap-2">
+              <Layers className="h-5 w-5 text-primary shrink-0" />
+              <span>{customizingDeal?.name}</span>
+            </DialogTitle>
+            <DialogDescription>Pick an item for each step below, then add the deal to the order.</DialogDescription>
           </DialogHeader>
           {customizingDeal && (
-            <div className="space-y-4">
-              {customizingDeal.optionGroups.map((g) => {
+            <div className="space-y-5">
+              {customizingDeal.optionGroups.map((g, idx) => {
                 const selected = dealGroupSelections[g.id] || [];
                 const need = g.minSelections === g.maxSelections ? `${g.minSelections}` : `${g.minSelections}-${g.maxSelections}`;
                 return (
                   <div key={g.id} className="space-y-2">
-                    <p className="text-xs font-bold text-foreground">{g.label} <span className="text-muted-foreground font-normal">(pick {need})</span></p>
-                    <div className="grid grid-cols-2 gap-1.5">
+                    <div className="flex items-center gap-2">
+                      <span className="h-5 w-5 rounded-full bg-primary/10 text-primary text-[11px] font-bold flex items-center justify-center shrink-0">{idx + 1}</span>
+                      <p className="text-sm font-bold text-foreground">{g.label}</p>
+                      <span className="text-[11px] text-muted-foreground font-medium ml-auto shrink-0">Pick {need}</span>
+                    </div>
+                    <div className="space-y-1.5">
                       {g.options.map((o) => {
                         const key = dealOptionKey(o.menuItemId, o.variantId);
                         const menuItem: any = menuItems.find((m) => m.id === o.menuItemId);
@@ -2943,15 +2950,21 @@ const WaiterPanel = () => {
                             disabled={optionOutOfStock}
                             onClick={() => toggleDealOption(g.id, key, g.maxSelections)}
                             className={cn(
-                              "flex items-center gap-2 p-2 rounded-lg border text-left text-xs transition-colors",
+                              "w-full flex items-start gap-3 p-3 rounded-xl border text-left text-sm transition-colors",
                               optionOutOfStock
                                 ? "opacity-50 cursor-not-allowed border-border bg-muted/30"
-                                : isChecked ? "border-primary bg-primary/5 font-semibold" : "border-border hover:bg-muted/40"
+                                : isChecked ? "border-primary bg-primary/5" : "border-border hover:border-primary/40 hover:bg-muted/30"
                             )}
                           >
-                            <Checkbox checked={isChecked} disabled={optionOutOfStock} className="pointer-events-none" />
-                            <span className="truncate">{menuItem?.name || "Item"}{variant ? ` (${variant.name})` : ""}</span>
-                            {optionOutOfStock && <span className="text-destructive text-[10px] shrink-0">(Out of Stock)</span>}
+                            <Checkbox checked={isChecked} disabled={optionOutOfStock} className="mt-0.5 shrink-0 pointer-events-none" />
+                            <div className="min-w-0 space-y-1">
+                              <p className={cn("leading-snug break-words", isChecked && !optionOutOfStock ? "font-semibold text-primary" : "font-medium text-foreground")}>
+                                {menuItem?.name || "Item"}{variant ? ` (${variant.name})` : ""}
+                              </p>
+                              {optionOutOfStock && (
+                                <span className="inline-block text-[10px] font-semibold text-destructive bg-destructive/10 px-1.5 py-0.5 rounded">Out of Stock</span>
+                              )}
+                            </div>
                           </button>
                         );
                       })}
