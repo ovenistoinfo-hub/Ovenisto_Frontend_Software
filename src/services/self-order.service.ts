@@ -74,6 +74,68 @@ export interface SelfOrderMenu {
   items: SelfOrderMenuItem[];
 }
 
+export interface SelfOrderDealComponent {
+  id: string;
+  menuItemId: string;
+  variantId: string | null;
+  qty: number;
+  displayOrder: number;
+}
+
+export interface SelfOrderDealOptionItem {
+  id: string;
+  menuItemId: string;
+  variantId: string | null;
+  extraPrice: number;
+  displayOrder: number;
+}
+
+export interface SelfOrderDealOptionGroup {
+  id: string;
+  label: string;
+  minSelections: number;
+  maxSelections: number;
+  displayOrder: number;
+  options: SelfOrderDealOptionItem[];
+}
+
+export interface SelfOrderDealBogoItem {
+  role: "BUY" | "GET";
+  menuItemId: string;
+  variantId: string | null;
+  qty: number;
+  displayOrder: number;
+}
+
+export type SelfOrderDealType = "combo" | "option_combo" | "percentage" | "buy_x_get_y" | "order_discount";
+
+/** The public/self-order-safe deal shape from GET /self-order/deals — see
+ *  the backend's mapDealOutPublic. Unlike the staff-facing DealRecord, this
+ *  has no per-channel dineInPrice/takeAwayPrice/etc columns: `price` and
+ *  `discountPercent` are already resolved to Dine In (the only channel a
+ *  self-order customer ever orders on), so no channel lookup is needed here. */
+export interface SelfOrderDeal {
+  id: string;
+  name: string;
+  code: string | null;
+  description: string | null;
+  image: string | null;
+  type: SelfOrderDealType;
+  price: number | null;
+  discountPercent: number | null;
+  applicableItems: string[];
+  applicableCategories: string[];
+  components: SelfOrderDealComponent[];
+  optionGroups: SelfOrderDealOptionGroup[];
+  bogoItems: SelfOrderDealBogoItem[];
+  buyItemId: string | null;
+  buyVariantId: string | null;
+  buyQty: number | null;
+  getItemId: string | null;
+  getVariantId: string | null;
+  getQty: number | null;
+}
+
 export interface CreateSelfOrderItemInput {
   menuItemId?: string | null;
   variantId?: string | null;
@@ -81,6 +143,15 @@ export interface CreateSelfOrderItemInput {
   price: number;
   qty: number;
   modifierIds?: string[];
+  /** Set when this line came off a Deal card rather than the plain menu.
+   *  deal.revalidate.ts re-derives the real price/discount server-side from
+   *  these — the client's own price/discount for a deal line is never
+   *  trusted, only its identity. */
+  dealId?: string | null;
+  dealName?: string | null;
+  dealLineId?: string | null;
+  dealGroupId?: string | null;
+  dealRole?: "buy" | "get" | null;
 }
 
 export interface CreateSelfOrderInput {
@@ -127,7 +198,11 @@ export interface SelfOrderActiveOrderItem {
   name: string;
   price: number;
   qty: number;
+  discount?: number;
   modifiers?: string[];
+  dealId?: string | null;
+  dealName?: string | null;
+  dealLineId?: string | null;
 }
 
 export interface SelfOrderActiveOrder {
@@ -143,6 +218,12 @@ export const selfOrderService = {
 
   async getMenu(): Promise<SelfOrderMenu> {
     return publicRequest<SelfOrderMenu>(`/self-order/menu`);
+  },
+
+  /** Live, outlet-scoped deals for the QR menu — pass the scanned table's id
+   *  so outlet-restricted deals are included alongside chain-wide ones. */
+  async getDeals(tableId?: string): Promise<SelfOrderDeal[]> {
+    return publicRequest<SelfOrderDeal[]>(`/self-order/deals${tableId ? `?tableId=${encodeURIComponent(tableId)}` : ""}`);
   },
 
   async createOrder(input: CreateSelfOrderInput): Promise<{ orderId: string }> {

@@ -3,12 +3,15 @@ import { useSearchParams } from "react-router-dom";
 import {
   Flame, Search, ShoppingCart, Plus, Minus, Send, ChevronUp, Loader2,
   XCircle, CheckCircle2, Users, Phone, User, BellRing, Utensils, Sparkles,
-  ArrowRight, X, Receipt, FileText, Ticket
+  ArrowRight, X, Receipt, FileText, Ticket, Gift, Package, Layers, Percent, Check,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useVisiblePolling } from "@/hooks/use-visible-polling";
@@ -21,7 +24,10 @@ import {
   type SelfOrderMenuItem,
   type SelfOrderStatus,
   type SelfOrderCouponPreview,
+  type SelfOrderDeal,
+  type SelfOrderDealOptionItem,
 } from "@/services/self-order.service";
+import { allocateDealDiscount, dealBogoSides, capFreeUnitPrice } from "@/lib/deals";
 
 interface CartItem {
   id: string;
@@ -33,7 +39,25 @@ interface CartItem {
   variant?: string;
   modifiers?: string[];
   modifierIds?: string[];
+  /** Set once a line came off a Deal card rather than the plain menu — see
+   *  POS.tsx's identical fields for the full contract (grouping, removal as
+   *  one unit, and what deal.revalidate.ts re-derives server-side). */
+  discount?: number;
+  dealId?: string | null;
+  dealName?: string | null;
+  dealLineId?: string | null;
+  dealGroupId?: string | null;
+  dealRole?: "buy" | "get" | null;
 }
+
+// Mirrors POS.tsx's dealFormatBadge — order_discount is excluded from
+// sellableDeals below (that's the separate Promo Code / Minimum Spend flow).
+const dealFormatBadge: Record<Exclude<SelfOrderDeal["type"], "order_discount">, { icon: typeof Package; label: string }> = {
+  combo: { icon: Package, label: "Fixed Bundle" },
+  option_combo: { icon: Layers, label: "Customizable" },
+  percentage: { icon: Percent, label: "% Discount" },
+  buy_x_get_y: { icon: Gift, label: "Buy X Get Y" },
+};
 
 const resolveModifiers = (item: SelfOrderMenuItem) => item.modifiers || [];
 
@@ -151,6 +175,21 @@ const SelfOrder = () => {
   // ── Live menu ──
   const [menu, setMenu] = useState<SelfOrderMenu | null>(null);
   const [menuLoading, setMenuLoading] = useState(true);
+
+  // ── Live deals — Fixed Bundle/Customizable/%Discount/Buy X Get Y. Order
+  // Discount is excluded from browsing (that's the separate Promo Code /
+  // Minimum Spend coupon flow above). Always priced at Dine In: a self-order
+  // customer only ever orders at their table. ──
+  const [deals, setDeals] = useState<SelfOrderDeal[]>([]);
+  const sellableDeals = useMemo(() => deals.filter((d) => d.type !== "order_discount"), [deals]);
+  const [showDealCustomize, setShowDealCustomize] = useState(false);
+  const [customizingDeal, setCustomizingDeal] = useState<SelfOrderDeal | null>(null);
+  const [dealGroupSelections, setDealGroupSelections] = useState<Record<string, string[]>>({});
+  const [showDealItemPicker, setShowDealItemPicker] = useState(false);
+  const [pickingDeal, setPickingDeal] = useState<SelfOrderDeal | null>(null);
+  const [pickedDealItemId, setPickedDealItemId] = useState("");
+  const [pickedDealVariantId, setPickedDealVariantId] = useState<string | null>(null);
+  const [pickedDealQty, setPickedDealQty] = useState(1);
 
   // ── Entry gate ──
   const [entryDone, setEntryDone] = useState(false);
@@ -394,6 +433,11 @@ const SelfOrder = () => {
       .finally(() => setMenuLoading(false));
   }, [entryDone]);
 
+  useEffect(() => {
+    if (!entryDone || !table) return;
+    selfOrderService.getDeals(table.tableId).then(setDeals).catch(() => {});
+  }, [entryDone, table]);
+
   // ── Poll every non-terminal order's status ──
   const pollStatus = useCallback(() => {
     orders
@@ -416,7 +460,7 @@ const SelfOrder = () => {
     return items;
   }, [availableItems, catFilter, search]);
 
-  const cartTotal = cart.reduce((s, i) => s + i.price * i.qty, 0);
+  const cartTotal = cart.reduce((s, i) => s + i.price * i.qty - (i.discount || 0), 0);
   const cartCount = cart.reduce((s, i) => s + i.qty, 0);
 
   // ── Coupon / Minimum Spend ──
@@ -483,7 +527,7 @@ const SelfOrder = () => {
   const sittingSubtotal = useMemo(
     () =>
       nonDeclinedOrders.reduce(
-        (sum, o) => sum + o.items.reduce((iSum, item) => iSum + item.price * item.qty, 0),
+        (sum, o) => sum + o.items.reduce((iSum, item) => iSum + item.price * item.qty - (item.discount || 0), 0),
         0
       ),
     [nonDeclinedOrders]
@@ -561,6 +605,320 @@ const SelfOrder = () => {
     setCart((prev) => prev.map((c) => (c.id === id ? { ...c, qty: Math.max(0, c.qty + delta) } : c)).filter((c) => c.qty > 0));
   };
 
+  /** A deal redemption is one unit — removing any of its lines removes all
+   *  of them, or a customer could keep half a Fixed Bundle at its bundle
+   *  price. Mirrors POS.tsx's removeDealGroup exactly. */
+  const removeDealGroup = (dealLineId: string) => setCart((prev) => prev.filter((c) => c.dealLineId !== dealLineId));
+
+  /** The cart's actual render rows: a plain item is its own row, but every
+   *  CartItem sharing a dealLineId collapses into one row — mirrors
+   *  POS.tsx's cartDisplayRows exactly. */
+  const cartDisplayRows = useMemo(() => {
+    const rows: ({ kind: "plain"; item: CartItem } | { kind: "deal"; dealLineId: string; dealName: string; items: CartItem[] })[] = [];
+    const seenLineIds = new Set<string>();
+    for (const item of cart) {
+      if (item.dealLineId) {
+        if (seenLineIds.has(item.dealLineId)) continue;
+        seenLineIds.add(item.dealLineId);
+        rows.push({
+          kind: "deal",
+          dealLineId: item.dealLineId,
+          dealName: item.dealName || "Deal",
+          items: cart.filter((c) => c.dealLineId === item.dealLineId),
+        });
+      } else {
+        rows.push({ kind: "plain", item });
+      }
+    }
+    return rows;
+  }, [cart]);
+
+  // ── Deals: add-to-cart — mirrors POS.tsx's addDealToCart family. Every
+  // self-order deal's price/discountPercent already comes back resolved to
+  // Dine In from the backend (mapDealOutPublic), so no channel lookup is
+  // needed here — deal.price and deal.discountPercent are used directly.
+  // Fixed Bundle and Buy X Get Y add their whole redemption in one click;
+  // Customizable opens a choice dialog; % Discount opens an eligible-item
+  // picker. ──
+  const addDealToCart = (deal: SelfOrderDeal) => {
+    if (deal.type === "combo") { addComboDealToCart(deal); return; }
+    if (deal.type === "buy_x_get_y") { addBogoDealToCart(deal); return; }
+    if (deal.type === "option_combo") { openDealCustomize(deal); return; }
+    if (deal.type === "percentage") { openDealItemPicker(deal); return; }
+  };
+
+  const menuItemUnitPrice = (menuItem: SelfOrderMenuItem, variant?: SelfOrderMenuItem["variants"][number] | null) =>
+    variant ? variant.price : menuItem.price;
+
+  const addComboDealToCart = (deal: SelfOrderDeal) => {
+    if (deal.components.length === 0) { toast.error(`"${deal.name}" has no items configured`); return; }
+    const rows = deal.components.map((c) => {
+      const menuItem = availableItems.find((m) => m.id === c.menuItemId);
+      const variant = c.variantId ? menuItem?.variants.find((v) => v.id === c.variantId) : undefined;
+      return { component: c, menuItem, variant, unitPrice: menuItem ? menuItemUnitPrice(menuItem, variant) : 0 };
+    });
+    if (rows.some((r) => !r.menuItem)) { toast.error(`A menu item in "${deal.name}" is no longer available`); return; }
+
+    const grossAmounts = rows.map((r) => r.unitPrice * r.component.qty);
+    const savings = Math.max(0, grossAmounts.reduce((s, v) => s + v, 0) - (deal.price ?? 0));
+    const discounts = allocateDealDiscount(savings, grossAmounts);
+
+    const lineId = `deal-${deal.id}-${Date.now()}`;
+    const newItems: CartItem[] = rows.map((r, idx) => ({
+      id: `${lineId}-${idx}`,
+      name: `${r.menuItem!.name}${r.variant ? ` (${r.variant.name})` : ""}`,
+      price: r.unitPrice, qty: r.component.qty, discount: discounts[idx], modifiers: [],
+      menuItemId: r.component.menuItemId, variantId: r.component.variantId,
+      dealId: deal.id, dealName: deal.name, dealLineId: lineId,
+    }));
+    setCart((prev) => [...prev, ...newItems]);
+    toast.success(`${deal.name} added to cart`);
+  };
+
+  const addBogoDealToCart = (deal: SelfOrderDeal) => {
+    const { buy, get } = dealBogoSides(deal);
+    if (buy.length === 0 || get.length === 0) { toast.error(`"${deal.name}" is not configured correctly`); return; }
+
+    const lineId = `deal-${deal.id}-${Date.now()}`;
+    const newItems: CartItem[] = [];
+    for (const row of buy) {
+      const menuItem = availableItems.find((m) => m.id === row.menuItemId);
+      if (!menuItem) { toast.error(`A menu item in "${deal.name}" is no longer available`); return; }
+      const variant = row.variantId ? menuItem.variants.find((v) => v.id === row.variantId) : undefined;
+      newItems.push({
+        id: `${lineId}-buy-${newItems.length}`,
+        name: `${menuItem.name}${variant ? ` (${variant.name})` : ""}`,
+        price: menuItemUnitPrice(menuItem, variant), qty: row.qty, discount: 0, modifiers: [],
+        menuItemId: row.menuItemId, variantId: row.variantId,
+        dealId: deal.id, dealName: deal.name, dealLineId: lineId, dealRole: "buy",
+      });
+    }
+    for (const row of get) {
+      const menuItem = availableItems.find((m) => m.id === row.menuItemId);
+      if (!menuItem) { toast.error(`A menu item in "${deal.name}" is no longer available`); return; }
+      const variant = row.variantId ? menuItem.variants.find((v) => v.id === row.variantId) : undefined;
+      const unitPrice = menuItemUnitPrice(menuItem, variant);
+      const variants = menuItem.variants ?? [];
+      const cheapest = variants.length === 0 ? unitPrice : Math.min(...variants.map((v) => v.price));
+      const cappedUnitPrice = capFreeUnitPrice(row.variantId, unitPrice, cheapest);
+      // The public deal record has no per-channel coverage override (only a
+      // PERCENTAGE deal's discountPercent gets folded to Dine In), so this
+      // always previews as fully free — the real figure is enforced server
+      // side by deal.revalidate.ts against the live Deal row regardless.
+      const freeUnitPrice = unitPrice;
+      newItems.push({
+        id: `${lineId}-get-${newItems.length}`,
+        name: `${menuItem.name}${variant ? ` (${variant.name})` : ""} (Free)`,
+        price: unitPrice, qty: row.qty, discount: freeUnitPrice * row.qty, modifiers: [],
+        menuItemId: row.menuItemId, variantId: row.variantId,
+        dealId: deal.id, dealName: deal.name, dealLineId: lineId, dealRole: "get",
+      });
+    }
+    setCart((prev) => [...prev, ...newItems]);
+    toast.success(`${deal.name} added to cart`);
+  };
+
+  const dealOptionKey = (menuItemId: string, variantId: string | null) => `${menuItemId}:${variantId ?? ""}`;
+
+  const openDealCustomize = (deal: SelfOrderDeal) => {
+    setCustomizingDeal(deal);
+    const initial: Record<string, string[]> = {};
+    deal.optionGroups.forEach((g) => { initial[g.id] = []; });
+    setDealGroupSelections(initial);
+    setShowDealCustomize(true);
+  };
+
+  const toggleDealOption = (groupId: string, key: string, maxSelections: number) => {
+    setDealGroupSelections((prev) => {
+      const current = prev[groupId] || [];
+      if (current.includes(key)) return { ...prev, [groupId]: current.filter((k) => k !== key) };
+      if (current.length >= maxSelections) {
+        if (maxSelections === 1) return { ...prev, [groupId]: [key] };
+        toast.error(`Max ${maxSelections} selection(s) for this step`);
+        return prev;
+      }
+      return { ...prev, [groupId]: [...current, key] };
+    });
+  };
+
+  const confirmDealCustomize = () => {
+    if (!customizingDeal) return;
+    const deal = customizingDeal;
+    const incomplete = deal.optionGroups.find((g) => (dealGroupSelections[g.id]?.length || 0) < g.minSelections);
+    if (incomplete) { toast.error(`Select at least ${incomplete.minSelections} item(s) for "${incomplete.label}"`); return; }
+
+    const picks: { groupId: string; option: SelfOrderDealOptionItem }[] = [];
+    for (const g of deal.optionGroups) {
+      for (const key of dealGroupSelections[g.id] || []) {
+        const option = g.options.find((o) => dealOptionKey(o.menuItemId, o.variantId) === key);
+        if (option) picks.push({ groupId: g.id, option });
+      }
+    }
+    if (picks.length === 0) { toast.error("Nothing selected"); return; }
+
+    const rows = picks.map(({ groupId, option }) => {
+      const menuItem = availableItems.find((m) => m.id === option.menuItemId);
+      const variant = option.variantId ? menuItem?.variants.find((v) => v.id === option.variantId) : undefined;
+      return { groupId, option, menuItem, variant, unitPrice: (menuItem ? menuItemUnitPrice(menuItem, variant) : 0) + (option.extraPrice || 0) };
+    });
+    if (rows.some((r) => !r.menuItem)) { toast.error(`A menu item in "${deal.name}" is no longer available`); return; }
+
+    const grossAmounts = rows.map((r) => r.unitPrice);
+    const savings = Math.max(0, grossAmounts.reduce((s, v) => s + v, 0) - (deal.price ?? 0));
+    const discounts = allocateDealDiscount(savings, grossAmounts);
+
+    const lineId = `deal-${deal.id}-${Date.now()}`;
+    const newItems: CartItem[] = rows.map((r, idx) => ({
+      id: `${lineId}-${idx}`,
+      name: `${r.menuItem!.name}${r.variant ? ` (${r.variant.name})` : ""}`,
+      price: r.unitPrice, qty: 1, discount: discounts[idx], modifiers: [],
+      menuItemId: r.option.menuItemId, variantId: r.option.variantId,
+      dealId: deal.id, dealName: deal.name, dealLineId: lineId, dealGroupId: r.groupId,
+    }));
+    setCart((prev) => [...prev, ...newItems]);
+    setShowDealCustomize(false);
+    setCustomizingDeal(null);
+    toast.success(`${deal.name} added to cart`);
+  };
+
+  const eligibleDealItems = useMemo(() => {
+    if (!pickingDeal) return [];
+    return availableItems.filter((m) =>
+      pickingDeal.applicableItems.includes(m.id) ||
+      (m.category?.id && pickingDeal.applicableCategories.includes(m.category.id))
+    );
+  }, [pickingDeal, availableItems]);
+
+  const openDealItemPicker = (deal: SelfOrderDeal) => {
+    setPickingDeal(deal);
+    setPickedDealItemId("");
+    setPickedDealVariantId(null);
+    setPickedDealQty(1);
+    setShowDealItemPicker(true);
+  };
+
+  const confirmDealItemPick = () => {
+    if (!pickingDeal || !pickedDealItemId) return;
+    const deal = pickingDeal;
+    const menuItem = availableItems.find((m) => m.id === pickedDealItemId);
+    if (!menuItem) return;
+    const variant = pickedDealVariantId ? menuItem.variants.find((v) => v.id === pickedDealVariantId) : undefined;
+    if (menuItem.variants.length > 0 && !variant) { toast.error("Pick a size"); return; }
+
+    const unitPrice = menuItemUnitPrice(menuItem, variant);
+    const percent = deal.discountPercent ?? 0;
+    const qty = Math.max(1, pickedDealQty);
+    const discount = Math.min(unitPrice * qty, unitPrice * qty * (percent / 100));
+
+    const lineId = `deal-${deal.id}-${Date.now()}`;
+    const newItem: CartItem = {
+      id: lineId,
+      name: `${menuItem.name}${variant ? ` (${variant.name})` : ""}`,
+      price: unitPrice, qty, discount, modifiers: [],
+      menuItemId: menuItem.id, variantId: variant?.id ?? null,
+      dealId: deal.id, dealName: deal.name, dealLineId: lineId,
+    };
+    setCart((prev) => [...prev, newItem]);
+    setShowDealItemPicker(false);
+    setPickingDeal(null);
+    toast.success(`${deal.name} added to cart`);
+  };
+
+  /** Everything the rich deal card needs — mirrors POS.tsx's
+   *  dealCardPricing, but reads deal.price/deal.discountPercent directly
+   *  since they're already resolved to Dine In server-side. */
+  const dealCardPricing = (deal: SelfOrderDeal): {
+    lines: string[];
+    priceLabel: string;
+    regularLabel: string | null;
+    regularStrike: boolean;
+    savingsPercent: number;
+  } => {
+    if (deal.type === "combo") {
+      const rows = deal.components.map((c) => {
+        const menuItem = availableItems.find((m) => m.id === c.menuItemId);
+        const variant = c.variantId ? menuItem?.variants.find((v) => v.id === c.variantId) : undefined;
+        return { c, menuItem, variant };
+      });
+      const lines = rows.filter((r) => r.menuItem).map((r) => `${r.c.qty}x ${r.menuItem!.name}${r.variant ? ` (${r.variant.name})` : ""}`);
+      const regular = rows.reduce((s, r) => (r.menuItem ? s + menuItemUnitPrice(r.menuItem, r.variant) * r.c.qty : s), 0);
+      const dealPrice = deal.price ?? 0;
+      const savingsPercent = regular > dealPrice ? Math.round(((regular - dealPrice) / regular) * 100) : 0;
+      return {
+        lines,
+        priceLabel: `${currency} ${dealPrice.toLocaleString()}`,
+        regularLabel: regular > dealPrice ? `${currency} ${regular.toLocaleString()}` : null,
+        regularStrike: true,
+        savingsPercent,
+      };
+    }
+    if (deal.type === "option_combo") {
+      return {
+        lines: deal.optionGroups.map((g) => g.label),
+        priceLabel: `${currency} ${(deal.price ?? 0).toLocaleString()}`,
+        regularLabel: null,
+        regularStrike: false,
+        savingsPercent: 0,
+      };
+    }
+    if (deal.type === "percentage") {
+      const items = availableItems.filter((m) =>
+        deal.applicableItems.includes(m.id) || (m.category?.id && deal.applicableCategories.includes(m.category.id))
+      );
+      const lines = items.map((m) => m.name);
+      const percent = deal.discountPercent ?? 0;
+      const prices: number[] = [];
+      items.forEach((m) => {
+        if (m.variants.length) m.variants.forEach((v) => prices.push(v.price));
+        else prices.push(m.price);
+      });
+      if (prices.length === 0) {
+        return { lines, priceLabel: `${percent}% OFF`, regularLabel: null, regularStrike: false, savingsPercent: percent };
+      }
+      const min = Math.min(...prices);
+      const max = Math.max(...prices);
+      const afterMin = Math.round(min * (1 - percent / 100));
+      const afterMax = Math.round(max * (1 - percent / 100));
+      return {
+        lines,
+        priceLabel: afterMin === afterMax ? `${currency} ${afterMin.toLocaleString()}` : `${currency} ${afterMin.toLocaleString()} – ${afterMax.toLocaleString()}`,
+        regularLabel: min === max ? `${currency} ${min.toLocaleString()}` : `${currency} ${min.toLocaleString()} – ${max.toLocaleString()}`,
+        regularStrike: false,
+        savingsPercent: percent,
+      };
+    }
+    // buy_x_get_y
+    const { buy, get } = dealBogoSides(deal);
+    const lines: string[] = [];
+    let buyTotal = 0, getTotal = 0;
+    buy.forEach((row) => {
+      const menuItem = availableItems.find((m) => m.id === row.menuItemId);
+      if (!menuItem) return;
+      const variant = row.variantId ? menuItem.variants.find((v) => v.id === row.variantId) : undefined;
+      const unitPrice = menuItemUnitPrice(menuItem, variant);
+      buyTotal += unitPrice * row.qty;
+      lines.push(`Buy ${row.qty}x ${menuItem.name}${variant ? ` (${variant.name})` : ""}`);
+    });
+    get.forEach((row) => {
+      const menuItem = availableItems.find((m) => m.id === row.menuItemId);
+      if (!menuItem) return;
+      const variant = row.variantId ? menuItem.variants.find((v) => v.id === row.variantId) : undefined;
+      const unitPrice = menuItemUnitPrice(menuItem, variant);
+      getTotal += unitPrice * row.qty;
+      lines.push(`Get ${row.qty}x ${menuItem.name}${variant ? ` (${variant.name})` : ""} Free`);
+    });
+    const regular = buyTotal + getTotal;
+    const dealPrice = Math.round(buyTotal);
+    const savingsPercent = regular > 0 ? Math.round((getTotal / regular) * 100) : 0;
+    return {
+      lines,
+      priceLabel: `${currency} ${dealPrice.toLocaleString()}`,
+      regularLabel: regular > dealPrice ? `${currency} ${regular.toLocaleString()}` : null,
+      regularStrike: true,
+      savingsPercent,
+    };
+  };
+
   const togglePresetNote = (preset: string) => {
     if (!notes) {
       setNotes(preset);
@@ -620,7 +978,11 @@ const SelfOrder = () => {
         total: grandTotal,
         specialInstructions: notes || undefined,
         dealCode: appliedCoupon?.code ?? undefined,
-        items: cart.map((i) => ({ menuItemId: i.menuItemId, variantId: i.variantId, name: i.name, price: i.price, qty: i.qty, modifierIds: i.modifierIds })),
+        items: cart.map((i) => ({
+          menuItemId: i.menuItemId, variantId: i.variantId, name: i.name, price: i.price, qty: i.qty, modifierIds: i.modifierIds,
+          dealId: i.dealId || null, dealName: i.dealName || null, dealLineId: i.dealLineId || null,
+          dealGroupId: i.dealGroupId || null, dealRole: i.dealRole || null,
+        })),
       });
       setOrders((prev) => [...prev, { orderId, items: cart, status: { orderId, status: "pending", accepted: false, paid: false } }]);
       setCart([]);
@@ -1254,6 +1616,26 @@ const SelfOrder = () => {
           </div>
 
           <div className="flex gap-2 overflow-x-auto scrollbar-none pt-2 pb-1 -mx-4 px-4 items-center">
+            {sellableDeals.length > 0 && (
+              <button
+                onClick={() => setCatFilter("__deals__")}
+                className={cn(
+                  "shrink-0 px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all duration-200 flex items-center gap-1.5 border",
+                  catFilter === "__deals__"
+                    ? "gradient-primary text-primary-foreground border-transparent shadow-md shadow-primary/25 scale-[1.02]"
+                    : "bg-card border-border/80 text-muted-foreground hover:text-foreground hover:border-primary/40"
+                )}
+              >
+                <Gift className="h-3.5 w-3.5" />
+                <span>Deals</span>
+                <span className={cn(
+                  "text-[9px] px-1.5 py-0.2 rounded-full font-bold",
+                  catFilter === "__deals__" ? "bg-black/20 text-white" : "bg-muted text-muted-foreground"
+                )}>
+                  {sellableDeals.length}
+                </span>
+              </button>
+            )}
             {categories.map((c) => {
               const isActive = catFilter === c;
               return (
@@ -1278,7 +1660,69 @@ const SelfOrder = () => {
       {/* Menu Items Container */}
       <div className="flex-1 overflow-y-auto px-4 py-4 pb-28">
         <div className="max-w-lg mx-auto space-y-3">
-          {menuLoading ? (
+          {catFilter === "__deals__" ? (
+            sellableDeals.length === 0 ? (
+              <div className="text-center py-16 px-4 space-y-2 bg-card/40 rounded-3xl border border-dashed border-border">
+                <Gift className="h-8 w-8 mx-auto text-muted-foreground/60" />
+                <p className="font-semibold text-foreground text-sm">No deals are running right now</p>
+              </div>
+            ) : (
+              sellableDeals.map((deal) => {
+                const badge = dealFormatBadge[deal.type];
+                const BadgeIcon = badge.icon;
+                const pricing = dealCardPricing(deal);
+                return (
+                  <button
+                    key={deal.id}
+                    onClick={() => addDealToCart(deal)}
+                    className="w-full text-left bg-card rounded-2xl border border-border/80 hover:border-primary/40 overflow-hidden shadow-xs hover:shadow-md transition-all duration-200"
+                  >
+                    <div className="aspect-[16/9] w-full relative overflow-hidden bg-muted/50">
+                      {deal.image ? (
+                        <img src={deal.image} alt={deal.name} className="h-full w-full object-cover" />
+                      ) : (
+                        <div className="h-full w-full bg-gradient-to-br from-primary/10 to-accent/10 flex items-center justify-center text-primary/60">
+                          <Gift className="h-8 w-8" />
+                        </div>
+                      )}
+                      <div className="absolute top-2 left-2 flex items-center gap-1 text-[10px] font-bold text-primary-foreground bg-primary/90 backdrop-blur-xs px-2 py-1 rounded-lg">
+                        <BadgeIcon className="h-3 w-3" />
+                        {badge.label}
+                      </div>
+                    </div>
+                    <div className="p-3.5 space-y-2">
+                      <p className="font-bold text-foreground text-sm leading-snug">{deal.name}</p>
+                      {deal.description && (
+                        <p className="text-xs text-muted-foreground">{deal.description}</p>
+                      )}
+                      {pricing.lines.length > 0 && (
+                        <div className="bg-muted/40 border border-border/60 rounded-xl px-2.5 py-2 space-y-1">
+                          {pricing.lines.map((line, i) => (
+                            <p key={i} className="text-[11px] text-foreground/80 font-medium">• {line}</p>
+                          ))}
+                        </div>
+                      )}
+                      <div className="flex items-end justify-between gap-2 pt-1">
+                        <div>
+                          {pricing.regularLabel && (
+                            <span className={cn("text-[11px] text-muted-foreground font-mono block", pricing.regularStrike && "line-through")}>
+                              {pricing.regularStrike ? pricing.regularLabel : `was ${pricing.regularLabel}`}
+                            </span>
+                          )}
+                          <span className="font-extrabold text-primary text-base">{pricing.priceLabel}</span>
+                        </div>
+                        {pricing.savingsPercent > 0 && (
+                          <span className="text-[10px] font-bold text-primary bg-primary/10 border border-primary/30 px-2 py-1 rounded-lg shrink-0">
+                            SAVE {pricing.savingsPercent}%
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </button>
+                );
+              })
+            )
+          ) : menuLoading ? (
             <div className="flex flex-col items-center justify-center py-20 space-y-3 text-muted-foreground">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
               <p className="text-xs font-medium">Preparing fresh menu...</p>
@@ -1540,7 +1984,32 @@ const SelfOrder = () => {
 
           <div className="flex-1 overflow-y-auto p-5 space-y-5">
             <div className="space-y-3">
-              {cart.map((item) => (
+              {cartDisplayRows.map((row) => {
+                if (row.kind === "deal") {
+                  const gross = row.items.reduce((s, i) => s + i.price * i.qty, 0);
+                  const discount = row.items.reduce((s, i) => s + (i.discount || 0), 0);
+                  return (
+                    <div key={row.dealLineId} className="flex items-center justify-between gap-3 p-3 rounded-xl bg-primary/[0.05] border border-primary/20">
+                      <div className="flex-1 min-w-0">
+                        <span className="inline-flex items-center gap-1 text-[10px] font-bold text-primary uppercase tracking-wide">
+                          <Gift className="h-3 w-3" /> Deal
+                        </span>
+                        <p className="font-semibold text-sm text-foreground truncate">{row.dealName}</p>
+                        <p className="text-[11px] text-muted-foreground truncate">
+                          {row.items.map((i) => `${i.qty}x ${i.name}`).join(", ")}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="font-bold text-sm">{currency} {(gross - discount).toLocaleString()}</span>
+                        <Button size="icon" variant="ghost" className="h-7 w-7 rounded-md hover:bg-destructive/10 hover:text-destructive" onClick={() => removeDealGroup(row.dealLineId)}>
+                          <X className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                }
+                const item = row.item;
+                return (
                 <div key={item.id} className="flex items-center justify-between gap-3 p-3 rounded-xl bg-muted/20 border border-border/50">
                   <div className="flex-1 min-w-0">
                     <p className="font-semibold text-sm text-foreground truncate">{item.name}</p>
@@ -1575,7 +2044,8 @@ const SelfOrder = () => {
                     </span>
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
 
             <div className="space-y-2">
@@ -1692,6 +2162,112 @@ const SelfOrder = () => {
           </div>
         </SheetContent>
       </Sheet>
+
+      {/* Customizable (option_combo) Deal — choice group picker */}
+      <Dialog open={showDealCustomize} onOpenChange={(open) => { setShowDealCustomize(open); if (!open) setCustomizingDeal(null); }}>
+        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{customizingDeal?.name}</DialogTitle>
+            <DialogDescription>Pick items for each step, then add to your order.</DialogDescription>
+          </DialogHeader>
+          {customizingDeal && (
+            <div className="space-y-4">
+              {customizingDeal.optionGroups.map((g) => {
+                const selected = dealGroupSelections[g.id] || [];
+                const need = g.minSelections === g.maxSelections ? `${g.minSelections}` : `${g.minSelections}-${g.maxSelections}`;
+                return (
+                  <div key={g.id} className="space-y-2">
+                    <p className="text-xs font-bold text-foreground">{g.label} <span className="text-muted-foreground font-normal">(pick {need})</span></p>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      {g.options.map((o) => {
+                        const key = dealOptionKey(o.menuItemId, o.variantId);
+                        const menuItem = availableItems.find((m) => m.id === o.menuItemId);
+                        const variant = o.variantId ? menuItem?.variants.find((v) => v.id === o.variantId) : undefined;
+                        const isChecked = selected.includes(key);
+                        return (
+                          <button
+                            key={key}
+                            onClick={() => toggleDealOption(g.id, key, g.maxSelections)}
+                            className={cn(
+                              "flex items-center gap-2 p-2 rounded-lg border text-left text-xs transition-colors",
+                              isChecked ? "border-primary bg-primary/5 font-semibold" : "border-border hover:bg-muted/40"
+                            )}
+                          >
+                            <Checkbox checked={isChecked} className="pointer-events-none" />
+                            <span className="truncate">{menuItem?.name || "Item"}{variant ? ` (${variant.name})` : ""}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDealCustomize(false)}>Cancel</Button>
+            <Button className="gradient-primary text-primary-foreground" onClick={confirmDealCustomize}>Add to Order</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* % Discount Deal — eligible item picker */}
+      <Dialog open={showDealItemPicker} onOpenChange={(open) => { setShowDealItemPicker(open); if (!open) setPickingDeal(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>{pickingDeal?.name}</DialogTitle>
+            <DialogDescription>Pick which item this {pickingDeal?.discountPercent}% discount applies to.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-foreground">Item</label>
+              <Select
+                value={pickedDealItemId}
+                onValueChange={(v) => { setPickedDealItemId(v); setPickedDealVariantId(null); }}
+              >
+                <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Select an item" /></SelectTrigger>
+                <SelectContent>
+                  {eligibleDealItems.map((m) => (
+                    <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {(() => {
+              const menuItem = eligibleDealItems.find((m) => m.id === pickedDealItemId);
+              const variants = menuItem?.variants || [];
+              if (variants.length === 0) return null;
+              return (
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-foreground">Size</label>
+                  <Select value={pickedDealVariantId || ""} onValueChange={setPickedDealVariantId}>
+                    <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Select a size" /></SelectTrigger>
+                    <SelectContent>
+                      {variants.map((v) => (
+                        <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              );
+            })()}
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-foreground">Quantity</label>
+              <Input
+                type="number"
+                min={1}
+                value={pickedDealQty}
+                onChange={(e) => setPickedDealQty(Math.max(1, Number(e.target.value) || 1))}
+                className="h-9 text-xs"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDealItemPicker(false)}>Cancel</Button>
+            <Button className="gradient-primary text-primary-foreground" disabled={!pickedDealItemId} onClick={confirmDealItemPick}>Add to Order</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
