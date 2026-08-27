@@ -211,6 +211,7 @@ const POS = () => {
     date: o.date ? new Date(o.date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
     time: o.time || '',
     items: (o.items || []).map((i: any) => ({
+      ...i,
       id: i.id,
       name: i.name,
       price: Number(i.price),
