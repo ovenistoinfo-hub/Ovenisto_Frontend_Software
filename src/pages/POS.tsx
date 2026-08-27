@@ -3,7 +3,7 @@ import type { OrderItem, Order, OrderType, CustomerType, OrderModificationLog } 
 import { orderService, type OrderRecord } from "@/services/order.service";
 import { cancellationRequestService, type CancellationRequestRecord } from "@/services/cancellationRequest.service";
 import { menuService, type RecipeIngredient } from "@/services/menu.service";
-import { calculateFoodAvailability } from "@/utils/foodAvailability";
+import { calculateFoodAvailability, isFullyOutOfStock } from "@/utils/foodAvailability";
 import { customerService, type CustomerRecord } from "@/services/customer.service";
 import { userService } from "@/services/user.service";
 import { settingsService, type SettingsRecord } from "@/services/settings.service";
@@ -2843,20 +2843,23 @@ const POS = () => {
               </div>
             ) : (
               filteredMenu.map((item) => {
-                const hasLowStock = ingredients.some(ing => {
-                  const recipe = (window as any).__recipes?.[item.name];
-                  return recipe?.some((r: any) => r.ingredientId === ing.id && ing.currentStock <= ing.lowStockLevel);
-                });
                 const variantsCount = (item as any).variants?.length || 0;
+                const variantIds = ((item as any).variants || []).map((v: any) => v.id);
+                const outOfStock = isFullyOutOfStock((item as any).recipes || [], variantIds, ingredientStockMap, productionStockMap);
                 return (
                 <React.Fragment key={item.id}>
-                  <button onClick={() => addToCart(item)} className={cn(
-                    "bg-card rounded-2xl border border-border/70 p-2 hover:shadow-xl hover:border-primary/40 transition-all duration-200 text-left group relative flex flex-col justify-between hover:-translate-y-0.5",
-                    expandedItemId === item.id && "ring-2 ring-primary border-primary bg-primary/5 shadow-md"
-                  )}>
+                  <button
+                    disabled={outOfStock}
+                    onClick={() => addToCart(item)}
+                    className={cn(
+                      "bg-card rounded-2xl border border-border/70 p-2 hover:shadow-xl hover:border-primary/40 transition-all duration-200 text-left group relative flex flex-col justify-between hover:-translate-y-0.5",
+                      expandedItemId === item.id && "ring-2 ring-primary border-primary bg-primary/5 shadow-md",
+                      outOfStock && "opacity-60 hover:shadow-none hover:border-border/70 hover:translate-y-0 cursor-not-allowed"
+                    )}
+                  >
                     <div className="aspect-[4/3] rounded-xl overflow-hidden mb-2 relative border border-border/40 w-full bg-muted/40">
                       {item.image ? (
-                        <img src={item.image} alt={item.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                        <img src={item.image} alt={item.name} className={cn("w-full h-full object-cover group-hover:scale-105 transition-transform duration-300", outOfStock && "grayscale")} />
                       ) : (
                         <div className="w-full h-full bg-gradient-to-br from-card via-muted/60 to-primary/10 flex flex-col items-center justify-center relative overflow-hidden group-hover:from-card group-hover:to-primary/20 transition-colors">
                           <Utensils className="h-9 w-9 text-primary/20 group-hover:text-primary/35 group-hover:scale-110 transition-all duration-300" />
@@ -2865,12 +2868,16 @@ const POS = () => {
                           </span>
                         </div>
                       )}
-                      {!item.available && (
+                      {!item.available ? (
                         <div className="absolute inset-0 bg-background/85 backdrop-blur-xs flex items-center justify-center">
                           <Badge variant="destructive" className="text-[10px] font-bold shadow-xs">Unavailable</Badge>
                         </div>
-                      )}
-                      {variantsCount > 0 && (
+                      ) : outOfStock ? (
+                        <div className="absolute inset-0 bg-background/85 backdrop-blur-xs flex items-center justify-center">
+                          <Badge variant="destructive" className="text-[10px] font-bold shadow-xs">Out of Stock</Badge>
+                        </div>
+                      ) : null}
+                      {variantsCount > 0 && !outOfStock && (
                         <div className="absolute top-1.5 right-1.5">
                           <Badge variant="secondary" className="text-[9px] px-1.5 py-0 bg-background/80 backdrop-blur-xs text-foreground font-semibold border border-border/60 shadow-2xs">
                             {variantsCount} Sizes

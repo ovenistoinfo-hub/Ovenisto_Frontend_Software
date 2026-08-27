@@ -44,6 +44,10 @@ export interface SelfOrderMenuVariant {
   id: string;
   name: string;
   price: number;
+  /** Can at least one more unit of this size currently be made from the
+   *  outlet's live kitchen/ingredient stock? Computed server-side —
+   *  self-order never receives raw stock numbers, only this boolean. */
+  available: boolean;
 }
 
 export interface SelfOrderMenuModifier {
@@ -65,6 +69,10 @@ export interface SelfOrderMenuItem {
   price: number;
   image?: string | null;
   category: { id: string; name: string } | null;
+  /** True if the item itself (no variants) or at least one of its variants
+   *  can currently be made. False only when every sellable size is out of
+   *  stock — see each SelfOrderMenuVariant's own `available` for which one. */
+  available: boolean;
   variants: SelfOrderMenuVariant[];
   modifiers: SelfOrderMenuModifier[];
 }
@@ -216,8 +224,11 @@ export const selfOrderService = {
     return publicRequest<SelfOrderTable>(`/self-order/table/${tableId}`);
   },
 
-  async getMenu(): Promise<SelfOrderMenu> {
-    return publicRequest<SelfOrderMenu>(`/self-order/menu`);
+  /** Pass the scanned table's id so item/variant `available` reflects that
+   *  outlet's live kitchen stock — omit it and everything comes back
+   *  available (no outlet to check stock against). */
+  async getMenu(tableId?: string): Promise<SelfOrderMenu> {
+    return publicRequest<SelfOrderMenu>(`/self-order/menu${tableId ? `?tableId=${encodeURIComponent(tableId)}` : ""}`);
   },
 
   /** Live, outlet-scoped deals for the QR menu — pass the scanned table's id

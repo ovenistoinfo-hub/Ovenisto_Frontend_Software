@@ -38,6 +38,9 @@ import { customerService, type CustomerRecord } from "@/services/customer.servic
 import { settingsService } from "@/services/settings.service";
 import { dealService, type DealRecord, type DealOptionItemRecord } from "@/services/deal.service";
 import { isDealLive, dealChannelPrice, dealChannelPercent, allocateDealDiscount, dealBogoSides, capFreeUnitPrice } from "@/lib/deals";
+import { warehouseService, type WarehouseStockRecord } from "@/services/warehouse.service";
+import { stockService, type ProductionStockRecord } from "@/services/stock.service";
+import { calculateFoodAvailability, isFullyOutOfStock } from "@/utils/foodAvailability";
 import { PageHeader } from "@/components/ui/page-header";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
 
@@ -211,7 +214,7 @@ const dealFormatBadge: Record<Exclude<DealRecord["type"], "order_discount">, { i
 // ─── Component ─────────────────────────────────────────────────────────────
 
 const WaiterPanel = () => {
-  const { settings, updateSettings } = useData();
+  const { settings, updateSettings, ingredients } = useData();
   const { user } = useAuth();
   const currency = settings.currency || "Rs.";
   const { markMine, isLikelyOwnEcho } = useSelfMutationGuard();
@@ -290,6 +293,50 @@ const WaiterPanel = () => {
   const [selectedTableId, setSelectedTableId] = useState<string | null>(null);
   const [cartItems,       setCartItems]        = useState<CartItem[]>([]);
   const [menuCategory,    setMenuCategory]     = useState("All");
+
+  // ── Live ingredient/production stock — mirrors POS.tsx's sourcing exactly
+  // (same stock the backend's validateOrderStock checks at order creation),
+  // so a dish disabled here is genuinely unmakeable, not just guessed at. ──
+  const { data: kitchenWarehouses = [] } = useQuery({
+    queryKey: ["kitchen-warehouses", user?.outletId],
+    queryFn: () => warehouseService.getAll({ type: "KITCHEN", outletId: user?.outletId ?? undefined }),
+    staleTime: 60000,
+    enabled: !!user?.outletId,
+  });
+  const kitchenWarehouseId = kitchenWarehouses.length > 0 ? kitchenWarehouses[0].id : null;
+  const { data: kitchenWarehouseStock = [] } = useQuery<WarehouseStockRecord[]>({
+    queryKey: ["kitchen-warehouse-stock", kitchenWarehouseId],
+    queryFn: () => warehouseService.getStock(kitchenWarehouseId!),
+    staleTime: 30000,
+    enabled: !!kitchenWarehouseId,
+  });
+  const ingredientStockMap = useMemo(() => {
+    const map = new Map<string, number>();
+    if (kitchenWarehouseStock.length > 0) {
+      for (const ws of kitchenWarehouseStock) {
+        if (ws?.ingredient?.id) map.set(ws.ingredient.id, Number(ws.currentStock ?? 0));
+      }
+    } else {
+      for (const ing of ingredients || []) {
+        if (ing?.id) map.set(ing.id, Number(ing.currentStock ?? 0));
+      }
+    }
+    return map;
+  }, [kitchenWarehouseStock, ingredients]);
+  const { data: apiProductionStock = [] } = useQuery<ProductionStockRecord[]>({
+    queryKey: ["production-stock"],
+    queryFn: () => stockService.getProductionStock(),
+    staleTime: 30000,
+  });
+  const productionStockMap = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const item of apiProductionStock) {
+      if (item?.productionItemId) {
+        map.set(item.productionItemId, (map.get(item.productionItemId) || 0) + Number(item.currentStock ?? 0));
+      }
+    }
+    return map;
+  }, [apiProductionStock]);
 
   // ── Deals — same real backend deals POS.tsx sells, always priced at Dine
   // In since every WaiterPanel order is a table order. Order Discount is
@@ -1146,6 +1193,11 @@ const WaiterPanel = () => {
     const hasModifiers = itemMods.length > 0;
 
     if (!hasVariants && !hasModifiers) {
+      const avail = calculateFoodAvailability(item.recipes || [], null, ingredientStockMap, productionStockMap);
+      if (avail.isRestricted && avail.availableQuantity === 0) {
+        toast.error(`${item.name} is out of stock`);
+        return;
+      }
       const basePrice = dineInPrice(item);
       setCartItems((prev) => {
         const ex = prev.find((o) => o.id === item.id && !o.variant && !o.modifiers?.length);
@@ -1168,6 +1220,12 @@ const WaiterPanel = () => {
   const confirmAddWithOptions = (item: MenuItemRecord) => {
     const hasVariants = item.variants && item.variants.length > 0;
     if (hasVariants && !selectedVariant) { toast.error("Please select a size"); return; }
+
+    const avail = calculateFoodAvailability(item.recipes || [], selectedVariant?.id ?? null, ingredientStockMap, productionStockMap);
+    if (avail.isRestricted && avail.availableQuantity === 0) {
+      toast.error(`${item.name}${selectedVariant ? ` (${selectedVariant.name})` : ""} is out of stock`);
+      return;
+    }
 
     const itemMods  = resolveModifiers(item);
     const basePrice = selectedVariant ? selectedVariant.price : dineInPrice(item);
@@ -1204,6 +1262,12 @@ const WaiterPanel = () => {
   const addWithoutExtras = (item: MenuItemRecord) => {
     const hasVariants = item.variants && item.variants.length > 0;
     if (hasVariants && !selectedVariant) { toast.error("Please select a size first"); return; }
+
+    const avail = calculateFoodAvailability(item.recipes || [], selectedVariant?.id ?? null, ingredientStockMap, productionStockMap);
+    if (avail.isRestricted && avail.availableQuantity === 0) {
+      toast.error(`${item.name}${selectedVariant ? ` (${selectedVariant.name})` : ""} is out of stock`);
+      return;
+    }
 
     const basePrice   = selectedVariant ? selectedVariant.price : dineInPrice(item);
     const variantName = selectedVariant?.name;
@@ -2612,30 +2676,36 @@ const WaiterPanel = () => {
                       const hasModifiers = itemMods.length > 0;
                       const isExpanded   = expandedItemId === item.id;
                       const baseItemPrice = dineInPrice(item);
+                      const outOfStock = isFullyOutOfStock(item.recipes || [], (item.variants || []).map((v) => v.id), ingredientStockMap, productionStockMap);
 
                       return (
-                        <div key={item.id} className={cn("border rounded-xl overflow-hidden bg-white dark:bg-card transition-all", isExpanded ? "col-span-2 border-primary/45 bg-zinc-100/50 dark:bg-zinc-950/10" : "border-zinc-200 dark:border-zinc-800/80 hover:border-zinc-300 dark:hover:border-zinc-700 hover:shadow-sm shadow-sm")}>
+                        <div key={item.id} className={cn("border rounded-xl overflow-hidden bg-white dark:bg-card transition-all", isExpanded ? "col-span-2 border-primary/45 bg-zinc-100/50 dark:bg-zinc-950/10" : "border-zinc-200 dark:border-zinc-800/80 hover:border-zinc-300 dark:hover:border-zinc-700 hover:shadow-sm shadow-sm", outOfStock && "opacity-60")}>
                           {/* Item card button */}
                           <button
+                            disabled={outOfStock}
                             onClick={() => addToOrder(item)}
-                            className="w-full text-left flex items-center gap-3 p-3 hover:bg-muted/30 transition-colors group/item"
+                            className={cn("w-full text-left flex items-center gap-3 p-3 hover:bg-muted/30 transition-colors group/item", outOfStock && "hover:bg-transparent cursor-not-allowed")}
                           >
                             <div className="h-12 w-12 rounded-lg bg-muted flex items-center justify-center shrink-0 overflow-hidden">
                               {item.image
-                                ? <img src={item.image} alt={item.name} className="h-full w-full object-cover" />
+                                ? <img src={item.image} alt={item.name} className={cn("h-full w-full object-cover", outOfStock && "grayscale")} />
                                 : <div className="h-full w-full gradient-primary flex items-center justify-center text-primary-foreground text-sm font-bold">{item.name.charAt(0)}</div>
                               }
                             </div>
                             <div className="flex-1 min-w-0">
                               <p className="text-xs font-semibold text-foreground leading-tight line-clamp-2 group-hover/item:text-primary transition-colors">{item.name}</p>
-                              <p className="text-xs font-bold text-primary mt-0.5">
-                                {hasVariants
-                                  ? `${currency} ${variantDineInPrice(item.variants[0])}–${variantDineInPrice(item.variants[item.variants.length - 1])}`
-                                  : `${currency} ${baseItemPrice.toLocaleString()}`}
-                              </p>
+                              {outOfStock ? (
+                                <p className="text-[10px] font-bold text-destructive mt-0.5 uppercase tracking-wide">Out of Stock</p>
+                              ) : (
+                                <p className="text-xs font-bold text-primary mt-0.5">
+                                  {hasVariants
+                                    ? `${currency} ${variantDineInPrice(item.variants[0])}–${variantDineInPrice(item.variants[item.variants.length - 1])}`
+                                    : `${currency} ${baseItemPrice.toLocaleString()}`}
+                                </p>
+                              )}
                             </div>
                             <div className="shrink-0">
-                              {(hasVariants || hasModifiers) ? (
+                              {outOfStock ? null : (hasVariants || hasModifiers) ? (
                                 <div className={cn("h-7 w-7 rounded-lg flex items-center justify-center border transition-all",
                                   isExpanded ? "gradient-primary text-primary-foreground border-transparent" : "border-zinc-200 dark:border-zinc-800 text-muted-foreground")}>
                                   {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
@@ -2657,18 +2727,24 @@ const WaiterPanel = () => {
                                   <div className="flex gap-1.5 flex-wrap">
                                     {item.variants.map((v) => {
                                       const vPrice = variantDineInPrice(v);
+                                      const vAvail = calculateFoodAvailability(item.recipes || [], v.id, ingredientStockMap, productionStockMap);
+                                      const vOutOfStock = vAvail.isRestricted && vAvail.availableQuantity === 0;
                                       return (
                                         <button
                                           key={v.id}
+                                          disabled={vOutOfStock}
                                           onClick={() => setSelectedVariant(selectedVariant?.id === v.id ? null : { id: v.id, name: v.name, price: vPrice })}
                                           className={cn(
                                             "px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all",
-                                            selectedVariant?.id === v.id
+                                            vOutOfStock
+                                              ? "opacity-50 cursor-not-allowed line-through bg-muted/40 border-zinc-200 dark:border-zinc-800 text-muted-foreground"
+                                              : selectedVariant?.id === v.id
                                               ? "gradient-primary text-primary-foreground border-transparent shadow-sm"
                                               : "bg-card border-zinc-200 dark:border-zinc-800 text-foreground hover:border-zinc-300 dark:hover:border-zinc-700"
                                           )}
                                         >
                                           {v.name} · {currency} {vPrice.toLocaleString()}
+                                          {vOutOfStock && <span className="ml-1 text-destructive no-underline">(Out of Stock)</span>}
                                         </button>
                                       );
                                     })}

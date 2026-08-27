@@ -427,11 +427,11 @@ const SelfOrder = () => {
   useEffect(() => {
     if (!entryDone) return;
     setMenuLoading(true);
-    selfOrderService.getMenu()
+    selfOrderService.getMenu(table?.tableId)
       .then(setMenu)
       .catch(() => toast.error("Could not load the menu. Please try refreshing."))
       .finally(() => setMenuLoading(false));
-  }, [entryDone]);
+  }, [entryDone, table]);
 
   useEffect(() => {
     if (!entryDone || !table) return;
@@ -547,6 +547,7 @@ const SelfOrder = () => {
     const hasModifiers = resolveModifiers(item).length > 0;
 
     if (!hasVariants && !hasModifiers) {
+      if (!item.available) { toast.error(`${item.name} is out of stock`); return; }
       setCart((prev) => {
         const existing = prev.find((c) => c.id === item.id);
         if (existing) return prev.map((c) => (c === existing ? { ...c, qty: c.qty + 1 } : c));
@@ -570,6 +571,12 @@ const SelfOrder = () => {
   const confirmAddWithOptions = (item: SelfOrderMenuItem) => {
     const hasVariants = item.variants.length > 0;
     if (hasVariants && !selectedVariant) { toast.error("Please select a size"); return; }
+
+    const pickedVariant = selectedVariant ? item.variants.find((v) => v.id === selectedVariant.id) : undefined;
+    if ((pickedVariant && !pickedVariant.available) || (!hasVariants && !item.available)) {
+      toast.error(`${item.name}${selectedVariant ? ` (${selectedVariant.name})` : ""} is out of stock`);
+      return;
+    }
 
     const basePrice = selectedVariant ? selectedVariant.price : item.price;
     const itemModifiers = resolveModifiers(item);
@@ -1741,7 +1748,8 @@ const SelfOrder = () => {
                     key={item.id}
                     className={cn(
                       "bg-card rounded-2xl border transition-all duration-200 overflow-hidden shadow-xs hover:shadow-md",
-                      isExpanded ? "border-primary/50 ring-1 ring-primary/20" : "border-border/80 hover:border-border"
+                      isExpanded ? "border-primary/50 ring-1 ring-primary/20" : "border-border/80 hover:border-border",
+                      !item.available && "opacity-60 hover:shadow-xs"
                     )}
                   >
                     <div className="p-3 flex items-start gap-3">
@@ -1751,7 +1759,7 @@ const SelfOrder = () => {
                           <img
                             src={item.image}
                             alt={item.name}
-                            className="h-full w-full object-cover transition-transform duration-300 hover:scale-105"
+                            className={cn("h-full w-full object-cover transition-transform duration-300 hover:scale-105", !item.available && "grayscale")}
                             onError={(e) => {
                               (e.target as HTMLElement).style.display = "none";
                             }}
@@ -1777,11 +1785,15 @@ const SelfOrder = () => {
                             )}
                           </div>
 
-                          <p className="font-extrabold text-primary text-base mt-1">
-                            {hasVariants
-                              ? `${currency} ${item.variants[0].price.toLocaleString()} – ${currency} ${item.variants[item.variants.length - 1].price.toLocaleString()}`
-                              : `${currency} ${item.price.toLocaleString()}`}
-                          </p>
+                          {!item.available ? (
+                            <p className="font-bold text-destructive text-xs mt-1 uppercase tracking-wide">Out of Stock</p>
+                          ) : (
+                            <p className="font-extrabold text-primary text-base mt-1">
+                              {hasVariants
+                                ? `${currency} ${item.variants[0].price.toLocaleString()} – ${currency} ${item.variants[item.variants.length - 1].price.toLocaleString()}`
+                                : `${currency} ${item.price.toLocaleString()}`}
+                            </p>
+                          )}
                         </div>
 
                         {/* Quick Add / Stepper Button */}
@@ -1811,6 +1823,7 @@ const SelfOrder = () => {
                           ) : (
                             <Button
                               size="sm"
+                              disabled={!item.available}
                               className={cn(
                                 "rounded-xl text-xs font-bold transition-all shadow-xs h-8 px-3",
                                 isExpanded
@@ -1852,18 +1865,25 @@ const SelfOrder = () => {
                                 return (
                                   <button
                                     key={v.name}
+                                    disabled={!v.available}
                                     onClick={() => setSelectedVariant(isSelected ? null : v)}
                                     className={cn(
                                       "px-3 py-2 rounded-xl text-xs font-semibold border text-left transition-all flex items-center justify-between",
-                                      isSelected
+                                      !v.available
+                                        ? "opacity-50 cursor-not-allowed line-through bg-muted/40 border-border/60 text-muted-foreground"
+                                        : isSelected
                                         ? "gradient-primary text-primary-foreground border-transparent shadow-md shadow-primary/20"
                                         : "bg-card border-border/80 text-foreground hover:border-primary/40"
                                     )}
                                   >
                                     <span className="truncate">{v.name}</span>
-                                    <span className="font-bold shrink-0 ml-1">
-                                      {currency} {v.price.toLocaleString()}
-                                    </span>
+                                    {v.available ? (
+                                      <span className="font-bold shrink-0 ml-1">
+                                        {currency} {v.price.toLocaleString()}
+                                      </span>
+                                    ) : (
+                                      <span className="font-bold shrink-0 ml-1 text-destructive no-underline">Out of Stock</span>
+                                    )}
                                   </button>
                                 );
                               })}

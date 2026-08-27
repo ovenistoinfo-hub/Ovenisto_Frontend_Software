@@ -93,3 +93,26 @@ export function calculateFoodAvailability(
     limitingIngredient: limitingIngName,
   };
 }
+
+/** Whether an item can be sold AT ALL right now — every one of its variants
+ *  (or, for a variant-less item, the item itself) is out of stock. Used to
+ *  decide when a whole menu/deal card should render as unclickable, as
+ *  opposed to just one size within it (see `calculateFoodAvailability`
+ *  called per-variant for that finer-grained case). An item with no
+ *  variants and no recipe, or any item where at least one variant still has
+ *  stock, is never fully out of stock. */
+export function isFullyOutOfStock(
+  recipes: RecipeIngredient[] = [],
+  variantIds: string[],
+  ingredientStockMap: Map<string, number> | Record<string, number>,
+  productionStockMap: Map<string, number> | Record<string, number> = {}
+): boolean {
+  if (variantIds.length === 0) {
+    const avail = calculateFoodAvailability(recipes, null, ingredientStockMap, productionStockMap);
+    return avail.isRestricted && avail.availableQuantity === 0;
+  }
+  return variantIds.every((variantId) => {
+    const avail = calculateFoodAvailability(recipes, variantId, ingredientStockMap, productionStockMap);
+    return avail.isRestricted && avail.availableQuantity === 0;
+  });
+}
