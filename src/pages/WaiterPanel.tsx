@@ -41,7 +41,6 @@ import { isDealLive, dealChannelPrice, dealChannelPercent, allocateDealDiscount,
 import { warehouseService, type WarehouseStockRecord } from "@/services/warehouse.service";
 import { stockService, type ProductionStockRecord } from "@/services/stock.service";
 import { calculateFoodAvailability, isFullyOutOfStock } from "@/utils/foodAvailability";
-import { PageHeader } from "@/components/ui/page-header";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
 
 // ─── Types ─────────────────────────────────────────────────────────────────
@@ -1800,20 +1799,15 @@ const WaiterPanel = () => {
 
   return (
     <div className="space-y-6">
-      {/* Page Header & Stats Cards Row */}
+      {/* Actions & Stats Cards Row — no page title here: the breadcrumb above
+          already says "Waiter Panel", so a second large heading was pure
+          dead vertical space this page can't spare. */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 w-full">
         <div className="shrink-0">
-          <PageHeader
-            icon={<UtensilsCrossed className="h-5 w-5" />}
-            title="Waiter Panel"
-            subtitle="Manage tables and take orders"
-            actions={
-              <Button variant="outline" size="sm" className="h-9 px-3 rounded-xl border-emerald-500/30 text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 font-bold gap-1.5" onClick={() => setShowMyCollectionDialog(true)}>
-                <Wallet className="h-4 w-4 text-emerald-500" />
-                <span>🍽️ My Collection: {currency} {(myActiveCash?.totalExpected || 0).toLocaleString()}</span>
-              </Button>
-            }
-          />
+          <Button variant="outline" size="sm" className="h-9 px-3 rounded-xl border-emerald-500/30 text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 font-bold gap-1.5" onClick={() => setShowMyCollectionDialog(true)}>
+            <Wallet className="h-4 w-4 text-emerald-500" />
+            <span>My Collection: {currency} {(myActiveCash?.totalExpected || 0).toLocaleString()}</span>
+          </Button>
         </div>
         {isOrderingMode ? (
           <Button variant="outline" onClick={() => { setIsOrderingMode(false); setCartItems([]); }} className="border-zinc-800 bg-zinc-950/40 hover:bg-zinc-900 rounded-xl font-bold gap-2 shrink-0">
@@ -1975,11 +1969,17 @@ const WaiterPanel = () => {
       )}
 
       {/* Main Dual Pane Layout Container */}
-      <div className="flex flex-col md:flex-row gap-6 min-h-[calc(100vh-220px)] items-stretch">
-        
-        {/* LEFT SIDEBAR: Selected table actions & session info */}
+      <div className="flex flex-col md:flex-row gap-6 min-h-[calc(100vh-160px)] items-start">
+
+        {/* LEFT SIDEBAR: Selected table actions & session info — only
+            while browsing the floor plan. Once ordering (isOrderingMode),
+            the cart takes this slot instead and the item grid gets the
+            width back, matching POS.tsx's two-column layout. Sticky so it
+            stays in view as the floor plan/menu grid beside it scrolls,
+            instead of scrolling away with the page. */}
+        {!isOrderingMode && (
         <div className={cn(
-          "w-full md:w-80 lg:w-96 flex flex-col shrink-0 bg-zinc-50 border-zinc-200 dark:bg-zinc-900/20 dark:border-zinc-800/80 rounded-2xl p-5 space-y-5 select-none transition-all",
+          "w-full md:w-80 lg:w-96 flex flex-col shrink-0 bg-zinc-50 border-zinc-200 dark:bg-zinc-900/20 dark:border-zinc-800/80 rounded-2xl p-5 space-y-5 select-none transition-all md:sticky md:top-4 md:max-h-[calc(100vh-2rem)] md:overflow-y-auto",
           !selectedTable && "hidden md:flex"
         )}>
           {!selectedTable ? (
@@ -2323,6 +2323,7 @@ const WaiterPanel = () => {
             </div>
           )}
         </div>
+        )}
 
         {/* RIGHT AREA: Floor map grid OR Menu Ordering View */}
         <div className="flex-grow flex flex-col overflow-y-auto pt-2 px-2 pb-6">
