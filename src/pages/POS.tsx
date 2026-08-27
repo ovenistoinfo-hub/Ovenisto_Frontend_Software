@@ -861,35 +861,106 @@ const POS = () => {
     toast.success(`${deal.name} added to cart`);
   };
 
-  const dealMenuItemName = (id: string) => (foodMenuItems.find((m) => m.id === id) as any)?.name || "Item";
-
-  /** One-line "what's in it" for a deal card — same shape as Deals.tsx's
-   *  admin-table summary, trimmed for a small card instead of a table cell. */
-  const dealCardSummary = (deal: DealRecord): string => {
+  /** Everything the rich POS deal card needs — the same "included items +
+   *  crossed-out regular price + deal price + SAVE%" shape as DealForm's Live
+   *  POS Card Preview, computed against the live menu at the current order
+   *  type instead of the form's in-progress draft state. */
+  const dealCardPricing = (deal: DealRecord): {
+    lines: string[];
+    priceLabel: string;
+    regularLabel: string | null;
+    regularStrike: boolean;
+    savingsPercent: number;
+  } => {
     if (deal.type === "combo") {
-      return deal.components.map((c) => `${c.qty}x ${dealMenuItemName(c.menuItemId)}`).join(", ");
+      const rows = deal.components.map((c) => {
+        const menuItem: any = foodMenuItems.find((m) => m.id === c.menuItemId);
+        const variant = c.variantId ? menuItem?.variants?.find((v: any) => v.id === c.variantId) : undefined;
+        return { c, menuItem, variant };
+      });
+      const lines = rows.filter((r) => r.menuItem).map((r) => `${r.c.qty}x ${r.menuItem.name}${r.variant ? ` (${r.variant.name})` : ""}`);
+      const regular = rows.reduce((s, r) => (r.menuItem ? s + resolvePrice(r.variant || r.menuItem, orderType) * r.c.qty : s), 0);
+      const dealPrice = dealChannelPrice(deal, orderType);
+      const savingsPercent = regular > dealPrice ? Math.round(((regular - dealPrice) / regular) * 100) : 0;
+      return {
+        lines,
+        priceLabel: `Rs. ${dealPrice.toLocaleString()}`,
+        regularLabel: regular > dealPrice ? `Rs. ${regular.toLocaleString()}` : null,
+        regularStrike: true,
+        savingsPercent,
+      };
     }
     if (deal.type === "option_combo") {
-      return deal.optionGroups.map((g) => g.label).join(" + ");
+      return {
+        lines: deal.optionGroups.map((g) => g.label),
+        priceLabel: `Rs. ${dealChannelPrice(deal, orderType).toLocaleString()}`,
+        regularLabel: null,
+        regularStrike: false,
+        savingsPercent: 0,
+      };
     }
     if (deal.type === "percentage") {
-      const items = deal.applicableItems.map(dealMenuItemName);
-      return items.length > 0 ? items.join(", ") : `${deal.applicableCategories.length} categories`;
+      const items = foodMenuItems.filter((m: any) =>
+        deal.applicableItems.includes(m.id) || (m.categoryId && deal.applicableCategories.includes(m.categoryId))
+      );
+      const lines = items.map((m: any) => m.name);
+      const percent = dealChannelPercent(deal, orderType, deal.discountPercent ?? 0);
+      const prices: number[] = [];
+      items.forEach((m: any) => {
+        if (m.variants?.length) m.variants.forEach((v: any) => prices.push(resolvePrice(v, orderType)));
+        else prices.push(resolvePrice(m, orderType));
+      });
+      if (prices.length === 0) {
+        return { lines, priceLabel: `${percent}% OFF`, regularLabel: null, regularStrike: false, savingsPercent: percent };
+      }
+      const min = Math.min(...prices);
+      const max = Math.max(...prices);
+      const afterMin = Math.round(min * (1 - percent / 100));
+      const afterMax = Math.round(max * (1 - percent / 100));
+      return {
+        lines,
+        priceLabel: afterMin === afterMax ? `Rs. ${afterMin.toLocaleString()}` : `Rs. ${afterMin.toLocaleString()} – ${afterMax.toLocaleString()}`,
+        regularLabel: min === max ? `Rs. ${min.toLocaleString()}` : `Rs. ${min.toLocaleString()} – ${max.toLocaleString()}`,
+        regularStrike: false,
+        savingsPercent: percent,
+      };
     }
-    if (deal.type === "buy_x_get_y") {
-      const { buy, get } = dealBogoSides(deal);
-      const label = (rows: typeof buy) => rows.map((r) => `${r.qty} ${dealMenuItemName(r.menuItemId)}`).join(" + ");
-      return buy.length && get.length ? `Buy ${label(buy)} → Get ${label(get)} Free` : deal.description || "";
-    }
-    return deal.description || "";
-  };
-
-  const dealCardValue = (deal: DealRecord): string => {
-    if (deal.type === "combo" || deal.type === "option_combo") {
-      return `Rs. ${dealChannelPrice(deal, orderType).toLocaleString()}`;
-    }
-    if (deal.type === "percentage") return `${deal.discountPercent}% OFF`;
-    return "Free Item";
+    // buy_x_get_y
+    const { buy, get } = dealBogoSides(deal);
+    const lines: string[] = [];
+    let buyTotal = 0, getTotal = 0, freeTotal = 0;
+    buy.forEach((row) => {
+      const menuItem: any = foodMenuItems.find((m) => m.id === row.menuItemId);
+      if (!menuItem) return;
+      const variant = row.variantId ? menuItem.variants?.find((v: any) => v.id === row.variantId) : undefined;
+      const unitPrice = resolvePrice(variant || menuItem, orderType);
+      buyTotal += unitPrice * row.qty;
+      lines.push(`Buy ${row.qty}x ${menuItem.name}${variant ? ` (${variant.name})` : ""}`);
+    });
+    get.forEach((row) => {
+      const menuItem: any = foodMenuItems.find((m) => m.id === row.menuItemId);
+      if (!menuItem) return;
+      const variant = row.variantId ? menuItem.variants?.find((v: any) => v.id === row.variantId) : undefined;
+      const unitPrice = resolvePrice(variant || menuItem, orderType);
+      const variants = menuItem.variants ?? [];
+      const cheapest = variants.length === 0 ? unitPrice : Math.min(...variants.map((v: any) => resolvePrice(v, orderType)));
+      const cappedUnitPrice = capFreeUnitPrice(row.variantId, unitPrice, cheapest);
+      const coveragePercent = dealChannelPercent(deal, orderType, 100);
+      const freeUnitPrice = Math.round(cappedUnitPrice * (coveragePercent / 100) * 100) / 100;
+      getTotal += unitPrice * row.qty;
+      freeTotal += freeUnitPrice * row.qty;
+      lines.push(`Get ${row.qty}x ${menuItem.name}${variant ? ` (${variant.name})` : ""}${freeUnitPrice <= 0 ? "" : freeUnitPrice >= unitPrice ? " (Free)" : " (Discounted)"}`);
+    });
+    const regular = buyTotal + getTotal;
+    const dealPrice = Math.round(buyTotal + (getTotal - freeTotal));
+    const savingsPercent = regular > 0 ? Math.round((freeTotal / regular) * 100) : 0;
+    return {
+      lines,
+      priceLabel: `Rs. ${dealPrice.toLocaleString()}`,
+      regularLabel: regular > dealPrice ? `Rs. ${regular.toLocaleString()}` : null,
+      regularStrike: true,
+      savingsPercent,
+    };
   };
 
   const runningOrders = allOrdersData.filter((o) => o.status === "preparing" || o.status === "pending");
@@ -2706,23 +2777,68 @@ const POS = () => {
                 sellableDeals.map((deal) => {
                   const badge = dealFormatBadge[deal.type];
                   const BadgeIcon = badge.icon;
+                  const pricing = dealCardPricing(deal);
                   return (
                     <button
                       key={deal.id}
                       onClick={() => addDealToCart(deal)}
-                      className="bg-card rounded-2xl border border-border/70 p-3 hover:shadow-xl hover:border-primary/40 transition-all duration-200 text-left group relative flex flex-col justify-between hover:-translate-y-0.5"
+                      className="bg-card rounded-2xl border border-border/70 overflow-hidden hover:shadow-xl hover:border-primary/40 transition-all duration-200 text-left group relative flex flex-col hover:-translate-y-0.5"
                     >
-                      <div className="flex items-center gap-1.5 text-[10px] font-bold text-primary mb-1.5">
-                        <BadgeIcon className="h-3.5 w-3.5" />
-                        {badge.label}
+                      {/* Cover image / gradient placeholder, mirroring DealForm's Live POS Card Preview */}
+                      <div className="aspect-[16/9] w-full relative overflow-hidden border-b border-border/40 bg-muted/40">
+                        {deal.image ? (
+                          <img src={deal.image} alt={deal.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                        ) : (
+                          <div className="w-full h-full bg-gradient-to-br from-card via-muted/60 to-primary/10 flex items-center justify-center">
+                            <Gift className="h-8 w-8 text-primary/25 group-hover:text-primary/40 group-hover:scale-110 transition-all duration-300" />
+                          </div>
+                        )}
+                        <div className="absolute top-1.5 left-1.5 flex items-center gap-1 text-[9px] font-bold text-primary-foreground bg-primary/90 backdrop-blur-xs px-1.5 py-0.5 rounded-md shadow-xs">
+                          <BadgeIcon className="h-3 w-3" />
+                          {badge.label}
+                        </div>
+                        {deal.code && (
+                          <div className="absolute top-1.5 right-1.5 text-[9px] font-mono font-semibold bg-background/80 backdrop-blur-xs text-foreground px-1.5 py-0.5 rounded-md border border-border/60 shadow-2xs">
+                            {deal.code}
+                          </div>
+                        )}
                       </div>
-                      <p className="font-bold text-sm text-foreground line-clamp-2 mb-1">{deal.name}</p>
-                      <p className="text-[11px] text-muted-foreground line-clamp-2 mb-2">
-                        {dealCardSummary(deal)}
-                      </p>
-                      <p className="font-mono font-extrabold text-sm text-primary">
-                        {dealCardValue(deal)}
-                      </p>
+
+                      <div className="p-2.5 flex flex-col gap-1.5 flex-1">
+                        <p className="font-bold text-sm text-foreground line-clamp-1 group-hover:text-primary transition-colors">{deal.name}</p>
+                        {deal.description && (
+                          <p className="text-[10px] text-muted-foreground line-clamp-1">{deal.description}</p>
+                        )}
+
+                        {/* Included items / structure inset box */}
+                        {pricing.lines.length > 0 && (
+                          <div className="bg-muted/40 border border-border/60 rounded-lg px-2 py-1.5 space-y-0.5">
+                            {pricing.lines.slice(0, 3).map((line, i) => (
+                              <p key={i} className="text-[10px] text-foreground/80 font-medium truncate">• {line}</p>
+                            ))}
+                            {pricing.lines.length > 3 && (
+                              <p className="text-[9px] text-muted-foreground font-semibold">+{pricing.lines.length - 3} more</p>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Pricing & savings footer */}
+                        <div className="mt-auto pt-1 flex items-end justify-between gap-1">
+                          <div>
+                            {pricing.regularLabel && (
+                              <span className={cn("text-[9px] text-muted-foreground font-mono block", pricing.regularStrike && "line-through")}>
+                                {pricing.regularStrike ? pricing.regularLabel : `was ${pricing.regularLabel}`}
+                              </span>
+                            )}
+                            <span className="font-mono font-extrabold text-sm text-primary">{pricing.priceLabel}</span>
+                          </div>
+                          {pricing.savingsPercent > 0 && (
+                            <span className="text-[9px] font-bold text-primary bg-primary/10 border border-primary/30 px-1.5 py-0.5 rounded shrink-0">
+                              SAVE {pricing.savingsPercent}%
+                            </span>
+                          )}
+                        </div>
+                      </div>
                     </button>
                   );
                 })
