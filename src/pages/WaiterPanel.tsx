@@ -904,6 +904,7 @@ const WaiterPanel = () => {
   // in one click; Customizable opens a choice dialog; % Discount opens an
   // eligible-item picker. ──
   const addDealToCart = (deal: DealRecord) => {
+    if (isDealOutOfStock(deal)) { toast.error(`"${deal.name}" is out of stock`); return; }
     if (deal.type === "combo") { addComboDealToCart(deal); return; }
     if (deal.type === "buy_x_get_y") { addBogoDealToCart(deal); return; }
     if (deal.type === "option_combo") { openDealCustomize(deal); return; }
@@ -1079,6 +1080,44 @@ const WaiterPanel = () => {
     setShowDealItemPicker(false);
     setPickingDeal(null);
     toast.success(`${deal.name} added to cart`);
+  };
+
+  /** Same "genuinely 0 units makeable right now" check addToOrder/
+   *  confirmAddWithOptions already run for a plain menu item, reused here so
+   *  a deal can't be added when a menu item it needs is out of stock. */
+  const isMenuItemOutOfStock = (menuItemId: string, variantId: string | null): boolean => {
+    const menuItem = menuItems.find((m) => m.id === menuItemId);
+    if (!menuItem) return true;
+    const variant = variantId ? menuItem.variants?.find((v) => v.id === variantId) : undefined;
+    const avail = calculateFoodAvailability(menuItem.recipes || [], variant?.id ?? null, ingredientStockMap, productionStockMap);
+    return avail.isRestricted && avail.availableQuantity === 0;
+  };
+
+  /** Whether a deal can be redeemed at all right now, given live stock —
+   *  mirrors POS.tsx's isDealOutOfStock exactly. */
+  const isDealOutOfStock = (deal: DealRecord): boolean => {
+    if (deal.type === "combo") {
+      return deal.components.some((c) => isMenuItemOutOfStock(c.menuItemId, c.variantId));
+    }
+    if (deal.type === "option_combo") {
+      return deal.optionGroups.some((g) => g.options.every((o) => isMenuItemOutOfStock(o.menuItemId, o.variantId)));
+    }
+    if (deal.type === "percentage") {
+      const eligible = menuItems.filter((m) =>
+        deal.applicableItems.includes(m.id) || (m.categoryId && deal.applicableCategories.includes(m.categoryId))
+      );
+      if (eligible.length === 0) return false;
+      return eligible.every((m) => {
+        const variants = m.variants || [];
+        return variants.length === 0
+          ? isMenuItemOutOfStock(m.id, null)
+          : variants.every((v) => isMenuItemOutOfStock(m.id, v.id));
+      });
+    }
+    // buy_x_get_y
+    const { buy, get } = dealBogoSides(deal);
+    if (buy.length === 0 || get.length === 0) return false;
+    return buy.some((r) => isMenuItemOutOfStock(r.menuItemId, r.variantId)) || get.some((r) => isMenuItemOutOfStock(r.menuItemId, r.variantId));
   };
 
   /** Everything the rich deal card needs — mirrors POS.tsx's
@@ -2614,15 +2653,20 @@ const WaiterPanel = () => {
                           const badge = dealFormatBadge[deal.type];
                           const BadgeIcon = badge.icon;
                           const pricing = dealCardPricing(deal);
+                          const outOfStock = isDealOutOfStock(deal);
                           return (
                             <button
                               key={deal.id}
+                              disabled={outOfStock}
                               onClick={() => addDealToCart(deal)}
-                              className="border border-zinc-200 dark:border-zinc-800/80 hover:border-primary/40 rounded-xl overflow-hidden bg-white dark:bg-card hover:shadow-sm transition-all text-left group/item flex flex-col"
+                              className={cn(
+                                "border border-zinc-200 dark:border-zinc-800/80 hover:border-primary/40 rounded-xl overflow-hidden bg-white dark:bg-card hover:shadow-sm transition-all text-left group/item flex flex-col",
+                                outOfStock && "opacity-60 hover:shadow-none hover:border-zinc-200 dark:hover:border-zinc-800/80 cursor-not-allowed"
+                              )}
                             >
                               <div className="aspect-[16/9] w-full relative overflow-hidden bg-muted">
                                 {deal.image ? (
-                                  <img src={deal.image} alt={deal.name} className="w-full h-full object-cover group-hover/item:scale-105 transition-transform duration-300" />
+                                  <img src={deal.image} alt={deal.name} className={cn("w-full h-full object-cover group-hover/item:scale-105 transition-transform duration-300", outOfStock && "grayscale")} />
                                 ) : (
                                   <div className="w-full h-full bg-gradient-to-br from-card via-muted/60 to-primary/10 flex items-center justify-center">
                                     <Gift className="h-8 w-8 text-primary/25" />
@@ -2632,6 +2676,11 @@ const WaiterPanel = () => {
                                   <BadgeIcon className="h-3 w-3" />
                                   {badge.label}
                                 </div>
+                                {outOfStock && (
+                                  <div className="absolute inset-0 bg-background/85 backdrop-blur-xs flex items-center justify-center">
+                                    <span className="text-[10px] font-bold text-destructive-foreground bg-destructive px-2 py-0.5 rounded-md shadow-xs">Out of Stock</span>
+                                  </div>
+                                )}
                               </div>
                               <div className="p-2.5 flex flex-col gap-1.5 flex-1">
                                 <p className="text-xs font-bold text-foreground group-hover/item:text-primary transition-colors">{deal.name}</p>
@@ -2887,17 +2936,22 @@ const WaiterPanel = () => {
                         const menuItem: any = menuItems.find((m) => m.id === o.menuItemId);
                         const variant = o.variantId ? menuItem?.variants?.find((v: any) => v.id === o.variantId) : undefined;
                         const isChecked = selected.includes(key);
+                        const optionOutOfStock = isMenuItemOutOfStock(o.menuItemId, o.variantId);
                         return (
                           <button
                             key={key}
+                            disabled={optionOutOfStock}
                             onClick={() => toggleDealOption(g.id, key, g.maxSelections)}
                             className={cn(
                               "flex items-center gap-2 p-2 rounded-lg border text-left text-xs transition-colors",
-                              isChecked ? "border-primary bg-primary/5 font-semibold" : "border-border hover:bg-muted/40"
+                              optionOutOfStock
+                                ? "opacity-50 cursor-not-allowed border-border bg-muted/30"
+                                : isChecked ? "border-primary bg-primary/5 font-semibold" : "border-border hover:bg-muted/40"
                             )}
                           >
-                            <Checkbox checked={isChecked} className="pointer-events-none" />
+                            <Checkbox checked={isChecked} disabled={optionOutOfStock} className="pointer-events-none" />
                             <span className="truncate">{menuItem?.name || "Item"}{variant ? ` (${variant.name})` : ""}</span>
+                            {optionOutOfStock && <span className="text-destructive text-[10px] shrink-0">(Out of Stock)</span>}
                           </button>
                         );
                       })}
@@ -2930,9 +2984,17 @@ const WaiterPanel = () => {
               >
                 <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Select an item" /></SelectTrigger>
                 <SelectContent>
-                  {eligibleDealItems.map((m: any) => (
-                    <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
-                  ))}
+                  {eligibleDealItems.map((m: any) => {
+                    const itemVariants = m.variants || [];
+                    const itemOutOfStock = itemVariants.length === 0
+                      ? isMenuItemOutOfStock(m.id, null)
+                      : itemVariants.every((v: any) => isMenuItemOutOfStock(m.id, v.id));
+                    return (
+                      <SelectItem key={m.id} value={m.id} disabled={itemOutOfStock}>
+                        {m.name}{itemOutOfStock && " (Out of Stock)"}
+                      </SelectItem>
+                    );
+                  })}
                 </SelectContent>
               </Select>
             </div>
@@ -2946,9 +3008,14 @@ const WaiterPanel = () => {
                   <Select value={pickedDealVariantId || ""} onValueChange={setPickedDealVariantId}>
                     <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Select a size" /></SelectTrigger>
                     <SelectContent>
-                      {variants.map((v: any) => (
-                        <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>
-                      ))}
+                      {variants.map((v: any) => {
+                        const variantOutOfStock = isMenuItemOutOfStock(menuItem.id, v.id);
+                        return (
+                          <SelectItem key={v.id} value={v.id} disabled={variantOutOfStock}>
+                            {v.name}{variantOutOfStock && " (Out of Stock)"}
+                          </SelectItem>
+                        );
+                      })}
                     </SelectContent>
                   </Select>
                 </div>

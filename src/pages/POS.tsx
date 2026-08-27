@@ -685,6 +685,7 @@ const POS = () => {
    *  one click adds the whole redemption — no staff choice needed. Wanting
    *  the offer twice is another click, same as adding any menu item twice. */
   const addDealToCart = (deal: DealRecord) => {
+    if (isDealOutOfStock(deal)) { toast.error(`"${deal.name}" is out of stock`); return; }
     if (deal.type === "combo") { addComboDealToCart(deal); return; }
     if (deal.type === "buy_x_get_y") { addBogoDealToCart(deal); return; }
     if (deal.type === "option_combo") { openDealCustomize(deal); return; }
@@ -860,6 +861,50 @@ const POS = () => {
     setShowDealItemPicker(false);
     setPickingDeal(null);
     toast.success(`${deal.name} added to cart`);
+  };
+
+  /** Same "genuinely 0 units makeable right now" check addToCart/confirmAddToCart
+   *  already run for a plain menu item, reused here so a deal can't be added
+   *  when a menu item it needs is out of stock. */
+  const isMenuItemOutOfStock = (menuItemId: string, variantId: string | null): boolean => {
+    const menuItem: any = foodMenuItems.find((m) => m.id === menuItemId);
+    if (!menuItem) return true;
+    const avail = calculateFoodAvailability(menuItem.recipes || [], variantId, ingredientStockMap, productionStockMap);
+    return avail.isRestricted && avail.availableQuantity === 0;
+  };
+
+  /** Whether a deal can be redeemed at all right now, given live stock:
+   *  - Fixed Bundle: every listed component must be makeable.
+   *  - Customizable: every choice step must have at least one option left.
+   *  - % Discount: at least one eligible item/variant must still be in stock
+   *    (it discounts whatever's ordered, so it's blocked only when nothing
+   *    it could apply to is available).
+   *  - Buy X Get Y: every "buy" row and every "get" row must be makeable —
+   *    it adds the whole redemption in one click, so a partial add isn't an
+   *    option the way it is for a plain multi-size item. */
+  const isDealOutOfStock = (deal: DealRecord): boolean => {
+    if (deal.type === "combo") {
+      return deal.components.some((c) => isMenuItemOutOfStock(c.menuItemId, c.variantId));
+    }
+    if (deal.type === "option_combo") {
+      return deal.optionGroups.some((g) => g.options.every((o) => isMenuItemOutOfStock(o.menuItemId, o.variantId)));
+    }
+    if (deal.type === "percentage") {
+      const eligible = foodMenuItems.filter((m: any) =>
+        deal.applicableItems.includes(m.id) || (m.categoryId && deal.applicableCategories.includes(m.categoryId))
+      );
+      if (eligible.length === 0) return false;
+      return eligible.every((m: any) => {
+        const variants = m.variants || [];
+        return variants.length === 0
+          ? isMenuItemOutOfStock(m.id, null)
+          : variants.every((v: any) => isMenuItemOutOfStock(m.id, v.id));
+      });
+    }
+    // buy_x_get_y
+    const { buy, get } = dealBogoSides(deal);
+    if (buy.length === 0 || get.length === 0) return false;
+    return buy.some((r) => isMenuItemOutOfStock(r.menuItemId, r.variantId)) || get.some((r) => isMenuItemOutOfStock(r.menuItemId, r.variantId));
   };
 
   /** Everything the rich POS deal card needs — the same "included items +
@@ -2779,16 +2824,21 @@ const POS = () => {
                   const badge = dealFormatBadge[deal.type];
                   const BadgeIcon = badge.icon;
                   const pricing = dealCardPricing(deal);
+                  const outOfStock = isDealOutOfStock(deal);
                   return (
                     <button
                       key={deal.id}
+                      disabled={outOfStock}
                       onClick={() => addDealToCart(deal)}
-                      className="bg-card rounded-2xl border border-border/70 overflow-hidden hover:shadow-xl hover:border-primary/40 transition-all duration-200 text-left group relative flex flex-col hover:-translate-y-0.5"
+                      className={cn(
+                        "bg-card rounded-2xl border border-border/70 overflow-hidden hover:shadow-xl hover:border-primary/40 transition-all duration-200 text-left group relative flex flex-col hover:-translate-y-0.5",
+                        outOfStock && "opacity-60 hover:shadow-none hover:border-border/70 hover:translate-y-0 cursor-not-allowed"
+                      )}
                     >
                       {/* Cover image / gradient placeholder, mirroring DealForm's Live POS Card Preview */}
                       <div className="aspect-[16/9] w-full relative overflow-hidden border-b border-border/40 bg-muted/40">
                         {deal.image ? (
-                          <img src={deal.image} alt={deal.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                          <img src={deal.image} alt={deal.name} className={cn("w-full h-full object-cover group-hover:scale-105 transition-transform duration-300", outOfStock && "grayscale")} />
                         ) : (
                           <div className="w-full h-full bg-gradient-to-br from-card via-muted/60 to-primary/10 flex items-center justify-center">
                             <Gift className="h-8 w-8 text-primary/25 group-hover:text-primary/40 group-hover:scale-110 transition-all duration-300" />
@@ -2798,6 +2848,11 @@ const POS = () => {
                           <BadgeIcon className="h-3 w-3" />
                           {badge.label}
                         </div>
+                        {outOfStock && (
+                          <div className="absolute inset-0 bg-background/85 backdrop-blur-xs flex items-center justify-center">
+                            <Badge variant="destructive" className="text-[10px] font-bold shadow-xs">Out of Stock</Badge>
+                          </div>
+                        )}
                       </div>
 
                       <div className="p-2.5 flex flex-col gap-1.5 flex-1">
@@ -3129,17 +3184,22 @@ const POS = () => {
                         const menuItem: any = foodMenuItems.find((m) => m.id === o.menuItemId);
                         const variant = o.variantId ? menuItem?.variants?.find((v: any) => v.id === o.variantId) : undefined;
                         const isChecked = selected.includes(key);
+                        const optionOutOfStock = isMenuItemOutOfStock(o.menuItemId, o.variantId);
                         return (
                           <button
                             key={key}
+                            disabled={optionOutOfStock}
                             onClick={() => toggleDealOption(g.id, key, g.maxSelections)}
                             className={cn(
                               "flex items-center gap-2 p-2 rounded-lg border text-left text-xs transition-colors",
-                              isChecked ? "border-primary bg-primary/5 font-semibold" : "border-border hover:bg-muted/40"
+                              optionOutOfStock
+                                ? "opacity-50 cursor-not-allowed border-border bg-muted/30"
+                                : isChecked ? "border-primary bg-primary/5 font-semibold" : "border-border hover:bg-muted/40"
                             )}
                           >
-                            <Checkbox checked={isChecked} className="pointer-events-none" />
+                            <Checkbox checked={isChecked} disabled={optionOutOfStock} className="pointer-events-none" />
                             <span className="truncate">{menuItem?.name || "Item"}{variant ? ` (${variant.name})` : ""}</span>
+                            {optionOutOfStock && <span className="text-destructive text-[10px] shrink-0">(Out of Stock)</span>}
                           </button>
                         );
                       })}
@@ -3172,9 +3232,17 @@ const POS = () => {
               >
                 <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Select an item" /></SelectTrigger>
                 <SelectContent>
-                  {eligibleDealItems.map((m: any) => (
-                    <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
-                  ))}
+                  {eligibleDealItems.map((m: any) => {
+                    const itemVariants = m.variants || [];
+                    const itemOutOfStock = itemVariants.length === 0
+                      ? isMenuItemOutOfStock(m.id, null)
+                      : itemVariants.every((v: any) => isMenuItemOutOfStock(m.id, v.id));
+                    return (
+                      <SelectItem key={m.id} value={m.id} disabled={itemOutOfStock}>
+                        {m.name}{itemOutOfStock && " (Out of Stock)"}
+                      </SelectItem>
+                    );
+                  })}
                 </SelectContent>
               </Select>
             </div>
@@ -3188,9 +3256,14 @@ const POS = () => {
                   <Select value={pickedDealVariantId || ""} onValueChange={setPickedDealVariantId}>
                     <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Select a size" /></SelectTrigger>
                     <SelectContent>
-                      {variants.map((v: any) => (
-                        <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>
-                      ))}
+                      {variants.map((v: any) => {
+                        const variantOutOfStock = isMenuItemOutOfStock(menuItem.id, v.id);
+                        return (
+                          <SelectItem key={v.id} value={v.id} disabled={variantOutOfStock}>
+                            {v.name}{variantOutOfStock && " (Out of Stock)"}
+                          </SelectItem>
+                        );
+                      })}
                     </SelectContent>
                   </Select>
                 </div>

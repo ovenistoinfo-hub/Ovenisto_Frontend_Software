@@ -648,6 +648,7 @@ const SelfOrder = () => {
   // Customizable opens a choice dialog; % Discount opens an eligible-item
   // picker. ──
   const addDealToCart = (deal: SelfOrderDeal) => {
+    if (isDealOutOfStock(deal)) { toast.error(`"${deal.name}" is out of stock`); return; }
     if (deal.type === "combo") { addComboDealToCart(deal); return; }
     if (deal.type === "buy_x_get_y") { addBogoDealToCart(deal); return; }
     if (deal.type === "option_combo") { openDealCustomize(deal); return; }
@@ -656,6 +657,44 @@ const SelfOrder = () => {
 
   const menuItemUnitPrice = (menuItem: SelfOrderMenuItem, variant?: SelfOrderMenuItem["variants"][number] | null) =>
     variant ? variant.price : menuItem.price;
+
+  /** Whether menuItemId (at variantId, or the item's own base availability
+   *  when variantId is null) is unavailable right now — reads the plain
+   *  `available` booleans the backend already computed from live stock (see
+   *  getSelfOrderMenu), never raw recipes/ingredient stock, which self-order
+   *  never receives. */
+  const isMenuItemUnavailable = (menuItemId: string, variantId: string | null): boolean => {
+    const item = availableItems.find((m) => m.id === menuItemId);
+    if (!item) return true;
+    if (variantId) {
+      const variant = item.variants.find((v) => v.id === variantId);
+      return variant ? !variant.available : true;
+    }
+    return !item.available;
+  };
+
+  /** Whether a deal can be redeemed at all right now, given live stock —
+   *  mirrors POS.tsx's isDealOutOfStock, but against the server-computed
+   *  `available` flags rather than recomputing from recipes. */
+  const isDealOutOfStock = (deal: SelfOrderDeal): boolean => {
+    if (deal.type === "combo") {
+      return deal.components.some((c) => isMenuItemUnavailable(c.menuItemId, c.variantId));
+    }
+    if (deal.type === "option_combo") {
+      return deal.optionGroups.some((g) => g.options.every((o) => isMenuItemUnavailable(o.menuItemId, o.variantId)));
+    }
+    if (deal.type === "percentage") {
+      const eligible = availableItems.filter((m) =>
+        deal.applicableItems.includes(m.id) || (m.category?.id && deal.applicableCategories.includes(m.category.id))
+      );
+      if (eligible.length === 0) return false;
+      return eligible.every((m) => !m.available);
+    }
+    // buy_x_get_y
+    const { buy, get } = dealBogoSides(deal);
+    if (buy.length === 0 || get.length === 0) return false;
+    return buy.some((r) => isMenuItemUnavailable(r.menuItemId, r.variantId)) || get.some((r) => isMenuItemUnavailable(r.menuItemId, r.variantId));
+  };
 
   const addComboDealToCart = (deal: SelfOrderDeal) => {
     if (deal.components.length === 0) { toast.error(`"${deal.name}" has no items configured`); return; }
@@ -1678,15 +1717,20 @@ const SelfOrder = () => {
                 const badge = dealFormatBadge[deal.type];
                 const BadgeIcon = badge.icon;
                 const pricing = dealCardPricing(deal);
+                const outOfStock = isDealOutOfStock(deal);
                 return (
                   <button
                     key={deal.id}
+                    disabled={outOfStock}
                     onClick={() => addDealToCart(deal)}
-                    className="w-full text-left bg-card rounded-2xl border border-border/80 hover:border-primary/40 overflow-hidden shadow-xs hover:shadow-md transition-all duration-200"
+                    className={cn(
+                      "w-full text-left bg-card rounded-2xl border border-border/80 hover:border-primary/40 overflow-hidden shadow-xs hover:shadow-md transition-all duration-200",
+                      outOfStock && "opacity-60 hover:shadow-xs hover:border-border/80"
+                    )}
                   >
                     <div className="aspect-[16/9] w-full relative overflow-hidden bg-muted/50">
                       {deal.image ? (
-                        <img src={deal.image} alt={deal.name} className="h-full w-full object-cover" />
+                        <img src={deal.image} alt={deal.name} className={cn("h-full w-full object-cover", outOfStock && "grayscale")} />
                       ) : (
                         <div className="h-full w-full bg-gradient-to-br from-primary/10 to-accent/10 flex items-center justify-center text-primary/60">
                           <Gift className="h-8 w-8" />
@@ -1696,6 +1740,11 @@ const SelfOrder = () => {
                         <BadgeIcon className="h-3 w-3" />
                         {badge.label}
                       </div>
+                      {outOfStock && (
+                        <div className="absolute inset-0 bg-background/85 backdrop-blur-xs flex items-center justify-center">
+                          <span className="text-[10px] font-bold text-destructive-foreground bg-destructive px-2.5 py-1 rounded-lg uppercase tracking-wide">Out of Stock</span>
+                        </div>
+                      )}
                     </div>
                     <div className="p-3.5 space-y-2">
                       <p className="font-bold text-foreground text-sm leading-snug">{deal.name}</p>
@@ -2204,17 +2253,22 @@ const SelfOrder = () => {
                         const menuItem = availableItems.find((m) => m.id === o.menuItemId);
                         const variant = o.variantId ? menuItem?.variants.find((v) => v.id === o.variantId) : undefined;
                         const isChecked = selected.includes(key);
+                        const optionOutOfStock = isMenuItemUnavailable(o.menuItemId, o.variantId);
                         return (
                           <button
                             key={key}
+                            disabled={optionOutOfStock}
                             onClick={() => toggleDealOption(g.id, key, g.maxSelections)}
                             className={cn(
                               "flex items-center gap-2 p-2 rounded-lg border text-left text-xs transition-colors",
-                              isChecked ? "border-primary bg-primary/5 font-semibold" : "border-border hover:bg-muted/40"
+                              optionOutOfStock
+                                ? "opacity-50 cursor-not-allowed border-border bg-muted/30"
+                                : isChecked ? "border-primary bg-primary/5 font-semibold" : "border-border hover:bg-muted/40"
                             )}
                           >
-                            <Checkbox checked={isChecked} className="pointer-events-none" />
+                            <Checkbox checked={isChecked} disabled={optionOutOfStock} className="pointer-events-none" />
                             <span className="truncate">{menuItem?.name || "Item"}{variant ? ` (${variant.name})` : ""}</span>
+                            {optionOutOfStock && <span className="text-destructive text-[10px] shrink-0">(Out of Stock)</span>}
                           </button>
                         );
                       })}
@@ -2247,9 +2301,15 @@ const SelfOrder = () => {
               >
                 <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Select an item" /></SelectTrigger>
                 <SelectContent>
-                  {eligibleDealItems.map((m) => (
-                    <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
-                  ))}
+                  {eligibleDealItems.map((m) => {
+                    const itemVariants = m.variants || [];
+                    const itemOutOfStock = itemVariants.length === 0 ? !m.available : itemVariants.every((v) => !v.available);
+                    return (
+                      <SelectItem key={m.id} value={m.id} disabled={itemOutOfStock}>
+                        {m.name}{itemOutOfStock && " (Out of Stock)"}
+                      </SelectItem>
+                    );
+                  })}
                 </SelectContent>
               </Select>
             </div>
@@ -2264,7 +2324,9 @@ const SelfOrder = () => {
                     <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Select a size" /></SelectTrigger>
                     <SelectContent>
                       {variants.map((v) => (
-                        <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>
+                        <SelectItem key={v.id} value={v.id} disabled={!v.available}>
+                          {v.name}{!v.available && " (Out of Stock)"}
+                        </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
