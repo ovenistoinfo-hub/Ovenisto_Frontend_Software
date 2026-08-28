@@ -23,7 +23,7 @@ import { useQuery } from "@tanstack/react-query";
 import { cashSettlementService } from "@/services/cashSettlement.service";
 import { getSocket } from "@/lib/socket";
 import { useModuleEvents } from "@/hooks/use-module-events";
-import { Search, Plus, Minus, X, ShoppingCart, FileText, Printer, ArrowLeft, Trash2, User, Users, MapPin, Phone, Flame, Check, CreditCard, Banknote, Smartphone, RotateCcw, Download, ClipboardList, AlertTriangle, UtensilsCrossed, CalendarClock, Calendar, Timer, ChefHat, Tag, Zap, History, Monitor, BookOpen, StickyNote, Eye, Building2, Crown, CircleAlert, Bell, DollarSign, Package, Ban, Truck, ShoppingBag, Utensils, AlertCircle, CheckCircle2, Clock, Loader2, Wallet, Info, Coins, Layers, Gift, Percent } from "lucide-react";
+import { Search, Plus, Minus, X, ShoppingCart, FileText, Printer, ArrowLeft, Trash2, User, Users, MapPin, Phone, Flame, Check, CreditCard, Banknote, Smartphone, RotateCcw, Download, ClipboardList, AlertTriangle, UtensilsCrossed, CalendarClock, Calendar, Timer, ChefHat, Tag, Zap, History, Monitor, BookOpen, StickyNote, Eye, Building2, Crown, CircleAlert, Bell, DollarSign, Package, Ban, Truck, ShoppingBag, Utensils, AlertCircle, CheckCircle2, Clock, Loader2, Wallet, Info, Coins, Layers, Gift, Percent, Receipt } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -140,7 +140,7 @@ const getPaymentIcon = (methodName: string) => {
   return CreditCard;
 };
 
-const quickDenominations = [10, 20, 50, 100, 500, 1000];
+const quickDenominations = [100, 200, 500, 1000, 2000, 5000];
 
 // Roles that can populate the "Waiter" (serving staff) selector — Waiters only.
 const WAITER_ASSIGNMENT_ROLES = ['Waiter', 'waiter'];
@@ -481,6 +481,19 @@ const POS = () => {
   const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
   const [selectedVariant, setSelectedVariant] = useState<string | null>(null);
 
+  /** One shared confirm dialog for the cart's destructive actions (clearing a
+   *  loaded order, replacing a dirty cart). POS is tablet-first and themed
+   *  dark; `window.confirm` renders an unstyled OS box that says
+   *  "localhost:8080 says", which looks broken on a till screen and can't be
+   *  themed or touch-sized. Every other confirm in this app is an
+   *  AlertDialog — this matches. */
+  const [confirmPrompt, setConfirmPrompt] = useState<{
+    title: string;
+    description: string;
+    confirmLabel: string;
+    onConfirm: () => void;
+  } | null>(null);
+
   // Discounts
   const [orderDiscount, setOrderDiscount] = useState(0);
 
@@ -506,6 +519,9 @@ const POS = () => {
   const [finalizeMethod, setFinalizeMethod] = useState("Cash");
   const [givenAmount, setGivenAmount] = useState(0);
   const [paymentEntries, setPaymentEntries] = useState<PaymentEntry[]>([]);
+  const [isSplitMode, setIsSplitMode] = useState(false);
+  const [splitMethod, setSplitMethod] = useState("Cash");
+  const [splitAmount, setSplitAmount] = useState<number>(0);
   const [sendSMS, setSendSMS] = useState(false);
   const [showCartDetails, setShowCartDetails] = useState(false);
   const orderStartTime = useRef<number>(Date.now());
@@ -1819,6 +1835,51 @@ const POS = () => {
   const total = subtotal + tax;
   const netPayable = Math.max(0, total - loadedAdvancePayment);
 
+  /** One string capturing everything an "Update Order" would actually send.
+   *  Compared against the snapshot taken when a running order was loaded, so
+   *  Update can stay disabled until something genuinely changed.
+   *
+   *  Re-sending an untouched order is NOT a harmless no-op server-side:
+   *  updateOrder deletes and recreates every OrderItem row, re-runs deal
+   *  revalidation, and re-resolves the order-level discount — so a stray click
+   *  churns the order, its kitchen tickets and its money for nothing.
+   *
+   *  Mirrors DealForm.tsx's formFingerprint/savedFingerprint pattern: adding a
+   *  new editable field means adding it to this one object. */
+  const cartFingerprint = useMemo(() => JSON.stringify({
+    items: cart.map((c) => [
+      (c as any).menuItemId ?? null,
+      (c as any).variantId ?? null,
+      c.qty,
+      c.price,
+      c.discount,
+      (c.modifiers ?? []).join("|"),
+      c.dealLineId ?? null,
+      c.notes ?? "",
+    ]),
+    orderType, tableNumber, deliveryAddress, selectedCustomer, isUrgent, orderDiscount,
+  }), [cart, orderType, tableNumber, deliveryAddress, selectedCustomer, isUrgent, orderDiscount]);
+
+  const loadedFingerprint = useRef<string | null>(null);
+  // Baseline is captured AFTER the render that populated the cart from the
+  // order, so it reflects the loaded state rather than whatever preceded it —
+  // same reason DealForm takes its baseline when `formReady` flips.
+  useEffect(() => {
+    loadedFingerprint.current = loadedOrderId ? cartFingerprint : null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadedOrderId]);
+
+  /** A loaded running order that the cashier has actually modified. A null
+   *  baseline (the effect above hasn't run yet) counts as NOT dirty, so the
+   *  button can't flicker enabled for a frame on load. */
+  const hasUnsavedOrderChanges =
+    loadedOrderId !== null &&
+    loadedFingerprint.current !== null &&
+    loadedFingerprint.current !== cartFingerprint;
+
+  /** Place Order needs items. Update Order needs items AND a real change. */
+  const canSubmitOrder = cart.length > 0 && (loadedOrderId === null || hasUnsavedOrderChanges);
+
   // Ask the server what order-level discount this cart earns, debounced so a
   // burst of cart edits costs one call. The basis is itemsSubtotal, NOT
   // `subtotal` — createOrder resolves the deal before the manual "extra
@@ -1837,9 +1898,10 @@ const POS = () => {
     return () => { cancelled = true; clearTimeout(timer); };
   }, [itemsSubtotal, orderType]);
 
-  const totalPaid = paymentEntries.reduce((s, e) => s + e.amount, 0);
-  const totalDue = Math.max(0, netPayable - totalPaid);
-  const finalizeChange = givenAmount > 0 ? Math.max(0, givenAmount - (totalDue > 0 ? totalDue : netPayable)) : 0;
+  const entriesTotal = paymentEntries.reduce((s, e) => s + e.amount, 0);
+  const totalPaid = entriesTotal;
+  const totalDue = Math.max(0, netPayable - entriesTotal);
+  const finalizeChange = entriesTotal > netPayable ? (entriesTotal - netPayable) : 0;
 
   const isPaymentSufficient = (totalPaid + loadedAdvancePayment) >= total;
 
@@ -1852,11 +1914,7 @@ const POS = () => {
     ? advanceEntries.length > 0 && advanceTotal > 0 && advanceTotal < total
     : true;
 
-  const loadRunningOrder = (orderId: string) => {
-    if (myPendingCancelOrderIds.has(orderId)) {
-      toast.error("This order has a pending cancellation request and cannot be modified.");
-      return;
-    }
+  const applyRunningOrder = (orderId: string) => {
     const order = allOrdersData.find((o) => o.id === orderId);
     if (!order) return;
     setCart(order.items.map((item) => ({ ...item, id: `${item.id}-${Date.now()}` })));
@@ -1867,6 +1925,32 @@ const POS = () => {
     setLoadedOrderId(orderId);
     setSelectedRunningOrder(orderId);
     orderStartTime.current = Date.now();
+  };
+
+  const loadRunningOrder = (orderId: string) => {
+    if (myPendingCancelOrderIds.has(orderId)) {
+      toast.error("This order has a pending cancellation request and cannot be modified.");
+      return;
+    }
+    // Clicking a different order (or a plain cart's worth of items) would
+    // overwrite the cart wholesale. Only ask when there is something real to
+    // lose: unsaved edits to the order already open, or an un-placed cart.
+    if (orderId !== loadedOrderId) {
+      const losingEdits = hasUnsavedOrderChanges;
+      const losingNewCart = !loadedOrderId && cart.length > 0;
+      if (losingEdits || losingNewCart) {
+        setConfirmPrompt({
+          title: "Discard current cart?",
+          description: losingEdits
+            ? `Unsaved changes to ${(allOrdersData as any[]).find((o) => o.id === loadedOrderId)?.orderNumber || "the open order"} will be lost. The order itself stays active.`
+            : `${cart.length} un-placed item${cart.length === 1 ? "" : "s"} in the cart will be removed.`,
+          confirmLabel: "Open Order",
+          onConfirm: () => applyRunningOrder(orderId),
+        });
+        return;
+      }
+    }
+    applyRunningOrder(orderId);
   };
 
   const cancelOrder = () => {
@@ -1888,8 +1972,42 @@ const POS = () => {
     localStorage.setItem("ovenisto-pos-cart", JSON.stringify({ cart: [], status: "idle", timestamp: Date.now() }));
   };
 
+  /** Clear, as the cart's own button fires it. `cancelOrder` is also called
+   *  internally right after a sale completes, which must never prompt — hence
+   *  the wrapper rather than a guard inside cancelOrder itself.
+   *
+   *  Detaching a loaded running order looks identical to cancelling it from
+   *  the cashier's side (the cart empties, the order vanishes from the cart
+   *  panel), so it is worth one confirm. The order itself is untouched either
+   *  way — it stays live in Order Monitor and on the kitchen board. */
+  const handleClearCart = () => {
+    if (cart.length === 0 && !loadedOrderId) return;
+    if (loadedOrderId) {
+      const orderNo = (allOrdersData as any[]).find((o) => o.id === loadedOrderId)?.orderNumber || "this order";
+      setConfirmPrompt({
+        title: `Stop editing ${orderNo}?`,
+        description: hasUnsavedOrderChanges
+          ? "Your unsaved changes will be discarded. The order is NOT cancelled — it stays active in Order Monitor."
+          : "The order is NOT cancelled — it stays active in Order Monitor.",
+        confirmLabel: "Stop Editing",
+        onConfirm: cancelOrder,
+      });
+      return;
+    }
+    cancelOrder();
+  };
+
   const saveDraft = () => {
     if (cart.length === 0) { toast.error("Add items first"); return; }
+    // A draft is a local, un-placed order. Drafting an order that is already
+    // live in the kitchen would fork it into a phantom duplicate: the draft
+    // could later be "placed" as a brand-new order while the original is still
+    // running, billing the customer twice for the same food.
+    if (loadedOrderId) {
+      const orderNo = (allOrdersData as any[]).find((o) => o.id === loadedOrderId)?.orderNumber || "This order";
+      toast.error(`${orderNo} is already placed — use Update Order instead. Drafts are for orders that haven't been sent to the kitchen yet.`);
+      return;
+    }
     const draft: DraftOrder = {
       id: `DRAFT-${Date.now()}`, items: [...cart], customer: selectedCustomerData?.name || "Walk-in", orderType,
       tableNumber: tableNumber || undefined, deliveryAddress: deliveryAddress || undefined, phone: deliveryPhone || undefined, createdAt: new Date(),
@@ -1931,14 +2049,29 @@ const POS = () => {
 
   const handlePlaceOrder = () => {
     if (!validateOrder()) return;
-    setShowConfirmOrder(true);
+    // Go directly to payment — pre-fill exact amount for fastest checkout
+    setFinalizeMethod("Cash");
+    setGivenAmount(netPayable);
+    setPaymentEntries([]);
+    setIsSplitMode(false);
+    setSplitMethod("Cash");
+    setSplitAmount(0);
+    setSendSMS(false);
+    setDeliveryPayMode("cod");
+    setAdvanceEntries([]);
+    setAdvanceMethod("Cash");
+    setAdvanceAmount(0);
+    setShowFinalizeSale(true);
   };
 
   const confirmPlaceOrder = () => {
     setShowConfirmOrder(false);
     setFinalizeMethod("Cash");
-    setGivenAmount(0);
+    setGivenAmount(netPayable);
     setPaymentEntries([]);
+    setIsSplitMode(false);
+    setSplitMethod("Cash");
+    setSplitAmount(0);
     setSendSMS(false);
     setDeliveryPayMode("cod");
     setAdvanceEntries([]);
@@ -1948,12 +2081,21 @@ const POS = () => {
   };
 
   const addPaymentEntry = () => {
-    if (givenAmount <= 0) { toast.error("Enter an amount"); return; }
-    setPaymentEntries(prev => [...prev, { id: `pay-${Date.now()}`, method: finalizeMethod, amount: givenAmount }]);
-    setGivenAmount(0);
+    const amt = givenAmount > 0 ? givenAmount : totalDue;
+    if (amt <= 0) { toast.error("Enter a valid payment amount"); return; }
+    const nextTotal = entriesTotal + amt;
+    setPaymentEntries(prev => [...prev, { id: `pay-${Date.now()}`, method: finalizeMethod, amount: amt }]);
+    setGivenAmount(Math.max(0, netPayable - nextTotal));
   };
 
-  const removePaymentEntry = (id: string) => setPaymentEntries(prev => prev.filter(e => e.id !== id));
+  const removePaymentEntry = (id: string) => {
+    setPaymentEntries(prev => {
+      const updated = prev.filter(e => e.id !== id);
+      const newTotal = updated.reduce((s, e) => s + e.amount, 0);
+      setGivenAmount(Math.max(0, netPayable - newTotal));
+      return updated;
+    });
+  };
 
   const handleFinalizeSubmit = async () => {
     if (orderType === "Delivery") {
@@ -2001,13 +2143,13 @@ const POS = () => {
           : `Advance (${advanceMethod}): Rs.0`;
         finalAdvancePayment = advanceTotal;
       } else {
-        payMethodStr = paymentEntries.length > 0
+        payMethodStr = isSplitMode && paymentEntries.length > 0
           ? paymentEntries.map(e => `${e.method}: Rs.${e.amount}`).join(", ")
           : finalizeMethod;
         finalAdvancePayment = 0;
       }
     } else {
-      payMethodStr = paymentEntries.length > 0
+      payMethodStr = isSplitMode && paymentEntries.length > 0
         ? paymentEntries.map(e => `${e.method}: Rs.${e.amount}`).join(", ")
         : finalizeMethod;
       if (loadedAdvancePayment > 0) {
@@ -2621,15 +2763,21 @@ const POS = () => {
                 <p className="text-xs text-muted-foreground mt-1 max-w-[200px]">Click items from the menu on the right to start building the order</p>
               </div>
             ) : (
-              <table className="w-full text-sm border-collapse">
+              // table-fixed is load-bearing: without it the browser sizes the
+              // Item column from whatever is left after the five fixed ones
+              // (was 336px of them), which on a narrow till panel collapsed it
+              // below the width of a single word — "Family Mega Deal" rendered
+              // one word per line, straight down. Fixed layout gives Item the
+              // remainder and lets it wrap normally.
+              <table className="w-full table-fixed text-sm border-collapse">
                 <thead>
                   <tr className="border-b border-border/80 text-muted-foreground text-[11px] uppercase tracking-wider font-semibold">
                     <th className="text-left py-2 font-semibold">Item</th>
-                    <th className="text-center py-2 font-semibold w-16">Price</th>
-                    <th className="text-center py-2 font-semibold w-24">Qty</th>
+                    <th className="text-center py-2 font-semibold w-14">Price</th>
+                    <th className="text-center py-2 font-semibold w-[76px]">Qty</th>
                     <th className="text-center py-2 font-semibold w-16 print:hidden">Disc.</th>
-                    <th className="text-right py-2 font-semibold w-20">Total</th>
-                    <th className="w-8 print:hidden"></th>
+                    <th className="text-right py-2 font-semibold w-[68px]">Total</th>
+                    <th className="w-7 print:hidden"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/40">
@@ -2639,12 +2787,16 @@ const POS = () => {
                       const discount = row.items.reduce((s, i) => s + i.discount, 0);
                       return (
                         <tr key={row.dealLineId} className="hover:bg-muted/30 transition-colors group bg-primary/[0.03]">
-                          <td className="py-2.5 pr-2">
+                          <td className="py-2.5 pr-2 align-top">
                             <span className="inline-flex items-center gap-1 text-[10px] font-bold text-primary uppercase tracking-wide">
-                              <Gift className="h-3 w-3" /> Deal
+                              <Gift className="h-3 w-3 shrink-0" /> Deal
                             </span>
-                            <p className="font-semibold text-foreground text-xs">{row.dealName}</p>
-                            <p className="text-[10px] text-muted-foreground/90">
+                            <p className="font-semibold text-foreground text-xs break-words">{row.dealName}</p>
+                            {/* The component list can run long ("1x Family Mega
+                                Deal: BBQ Chicken Pizza (Large (14")), 1x …") —
+                                clamp it so one deal can't push the row taller
+                                than the rest of the cart put together. */}
+                            <p className="text-[10px] text-muted-foreground/90 break-words line-clamp-2">
                               {row.items.map((i) => `${i.qty}x ${i.name}`).join(", ")}
                             </p>
                           </td>
@@ -2664,9 +2816,9 @@ const POS = () => {
                     return (
                       <tr key={item.id} className="hover:bg-muted/30 transition-colors group">
                         <td className="py-2.5 pr-2">
-                          <span className="font-semibold text-foreground text-xs">{item.name}</span>
+                          <span className="font-semibold text-foreground text-xs break-words">{item.name}</span>
                           {item.modifiers && item.modifiers.length > 0 && (
-                            <p className="text-[10px] text-muted-foreground/90 font-medium">{item.modifiers.join(", ")}</p>
+                            <p className="text-[10px] text-muted-foreground/90 font-medium break-words line-clamp-2">{item.modifiers.join(", ")}</p>
                           )}
                           {item.notes && (
                             <p className="text-[10px] text-warning font-medium italic truncate max-w-[140px] mt-0.5">{item.notes}</p>
@@ -2751,13 +2903,41 @@ const POS = () => {
             <div className="space-y-2 pt-0.5">
               {/* Secondary Actions Row */}
               <div className="grid grid-cols-3 gap-1.5">
-                <Button variant="outline" className="text-destructive border-destructive/30 text-[10px] h-8 rounded-lg hover:bg-destructive/10 font-semibold" onClick={cancelOrder}><Trash2 className="h-3 w-3 mr-1" />Clear</Button>
-                <Button variant="outline" className="text-amber-500 border-amber-500/30 text-[10px] h-8 rounded-lg hover:bg-amber-500/10 font-semibold" onClick={saveDraft}><FileText className="h-3 w-3 mr-1" />Draft</Button>
-                <Button variant="outline" className="text-blue-500 border-blue-500/30 text-[10px] h-8 rounded-lg hover:bg-blue-500/10 font-semibold" onClick={() => cart.length > 0 && setShowQuotation(true)}><FileText className="h-3 w-3 mr-1" />Quote</Button>
+                <Button
+                  variant="outline"
+                  className="text-destructive border-destructive/30 text-[10px] h-8 rounded-lg hover:bg-destructive/10 font-semibold"
+                  onClick={handleClearCart}
+                  disabled={cart.length === 0 && !loadedOrderId}
+                  title={loadedOrderId ? "Stop editing this order" : "Empty the cart"}
+                ><Trash2 className="h-3 w-3 mr-1" />Clear</Button>
+                <Button
+                  variant="outline"
+                  className="text-amber-500 border-amber-500/30 text-[10px] h-8 rounded-lg hover:bg-amber-500/10 font-semibold"
+                  onClick={saveDraft}
+                  disabled={cart.length === 0 || !!loadedOrderId}
+                  title={loadedOrderId ? "Already-placed orders can't be drafted — use Update Order" : "Park this cart as a draft"}
+                ><FileText className="h-3 w-3 mr-1" />Draft</Button>
+                <Button
+                  variant="outline"
+                  className="text-blue-500 border-blue-500/30 text-[10px] h-8 rounded-lg hover:bg-blue-500/10 font-semibold"
+                  onClick={() => setShowQuotation(true)}
+                  disabled={cart.length === 0}
+                ><FileText className="h-3 w-3 mr-1" />Quote</Button>
               </div>
               {/* Primary Order Button Row */}
-              <Button className="w-full gradient-primary text-primary-foreground text-sm h-10 font-extrabold rounded-xl shadow-lg hover:shadow-xl transition-all duration-200" onClick={handlePlaceOrder}>
-                {loadedOrderId ? "Update Order" : "Place Order"}
+              <Button
+                className="w-full gradient-primary text-primary-foreground text-sm h-10 font-extrabold rounded-xl shadow-lg hover:shadow-xl transition-all duration-200"
+                onClick={handlePlaceOrder}
+                disabled={!canSubmitOrder || isSubmitting}
+                title={
+                  cart.length === 0
+                    ? "Add items to the cart first"
+                    : loadedOrderId && !hasUnsavedOrderChanges
+                      ? "Nothing has changed on this order yet"
+                      : undefined
+                }
+              >
+                {loadedOrderId ? (hasUnsavedOrderChanges ? "Update Order" : "No Changes") : "Place Order"}
               </Button>
             </div>
           </div>
@@ -3433,6 +3613,28 @@ const POS = () => {
       </Dialog>
 
       {/* Confirm Order Dialog */}
+      {/* Shared cart confirm — replaces the browser's native window.confirm,
+          which rendered an unthemed "localhost:8080 says" OS box on the till. */}
+      <AlertDialog open={confirmPrompt !== null} onOpenChange={(open) => { if (!open) setConfirmPrompt(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{confirmPrompt?.title}</AlertDialogTitle>
+            <AlertDialogDescription>{confirmPrompt?.description}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                confirmPrompt?.onConfirm();
+                setConfirmPrompt(null);
+              }}
+            >
+              {confirmPrompt?.confirmLabel}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <AlertDialog open={showConfirmOrder} onOpenChange={setShowConfirmOrder}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -3463,381 +3665,339 @@ const POS = () => {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Finalize Sale Dialog */}
+      {/* Finalize Sale Dialog — High-craft unified checkout */}
       <Dialog open={showFinalizeSale} onOpenChange={setShowFinalizeSale}>
-        <DialogContent className="max-w-[95vw] sm:max-w-3xl max-h-[95vh] overflow-y-auto">
-          <DialogHeader className="pb-2 border-b border-border/40">
-            <DialogTitle className="flex items-center justify-between text-lg">
-              <div className="flex items-center gap-2">
-                <Wallet className="h-5 w-5 text-primary" />
-                <span>Finalize Sale</span>
-              </div>
-              <Badge variant="outline" className="text-xs font-mono gap-1 border-muted-foreground/30">
-                <Clock className="h-3 w-3 text-muted-foreground" />
-                <span>{orderElapsed}</span>
-              </Badge>
-            </DialogTitle>
-          </DialogHeader>
+        <DialogContent className="max-w-[95vw] sm:max-w-[490px] p-5 gap-0 overflow-hidden rounded-3xl bg-card/95 backdrop-blur-xl border border-border/80 shadow-2xl shadow-black/40">
 
-          {/* Delivery Payment Mode Selector — only shown for new delivery orders */}
-          {orderType === "Delivery" && !loadedAdvancePayment && (
-            <div className="bg-muted/30 rounded-xl p-3.5 space-y-2.5 border border-border/60">
-              <div className="flex items-center justify-between">
-                <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                  <Truck className="h-3.5 w-3.5 text-primary" />
-                  Delivery Payment Mode
-                </p>
-                <span className="text-[11px] text-muted-foreground">Select how order will be settled</span>
+          {/* Modal Header with Icon Badge */}
+          <div className="flex items-center justify-between pb-3 border-b border-border/40">
+            <div className="flex items-center gap-2.5">
+              <div className="h-9 w-9 rounded-xl bg-orange-500/10 border border-orange-500/20 flex items-center justify-center text-orange-500 shadow-inner">
+                <Receipt className="h-4 w-4" />
+              </div>
+              <div>
+                <DialogTitle className="text-base font-bold text-foreground tracking-tight">Payment Checkout</DialogTitle>
+                <p className="text-[11px] text-muted-foreground">Select method &amp; confirm settlement</p>
+              </div>
+            </div>
+            <Badge variant="outline" className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 border-orange-500/40 text-orange-500 bg-orange-500/10 rounded-full">
+              {orderType}{tableNumber ? ` · Table ${tableNumber}` : ""}
+            </Badge>
+          </div>
+
+          <div className="pt-3.5 space-y-3 max-h-[82vh] overflow-y-auto pr-0.5">
+
+            {/* 1. Order Summary Card */}
+            <div className="bg-muted/20 hover:bg-muted/30 transition-colors p-3.5 rounded-2xl border border-border/50 space-y-2.5">
+              {/* Customer Row */}
+              <div className="flex items-center justify-between text-xs">
+                <div className="flex items-center gap-1.5 font-medium text-foreground">
+                  <User className="h-3.5 w-3.5 text-muted-foreground" />
+                  <span className="font-semibold">{selectedCustomerData?.name || "Walk-in Customer"}</span>
+                  {(selectedCustomerData as any)?.phone && (
+                    <span className="text-[11px] text-muted-foreground font-mono">({(selectedCustomerData as any).phone})</span>
+                  )}
+                </div>
+                <span className="text-[11px] text-muted-foreground">{cart.length} {cart.length === 1 ? "item" : "items"}</span>
               </div>
 
-              <div className="grid grid-cols-3 gap-2">
-                {(["cod", "advance", "prepaid"] as const).map(mode => (
-                  <Button
-                    key={mode}
-                    size="sm"
-                    variant={deliveryPayMode === mode ? "default" : "outline"}
-                    className={cn(
-                      "text-xs h-11 flex items-center justify-center gap-2 font-medium transition-all",
-                      deliveryPayMode === mode
-                        ? "gradient-primary text-primary-foreground shadow-sm font-semibold"
-                        : "hover:bg-muted/80"
-                    )}
-                    onClick={() => {
-                      setDeliveryPayMode(mode);
-                      setAdvanceEntries([]);
-                      setAdvanceAmount(0);
-                    }}
-                  >
-                    {mode === "cod"     && <><Truck className="h-4 w-4 shrink-0" /><span>Cash on Delivery</span></>}
-                    {mode === "advance" && <><Wallet className="h-4 w-4 shrink-0" /><span>Advance Payment</span></>}
-                    {mode === "prepaid" && <><CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" /><span>Full Prepaid</span></>}
-                  </Button>
+              {/* Items List snippet */}
+              <div className="bg-background/70 rounded-xl p-2.5 border border-border/40 space-y-1.5 text-xs max-h-24 overflow-y-auto">
+                {cart.map((item, idx) => (
+                  <div key={item.id || idx} className="flex justify-between items-center text-xs">
+                    <span className="truncate pr-2 text-muted-foreground">
+                      <span className="inline-flex items-center justify-center h-4 px-1.5 rounded-md bg-muted/60 text-foreground font-mono font-semibold text-[10px] mr-1.5">
+                        {item.qty}x
+                      </span>
+                      {item.name}
+                    </span>
+                    <span className="font-mono font-semibold text-foreground shrink-0 tabular-nums">
+                      Rs. {((item.price * item.qty) - (item.discount || 0)).toLocaleString()}
+                    </span>
+                  </div>
                 ))}
               </div>
 
-              {/* COD banner */}
-              {deliveryPayMode === "cod" && (
-                <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-2.5 text-xs text-amber-700 dark:text-amber-400 flex items-center gap-2.5">
-                  <Truck className="h-4 w-4 shrink-0 text-amber-500" />
-                  <span>Doorstep Collection: Rider will collect <strong className="font-mono font-bold text-amber-600 dark:text-amber-300">Rs. {total.toLocaleString()}</strong> from customer at delivery.</span>
+              {/* Financial Calculation Breakdown */}
+              <div className="space-y-1 pt-1 text-xs border-t border-border/40">
+                <div className="flex justify-between text-muted-foreground text-[11px]">
+                  <span>Subtotal</span>
+                  <span className="font-mono tabular-nums">Rs. {itemsSubtotal.toLocaleString()}</span>
                 </div>
-              )}
-
-              {/* Advance input panel */}
-              {deliveryPayMode === "advance" && (
-                <div className="space-y-2.5 pt-1.5 border-t border-border/40">
-                  <p className="text-xs font-semibold text-muted-foreground">Select Advance Payment Method & Amount</p>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
-                    {(effectiveSettings?.paymentMethods ?? ["Cash", "Credit Card", "Account", "JazzCash", "EasyPaisa"]).map(pm => {
-                      const IconComponent = getPaymentIcon(pm);
-                      return (
-                        <Button key={pm} size="sm" variant={advanceMethod === pm ? "default" : "outline"}
-                          className={cn("text-xs h-8 gap-1.5", advanceMethod === pm && "gradient-primary text-primary-foreground font-semibold")}
-                          onClick={() => setAdvanceMethod(pm)}>
-                          <IconComponent className="h-3.5 w-3.5" />{pm}
-                        </Button>
-                      );
-                    })}
+                {orderDiscount > 0 && (
+                  <div className="flex justify-between text-destructive text-[11px]">
+                    <span>Discount</span>
+                    <span className="font-mono tabular-nums">-Rs. {orderDiscount.toLocaleString()}</span>
                   </div>
+                )}
+                {dealDiscount > 0 && dealPreview && (
+                  <div className="flex justify-between text-emerald-500 text-[11px]">
+                    <span>{dealPreview.dealName}</span>
+                    <span className="font-mono tabular-nums">-Rs. {dealDiscount.toLocaleString()}</span>
+                  </div>
+                )}
+                <div className="flex justify-between text-muted-foreground text-[11px]">
+                  <span>Tax ({Math.round(taxRate * 100)}%)</span>
+                  <span className="font-mono tabular-nums">Rs. {tax.toLocaleString()}</span>
+                </div>
+                {loadedAdvancePayment > 0 && (
+                  <div className="flex justify-between text-emerald-500 font-semibold text-[11px]">
+                    <span>Advance Deposit Paid ({loadedAdvanceMethod})</span>
+                    <span className="font-mono tabular-nums">-Rs. {loadedAdvancePayment.toLocaleString()}</span>
+                  </div>
+                )}
+                <div className="flex justify-between items-center pt-1.5 border-t border-border/40 font-bold">
+                  <span className="uppercase tracking-wider text-[11px] text-muted-foreground">Order Total</span>
+                  <span className="text-2xl font-black text-amber-500 dark:text-amber-400 font-mono tracking-tight tabular-nums">
+                    {effectiveSettings.currency} {netPayable.toLocaleString()}
+                  </span>
+                </div>
+              </div>
+            </div>
 
-                  <div className="flex gap-2">
+            {/* 2. Delivery Payment Mode Selector (Only when Delivery & No advance pre-loaded) */}
+            {orderType === "Delivery" && !loadedAdvancePayment && (
+              <div className="bg-muted/20 p-3 rounded-2xl border border-border/50 space-y-2">
+                <div className="flex justify-between items-center text-xs font-semibold">
+                  <span className="uppercase tracking-wider text-muted-foreground text-[10px]">Delivery Mode</span>
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  {(["cod", "advance", "prepaid"] as const).map(mode => (
+                    <button
+                      key={mode}
+                      type="button"
+                      onClick={() => { setDeliveryPayMode(mode); setAdvanceEntries([]); setAdvanceAmount(0); }}
+                      className={cn(
+                        "flex flex-col items-center justify-center gap-1 h-12 rounded-xl border text-[11px] font-semibold transition-all",
+                        deliveryPayMode === mode
+                          ? "border-2 border-orange-500 bg-orange-500/10 text-orange-500 font-bold shadow-sm shadow-orange-500/10"
+                          : "border-border/60 text-muted-foreground hover:text-foreground hover:bg-muted/40"
+                      )}
+                    >
+                      {mode === "cod"     && <><Truck className="h-4 w-4" /><span>COD</span></>}
+                      {mode === "advance" && <><Wallet className="h-4 w-4" /><span>Advance</span></>}
+                      {mode === "prepaid" && <><CheckCircle2 className="h-4 w-4" /><span>Prepaid</span></>}
+                    </button>
+                  ))}
+                </div>
+                {deliveryPayMode === "cod" && (
+                  <p className="text-[11px] text-amber-500 mt-1 flex items-center gap-1.5 bg-amber-500/10 border border-amber-500/20 rounded-xl p-2 font-medium">
+                    <Truck className="h-4 w-4 shrink-0" />Rider will collect <strong>Rs. {total.toLocaleString()}</strong> at doorstep
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* 3. Delivery Advance Setup */}
+            {orderType === "Delivery" && deliveryPayMode === "advance" && !loadedAdvancePayment && (
+              <div className="bg-muted/20 p-3.5 rounded-2xl border border-border/50 space-y-2.5">
+                <div className="flex justify-between items-center text-xs">
+                  <span className="font-semibold text-muted-foreground text-[11px]">Select Advance Method &amp; Amount</span>
+                  <span className="text-muted-foreground font-mono text-[11px]">Total: Rs. {total.toLocaleString()}</span>
+                </div>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {(effectiveSettings?.paymentMethods ?? ["Cash", "JazzCash", "EasyPaisa"]).map(pm => {
+                    const IconComponent = getPaymentIcon(pm);
+                    return (
+                      <button
+                        key={pm}
+                        type="button"
+                        onClick={() => setAdvanceMethod(pm)}
+                        className={cn(
+                          "flex items-center justify-center gap-2 h-9 rounded-xl border text-xs font-semibold transition-all",
+                          advanceMethod === pm
+                            ? "border-2 border-orange-500 bg-orange-500/10 text-orange-500 font-bold shadow-sm shadow-orange-500/10"
+                            : "border-border/60 text-muted-foreground hover:bg-muted/50"
+                        )}
+                      >
+                        <IconComponent className="h-3.5 w-3.5" />{pm}
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-mono font-bold text-muted-foreground">Rs.</span>
                     <Input
                       type="number"
-                      placeholder="Advance amount (Rs.)"
+                      placeholder="Advance amount"
                       value={advanceAmount || ""}
                       onChange={e => setAdvanceAmount(Number(e.target.value))}
-                      className="text-sm h-9"
+                      className="h-10 pl-9 text-sm font-mono font-bold rounded-xl"
                     />
-                    <Button size="sm" className="h-9 px-4 gap-1" onClick={() => {
+                  </div>
+                  <Button
+                    size="sm"
+                    className="h-10 px-4 shrink-0 gap-1.5 bg-orange-600 hover:bg-orange-500 text-white font-bold rounded-xl shadow-sm"
+                    onClick={() => {
                       if (advanceAmount <= 0) { toast.error("Enter advance amount"); return; }
                       if (advanceAmount >= total) {
-                        toast.info("Advance deposit equals or exceeds total — converted to Full Prepaid mode");
+                        toast.info("Converted to Full Prepaid");
                         setDeliveryPayMode("prepaid");
-                        setPaymentEntries([{ id: `pay-${Date.now()}`, method: advanceMethod, amount: advanceAmount }]);
+                        setFinalizeMethod(advanceMethod);
+                        setGivenAmount(total);
                         setAdvanceAmount(0);
                         return;
                       }
                       setAdvanceEntries(prev => [...prev, { id: `adv-${Date.now()}`, method: advanceMethod, amount: advanceAmount }]);
                       setAdvanceAmount(0);
-                    }}>
-                      <Plus className="h-3.5 w-3.5" />Add Advance
-                    </Button>
-                  </div>
-
-                  {advanceEntries.map(e => (
-                    <div key={e.id} className="flex items-center justify-between text-xs bg-muted/60 border border-border/40 rounded-lg px-2.5 py-1.5">
-                      <span className="font-medium flex items-center gap-1.5">
-                        <Wallet className="h-3 w-3 text-primary" />{e.method}
-                      </span>
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono font-bold">Rs. {e.amount.toLocaleString()}</span>
-                        <button onClick={() => setAdvanceEntries(prev => prev.filter(x => x.id !== e.id))} className="text-destructive hover:text-destructive/80 transition-colors">
-                          <X className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-
-                  {advanceEntries.length > 0 && (
-                    <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-2.5 text-xs space-y-1">
-                      <div className="flex justify-between text-muted-foreground"><span>Total Order Amount</span><span className="font-mono font-bold text-foreground">Rs. {total.toLocaleString()}</span></div>
-                      <div className="flex justify-between text-emerald-600 dark:text-emerald-400 font-semibold"><span>Advance Deposit Received</span><span className="font-mono">- Rs. {advanceTotal.toLocaleString()}</span></div>
-                      <Separator className="my-1 bg-amber-500/20" />
-                      <div className="flex justify-between text-amber-700 dark:text-amber-300 font-extrabold text-sm">
-                        <span className="flex items-center gap-1"><Truck className="h-3.5 w-3.5" />Rider Collects at Doorstep</span>
-                        <span className="font-mono">Rs. {deliveryBalance.toLocaleString()}</span>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-1">
-            {/* Left: Order Info & Cart Overview */}
-            <div className="space-y-3 bg-muted/20 p-3 rounded-xl border border-border/50">
-              <div className="text-xs space-y-1.5">
-                <p className="text-muted-foreground flex justify-between">
-                  <span>Customer:</span>
-                  <strong className="text-foreground font-semibold">{selectedCustomerData?.name || "Walk-in"}</strong>
-                </p>
-                <p className="text-muted-foreground flex justify-between">
-                  <span>Order Type:</span>
-                  <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 uppercase font-semibold">{orderType}</Badge>
-                </p>
-                {tableNumber && (
-                  <p className="text-muted-foreground flex justify-between">
-                    <span>Table:</span>
-                    <strong className="text-foreground">#{tableNumber}</strong>
-                  </p>
-                )}
-                {deliveryAddress && orderType === "Delivery" && (
-                  <p className="text-muted-foreground text-[11px] truncate">
-                    <span>Address: </span><strong className="text-foreground">{deliveryAddress}</strong>
-                  </p>
-                )}
-              </div>
-
-              <Separator className="bg-border/60" />
-
-              <Button variant="ghost" size="sm" className="text-xs w-full justify-between h-7 text-muted-foreground hover:text-foreground" onClick={() => setShowCartDetails(!showCartDetails)}>
-                <span>Cart Details ({cart.length} items)</span>
-                <span>{showCartDetails ? "Hide" : "Show"}</span>
-              </Button>
-
-              {showCartDetails && (
-                <div className="text-xs space-y-1.5 max-h-32 overflow-y-auto pr-1 bg-background/50 p-2 rounded-lg border border-border/40">
-                  {cart.map(item => (
-                    <div key={item.id} className="flex justify-between text-muted-foreground">
-                      <span className="truncate pr-2">{item.qty}x {item.name}</span>
-                      <span className="font-mono font-medium text-foreground">Rs. {((item.price * item.qty) - item.discount).toLocaleString()}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              <Separator className="bg-border/60" />
-
-              {/* Left Column Bill Breakdown */}
-              <div className="space-y-1.5 text-xs">
-                <div className="flex justify-between text-muted-foreground"><span>Subtotal</span><span className="font-mono">Rs. {itemsSubtotal.toLocaleString()}</span></div>
-                {orderDiscount > 0 && <div className="flex justify-between text-destructive"><span>Discount</span><span className="font-mono">-Rs. {orderDiscount.toLocaleString()}</span></div>}
-                {dealDiscount > 0 && dealPreview && <div className="flex justify-between text-emerald-600 dark:text-emerald-400 font-medium"><span className="truncate pr-2">{dealPreview.code ? `${dealPreview.dealName} (${dealPreview.code})` : dealPreview.dealName}</span><span className="font-mono shrink-0">-Rs. {dealDiscount.toLocaleString()}</span></div>}
-                <div className="flex justify-between text-muted-foreground"><span>Tax</span><span className="font-mono">Rs. {tax.toLocaleString()}</span></div>
-                <Separator className="my-1 bg-border/60" />
-                <div className="flex justify-between font-bold text-sm text-foreground pt-0.5">
-                  <span>Gross Order Total</span>
-                  <span className="font-mono text-primary">Rs. {total.toLocaleString()}</span>
-                </div>
-                {loadedAdvancePayment > 0 && (
-                  <>
-                    <div className="flex justify-between text-emerald-600 dark:text-emerald-400 font-semibold text-xs pt-1">
-                      <span>Advance Deposit ({loadedAdvanceMethod})</span>
-                      <span className="font-mono">- Rs. {loadedAdvancePayment.toLocaleString()}</span>
-                    </div>
-                    <div className="flex justify-between font-extrabold text-sm pt-1 text-primary">
-                      <span>Net Payable</span>
-                      <span className="font-mono">Rs. {netPayable.toLocaleString()}</span>
-                    </div>
-                  </>
-                )}
-              </div>
-            </div>
-
-            {/* Center: Counter Payment Entry (Hidden for Delivery COD & Delivery Advance) */}
-            {!(orderType === "Delivery" && (deliveryPayMode === "cod" || deliveryPayMode === "advance") && !loadedAdvancePayment) ? (
-              <div className="space-y-3 bg-muted/20 p-3 rounded-xl border border-border/50">
-                <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Select Payment Method</p>
-                <div className="grid grid-cols-2 gap-1.5">
-                  {(effectiveSettings?.paymentMethods ?? ["Cash", "Credit Card", "Account", "JazzCash", "EasyPaisa"]).map(pm => {
-                    const IconComponent = getPaymentIcon(pm);
-                    return (
-                      <Button key={pm} variant={finalizeMethod === pm ? "default" : "outline"} size="sm"
-                        className={cn("text-xs h-8 gap-1", finalizeMethod === pm && "gradient-primary text-primary-foreground font-semibold")}
-                        onClick={() => setFinalizeMethod(pm)}>
-                        <IconComponent className="h-3.5 w-3.5" />{pm}
-                      </Button>
-                    );
-                  })}
-                </div>
-                <Separator className="bg-border/60" />
-                <div className="space-y-2">
-                  <p className="text-xs font-medium text-muted-foreground">Enter Cash / Amount</p>
-                  <Input type="number" value={givenAmount || ""} onChange={(e) => setGivenAmount(Number(e.target.value))} placeholder="0" className="text-lg text-center font-mono font-bold h-10" />
-                  <div className="grid grid-cols-3 gap-1">
-                    {quickDenominations.map(d => (
-                      <Button key={d} variant="outline" size="sm" className="text-xs font-mono h-7" onClick={() => setGivenAmount(prev => prev + d)}>+{d}</Button>
-                    ))}
-                  </div>
-                  <Button className="w-full h-8 text-xs font-semibold gap-1" size="sm" onClick={addPaymentEntry}>
-                    <Plus className="h-3.5 w-3.5" />Add Payment Entry
-                  </Button>
-                  <Button variant="outline" className="w-full text-xs h-7" size="sm" onClick={() => { setGivenAmount(netPayable); setPaymentEntries([]); }}>
-                    Exact Amount (Rs. {netPayable.toLocaleString()})
+                    }}
+                  >
+                    <Plus className="h-4 w-4" />Add
                   </Button>
                 </div>
-              </div>
-            ) : (
-              /* Hero Info Banner in Middle Column when COD or Advance is selected */
-              <div className="bg-muted/20 p-4 rounded-xl border border-border/50 flex flex-col items-center justify-center text-center space-y-2">
-                {deliveryPayMode === "cod" ? (
-                  <>
-                    <div className="p-3 bg-amber-500/10 rounded-full text-amber-500">
-                      <Truck className="h-8 w-8" />
+                {advanceEntries.map(e => (
+                  <div key={e.id} className="flex items-center justify-between text-xs bg-muted/40 border border-border/40 rounded-xl px-3 py-2">
+                    <span className="font-semibold text-foreground">{e.method}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono font-bold text-emerald-500 tabular-nums">Rs. {e.amount.toLocaleString()}</span>
+                      <button onClick={() => setAdvanceEntries(prev => prev.filter(x => x.id !== e.id))} className="text-destructive/70 hover:text-destructive transition-colors">
+                        <X className="h-3.5 w-3.5" />
+                      </button>
                     </div>
-                    <p className="text-sm font-bold text-foreground">Cash on Delivery</p>
-                    <p className="text-xs text-muted-foreground max-w-[200px]">
-                      Customer will pay cash directly to the rider at delivery. No payment entry needed now.
-                    </p>
-                  </>
-                ) : (
-                  <>
-                    <div className="p-3 bg-blue-500/10 rounded-full text-blue-500">
-                      <Wallet className="h-8 w-8" />
-                    </div>
-                    <p className="text-sm font-bold text-foreground">Advance Payment Mode</p>
-                    <p className="text-xs text-muted-foreground max-w-[200px]">
-                      Enter advance deposit in the top panel. Remaining balance will be collected by rider at doorstep.
-                    </p>
-                  </>
+                  </div>
+                ))}
+                {advanceEntries.length > 0 && (
+                  <div className="text-xs bg-amber-500/10 border border-amber-500/20 rounded-xl px-3 py-2 flex justify-between font-bold text-amber-500">
+                    <span>Rider Collects at Doorstep:</span>
+                    <span className="font-mono tabular-nums">Rs. {deliveryBalance.toLocaleString()}</span>
+                  </div>
                 )}
               </div>
             )}
 
-            {/* Right: Settlement & Payment Entries Summary */}
-            <div className="space-y-3 bg-muted/20 p-3 rounded-xl border border-border/50 flex flex-col justify-between">
-              <div className="space-y-2.5">
-                <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Payment Summary</p>
-
-                {/* Show entries depending on mode */}
-                {orderType === "Delivery" && deliveryPayMode === "advance" && !loadedAdvancePayment ? (
-                  <div className="space-y-1 bg-background/60 p-2 rounded-lg border border-border/40">
-                    <p className="text-[11px] font-semibold text-muted-foreground">Advance Entries ({advanceEntries.length})</p>
-                    {advanceEntries.length === 0 ? (
-                      <p className="text-xs text-muted-foreground italic py-1">No advance entries added</p>
+            {/* 4. Unified Settlement Card */}
+            {(orderType !== "Delivery" || deliveryPayMode === "prepaid" || loadedAdvancePayment > 0) && (
+              <div className="bg-muted/20 p-3.5 rounded-2xl border border-border/50 space-y-3">
+                <div className="flex justify-between items-center text-xs">
+                  <span className="font-semibold text-muted-foreground text-[11px] uppercase tracking-wider">Payment Method &amp; Amount</span>
+                  <span className="font-mono text-muted-foreground text-[11px]">
+                    {paymentEntries.length > 0 ? (
+                      totalPaid > netPayable ? (
+                        <span className="text-emerald-500 font-bold">Change: Rs. {(totalPaid - netPayable).toLocaleString()}</span>
+                      ) : (
+                        <>Remaining: <strong className={cn(totalDue > 0 ? "text-amber-500 font-bold" : "text-emerald-500 font-bold")}>Rs. {totalDue.toLocaleString()}</strong></>
+                      )
                     ) : (
-                      advanceEntries.map(e => (
-                        <div key={e.id} className="flex items-center justify-between text-xs py-0.5">
-                          <span className="font-medium">{e.method}</span>
-                          <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">Rs. {e.amount.toLocaleString()}</span>
-                        </div>
-                      ))
+                      <>Due: <strong className="text-foreground font-bold">Rs. {netPayable.toLocaleString()}</strong></>
                     )}
-                  </div>
-                ) : orderType === "Delivery" && deliveryPayMode === "cod" && !loadedAdvancePayment ? (
-                  <div className="bg-amber-500/10 border border-amber-500/20 p-2.5 rounded-lg text-xs space-y-1">
-                    <div className="flex justify-between text-amber-700 dark:text-amber-400 font-semibold">
-                      <span>Payment Type:</span>
-                      <span>COD Doorstep</span>
-                    </div>
-                    <div className="flex justify-between font-bold text-foreground pt-0.5">
-                      <span>Rider Collects:</span>
-                      <span className="font-mono">Rs. {total.toLocaleString()}</span>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="space-y-1 bg-background/60 p-2 rounded-lg border border-border/40">
-                    <p className="text-[11px] font-semibold text-muted-foreground">Counter Payment Entries ({paymentEntries.length})</p>
-                    {paymentEntries.length === 0 ? (
-                      <p className="text-xs text-muted-foreground italic py-1">No entries yet</p>
-                    ) : (
-                      paymentEntries.map(e => (
-                        <div key={e.id} className="flex items-center justify-between text-xs py-0.5">
-                          <span className="font-medium">{e.method}</span>
-                          <div className="flex items-center gap-1.5">
-                            <span className="font-mono font-bold">Rs. {e.amount.toLocaleString()}</span>
-                            <button onClick={() => removePaymentEntry(e.id)} className="text-destructive hover:text-destructive/80">
-                              <X className="h-3 w-3" />
-                            </button>
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                )}
-
-                <Separator className="bg-border/60" />
-
-                {/* Single Authoritative Balance Summary — No Duplication! */}
-                <div className="space-y-1 text-xs">
-                  {orderType === "Delivery" && deliveryPayMode === "cod" && !loadedAdvancePayment ? (
-                    <div className="flex justify-between font-bold text-foreground text-sm">
-                      <span>Doorstep Cash Due</span>
-                      <span className="font-mono text-amber-600 dark:text-amber-400">Rs. {total.toLocaleString()}</span>
-                    </div>
-                  ) : orderType === "Delivery" && deliveryPayMode === "advance" && !loadedAdvancePayment ? (
-                    <>
-                      <div className="flex justify-between text-muted-foreground"><span>Total Advance Paid</span><span className="font-mono font-semibold text-emerald-600 dark:text-emerald-400">Rs. {advanceTotal.toLocaleString()}</span></div>
-                      <div className="flex justify-between font-bold text-foreground text-sm pt-1 border-t border-border/40"><span>Rider Collects</span><span className="font-mono text-amber-600 dark:text-amber-400">Rs. {deliveryBalance.toLocaleString()}</span></div>
-                    </>
-                  ) : (
-                    <>
-                      <div className="flex justify-between text-muted-foreground"><span>Net Payable</span><span className="font-mono font-semibold">Rs. {netPayable.toLocaleString()}</span></div>
-                      <div className="flex justify-between text-muted-foreground"><span>Total Collected</span><span className={cn("font-mono font-bold", totalPaid >= netPayable ? "text-emerald-600 dark:text-emerald-400" : "text-destructive")}>Rs. {totalPaid.toLocaleString()}</span></div>
-                      {totalPaid > netPayable && <div className="flex justify-between text-emerald-600 font-bold pt-1 border-t border-border/40"><span>Change Return</span><span className="font-mono">Rs. {(totalPaid - netPayable).toLocaleString()}</span></div>}
-                      {totalPaid < netPayable && <div className="flex justify-between text-destructive font-bold pt-1 border-t border-border/40"><span>Remaining Balance</span><span className="font-mono">Rs. {(netPayable - totalPaid).toLocaleString()}</span></div>}
-                    </>
-                  )}
-                </div>
-              </div>
-
-              <div className="space-y-2 pt-2">
-                <div className="flex items-center gap-2">
-                  <Checkbox id="sendSMS" checked={sendSMS} onCheckedChange={(c) => setSendSMS(!!c)} />
-                  <Label htmlFor="sendSMS" className="text-xs cursor-pointer text-muted-foreground hover:text-foreground">Send SMS receipt to customer</Label>
+                  </span>
                 </div>
 
-                {isDeliveryPrepaid && totalPaid < netPayable && (
-                  <p className="text-[11px] text-destructive font-medium bg-destructive/10 p-1.5 rounded border border-destructive/30 flex items-center gap-1">
-                    <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-destructive" />
-                    Full Prepaid requires complete payment (Rs. {netPayable.toLocaleString()}). Enter full payment or switch mode.
-                  </p>
+                {/* Method Chips */}
+                <div className="grid grid-cols-2 gap-2">
+                  {(effectiveSettings?.paymentMethods ?? ["Cash", "JazzCash", "EasyPaisa", "Credit Card"]).map(pm => {
+                    const IconComponent = getPaymentIcon(pm);
+                    const isSelected = finalizeMethod === pm;
+                    return (
+                      <button
+                        key={pm}
+                        type="button"
+                        onClick={() => {
+                          setFinalizeMethod(pm);
+                        }}
+                        className={cn(
+                          "flex items-center justify-center gap-2 h-10 rounded-xl border text-xs font-semibold transition-all",
+                          isSelected
+                            ? "border-2 border-orange-500 bg-orange-500/10 text-orange-500 font-bold shadow-sm shadow-orange-500/10"
+                            : "border-border/60 text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                        )}
+                      >
+                        <IconComponent className="h-4 w-4 shrink-0" />
+                        <span>{pm}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Amount Input with Add Split Button */}
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-mono font-bold text-muted-foreground">Rs.</span>
+                    <Input
+                      type="number"
+                      placeholder={`Amount (Due: ${paymentEntries.length > 0 ? totalDue : netPayable})`}
+                      value={givenAmount === 0 ? "" : givenAmount}
+                      onChange={(e) => setGivenAmount(Number(e.target.value))}
+                      className="h-10 pl-9 text-sm font-mono font-bold rounded-xl border-border/70 focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
+                    />
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="h-10 px-4 shrink-0 gap-1.5 bg-orange-600 hover:bg-orange-500 text-white font-bold rounded-xl shadow-sm"
+                    onClick={addPaymentEntry}
+                  >
+                    <Plus className="h-4 w-4" />Add
+                  </Button>
+                </div>
+
+                {/* Added Payment Entries List */}
+                {paymentEntries.length > 0 && (
+                  <div className="space-y-1.5 pt-0.5">
+                    {paymentEntries.map(e => (
+                      <div key={e.id} className="flex items-center justify-between text-xs bg-muted/40 border border-border/40 rounded-xl px-3 py-2">
+                        <span className="font-semibold text-foreground">{e.method}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono font-bold text-emerald-500 tabular-nums">Rs. {e.amount.toLocaleString()}</span>
+                          <button onClick={() => removePaymentEntry(e.id)} className="text-destructive/70 hover:text-destructive transition-colors">
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+
+                    <div className="flex justify-between items-center pt-2 border-t border-border/40 text-xs">
+                      <span className="text-muted-foreground font-medium">Total Settled:</span>
+                      <span className={cn("font-mono font-bold tabular-nums", totalPaid >= netPayable ? "text-emerald-500" : "text-amber-500")}>
+                        Rs. {totalPaid.toLocaleString()} / Rs. {netPayable.toLocaleString()}
+                      </span>
+                    </div>
+                  </div>
                 )}
-                {isDeliveryAdvance && advanceEntries.length === 0 && (
-                  <p className="text-[11px] text-amber-600 dark:text-amber-400 flex items-center gap-1 font-medium bg-amber-500/10 p-1.5 rounded border border-amber-500/20">
-                    <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-                    Enter at least one advance payment entry above.
-                  </p>
-                )}
-                {orderType !== "Delivery" && totalPaid < netPayable && (
-                  <p className="text-[11px] text-destructive font-medium bg-destructive/10 p-1.5 rounded border border-destructive/30 flex items-center gap-1">
-                    <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-destructive" />
-                    Full payment required (Rs. {netPayable.toLocaleString()}). Remaining balance must be 0 to confirm.
-                  </p>
+
+                {/* Change Return Banner when customer overpays */}
+                {totalPaid > netPayable && (
+                  <div className="flex items-center justify-between p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-xs font-bold transition-all animate-in fade-in">
+                    <span className="flex items-center gap-1.5">
+                      <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                      <span>Change Return:</span>
+                    </span>
+                    <span className="font-mono text-sm tabular-nums">Rs. {(totalPaid - netPayable).toLocaleString()}</span>
+                  </div>
                 )}
               </div>
-            </div>
+            )}
+
+            {/* 5. Primary Action Button */}
+            {(() => {
+              const isReady = !isSubmitting && (
+                (orderType === "Delivery" && deliveryPayMode === "cod" && !loadedAdvancePayment) ||
+                (isDeliveryAdvance && isAdvanceSufficient) ||
+                (paymentEntries.length > 0 && totalPaid >= netPayable)
+              );
+
+              return (
+                <div className="pt-1.5">
+                  <Button
+                    className={cn(
+                      "w-full h-12 text-sm font-bold rounded-2xl gap-2 transition-all active:scale-[0.99]",
+                      isReady && !isSubmitting
+                        ? "bg-orange-600 hover:bg-orange-500 text-white font-bold shadow-sm"
+                        : "bg-muted text-muted-foreground opacity-50 cursor-not-allowed"
+                    )}
+                    onClick={handleFinalizeSubmit}
+                    disabled={!isReady || isSubmitting}
+                  >
+                    {isSubmitting
+                      ? <><Loader2 className="h-4 w-4 animate-spin" />Processing Order...</>
+                      : <><Check className="h-4 w-4" />Confirm &amp; Place Order</>}
+                  </Button>
+                </div>
+              );
+            })()}
+
           </div>
-
-          <DialogFooter className="gap-2 pt-3 border-t border-border/40">
-            <Button variant="outline" size="sm" onClick={() => setShowFinalizeSale(false)} disabled={isSubmitting}>Cancel</Button>
-            <Button className="gradient-primary text-primary-foreground min-w-[160px] h-9 font-semibold gap-1.5" onClick={handleFinalizeSubmit} disabled={isSubmitting || (orderType !== "Delivery" && totalPaid < netPayable) || (isDeliveryAdvance && !isAdvanceSufficient) || (isDeliveryPrepaid && totalPaid < netPayable)}>
-              {isSubmitting
-                ? <><Loader2 className="h-4 w-4 animate-spin" />Processing...</>
-                : <><Check className="h-4 w-4" />Confirm Payment</>}
-            </Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
 

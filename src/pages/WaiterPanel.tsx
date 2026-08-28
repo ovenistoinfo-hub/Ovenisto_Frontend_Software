@@ -97,6 +97,16 @@ const resolveModifiers = (item: MenuItemRecord) => {
   return item.modifiers?.filter((m: any) => m.status === "active" || m.status === undefined || !m.status) || [];
 };
 
+const getPaymentIcon = (method: string) => {
+  const m = method.toLowerCase();
+  if (m.includes("cash")) return Coins;
+  if (m.includes("jazz")) return Smartphone;
+  if (m.includes("easy") || m.includes("paisa")) return Smartphone;
+  if (m.includes("card") || m.includes("credit") || m.includes("debit") || m.includes("bank")) return CreditCard;
+  if (m.includes("wallet")) return Wallet;
+  return CreditCard;
+};
+
 // ─── Status config ─────────────────────────────────────────────────────────
 
 const statusConfig = {
@@ -375,6 +385,8 @@ const WaiterPanel = () => {
   const [showBillDialog, setShowBillDialog] = useState(false);
   const [showPayBillDialog, setShowPayBillDialog] = useState(false);
   const [isSplitPayment, setIsSplitPayment] = useState(false);
+  const [waiterPaymentEntries, setWaiterPaymentEntries] = useState<{ id: string; method: string; amount: number }[]>([]);
+  const [waiterGivenAmount, setWaiterGivenAmount] = useState<number>(0);
   const [splitMethod1, setSplitMethod1] = useState("Cash");
   const [splitMethod2, setSplitMethod2] = useState("Credit Card");
   const [splitAmount1, setSplitAmount1] = useState(0);
@@ -593,7 +605,7 @@ const WaiterPanel = () => {
     const sessionStart = sessionStartStr ? Number(sessionStartStr.split(":")[0]) : NaN;
 
     return orders.filter((o) => {
-      if (o.tableNumber !== tableNum) return false;
+      if (Number(o.tableNumber) !== Number(tableNum)) return false;
       if (ACTIVE_STATUSES.includes(o.status)) return true;
 
       if (isOccupied && o.status === "completed") {
@@ -2114,7 +2126,15 @@ const WaiterPanel = () => {
                       <ShoppingCart className="h-3.5 w-3.5" /> Place Order
                     </Button>
                     <Button 
-                      onClick={() => { setShowPayBillDialog(true); setIsSplitPayment(false); }} 
+                      onClick={() => {
+                        const totalBill = activeTableOrders.reduce((s, o) => s + Number(o.total), 0);
+                        const adv = currentAdvancePayment;
+                        const netDue = Math.max(0, totalBill - adv);
+                        setSettlePaymentMethod("Cash");
+                        setWaiterGivenAmount(netDue);
+                        setWaiterPaymentEntries([]);
+                        setShowPayBillDialog(true);
+                      }} 
                       disabled={!canPayBill || settlingBillingState} 
                       className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-bold rounded-xl h-9 w-full flex items-center justify-center gap-1.5 shadow-[0_4px_12px_rgba(16,185,129,0.25)] hover:shadow-[0_4px_16px_rgba(16,185,129,0.4)] transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] text-xs border-none"
                     >
@@ -2521,7 +2541,7 @@ const WaiterPanel = () => {
                   </CardContent>
                 </Card>
               ) : (
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3 pt-0.5 pb-4">
+                <div className="grid grid-cols-[repeat(auto-fill,minmax(230px,1fr))] gap-3.5 pt-0.5 pb-6">
                   {filteredTables.map((t) => {
                     const tNum    = Number(t.number);
                     const status  = getTableStatus(tNum);
@@ -2548,89 +2568,174 @@ const WaiterPanel = () => {
                       status === "occupied" ? (hasFoodReady ? "bg-orange-400 animate-ping shadow-[0_0_8px_rgba(249,115,22,0.8)]" : "bg-orange-500 shadow-[0_0_8px_rgba(249,115,22,0.6)]") :
                       "bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.6)]";
 
-                    const statusBorderClass =
-                      status === "available" ? "border-emerald-500/50" :
-                      status === "occupied" ? "border-orange-500/50" :
-                      "border-amber-500/50";
-
                     const cardStatusClass =
                       status === "bill-requested"
                         ? "border-destructive/80 bg-destructive/10 hover:border-destructive animate-pulse ring-2 ring-destructive/40 shadow-[0_0_16px_rgba(239,68,68,0.4)]"
                         : isOccupiedState
                         ? cn(
-                            "border-orange-500/50 bg-orange-950/10 hover:border-orange-400 dark:bg-orange-950/20",
-                            hasFoodReady && "animate-pulse ring-2 ring-orange-500/80 shadow-[0_0_18px_rgba(249,115,22,0.5)]"
+                            "border-orange-500/40 bg-orange-500/[0.03] dark:bg-orange-500/[0.05] hover:border-orange-500/80",
+                            hasFoodReady && "animate-pulse ring-2 ring-orange-500/80 shadow-[0_0_18px_rgba(249,115,22,0.4)]"
                           )
-                        : "border-emerald-500/50 bg-emerald-950/10 hover:border-emerald-400 dark:bg-emerald-950/20";
-
-                    const chairBgClass =
-                      status === "available" ? "bg-emerald-500/60" :
-                      status === "occupied" ? "bg-orange-500/60" :
-                      "bg-emerald-500/60";
+                        : "border-emerald-500/40 bg-emerald-500/[0.03] dark:bg-emerald-500/[0.05] hover:border-emerald-500/80";
 
                     const elapsedStr = isOccupiedState && oldest ? getElapsed(oldest) : "";
-                    const centerText = isOccupiedState ? (elapsedStr || "") : "";
-                    const centerTextClass = "font-black text-xs text-primary tracking-tight leading-none text-center px-1";
+
+                    // Find the primary active order for this table card
+                    const latestOrder = tOrders.find(o => o.status === "preparing") 
+                      || tOrders.find(o => o.status === "ready")
+                      || tOrders.find(o => o.status === "pending")
+                      || tOrders[0];
+
+                    const maxCookingTime = latestOrder ? latestOrder.items.reduce((max, item) => Math.max(max, item.cookingTime || 0), 0) : 0;
+                    const cookLimitMinutes = maxCookingTime > 0 ? maxCookingTime : 15;
+
+                    const elapsedMs = latestOrder ? clock.getTime() - new Date(latestOrder.createdAt).getTime() : 0;
+                    const elapsedSec = Math.floor(elapsedMs / 1000);
+                    const elapsedFormatted = elapsedSec < 60 ? `${elapsedSec}s` : `${Math.floor(elapsedSec / 60)}m ${elapsedSec % 60}s`;
+
+                    const prepStart = latestOrder && latestOrder.status === "preparing" && latestOrder.updatedAt 
+                      ? new Date(latestOrder.updatedAt).getTime() 
+                      : (latestOrder ? new Date(latestOrder.createdAt).getTime() : 0);
+                    const elapsedPrepMs = clock.getTime() - prepStart;
+                    const elapsedPrepSec = Math.floor(elapsedPrepMs / 1000);
+                    const remainingSec = Math.max(0, cookLimitMinutes * 60 - elapsedPrepSec);
+                    const countdownText = remainingSec === 0 ? "Overdue" : `${Math.floor(remainingSec / 60)}:${String(remainingSec % 60).padStart(2, "0")} left`;
 
                     return (
                       <div key={t.id} className="p-0.5">
                         <Card
                           onClick={() => handleTableClick(t)}
                           className={cn(
-                            "shadow-md bg-white dark:bg-zinc-900/40 border rounded-2xl flex flex-col justify-between p-3 h-[148px] w-full cursor-pointer transition-all duration-300 relative hover:scale-[1.02]",
+                            "shadow-md bg-white dark:bg-zinc-900/50 border rounded-2xl flex flex-col justify-between p-3 min-h-[160px] w-full cursor-pointer transition-all duration-300 relative hover:scale-[1.02]",
                             cardStatusClass,
-                            selectedTableId === t.id && "ring-2 ring-primary ring-offset-2 dark:ring-offset-zinc-950 shadow-lg"
+                            selectedTableId === t.id && "ring-2 ring-orange-500 ring-offset-2 dark:ring-offset-zinc-950 shadow-lg border-orange-500"
                           )}
                         >
-                          {/* Top Bar: Table Label & Pulse Status */}
+                          {/* Top Bar: Table Label, Status Dot & Capacity/Pax Pill */}
                           <div className="flex items-center justify-between w-full select-none shrink-0">
                             <div className="flex items-center gap-2">
                               <span className={cn(
-                                "h-2.5 w-2.5 rounded-full",
+                                "h-2.5 w-2.5 rounded-full shrink-0",
                                 statusDotColor
                               )} />
-                              <span className="text-sm font-black uppercase tracking-wider text-foreground">Table {t.number}</span>
+                              <span className="text-sm font-black uppercase tracking-wider text-foreground">TABLE {t.number}</span>
                             </div>
-                            {status === "bill-requested" && (
-                              <Badge className="bg-destructive text-destructive-foreground font-extrabold text-[10px] animate-pulse gap-1 px-1.5 py-0.5 shadow-sm border-none">
+
+                            {status === "bill-requested" ? (
+                              <Badge className="bg-destructive text-destructive-foreground font-extrabold text-[10px] animate-pulse gap-1 px-2 py-0.5 shadow-xs border-none">
                                 <Receipt className="h-3 w-3" /> Bill Req.
                               </Badge>
-                            )}
-                          </div>
-
-                          {/* Middle Area: Graphical Table Blueprint Diagram */}
-                          <div className="flex-grow flex items-center justify-center relative my-1 w-full select-none">
-                            {t.shape === "round" && (
-                              <div className={cn("h-16 w-16 rounded-full border-2 flex items-center justify-center relative bg-zinc-50 dark:bg-zinc-950/40", statusBorderClass)}>
-                                <span className={centerTextClass}>{centerText}</span>
-                                {renderMiniChairs("round", t.capacity, chairBgClass)}
+                            ) : isOccupiedState ? (
+                              <div className="flex items-center gap-1 text-[10px] font-bold text-orange-500 bg-orange-500/10 px-2 py-0.5 rounded-full border border-orange-500/20">
+                                <Users className="h-3 w-3 text-orange-500 shrink-0" />
+                                <span>{getGuestsCount(t)} Pax</span>
                               </div>
-                            )}
-                            {t.shape === "square" && (
-                              <div className={cn("h-14 w-14 rounded-xl border-2 flex items-center justify-center relative bg-zinc-50 dark:bg-zinc-950/40", statusBorderClass)}>
-                                <span className={centerTextClass}>{centerText}</span>
-                                {renderMiniChairs("square", t.capacity, chairBgClass)}
+                            ) : status === "reserved" ? (
+                              <div className="flex items-center gap-1 text-[10px] font-bold text-amber-500 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/20">
+                                <BookOpen className="h-3 w-3 text-amber-500 shrink-0" />
+                                <span>Reserved</span>
                               </div>
-                            )}
-                            {t.shape === "rectangle" && (
-                              <div className={cn("h-12 w-20 rounded-xl border-2 flex items-center justify-center relative bg-zinc-50 dark:bg-zinc-950/40", statusBorderClass)}>
-                                <span className={centerTextClass}>{centerText}</span>
-                                {renderMiniChairs("rectangle", t.capacity, chairBgClass)}
+                            ) : (
+                              <div className="flex items-center gap-1 text-[10px] font-semibold text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                                <Users className="h-3 w-3 text-emerald-500 shrink-0" />
+                                <span>{t.capacity} Seats</span>
                               </div>
                             )}
                           </div>
 
-                          {/* Bottom Bar: Area Name and Customer Count */}
-                          <div className="flex items-center justify-between w-full mt-1 shrink-0 select-none gap-1">
-                            <span className="text-xs text-muted-foreground font-extrabold tracking-wide truncate flex-1 min-w-0 pr-1" title={t.floor || "Main Hall"}>
-                              {t.floor || "Main Hall"}
+                          {/* Middle Section: Live Order Status Card */}
+                          <div className="flex-1 flex flex-col justify-center my-1.5 w-full select-none">
+                            {isOccupiedState && latestOrder ? (
+                              <div className="space-y-1.5 w-full">
+                                <div className="bg-zinc-100/80 dark:bg-zinc-950/70 rounded-xl p-2.5 border border-zinc-200/90 dark:border-zinc-800/80 shadow-2xs space-y-1.5">
+                                  <div className="flex items-center justify-between">
+                                    <span className="font-bold text-xs text-foreground tracking-tight">Order #{latestOrder.orderNumber}</span>
+                                    <Badge className={cn(
+                                      "text-[9px] px-1.5 py-0.2 rounded-md font-extrabold uppercase border-none text-zinc-950",
+                                      latestOrder.status === "pending" && "bg-amber-500",
+                                      latestOrder.status === "preparing" && "bg-sky-500 text-white",
+                                      latestOrder.status === "ready" && "bg-emerald-500 text-white animate-pulse",
+                                      latestOrder.status === "completed" && "bg-emerald-600 text-white font-black",
+                                    )}>
+                                      {latestOrder.status === "completed" ? "SERVED" : latestOrder.status}
+                                    </Badge>
+                                  </div>
+
+                                  {latestOrder.status === "pending" && (
+                                    <div className="flex justify-between items-center text-[10px] text-muted-foreground">
+                                      <span>Wait Time:</span>
+                                      <span className="font-semibold text-foreground font-mono">{elapsedFormatted}</span>
+                                    </div>
+                                  )}
+
+                                  {latestOrder.status === "preparing" && (
+                                    <div className="flex justify-between items-center text-[10px] text-muted-foreground">
+                                      <span>Remaining:</span>
+                                      <span className={cn("font-bold font-mono", remainingSec < 120 ? "text-red-500" : "text-emerald-500")}>
+                                        {countdownText}
+                                      </span>
+                                    </div>
+                                  )}
+
+                                  {latestOrder.status === "ready" && (
+                                    <div className="flex items-center gap-1 text-[10px] font-bold text-emerald-500">
+                                      <Check className="h-3 w-3" /> Ready to serve
+                                    </div>
+                                  )}
+                                </div>
+
+                                {elapsedStr && (
+                                  <div className="flex items-center justify-between text-[10px] px-1 text-muted-foreground">
+                                    <span>Time elapsed:</span>
+                                    <span className="text-primary font-bold flex items-center gap-1 font-mono">
+                                      <Clock className="h-3 w-3" /> {elapsedStr}
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+                            ) : isOccupiedState ? (
+                              <div className="space-y-1.5 w-full">
+                                <div className="bg-zinc-100/80 dark:bg-zinc-950/70 rounded-xl p-2.5 border border-zinc-200/90 dark:border-zinc-800/80 shadow-2xs text-center">
+                                  <span className="text-xs font-bold text-orange-500">Sitting Active</span>
+                                  <p className="text-[10px] text-muted-foreground">Awaiting Order</p>
+                                </div>
+                                {elapsedStr && (
+                                  <div className="flex items-center justify-between text-[10px] px-1 text-muted-foreground">
+                                    <span>Time elapsed:</span>
+                                    <span className="text-primary font-bold flex items-center gap-1 font-mono">
+                                      <Clock className="h-3 w-3" /> {elapsedStr}
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              <div className="flex flex-col items-center justify-center py-2 text-center text-muted-foreground select-none">
+                                <div className="h-7 w-7 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-500 mb-1">
+                                  <UtensilsCrossed className="h-3.5 w-3.5" />
+                                </div>
+                                <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">Available</span>
+                                <span className="text-[10px] text-muted-foreground">Ready for seating</span>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Bottom Bar: Floor Name and Status Badge */}
+                          <div className="flex items-center justify-between w-full pt-1.5 shrink-0 select-none border-t border-zinc-200/60 dark:border-zinc-800/60 text-xs">
+                            <span className="text-muted-foreground font-semibold truncate text-[11px]" title={t.floor || "Ground Floor"}>
+                              {t.floor || "Ground Floor"}
                             </span>
-                            <div className="flex items-center gap-1 shrink-0">
-                              <div className="flex items-center gap-1 text-[11px] font-black text-foreground bg-zinc-100 dark:bg-zinc-800/90 px-2 py-0.5 rounded-full border border-zinc-200 dark:border-zinc-700/80 shadow-xs">
-                                <Users className="h-3 w-3 text-muted-foreground shrink-0" />
-                                <span>{isOccupiedState ? getGuestsCount(t) : t.capacity}</span>
-                              </div>
-                            </div>
+                            <span className={cn(
+                              "text-[10px] font-bold uppercase tracking-wider",
+                              status === "bill-requested" ? "text-destructive" :
+                              isOccupiedState ? "text-orange-500" :
+                              status === "reserved" ? "text-amber-500" :
+                              "text-emerald-500"
+                            )}>
+                              {status === "bill-requested" ? "Bill Req" :
+                               isOccupiedState ? "Occupied" :
+                               status === "reserved" ? "Reserved" :
+                               "Available"}
+                            </span>
                           </div>
                         </Card>
                       </div>
@@ -3364,225 +3469,267 @@ const WaiterPanel = () => {
         </DialogContent>
       </Dialog>
 
-      {/* ── Pay Bill Dialog (POS Checkout Style) ── */}
+      {/* ── Pay Bill Dialog (POS High-Craft Checkout Style) ── */}
       <Dialog open={showPayBillDialog} onOpenChange={setShowPayBillDialog}>
-        <DialogContent className="w-[95vw] max-w-[450px] rounded-2xl bg-background border border-border text-foreground shadow-2xl">
-          <DialogHeader className="pb-2 border-b border-border">
-            <DialogTitle className="text-center text-lg font-bold flex items-center justify-center gap-2 text-foreground">
-              <CreditCard className="h-5 w-5 text-emerald-500" /> Settle Billing
-            </DialogTitle>
-            <DialogDescription className="sr-only">Choose payment method and settle billing for active table session</DialogDescription>
-          </DialogHeader>
+        <DialogContent className="max-w-[95vw] sm:max-w-[490px] p-5 gap-0 overflow-hidden rounded-3xl bg-card/95 backdrop-blur-xl border border-border/80 shadow-2xl shadow-black/40">
 
-          <div className="space-y-4 py-2 text-xs select-none">
-            {/* Professional Breakdown Card */}
-            <div className="bg-zinc-50 dark:bg-zinc-900/60 border border-zinc-200 dark:border-zinc-800/80 rounded-2xl p-4 space-y-2">
-              <div className="flex justify-between items-center text-muted-foreground">
-                <span>Subtotal</span>
-                <span className="font-semibold text-foreground">{currency} {activeTableOrders.reduce((s, o) => s + Number(o.subtotal), 0).toLocaleString()}</span>
+          {/* Modal Header with Icon Badge */}
+          <div className="flex items-center justify-between pb-3 border-b border-border/40">
+            <div className="flex items-center gap-2.5">
+              <div className="h-9 w-9 rounded-xl bg-orange-500/10 border border-orange-500/20 flex items-center justify-center text-orange-500 shadow-inner">
+                <Receipt className="h-4 w-4" />
               </div>
-              {activeTableDiscount > 0 && (
-                <div className="flex justify-between items-center text-emerald-600 dark:text-emerald-400 font-medium">
-                  <span className="truncate pr-2">{activeTableDealName ?? "Discount"}</span>
-                  <span className="shrink-0">- {currency} {activeTableDiscount.toLocaleString()}</span>
-                </div>
-              )}
-              <div className="flex justify-between items-center text-muted-foreground">
-                <span>GST Tax ({taxRate}%)</span>
-                <span className="font-semibold text-foreground">{currency} {activeTableOrders.reduce((s, o) => s + Number(o.tax), 0).toLocaleString()}</span>
+              <div>
+                <DialogTitle className="text-base font-bold text-foreground tracking-tight">Payment Checkout</DialogTitle>
+                <p className="text-[11px] text-muted-foreground">Settle Table {selectedTable?.number} billing</p>
               </div>
-              <div className="flex justify-between items-center font-bold text-sm text-foreground">
-                <span>Grand Total</span>
-                <span className={currentAdvancePayment > 0 ? "text-foreground font-bold" : "text-primary"}>
-                  {currency} {activeTableOrders.reduce((s, o) => s + Number(o.total), 0).toLocaleString()}
-                </span>
-              </div>
-              {currentAdvancePayment > 0 && (
-                <>
-                  <div className="flex justify-between items-center text-emerald-600 dark:text-emerald-400 font-bold text-xs">
-                    <span>Advance Paid Credit</span>
-                    <span>- {currency} {currentAdvancePayment.toLocaleString()}</span>
-                  </div>
-                  <Separator className="bg-zinc-200 dark:bg-zinc-800/50 my-1" />
-                  <div className="flex justify-between items-center font-extrabold text-sm text-foreground">
-                    <span className="text-muted-foreground font-semibold">Net Amount Due</span>
-                    <span className="text-primary text-base font-extrabold">
-                      {currency} {Math.max(0, activeTableOrders.reduce((s, o) => s + Number(o.total), 0) - currentAdvancePayment).toLocaleString()}
-                    </span>
-                  </div>
-                </>
-              )}
             </div>
-
-            {/* Split / Single Tabs */}
-            <div className="grid grid-cols-2 p-1 bg-zinc-100 dark:bg-zinc-900/60 border border-zinc-200 dark:border-zinc-800 rounded-xl">
-              <button
-                onClick={() => {
-                  setIsSplitPayment(false);
-                }}
-                className={cn(
-                  "py-2 text-[11px] font-bold rounded-lg transition-all",
-                  !isSplitPayment 
-                    ? "bg-white dark:bg-zinc-950 text-foreground border border-zinc-250 dark:border-zinc-800 shadow-sm" 
-                    : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                Single Payment
-              </button>
-              <button
-                onClick={() => {
-                  setIsSplitPayment(true);
-                  const totalBill = activeTableOrders.reduce((s, o) => s + Number(o.total), 0);
-                  setSplitAmount1(Math.round(totalBill / 2));
-                  setSplitAmount2(totalBill - Math.round(totalBill / 2));
-                }}
-                className={cn(
-                  "py-2 text-[11px] font-bold rounded-lg transition-all",
-                  isSplitPayment 
-                    ? "bg-white dark:bg-zinc-950 text-foreground border border-zinc-250 dark:border-zinc-800 shadow-sm" 
-                    : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                Split Payment
-              </button>
-            </div>
-
-            {/* Form Fields */}
-            {!isSplitPayment ? (
-              <div className="space-y-3">
-                <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider pl-1">Choose Payment Account</label>
-                <div className="grid grid-cols-2 gap-2">
-                  {(settings.paymentMethods ?? ["Cash", "Credit Card", "Account", "JazzCash", "EasyPaisa"]).map((payOpt) => {
-                    const isSelected = settlePaymentMethod === payOpt;
-                    
-                    const getOptIcon = () => {
-                      const name = payOpt.toLowerCase();
-                      if (name.includes("cash")) return Coins;
-                      if (name.includes("card") || name.includes("bank") || name.includes("hbl") || name.includes("visa") || name.includes("master")) return CreditCard;
-                      if (name.includes("account")) return BookOpen;
-                      if (name.includes("phone") || name.includes("mobile") || name.includes("jazz") || name.includes("paisa") || name.includes("easypaisa")) return Smartphone;
-                      return CreditCard;
-                    };
-                    
-                    const getOptColor = () => {
-                      const name = payOpt.toLowerCase();
-                      if (name.includes("cash")) return "text-amber-500 border-amber-500/20 bg-amber-500/5";
-                      if (name.includes("card") || name.includes("bank") || name.includes("hbl") || name.includes("visa") || name.includes("master")) return "text-blue-500 border-blue-500/20 bg-blue-500/5";
-                      if (name.includes("account")) return "text-indigo-500 border-indigo-500/20 bg-indigo-500/5";
-                      if (name.includes("jazz")) return "text-red-500 border-red-500/20 bg-red-500/5";
-                      if (name.includes("paisa") || name.includes("easypaisa")) return "text-emerald-500 border-emerald-500/20 bg-emerald-500/5";
-                      return "text-zinc-500 border-zinc-500/20 bg-zinc-500/5";
-                    };
-
-                    const IconComp = getOptIcon();
-                    const colorClass = getOptColor();
-                    return (
-                      <button
-                        key={payOpt}
-                        onClick={() => setSettlePaymentMethod(payOpt)}
-                        className={cn(
-                          "flex items-center gap-2.5 p-3 rounded-xl border text-left transition-all hover:scale-[1.01] active:scale-[0.99]",
-                          isSelected 
-                            ? "border-emerald-500 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-extrabold shadow-[0_2px_8px_rgba(16,185,129,0.15)]" 
-                            : "border-zinc-200 dark:border-zinc-850 bg-zinc-50 dark:bg-zinc-900/20 text-muted-foreground hover:border-zinc-300 dark:hover:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-900/40"
-                        )}
-                      >
-                        <div className={cn("p-1.5 rounded-lg bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-900", isSelected ? "text-emerald-600 dark:text-emerald-400 border-emerald-500/20" : colorClass)}>
-                          <IconComp className="h-3.5 w-3.5" />
-                        </div>
-                        <span className="text-[11px] font-bold tracking-tight">{payOpt}</span>
-                        {isSelected && <Check className="ml-auto h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 font-black" />}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-4 bg-zinc-50 dark:bg-zinc-900/20 border border-zinc-200 dark:border-zinc-800/80 p-3.5 rounded-2xl">
-                <div className="grid grid-cols-5 items-center gap-2">
-                  <span className="col-span-2 text-[10px] font-bold text-muted-foreground uppercase tracking-wider pl-1">Split 1 Method</span>
-                  <span className="col-span-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider pl-1">Amount 1</span>
-                </div>
-                
-                <div className="grid grid-cols-5 items-center gap-2">
-                  <div className="col-span-2">
-                    <Select value={splitMethod1} onValueChange={setSplitMethod1}>
-                      <SelectTrigger className="rounded-xl bg-white dark:bg-zinc-950 border-zinc-250 dark:border-zinc-800 text-[11px] h-9 text-foreground"><SelectValue /></SelectTrigger>
-                      <SelectContent className="bg-white dark:bg-zinc-950 border-zinc-250 dark:border-zinc-800 text-foreground text-[11px]">
-                        {(settings.paymentMethods ?? ["Cash", "Credit Card", "Account", "JazzCash", "EasyPaisa"]).map(pm => (
-                          <SelectItem key={pm} value={pm}>{pm}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="col-span-3 relative">
-                    <span className="absolute left-3 top-2.5 text-zinc-500 font-semibold">{currency}</span>
-                    <Input 
-                      type="number"
-                      value={splitAmount1 || ""}
-                      onChange={(e) => {
-                        const totalBill = activeTableOrders.reduce((s, o) => s + Number(o.total), 0);
-                        const val = Math.min(totalBill, Math.max(0, Number(e.target.value)));
-                        setSplitAmount1(val);
-                        setSplitAmount2(totalBill - val);
-                      }}
-                      className="rounded-xl border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950/40 text-foreground pl-8 font-bold text-[11px] h-9"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-5 items-center gap-2 pt-1">
-                  <span className="col-span-2 text-[10px] font-bold text-muted-foreground uppercase tracking-wider pl-1">Split 2 Method</span>
-                  <span className="col-span-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider pl-1">Amount 2</span>
-                </div>
-
-                <div className="grid grid-cols-5 items-center gap-2">
-                  <div className="col-span-2">
-                    <Select value={splitMethod2} onValueChange={setSplitMethod2}>
-                      <SelectTrigger className="rounded-xl bg-white dark:bg-zinc-950 border-zinc-250 dark:border-zinc-800 text-[11px] h-9 text-foreground"><SelectValue /></SelectTrigger>
-                      <SelectContent className="bg-white dark:bg-zinc-950 border-zinc-250 dark:border-zinc-800 text-foreground text-[11px]">
-                        {(settings.paymentMethods ?? ["Cash", "Credit Card", "Account", "JazzCash", "EasyPaisa"]).map(pm => (
-                          <SelectItem key={pm} value={pm}>{pm}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="col-span-3 relative">
-                    <span className="absolute left-3 top-2.5 text-zinc-500 font-semibold">{currency}</span>
-                    <Input 
-                      type="number"
-                      value={splitAmount2 || ""}
-                      onChange={(e) => {
-                        const totalBill = activeTableOrders.reduce((s, o) => s + Number(o.total), 0);
-                        const val = Math.min(totalBill, Math.max(0, Number(e.target.value)));
-                        setSplitAmount2(val);
-                        setSplitAmount1(totalBill - val);
-                      }}
-                      className="rounded-xl border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950/40 text-foreground pl-8 font-bold text-[11px] h-9"
-                    />
-                  </div>
-                </div>
-              </div>
-            )}
+            <Badge variant="outline" className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 border-orange-500/40 text-orange-500 bg-orange-500/10 rounded-full">
+              Table {selectedTable?.number}{selectedTable?.floorName ? ` · ${selectedTable.floorName}` : ""}
+            </Badge>
           </div>
 
-          <DialogFooter className="flex gap-2 mt-2 pt-2 border-t border-border">
-            <Button variant="outline" onClick={() => setShowPayBillDialog(false)} className="rounded-xl flex-1 border-zinc-200 dark:border-zinc-855 hover:bg-zinc-100 dark:hover:bg-zinc-900 text-muted-foreground hover:text-foreground transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]">
-              Cancel
-            </Button>
-            <Button 
-              disabled={settlingBillingState}
-              onClick={() => {
-                const finalPaymentMethod = isSplitPayment 
-                  ? `${splitMethod1}: Rs.${splitAmount1.toLocaleString()}, ${splitMethod2}: Rs.${splitAmount2.toLocaleString()}` 
-                  : settlePaymentMethod;
-                settleBilling(finalPaymentMethod);
-              }} 
-              className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl flex-1 flex items-center justify-center gap-1.5 shadow-[0_4px_12px_rgba(16,185,129,0.25)] border-none transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
-            >
-              {settlingBillingState ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />} Confirm Pay
-            </Button>
-          </DialogFooter>
+          <div className="pt-3.5 space-y-3 max-h-[82vh] overflow-y-auto pr-0.5">
+
+            {/* 1. Order Summary Card */}
+            <div className="bg-muted/20 hover:bg-muted/30 transition-colors p-3.5 rounded-2xl border border-border/50 space-y-2.5">
+              {/* Customer Row */}
+              <div className="flex items-center justify-between text-xs">
+                <div className="flex items-center gap-1.5 font-medium text-foreground">
+                  <User className="h-3.5 w-3.5 text-muted-foreground" />
+                  <span className="font-semibold">{selectedCustomerData?.name || "Walk-in Customer"}</span>
+                  {selectedCustomerData?.phone && (
+                    <span className="text-[11px] text-muted-foreground font-mono">({selectedCustomerData.phone})</span>
+                  )}
+                </div>
+                <span className="text-[11px] text-muted-foreground">
+                  {activeTableOrders.length} {activeTableOrders.length === 1 ? "order" : "orders"}
+                </span>
+              </div>
+
+              {/* Items List snippet */}
+              {(() => {
+                const allItems = activeTableOrders.flatMap(o => (o.items || []).map(item => ({ ...item, orderNum: o.orderNumber })));
+                if (allItems.length === 0) return null;
+                return (
+                  <div className="bg-background/70 rounded-xl p-2.5 border border-border/40 space-y-1.5 text-xs max-h-24 overflow-y-auto">
+                    {allItems.map((item: any, idx: number) => (
+                      <div key={item.id || idx} className="flex justify-between items-center text-xs">
+                        <span className="truncate pr-2 text-muted-foreground">
+                          <span className="inline-flex items-center justify-center h-4 px-1.5 rounded-md bg-muted/60 text-foreground font-mono font-semibold text-[10px] mr-1.5">
+                            {item.qty}x
+                          </span>
+                          {item.name}
+                        </span>
+                        <span className="font-mono font-semibold text-foreground shrink-0 tabular-nums">
+                          Rs. {((Number(item.price) * Number(item.qty)) - Number(item.discount || 0)).toLocaleString()}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+
+              {/* Financial Calculation Breakdown */}
+              {(() => {
+                const subtotalSum = activeTableOrders.reduce((s, o) => s + Number(o.subtotal), 0);
+                const taxSum = activeTableOrders.reduce((s, o) => s + Number(o.tax), 0);
+                const totalSum = activeTableOrders.reduce((s, o) => s + Number(o.total), 0);
+                const netAmountDue = Math.max(0, totalSum - currentAdvancePayment);
+
+                return (
+                  <div className="space-y-1 pt-1 text-xs border-t border-border/40">
+                    <div className="flex justify-between text-muted-foreground text-[11px]">
+                      <span>Subtotal</span>
+                      <span className="font-mono tabular-nums">Rs. {subtotalSum.toLocaleString()}</span>
+                    </div>
+                    {activeTableDiscount > 0 && (
+                      <div className="flex justify-between text-emerald-500 text-[11px]">
+                        <span>{activeTableDealName ?? "Discount"}</span>
+                        <span className="font-mono tabular-nums">-Rs. {activeTableDiscount.toLocaleString()}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between text-muted-foreground text-[11px]">
+                      <span>GST Tax ({taxRate}%)</span>
+                      <span className="font-mono tabular-nums">Rs. {taxSum.toLocaleString()}</span>
+                    </div>
+                    {currentAdvancePayment > 0 && (
+                      <div className="flex justify-between text-emerald-500 font-semibold text-[11px]">
+                        <span>Advance Paid Credit</span>
+                        <span className="font-mono tabular-nums">-Rs. {currentAdvancePayment.toLocaleString()}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between items-center pt-1.5 border-t border-border/40 font-bold">
+                      <span className="uppercase tracking-wider text-[11px] text-muted-foreground">Order Total</span>
+                      <span className="text-2xl font-black text-amber-500 dark:text-amber-400 font-mono tracking-tight tabular-nums">
+                        {currency} {netAmountDue.toLocaleString()}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+
+            {/* 2. Unified Settlement Card */}
+            {(() => {
+              const totalSum = activeTableOrders.reduce((s, o) => s + Number(o.total), 0);
+              const netAmountDue = Math.max(0, totalSum - currentAdvancePayment);
+              const waiterEntriesTotal = waiterPaymentEntries.reduce((s, e) => s + e.amount, 0);
+              const waiterTotalPaid = waiterEntriesTotal;
+              const waiterTotalDue = Math.max(0, netAmountDue - waiterEntriesTotal);
+
+              return (
+                <div className="bg-muted/20 p-3.5 rounded-2xl border border-border/50 space-y-3">
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="font-semibold text-muted-foreground text-[11px] uppercase tracking-wider">Payment Method &amp; Amount</span>
+                    <span className="font-mono text-muted-foreground text-[11px]">
+                      {waiterPaymentEntries.length > 0 ? (
+                        waiterTotalPaid > netAmountDue ? (
+                          <span className="text-emerald-500 font-bold">Change: Rs. {(waiterTotalPaid - netAmountDue).toLocaleString()}</span>
+                        ) : (
+                          <>Remaining: <strong className={cn(waiterTotalDue > 0 ? "text-amber-500 font-bold" : "text-emerald-500 font-bold")}>Rs. {waiterTotalDue.toLocaleString()}</strong></>
+                        )
+                      ) : (
+                        <>Due: <strong className="text-foreground font-bold">Rs. {netAmountDue.toLocaleString()}</strong></>
+                      )}
+                    </span>
+                  </div>
+
+                  {/* Method Chips */}
+                  <div className="grid grid-cols-2 gap-2">
+                    {(settings.paymentMethods ?? ["Cash", "JazzCash", "EasyPaisa", "Credit Card"]).map(pm => {
+                      const IconComponent = getPaymentIcon(pm);
+                      const isSelected = settlePaymentMethod === pm;
+                      return (
+                        <button
+                          key={pm}
+                          type="button"
+                          onClick={() => setSettlePaymentMethod(pm)}
+                          className={cn(
+                            "flex items-center justify-center gap-2 h-10 rounded-xl border text-xs font-semibold transition-all",
+                            isSelected
+                              ? "border-2 border-orange-500 bg-orange-500/10 text-orange-500 font-bold shadow-sm shadow-orange-500/10"
+                              : "border-border/60 text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                          )}
+                        >
+                          <IconComponent className="h-4 w-4 shrink-0" />
+                          <span>{pm}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Amount Input with Add Button */}
+                  <div className="flex gap-2">
+                    <div className="relative flex-1">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-mono font-bold text-muted-foreground">Rs.</span>
+                      <Input
+                        type="number"
+                        placeholder={`Amount (Due: ${waiterPaymentEntries.length > 0 ? waiterTotalDue : netAmountDue})`}
+                        value={waiterGivenAmount === 0 ? "" : waiterGivenAmount}
+                        onChange={(e) => setWaiterGivenAmount(Number(e.target.value))}
+                        className="h-10 pl-9 text-sm font-mono font-bold rounded-xl border-border/70 focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
+                      />
+                    </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="h-10 px-4 shrink-0 gap-1.5 bg-orange-600 hover:bg-orange-500 text-white font-bold rounded-xl shadow-sm"
+                      onClick={() => {
+                        const amt = waiterGivenAmount > 0 ? waiterGivenAmount : waiterTotalDue;
+                        if (amt <= 0) { toast.error("Enter a valid payment amount"); return; }
+                        const nextTotal = waiterEntriesTotal + amt;
+                        setWaiterPaymentEntries(prev => [...prev, { id: `pay-${Date.now()}`, method: settlePaymentMethod, amount: amt }]);
+                        setWaiterGivenAmount(Math.max(0, netAmountDue - nextTotal));
+                      }}
+                    >
+                      <Plus className="h-4 w-4" />Add
+                    </Button>
+                  </div>
+
+                  {/* Added Payment Entries List */}
+                  {waiterPaymentEntries.length > 0 && (
+                    <div className="space-y-1.5 pt-0.5">
+                      {waiterPaymentEntries.map(e => (
+                        <div key={e.id} className="flex items-center justify-between text-xs bg-muted/40 border border-border/40 rounded-xl px-3 py-2">
+                          <span className="font-semibold text-foreground">{e.method}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono font-bold text-emerald-500 tabular-nums">Rs. {e.amount.toLocaleString()}</span>
+                            <button
+                              onClick={() => {
+                                setWaiterPaymentEntries(prev => {
+                                  const updated = prev.filter(x => x.id !== e.id);
+                                  const newTotal = updated.reduce((s, x) => s + x.amount, 0);
+                                  setWaiterGivenAmount(Math.max(0, netAmountDue - newTotal));
+                                  return updated;
+                                });
+                              }}
+                              className="text-destructive/70 hover:text-destructive transition-colors"
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+
+                      <div className="flex justify-between items-center pt-2 border-t border-border/40 text-xs">
+                        <span className="text-muted-foreground font-medium">Total Settled:</span>
+                        <span className={cn("font-mono font-bold tabular-nums", waiterTotalPaid >= netAmountDue ? "text-emerald-500" : "text-amber-500")}>
+                          Rs. {waiterTotalPaid.toLocaleString()} / Rs. {netAmountDue.toLocaleString()}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Change Return Banner when customer overpays */}
+                  {waiterTotalPaid > netAmountDue && (
+                    <div className="flex items-center justify-between p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-xs font-bold transition-all animate-in fade-in">
+                      <span className="flex items-center gap-1.5">
+                        <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                        <span>Change Return:</span>
+                      </span>
+                      <span className="font-mono text-sm tabular-nums">Rs. {(waiterTotalPaid - netAmountDue).toLocaleString()}</span>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
+            {/* 3. Primary Action Button */}
+            {(() => {
+              const totalSum = activeTableOrders.reduce((s, o) => s + Number(o.total), 0);
+              const netAmountDue = Math.max(0, totalSum - currentAdvancePayment);
+              const waiterEntriesTotal = waiterPaymentEntries.reduce((s, e) => s + e.amount, 0);
+              const isReady = !settlingBillingState && waiterPaymentEntries.length > 0 && waiterEntriesTotal >= netAmountDue;
+
+              return (
+                <div className="pt-1.5">
+                  <Button
+                    className={cn(
+                      "w-full h-12 text-sm font-bold rounded-2xl gap-2 transition-all active:scale-[0.99]",
+                      isReady && !settlingBillingState
+                        ? "bg-orange-600 hover:bg-orange-500 text-white font-bold shadow-sm"
+                        : "bg-muted text-muted-foreground opacity-50 cursor-not-allowed"
+                    )}
+                    onClick={() => {
+                      const finalPaymentMethod = waiterPaymentEntries.length > 0
+                        ? waiterPaymentEntries.map(e => `${e.method}: Rs.${e.amount}`).join(", ")
+                        : settlePaymentMethod;
+                      settleBilling(finalPaymentMethod);
+                    }}
+                    disabled={!isReady || settlingBillingState}
+                  >
+                    {settlingBillingState ? (
+                      <><Loader2 className="h-4 w-4 animate-spin" />Processing Settlement...</>
+                    ) : (
+                      <><Check className="h-4 w-4" />Confirm Pay</>
+                    )}
+                  </Button>
+                </div>
+              );
+            })()}
+
+          </div>
         </DialogContent>
       </Dialog>
 
