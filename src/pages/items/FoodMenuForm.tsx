@@ -14,7 +14,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
-import { Plus, Trash2, Upload, ArrowLeft, Utensils, Timer, Loader2, X, ChevronDown, ChevronRight } from "lucide-react";
+import { Plus, Trash2, Upload, ArrowLeft, Utensils, Timer, Loader2, X, ChevronDown, ChevronRight, AlertTriangle } from "lucide-react";
+import { DEFAULT_LOW_STOCK_ALERT } from "@/utils/foodAvailability";
 import { PageHeader } from "@/components/ui/page-header";
 import { toast } from "sonner";
 import { menuService, type CategoryRecord, type ModifierRecord, type RecipeIngredient, type ModifierVariantConfig } from "@/services/menu.service";
@@ -92,7 +93,7 @@ const FoodMenuForm = () => {
   const codeManualRef = useRef(false);
 
   // Form data
-  const [form, setForm] = useState({ name: "", code: "", categoryId: "", description: "", available: true, cookingTime: 0 });
+  const [form, setForm] = useState({ name: "", code: "", categoryId: "", description: "", available: true, cookingTime: 0, lowStockAlert: DEFAULT_LOW_STOCK_ALERT });
   const [mealTypeIds, setMealTypeIds] = useState<string[]>([]);
   const [imageUrl, setImageUrl] = useState("");
   const [pricingType, setPricingType] = useState<"simple" | "variant">("simple");
@@ -199,6 +200,7 @@ const FoodMenuForm = () => {
             description: "",
             available: item.available,
             cookingTime: item.cookingTime,
+            lowStockAlert: item.lowStockAlert ?? DEFAULT_LOW_STOCK_ALERT,
           });
           setMealTypeIds(item.mealTypeIds || []);
           setImageUrl(item.image || "");
@@ -655,6 +657,8 @@ const FoodMenuForm = () => {
         available: form.available,
         image: imageUrl || null,
         cookingTime: form.cookingTime || 0,
+        // `??` not `||`: 0 is a real choice ("only warn once it's actually out").
+        lowStockAlert: form.lowStockAlert ?? DEFAULT_LOW_STOCK_ALERT,
         mealTypeIds,
         variants: pricingType === "variant"
           ? variants.map((v, idx) => ({ ...v, costPrice: getColumnTotal(idx.toString()) }))
@@ -818,6 +822,25 @@ const FoodMenuForm = () => {
             </div>
             <div><Label>Category</Label><Select value={form.categoryId} onValueChange={(v) => setForm(p => ({ ...p, categoryId: v }))}><SelectTrigger><SelectValue placeholder="Select category" /></SelectTrigger><SelectContent>{categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent></Select></div>
             <div><Label className="flex items-center gap-1.5"><Timer className="h-3.5 w-3.5 text-primary" />Cooking Time (minutes)</Label><Input type="number" min={0} value={form.cookingTime || ""} onChange={(e) => setForm(p => ({ ...p, cookingTime: Number(e.target.value) }))} placeholder="e.g., 15" className="max-w-xs" /></div>
+            <div>
+              <Label className="flex items-center gap-1.5"><AlertTriangle className="h-3.5 w-3.5 text-primary" />Low Stock Alert (portions)</Label>
+              <Input
+                type="number"
+                min={0}
+                value={form.lowStockAlert}
+                onChange={(e) => {
+                  // Keep an empty box usable while typing without writing NaN
+                  // into state; blank falls back to the default on save.
+                  const v = e.target.value;
+                  setForm(p => ({ ...p, lowStockAlert: v === "" ? 0 : Math.max(0, Math.floor(Number(v) || 0)) }));
+                }}
+                placeholder={String(DEFAULT_LOW_STOCK_ALERT)}
+                className="max-w-xs"
+              />
+              <p className="text-[11px] text-muted-foreground mt-1">
+                POS warns "Low Stock" once this dish can only be made {form.lowStockAlert || 0} more time{(form.lowStockAlert || 0) === 1 ? "" : "s"} from current stock. Set 0 to only warn when it is fully out.
+              </p>
+            </div>
 
             {/* Meal Types */}
             {mealTypes.length > 0 && (

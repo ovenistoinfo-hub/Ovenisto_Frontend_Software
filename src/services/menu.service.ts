@@ -36,6 +36,12 @@ export interface MenuItemRecord {
   deliveryPrice: number | null;
   foodpandaPrice: number | null;
   costPrice: number;
+  /** Portions-remaining threshold at/below which POS flags this dish "Low
+   *  Stock" (0 = only warn once it is actually out). Defaults to 5, which is
+   *  what used to be hardcoded for every dish in `utils/foodAvailability.ts`.
+   *  Optional here because an item cached from before the field existed
+   *  won't carry it — always read it as `item.lowStockAlert ?? 5`. */
+  lowStockAlert?: number;
   available: boolean;
   image: string | null;
   tags: string[];

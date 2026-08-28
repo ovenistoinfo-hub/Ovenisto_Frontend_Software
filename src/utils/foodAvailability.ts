@@ -1,5 +1,10 @@
 import { RecipeIngredient } from '../services/menu.service';
 
+/** Fallback when a dish carries no `lowStockAlert` of its own — an item saved
+ *  before the field existed, or a cached payload from an older build. Matches
+ *  the DB column's own default, so the two can't disagree. */
+export const DEFAULT_LOW_STOCK_ALERT = 5;
+
 export interface FoodAvailabilityResult {
   availableQuantity: number;
   status: 'normal' | 'low' | 'out_of_stock';
@@ -14,16 +19,22 @@ export interface FoodAvailabilityResult {
  * available_quantity = Math.floor(current_stock / required_quantity_per_food)
  * Food item's available quantity is MIN across ALL required ingredients for that size.
  *
- * Status:
- * > 5 = 'normal'
- * 1 - 5 = 'low' (Low Stock)
+ * Status, against the dish's own `lowStockAlert` threshold:
+ * > threshold = 'normal'
+ * 1 - threshold = 'low' (Low Stock)
  * 0 = 'out_of_stock' (Out of Stock)
+ *
+ * `lowStockAlert` comes from `FoodMenuItem.lowStockAlert` and is set per dish
+ * on the Food Menu form. It was a hardcoded 5 for everything until 2026-08-28,
+ * which warned far too late on a bestseller and far too early on a slow mover.
+ * Pass 0 to only ever report a dish once it is genuinely out.
  */
 export function calculateFoodAvailability(
   recipes: RecipeIngredient[] = [],
   variantId: string | null = null,
   ingredientStockMap: Map<string, number> | Record<string, number>,
-  productionStockMap: Map<string, number> | Record<string, number> = {}
+  productionStockMap: Map<string, number> | Record<string, number> = {},
+  lowStockAlert: number = DEFAULT_LOW_STOCK_ALERT
 ): FoodAvailabilityResult {
   if (!recipes || recipes.length === 0) {
     return { availableQuantity: Infinity, status: 'normal', isRestricted: false };
@@ -79,10 +90,16 @@ export function calculateFoodAvailability(
 
   const finalAvail = Math.max(0, minAvailable);
 
+  // A negative or non-numeric threshold would silently disable the warning, so
+  // fall back rather than trust it. 0 IS valid ("out-of-stock only").
+  const threshold = Number.isFinite(lowStockAlert) && lowStockAlert >= 0
+    ? lowStockAlert
+    : DEFAULT_LOW_STOCK_ALERT;
+
   let status: 'normal' | 'low' | 'out_of_stock' = 'normal';
   if (finalAvail === 0) {
     status = 'out_of_stock';
-  } else if (finalAvail <= 5) {
+  } else if (finalAvail <= threshold) {
     status = 'low';
   }
 

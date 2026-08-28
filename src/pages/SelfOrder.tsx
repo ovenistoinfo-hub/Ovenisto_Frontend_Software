@@ -449,7 +449,17 @@ const SelfOrder = () => {
       });
   }, [orders]);
   const hasActiveOrder = orders.some((o) => o.status.status !== "cancelled" && !o.status.paid);
-  useVisiblePolling(pollStatus, 4000, hasActiveOrder);
+  // Safety net only. The `order:updated` socket handler above already writes the
+  // exact same SelfOrderStatus into the exact same state, instantly — this poll
+  // exists purely for a device whose socket never connected (a phone on a
+  // network that blocks websockets).
+  //
+  // It used to run every 4s, and it fires ONE request PER un-finished order, so
+  // a customer four orders into a sitting generated ~3,600 requests an hour from
+  // a single table — the scaling problem the self-order docs flagged as a known
+  // limitation. At 20s that is ~180/hr, and the socket still makes the UI feel
+  // instant for everyone whose socket works.
+  useVisiblePolling(pollStatus, 20_000, hasActiveOrder);
 
   const availableItems = useMemo(() => menu?.items ?? [], [menu]);
   const categories = useMemo(() => ["All", ...(menu?.categories.map((c) => c.name) ?? [])], [menu]);
@@ -839,7 +849,7 @@ const SelfOrder = () => {
     setPickingDeal(deal);
     const eligible = availableItems.filter((m) =>
       deal.applicableItems.includes(m.id) ||
-      (m.categoryId && deal.applicableCategories.includes(m.categoryId))
+      (m.category?.id != null && deal.applicableCategories.includes(m.category.id))
     );
     if (eligible.length > 0) {
       const first = eligible[0];

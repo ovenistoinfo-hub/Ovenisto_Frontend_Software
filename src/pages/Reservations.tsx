@@ -31,6 +31,7 @@ import { useOutletFilter } from "@/hooks/useOutletFilter";
 import { OutletFilterSelect } from "@/components/OutletFilterSelect";
 import { useAuth } from "@/contexts/AuthContext";
 import { useReservationEvents } from "@/hooks/use-reservation-events";
+import { useOrderEvents } from "@/hooks/use-order-events";
 import { useVisiblePolling } from "@/hooks/use-visible-polling";
 import { useSelfMutationGuard } from "@/hooks/use-self-mutation-guard";
 import { getSocket } from "@/lib/socket";
@@ -119,6 +120,16 @@ const Reservations = () => {
   });
   useVisiblePolling(() => qc.invalidateQueries({ queryKey: ["reservations"] }), 60000);
 
+  // The orders list below gets the same treatment: push first, slow poll as the
+  // safety net. It used to sit on a bare 10s refetchInterval with no socket at
+  // all — 360 requests an hour, each one pulling 300 orders WITH their items,
+  // categories, cancellation requests and kitchen progress, all day long on a
+  // page a Floor Manager leaves open. Easily the heaviest recurring query in
+  // the app, for data that changes a few times an hour.
+  useOrderEvents(() => {
+    qc.invalidateQueries({ queryKey: ["orders-list-for-reservations"] });
+  });
+
   const { data: reservations = [], isLoading } = useQuery({
     queryKey: ["reservations", selectedOutletId],
     queryFn: () => reservationService.getAll({ outletId: selectedOutletId !== "all" ? selectedOutletId : undefined }),
@@ -164,7 +175,8 @@ const Reservations = () => {
   const { data: ordersRes } = useQuery({
     queryKey: ["orders-list-for-reservations", selectedOutletId],
     queryFn: () => orderService.getOrders({ limit: 300 }),
-    refetchInterval: 10000,
+    // Safety net only — useOrderEvents above is what keeps this fresh.
+    refetchInterval: 120_000,
   });
   const orders = useMemo(() => ordersRes?.data ?? [], [ordersRes]);
 

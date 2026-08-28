@@ -240,7 +240,11 @@ const WaiterPanel = () => {
 
   useModuleEvents(["cashSettlement:created", "order:created", "order:updated", "table:updated"], refetchMyActiveCash);
   useOrderEvents(refetchMyActiveCash);
-  useVisiblePolling(refetchMyActiveCash, 30000);
+  // Two socket subscriptions already cover every event that can change this
+  // waiter's uncleared-cash figure, so the timer is a pure fallback — 30s was
+  // 120 requests an hour for a number that only moves when an order or a
+  // settlement does.
+  useVisiblePolling(refetchMyActiveCash, 300_000);
 
   // Dynamic ticking clock for live order countdown/wait timers
   const [clock, setClock] = useState(new Date());
@@ -497,10 +501,17 @@ const WaiterPanel = () => {
   }, [loadOrders, loadCustomers]));
   useTableEvents(loadTables);
   useReservationEvents(loadReservations);
-  useVisiblePolling(loadOrders, 60000);
-  useVisiblePolling(loadTables, 60000);
-  useVisiblePolling(loadReservations, 60000);
-  useVisiblePolling(loadCustomers, 60000);
+  // Four independent 60s polls meant a waiter's tablet fired ~240 requests an
+  // hour on top of the sockets above, which already push every one of these
+  // changes the moment it happens. Stretched to 3 minutes: still a real
+  // self-heal if a socket message is ever dropped, at a third of the load.
+  useVisiblePolling(loadOrders, 180_000);
+  useVisiblePolling(loadTables, 180_000);
+  useVisiblePolling(loadReservations, 180_000);
+  // Customers has no socket at all, but it barely changes and every path that
+  // does create one (a self-order signup) already refreshes it via
+  // useOrderEvents above — so this one can be slower still.
+  useVisiblePolling(loadCustomers, 600_000);
 
   // Friendly toast for changes pushed from elsewhere (another waiter, POS, kitchen) —
   // suppressed for a few seconds after this client's own writes (see markMine() calls above)

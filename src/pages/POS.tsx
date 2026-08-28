@@ -3,7 +3,7 @@ import type { OrderItem, Order, OrderType, CustomerType, OrderModificationLog } 
 import { orderService, type OrderRecord, type OrderCouponPreview } from "@/services/order.service";
 import { cancellationRequestService, type CancellationRequestRecord } from "@/services/cancellationRequest.service";
 import { menuService, type RecipeIngredient } from "@/services/menu.service";
-import { calculateFoodAvailability, isFullyOutOfStock } from "@/utils/foodAvailability";
+import { calculateFoodAvailability, isFullyOutOfStock, DEFAULT_LOW_STOCK_ALERT } from "@/utils/foodAvailability";
 import { customerService, type CustomerRecord } from "@/services/customer.service";
 import { userService } from "@/services/user.service";
 import { settingsService, type SettingsRecord } from "@/services/settings.service";
@@ -41,7 +41,7 @@ import { Progress } from "@/components/ui/progress";
 import { DatePicker } from "@/components/ui/date-picker";
 import { TimePicker } from "@/components/ui/time-picker";
 import { toast } from "sonner";
-import { Link, useLocation } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { cn, formatPakistaniPhone, isValidPakistaniPhone } from "@/lib/utils";
 import { api } from "@/services/api";
 import { generateInvoicePDF } from "@/lib/generate-invoice-pdf";
@@ -153,7 +153,6 @@ const CANCEL_RESPONSIBLE_ROLES = ['Cashier', 'Kitchen Staff', 'Kitchen Manager',
 const POS = () => {
   const { orders: localOrdersData, customers: customersList, foodMenuItems: localFoodMenuItems, foodCategories: localFoodCategories, modifiers: localModifiers, kitchens: localKitchens, ingredients, addItem, updateItem: updateDataItem, shifts, settings, riders: deliveryRiders, updateSettings } = useData();
   const { user } = useAuth();
-  const location = useLocation();
   const { markMine, isLikelyOwnEcho } = useSelfMutationGuard();
 
   // ── API data state (overrides localStorage) ──
@@ -196,7 +195,9 @@ const POS = () => {
   };
 
   useModuleEvents(["cashSettlement:created", "order:created", "order:updated", "delivery:status_updated"], refetchMyActiveCash);
-  useVisiblePolling(refetchMyActiveCash, 30000);
+  // Fallback behind the subscription above — every event that moves this
+  // cashier's uncleared-cash figure is already pushed (matches WaiterPanel).
+  useVisiblePolling(refetchMyActiveCash, 300_000);
 
   // Prefer API settings; fall back to localStorage settings
   const effectiveSettings = apiSettings ?? settings;
@@ -336,8 +337,11 @@ const POS = () => {
   // poll so a backgrounded tab stops querying and lets the DB idle (saves CU-hrs).
   useOrderEvents(loadApiOrders);
   useReservationEvents(loadApiReservations);
-  useVisiblePolling(loadApiOrders, 60000);
-  useVisiblePolling(loadApiReservations, 60000);
+  // Safety nets behind the two subscriptions above, stretched from 60s to 3
+  // minutes: a POS terminal sits open all day, and at 60s these two alone were
+  // ~120 requests an hour of duplicated work on top of the push events.
+  useVisiblePolling(loadApiOrders, 180_000);
+  useVisiblePolling(loadApiReservations, 180_000);
 
   // Friendly toast for changes pushed from elsewhere (another cashier, waiter, kitchen) —
   // suppressed for a few seconds after this client's own writes (see markMine() calls above)
@@ -420,42 +424,17 @@ const POS = () => {
     };
   }, [user?.id]);
 
-  // ── Load order from Order Status Board (payment collection) ──
-  useEffect(() => {
-    const state = location.state as { loadOrderId?: string; paymentOnly?: boolean } | null;
-    if (state?.loadOrderId) {
-      // Delay slightly so allOrdersData is populated
-      const timer = setTimeout(() => {
-        const order = allOrdersData.find((o) => o.id === state.loadOrderId);
-        if (order) {
-          setCart(order.items.map((item: any) => ({ ...item, id: `${item.id}-${Date.now()}` })));
-          setOrderType(order.type);
-          setSelectedCustomer(effectiveCustomers.find((c: any) => c.name === order.customer)?.id || "");
-          if (order.tableNumber) setTableNumber(order.tableNumber);
-          if (order.deliveryAddress) setDeliveryAddress(order.deliveryAddress);
-          setLoadedOrderId(state.loadOrderId!);
-          setSelectedRunningOrder(state.loadOrderId!);
-          if (state.paymentOnly) setPaymentOnlyMode(true);
-          toast.info(`Loaded ${order.orderNumber} for payment`);
-        } else {
-          // Try fetching directly
-          orderService.getOrder(state.loadOrderId!).then((apiOrder) => {
-            const normalized = normalizeApiOrder(apiOrder);
-            setCart(normalized.items.map((item: any) => ({ ...item, id: `${item.id}-${Date.now()}` })));
-            setOrderType(normalized.type);
-            if (normalized.tableNumber) setTableNumber(normalized.tableNumber);
-            setLoadedOrderId(state.loadOrderId!);
-            if (state.paymentOnly) setPaymentOnlyMode(true);
-            toast.info(`Loaded ${normalized.orderNumber} for payment`);
-          }).catch(() => toast.error("Could not load order"));
-        }
-        // Clear the navigation state
-        window.history.replaceState({}, document.title);
-      }, 500);
-      return () => clearTimeout(timer);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [location.state]);
+  // NOTE: An effect here used to load an order out of `location.state`
+  // (`{ loadOrderId, paymentOnly }`) so a manager could collect payment on an
+  // existing order from Order Monitor. Nothing has navigated here with that
+  // state for a long time — Order Monitor renders no such button — so the
+  // effect, and the `paymentOnlyMode` branch it fed, were unreachable dead
+  // code and were removed (2026-08-28). Pay Bill on the Waiter Panel is the
+  // live payment path. If this is ever rebuilt, it must display the order's
+  // STORED subtotal/discount/total rather than re-deriving them from the cart:
+  // the order-level deal that was applied at creation may no longer be the one
+  // that would apply today, so a re-derived figure can disagree with what the
+  // customer was actually charged.
 
   // Update order status via API + optimistic local update
   const handleOrderStatusUpdate = useCallback(async (id: string, status: string) => {
@@ -562,9 +541,6 @@ const POS = () => {
   const [showLowStock, setShowLowStock] = useState(false);
   const [stockSearch, setStockSearch] = useState("");
   const [stockStatusFilter, setStockStatusFilter] = useState<"all" | "out" | "low">("all");
-
-  // Payment-only mode (loaded from Order Status for collecting payment on existing order)
-  const [paymentOnlyMode, setPaymentOnlyMode] = useState(false);
 
   // Staff / Waiter
   const [selectedStaff, setSelectedStaff] = useState(user?.name || "Admin User");
@@ -1029,7 +1005,7 @@ const POS = () => {
 
   // Real-time push, plus a 60s visibility-gated safety poll (matches orders/reservations above).
   useTableEvents(loadTables);
-  useVisiblePolling(loadTables, 60000);
+  useVisiblePolling(loadTables, 180_000);
 
   // Load available riders when delivery type is selected
   useEffect(() => {
@@ -1384,10 +1360,14 @@ const POS = () => {
       const recipes: RecipeIngredient[] = (item as any).recipes || [];
       if (recipes.length === 0) continue;
 
+      // Each dish decides its own warning point (Food Menu form). `??` not
+      // `||`, because 0 means "only tell me when it's actually out" and must
+      // not fall through to the default of 5.
+      const lowStockAlert = (item as any).lowStockAlert ?? DEFAULT_LOW_STOCK_ALERT;
       const variants = (item as any).variants || [];
       if (variants.length > 0) {
         for (const v of variants) {
-          const avail = calculateFoodAvailability(recipes, v.id, ingredientStockMap, productionStockMap);
+          const avail = calculateFoodAvailability(recipes, v.id, ingredientStockMap, productionStockMap, lowStockAlert);
           if (avail.isRestricted && (avail.status === 'low' || avail.status === 'out_of_stock')) {
             list.push({
               id: `${item.id}-${v.id}`,
@@ -1401,7 +1381,7 @@ const POS = () => {
           }
         }
       } else {
-        const avail = calculateFoodAvailability(recipes, null, ingredientStockMap, productionStockMap);
+        const avail = calculateFoodAvailability(recipes, null, ingredientStockMap, productionStockMap, lowStockAlert);
         if (avail.isRestricted && (avail.status === 'low' || avail.status === 'out_of_stock')) {
           list.push({
             id: item.id,
@@ -1416,11 +1396,67 @@ const POS = () => {
     return list;
   }, [foodMenuItems, ingredientStockMap, productionStockMap]);
 
+  /** Depleted PRODUCTION items (Pizza Dough, Burger Dough…), shaped like an
+   *  ingredient row so the Ingredients tab can render them unchanged.
+   *
+   *  Why this exists: stock lives in three layers, and the Ingredients tab only
+   *  ever read layer 1 (`Ingredient`). A dish whose recipe depends on a
+   *  production item would show on the Food Items tab as
+   *  "Depleted: Pizza Dough" while the Ingredients tab sat empty and the two
+   *  tabs flatly contradicted each other — Pizza Dough is a ProductionItem, so
+   *  no `Ingredient` row for it exists to find.
+   *
+   *  Built from BOTH the live production-stock rows AND the production items
+   *  referenced by recipes, because an item that has never been produced (or
+   *  whose stock row was cleaned up) has no row at all yet still reads as 0 and
+   *  still blocks its dishes.
+   *
+   *  Only "out of stock" is reported: neither ProductionItem nor
+   *  ProductionWarehouseStock carries a lowStockLevel, so there is no threshold
+   *  to judge "running low" against. Adding one is a separate change. */
+  const outOfStockProductionItems = useMemo(() => {
+    const meta = new Map<string, { name: string; unit: string }>();
+
+    for (const row of apiProductionStock) {
+      if (row?.item?.id) meta.set(row.item.id, { name: row.item.name, unit: row.item.unit });
+    }
+    for (const item of foodMenuItems) {
+      for (const r of (((item as any).recipes || []) as RecipeIngredient[])) {
+        const pid = (r as any).productionItemId;
+        if (pid && !meta.has(pid)) {
+          meta.set(pid, { name: (r as any).productionItem?.name || 'Production Item', unit: (r as any).productionItem?.unit || '' });
+        }
+      }
+    }
+
+    const out: any[] = [];
+    meta.forEach((info, pid) => {
+      const stock = productionStockMap.get(pid) ?? 0;
+      if (stock > 0) return;
+      out.push({
+        id: `production:${pid}`,
+        name: info.name,
+        category: 'Production',
+        unit: info.unit,
+        currentStock: stock,
+        lowStockLevel: 0,
+      });
+    });
+    return out;
+  }, [apiProductionStock, foodMenuItems, productionStockMap]);
+
+  /** What the Ingredients tab actually lists: raw ingredients plus any depleted
+   *  production item, so it can never again disagree with the Food Items tab. */
+  const ingredientAlerts = useMemo(
+    () => [...lowStockItems, ...outOfStockProductionItems],
+    [lowStockItems, outOfStockProductionItems]
+  );
+
   const foodOutOfStockCount = useMemo(() => lowStockFoodItems.filter(i => i.status === 'out_of_stock').length, [lowStockFoodItems]);
   const foodLowStockCount = useMemo(() => lowStockFoodItems.filter(i => i.status === 'low').length, [lowStockFoodItems]);
 
-  const ingOutOfStockCount = useMemo(() => lowStockItems.filter((i: any) => Number(i.currentStock || 0) <= 0).length, [lowStockItems]);
-  const ingLowStockCount = useMemo(() => lowStockItems.filter((i: any) => Number(i.currentStock || 0) > 0).length, [lowStockItems]);
+  const ingOutOfStockCount = useMemo(() => ingredientAlerts.filter((i: any) => Number(i.currentStock || 0) <= 0).length, [ingredientAlerts]);
+  const ingLowStockCount = useMemo(() => ingredientAlerts.filter((i: any) => Number(i.currentStock || 0) > 0).length, [ingredientAlerts]);
 
   const filteredLowStockFoodItems = useMemo(() => {
     return lowStockFoodItems.filter(item => {
@@ -1438,7 +1474,7 @@ const POS = () => {
   }, [lowStockFoodItems, stockSearch, stockStatusFilter]);
 
   const filteredLowStockIngredients = useMemo(() => {
-    return lowStockItems.filter((item: any) => {
+    return ingredientAlerts.filter((item: any) => {
       const q = stockSearch.trim().toLowerCase();
       const matchesSearch = !q ||
         item.name.toLowerCase().includes(q) ||
@@ -1450,7 +1486,7 @@ const POS = () => {
       if (stockStatusFilter === "low") return !isOutOfStock;
       return true;
     });
-  }, [lowStockItems, stockSearch, stockStatusFilter]);
+  }, [ingredientAlerts, stockSearch, stockStatusFilter]);
 
   const activeStaff = useMemo(() => {
     if (!apiStaff || apiStaff.length === 0) return [];
@@ -1848,7 +1884,6 @@ const POS = () => {
     setLoadedAdvanceMethod("");
     setLoadedReservationId(null);
     setIsUrgent(false);
-    setPaymentOnlyMode(false);
     orderStartTime.current = Date.now();
     localStorage.setItem("ovenisto-pos-cart", JSON.stringify({ cart: [], status: "idle", timestamp: Date.now() }));
   };
@@ -1921,7 +1956,7 @@ const POS = () => {
   const removePaymentEntry = (id: string) => setPaymentEntries(prev => prev.filter(e => e.id !== id));
 
   const handleFinalizeSubmit = async () => {
-    if (orderType === "Delivery" && !paymentOnlyMode) {
+    if (orderType === "Delivery") {
       const activePhone = (selectedCustomerData as any)?.phone || deliveryPhone;
       if (!deliveryAddress || !deliveryAddress.trim()) {
         toast.error("Delivery address is required!");
@@ -1993,73 +2028,65 @@ const POS = () => {
 
     try {
       markMine();
-      // ── Payment-only mode: just record payment, NO status change, NO re-send to kitchen ──
-      if (paymentOnlyMode && loadedOrderId) {
-        const updated = await orderService.updateOrder(loadedOrderId, { paymentMethod: payMethodStr });
-        const existingOrder = allOrdersData.find((o) => o.id === loadedOrderId);
-        finalOrderNumber = updated.orderNumber || existingOrder?.orderNumber || "Updated";
-        toast.success(`Payment collected for ${finalOrderNumber}!`);
-      } else {
-        // ── Normal flow: create or full-update order ──
-        const orderPayload = {
-          customerId: selectedCustomer || undefined,
-          customerName: selectedCustomerData?.name || "Walk-in",
-          phone: (selectedCustomerData as any)?.phone || deliveryPhone || undefined,
-          type: orderType,
-          items: cart.map((c) => ({
-            menuItemId: (c as any).menuItemId || null,
-            variantId: (c as any).variantId || null,
-            name: c.name, price: c.price, qty: c.qty, discount: c.discount,
-            modifiers: c.modifiers || [], modifierIds: (c as any).modifierIds || [], cookingTime: c.cookingTime || null, notes: c.notes || null,
-            dealId: c.dealId || null, dealName: c.dealName || null, dealLineId: c.dealLineId || null,
-            dealGroupId: c.dealGroupId || null, dealRole: c.dealRole || null,
-          })),
-          subtotal: itemsSubtotal, discount: orderDiscount, tax, total,
-          advancePayment: finalAdvancePayment || undefined,
-          paymentMethod: payMethodStr,
-          staffName: selectedStaff,
-          tableNumber: orderType === "Dine In" ? tableNumber || null : null,
-          deliveryAddress: orderType === "Delivery" ? deliveryAddress : undefined,
-          isUrgent,
-          customerType: (selectedCustomerData as any)?.customerType || "walk-in",
-          orderSource: "pos" as const,
-        };
+      // ── Create the order, or full-update the one loaded for editing ──
+      const orderPayload = {
+        customerId: selectedCustomer || undefined,
+        customerName: selectedCustomerData?.name || "Walk-in",
+        phone: (selectedCustomerData as any)?.phone || deliveryPhone || undefined,
+        type: orderType,
+        items: cart.map((c) => ({
+          menuItemId: (c as any).menuItemId || null,
+          variantId: (c as any).variantId || null,
+          name: c.name, price: c.price, qty: c.qty, discount: c.discount,
+          modifiers: c.modifiers || [], modifierIds: (c as any).modifierIds || [], cookingTime: c.cookingTime || null, notes: c.notes || null,
+          dealId: c.dealId || null, dealName: c.dealName || null, dealLineId: c.dealLineId || null,
+          dealGroupId: c.dealGroupId || null, dealRole: c.dealRole || null,
+        })),
+        subtotal: itemsSubtotal, discount: orderDiscount, tax, total,
+        advancePayment: finalAdvancePayment || undefined,
+        paymentMethod: payMethodStr,
+        staffName: selectedStaff,
+        tableNumber: orderType === "Dine In" ? tableNumber || null : null,
+        deliveryAddress: orderType === "Delivery" ? deliveryAddress : undefined,
+        isUrgent,
+        customerType: (selectedCustomerData as any)?.customerType || "walk-in",
+        orderSource: "pos" as const,
+      };
 
-        if (loadedOrderId) {
-          const updated = await orderService.updateOrder(loadedOrderId, orderPayload);
-          finalOrderNumber = updated.orderNumber || (allOrdersData as any[]).find((x) => x.id === loadedOrderId)?.orderNumber || "Updated";
-          toast.success(`Order ${finalOrderNumber} updated!`);
-        } else {
-          const created = await orderService.createOrder(orderPayload);
-          finalOrderNumber = created.orderNumber;
-          setApiOrders(prev => [normalizeApiOrder(created), ...prev]);
-          if (loadedReservationId) {
-            reservationService.update(loadedReservationId, { status: "completed", orderId: created.id }).catch(() => {});
-            setLoadedReservationId(null);
-          }
-          if (orderType === "Dine In" && tableNumber) {
-            const targetTable = backendTables.find((t) => Number(t.number) === tableNumber);
-            if (targetTable) {
-              const guests = dineInGuests || targetTable.capacity || 2;
-              const wasAlreadyOccupied = targetTable.status === "occupied";
-              tableService.updateTable(targetTable.id, {
-                status: "occupied",
-                currentOrderId: `${Date.now()}:${guests}`
-              }).catch(() => {});
-              // Only clear self-order state when this order newly occupies the
-              // table (a new sitting) — not on a 2nd/3rd order rung in during an
-              // already-occupied, possibly self-order-active sitting.
-              if (!wasAlreadyOccupied) {
-                tableService.notifySelfOrderSessionEnded(targetTable.id).catch(() => {});
-              }
+      if (loadedOrderId) {
+        const updated = await orderService.updateOrder(loadedOrderId, orderPayload);
+        finalOrderNumber = updated.orderNumber || (allOrdersData as any[]).find((x) => x.id === loadedOrderId)?.orderNumber || "Updated";
+        toast.success(`Order ${finalOrderNumber} updated!`);
+      } else {
+        const created = await orderService.createOrder(orderPayload);
+        finalOrderNumber = created.orderNumber;
+        setApiOrders(prev => [normalizeApiOrder(created), ...prev]);
+        if (loadedReservationId) {
+          reservationService.update(loadedReservationId, { status: "completed", orderId: created.id }).catch(() => {});
+          setLoadedReservationId(null);
+        }
+        if (orderType === "Dine In" && tableNumber) {
+          const targetTable = backendTables.find((t) => Number(t.number) === tableNumber);
+          if (targetTable) {
+            const guests = dineInGuests || targetTable.capacity || 2;
+            const wasAlreadyOccupied = targetTable.status === "occupied";
+            tableService.updateTable(targetTable.id, {
+              status: "occupied",
+              currentOrderId: `${Date.now()}:${guests}`
+            }).catch(() => {});
+            // Only clear self-order state when this order newly occupies the
+            // table (a new sitting) — not on a 2nd/3rd order rung in during an
+            // already-occupied, possibly self-order-active sitting.
+            if (!wasAlreadyOccupied) {
+              tableService.notifySelfOrderSessionEnded(targetTable.id).catch(() => {});
             }
           }
-          if (orderType === "Delivery" && selectedRiderId) {
-            deliveryService.assignRider({ orderId: created.id, riderId: selectedRiderId, estimatedTime: 30 })
-              .catch(() => {});
-          }
-          toast.success(`Order ${finalOrderNumber} placed! Net Payable: Rs. ${netPayable.toLocaleString()}`);
         }
+        if (orderType === "Delivery" && selectedRiderId) {
+          deliveryService.assignRider({ orderId: created.id, riderId: selectedRiderId, estimatedTime: 30 })
+            .catch(() => {});
+        }
+        toast.success(`Order ${finalOrderNumber} placed! Net Payable: Rs. ${netPayable.toLocaleString()}`);
       }
     } catch (err: any) {
       toast.error(err?.message || "Failed to save order");
@@ -2078,7 +2105,6 @@ const POS = () => {
     setKotStaffName(selectedStaff);
     setShowFinalizeSale(false);
     setShowKOT(true);
-    setPaymentOnlyMode(false);
     cancelOrder();
     loadApiOrders();
   };
@@ -2262,125 +2288,48 @@ const POS = () => {
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-background flex flex-col print:static print:z-auto">
-      {/* POS Header */}
-      <div className="h-12 lg:h-14 bg-card border-b-2 border-primary/15 flex items-center justify-between px-2 sm:px-4 shrink-0 print:hidden shadow-sm">
-        <div className="flex items-center gap-2 shrink-0">
-          <Button variant="ghost" size="icon" className="h-8 w-8 lg:h-9 lg:w-9 rounded-full hover:bg-primary/10" onClick={() => setShowRegisterClose(true)}>
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-          <div className="flex items-center gap-1.5">
-            <div className="h-7 w-7 lg:h-9 lg:w-9 rounded-xl gradient-primary flex items-center justify-center shadow-md">
-              <Flame className="h-4 w-4 lg:h-5 lg:w-5 text-primary-foreground" />
-            </div>
-            <div className="hidden sm:block">
-              <span className="font-bold text-foreground text-sm lg:text-base tracking-tight">Ovenisto</span>
-              <span className="text-primary font-extrabold text-sm lg:text-base ml-1">POS</span>
+    <div className="fixed inset-0 z-50 bg-background flex overflow-hidden print:static print:z-auto print:block">
+      {/* LEFT: Running Orders / Drafts — hidden on <xl, toggle via button */}
+      {showLeftSidebar && (
+        <div className="fixed inset-0 z-40 bg-black/40 xl:hidden" onClick={() => setShowLeftSidebar(false)} />
+      )}
+      <div className={cn(
+        "bg-card border-r border-border/60 flex flex-col shrink-0 print:hidden z-50 transition-all duration-200",
+        "w-56 lg:w-60",
+        "xl:relative xl:translate-x-0",
+        showLeftSidebar ? "fixed inset-y-0 left-0 top-0 translate-x-0 shadow-2xl" : "hidden xl:flex"
+      )}>
+        {/* Brand & Back Navigation Header */}
+        <div className="h-12 lg:h-13 bg-card px-2.5 sm:px-3 border-b border-border/60 flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-1.5 shrink-0">
+            <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full hover:bg-primary/10 shrink-0" onClick={() => setShowRegisterClose(true)}>
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+            <div className="flex items-center gap-1.5">
+              <div className="h-7 w-7 rounded-xl gradient-primary flex items-center justify-center shadow-md shrink-0">
+                <Flame className="h-4 w-4 text-primary-foreground" />
+              </div>
+              <div>
+                <span className="font-bold text-foreground text-sm tracking-tight">Ovenisto</span>
+                <span className="text-primary font-extrabold text-sm ml-0.5">POS</span>
+              </div>
             </div>
           </div>
-        </div>
-        <div className="flex items-center gap-1 overflow-x-auto scrollbar-none flex-1 ml-2 mr-1">
-          {/* Mobile: sidebar toggle */}
-          <Button variant="outline" size="icon" className="h-8 w-8 shrink-0 rounded-lg xl:hidden" onClick={() => setShowLeftSidebar(!showLeftSidebar)}>
-            <ClipboardList className="h-3.5 w-3.5" />
-          </Button>
-
-          {/* Group 1: Live order operations (most used) */}
-          <Button variant="outline" size="sm" className="h-8 text-xs rounded-lg gap-1 shrink-0 px-2.5 font-medium" onClick={() => setShowOrderStatus(true)}>
-            <ClipboardList className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">Order Status</span>
-            {activeOrdersCount > 0 && (
-              <Badge className="h-5 px-1 text-[10px] gradient-primary text-primary-foreground">{activeOrdersCount}</Badge>
-            )}
-          </Button>
-
-          {/* Divider */}
-          <div className="h-5 w-px bg-border/60 shrink-0 hidden sm:block mx-0.5" />
-
-          {/* Group 2: Scheduling & secondary */}
-          <Button variant="outline" size="sm" className="h-8 text-xs rounded-lg gap-1 shrink-0 px-2" onClick={() => setShowReservations(true)}>
-            <BookOpen className="h-3.5 w-3.5" />
-            <span className="hidden lg:inline">Reservations</span>
-            {todayReservations.length > 0 && (
-              <Badge className="h-5 px-1 text-[10px] bg-info/80 text-info-foreground">{todayReservations.length}</Badge>
-            )}
-          </Button>
-
-          {/* Divider */}
-          <div className="h-5 w-px bg-border/60 shrink-0 hidden sm:block mx-0.5" />
-
-          {/* Group 3: Utilities */}
-          <Button variant="outline" size="sm" className="h-8 text-xs rounded-lg gap-1 shrink-0 px-2" asChild>
-            <Link to="/customer-display" target="_blank"><Monitor className="h-3.5 w-3.5" /><span className="hidden xl:inline">Customer Screen</span></Link>
-          </Button>
-          <Button variant="outline" size="sm" className="h-8 text-xs rounded-lg gap-1 shrink-0 px-2" onClick={() => activeShift ? setShowRegisterClose(true) : setShowRegisterOpen(true)}>
-            <DollarSign className="h-3.5 w-3.5" />
-            <span className="hidden xl:inline">{activeShift ? "Cash Register" : "Open Register"}</span>
-          </Button>
-          {(myActiveCash?.totalExpected ?? 0) > 0 && (
-            <Button variant="outline" size="sm" className="h-8 text-xs rounded-lg gap-1 shrink-0 px-2 border-emerald-500/30 text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 font-bold" onClick={() => setShowCashHeldDialog(true)}>
-              <Wallet className="h-3.5 w-3.5 text-emerald-500" />
-              <span className="hidden lg:inline">🧾 My Collection:</span> {effectiveSettings.currency} {myActiveCash!.totalExpected.toLocaleString()}
-            </Button>
-          )}
-          {(lowStockItems.length > 0 || lowStockFoodItems.length > 0) && (
-            <Button
-              variant="outline"
-              size="sm"
-              className={cn(
-                "h-8 text-xs rounded-lg gap-1.5 shrink-0 px-2.5 font-semibold transition-all shadow-2xs",
-                (foodOutOfStockCount + ingOutOfStockCount) > 0
-                  ? "border-destructive/40 text-destructive bg-destructive/10 hover:bg-destructive/20 hover:border-destructive/60"
-                  : "border-amber-500/40 text-amber-600 dark:text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 hover:border-amber-500/60"
-              )}
-              onClick={() => setShowLowStock(true)}
-            >
-              <AlertTriangle className={cn("h-3.5 w-3.5", (foodOutOfStockCount + ingOutOfStockCount) > 0 ? "text-destructive animate-pulse" : "text-amber-500")} />
-              <span className="hidden lg:inline">Stock Alerts</span>
-              <Badge
-                className={cn(
-                  "h-5 px-1.5 text-[10px] font-bold rounded-full",
-                  (foodOutOfStockCount + ingOutOfStockCount) > 0 ? "bg-destructive text-destructive-foreground" : "bg-amber-500 text-white"
-                )}
-              >
-                {lowStockItems.length + lowStockFoodItems.length}
-              </Badge>
-            </Button>
-          )}
-        </div>
-        {/* Mobile: toggle between menu & cart */}
-        <div className="flex items-center gap-1 xl:hidden ml-1 shrink-0">
-          <Button variant={mobileView === "menu" ? "default" : "outline"} size="sm" className="h-8 text-xs rounded-lg px-2.5" onClick={() => setMobileView("menu")}>
-            <Search className="h-3.5 w-3.5 mr-1" />Menu
-          </Button>
-          <Button variant={mobileView === "cart" ? "default" : "outline"} size="sm" className="h-8 text-xs rounded-lg px-2.5 relative" onClick={() => setMobileView("cart")}>
-            <ShoppingCart className="h-3.5 w-3.5 mr-1" />Cart
-            {cart.length > 0 && <Badge className="absolute -top-1.5 -right-1.5 h-4 px-1 text-[9px] gradient-primary text-primary-foreground">{cart.length}</Badge>}
+          <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg xl:hidden" onClick={() => setShowLeftSidebar(false)}>
+            <X className="h-4 w-4" />
           </Button>
         </div>
-      </div>
 
-      {/* 3-panel layout */}
-      <div className="flex-1 flex overflow-hidden print:block relative">
-        {/* LEFT: Running Orders / Drafts — hidden on <xl, toggle via button */}
-        {showLeftSidebar && (
-          <div className="fixed inset-0 z-40 bg-black/40 xl:hidden" onClick={() => setShowLeftSidebar(false)} />
-        )}
-        <div className={cn(
-          "bg-card border-r border-border/60 flex flex-col shrink-0 print:hidden z-50 transition-all duration-200",
-          "w-56 lg:w-60",
-          "xl:relative xl:translate-x-0",
-          showLeftSidebar ? "fixed inset-y-0 left-0 top-12 translate-x-0 shadow-2xl" : "hidden xl:flex"
-        )}>
-          <div className="p-3 border-b border-border/60">
-            <Tabs value={showDrafts ? "drafts" : "running"} onValueChange={(v) => setShowDrafts(v === "drafts")}>
-              <TabsList className="w-full h-9 bg-muted/60 rounded-lg">
-                <TabsTrigger value="running" className="text-xs flex-1 rounded-md data-[state=active]:shadow-sm">Running ({runningOrders.length})</TabsTrigger>
-                <TabsTrigger value="drafts" className="text-xs flex-1 rounded-md data-[state=active]:shadow-sm">Drafts ({drafts.length})</TabsTrigger>
-              </TabsList>
-            </Tabs>
-          </div>
-          <div className="flex-1 overflow-y-auto p-2.5 space-y-2">
+        {/* Tabs */}
+        <div className="p-2.5 border-b border-border/60">
+          <Tabs value={showDrafts ? "drafts" : "running"} onValueChange={(v) => setShowDrafts(v === "drafts")}>
+            <TabsList className="w-full h-8 bg-muted/60 rounded-lg">
+              <TabsTrigger value="running" className="text-xs flex-1 rounded-md data-[state=active]:shadow-sm">Running ({runningOrders.length})</TabsTrigger>
+              <TabsTrigger value="drafts" className="text-xs flex-1 rounded-md data-[state=active]:shadow-sm">Drafts ({drafts.length})</TabsTrigger>
+            </TabsList>
+          </Tabs>
+        </div>
+        <div className="flex-1 overflow-y-auto p-2.5 space-y-2">
             {showDrafts ? (
               drafts.length === 0 ? (
                 <div className="text-center py-8">
@@ -2434,7 +2383,7 @@ const POS = () => {
               )
             )}
           </div>
-          <div className="p-2.5 border-t border-border/60 space-y-1.5">
+          <div className="p-2.5 border-t border-border/60">
             <Button variant="outline" size="sm" className="w-full text-xs h-8 rounded-lg" onClick={() => {
               if (selectedRunningOrder) {
                 const order = allOrdersData.find(o => o.id === selectedRunningOrder);
@@ -2444,18 +2393,30 @@ const POS = () => {
               }
               setShowKOT(true);
             }}><Printer className="h-3 w-3 mr-1" />Re-print KOT</Button>
-            <Button variant="outline" size="sm" className="w-full text-xs h-8 rounded-lg text-destructive border-destructive/30 hover:bg-destructive/5" onClick={cancelOrder}>Cancel Order</Button>
           </div>
         </div>
 
         {/* CENTER: Current Order — full width on mobile when cart view active, fixed width on xl+ */}
         <div className={cn(
-          "shrink-0 flex flex-col min-w-0 bg-background print:w-full",
+          "shrink-0 flex flex-col min-w-0 bg-background border-r border-border/60 print:w-full",
           "w-full xl:w-[380px] 2xl:w-[420px]",
           mobileView === "cart" ? "flex" : "hidden xl:flex"
         )}>
+          {/* Mobile Cart Header (xl:hidden) */}
+          <div className="px-2.5 py-2 border-b border-border/60 bg-card/70 flex items-center justify-between xl:hidden shrink-0">
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="icon" className="h-8 w-8 rounded-lg" onClick={() => setShowLeftSidebar(!showLeftSidebar)}>
+                <ClipboardList className="h-3.5 w-3.5" />
+              </Button>
+              <span className="font-bold text-xs">Current Order</span>
+            </div>
+            <Button variant="default" size="sm" className="h-7 text-xs rounded-lg px-2.5 gradient-primary" onClick={() => setMobileView("menu")}>
+              <Search className="h-3.5 w-3.5 mr-1" />Back to Menu
+            </Button>
+          </div>
+
           {/* Customer + Waiter — single row */}
-          <div className="px-2 sm:px-3 py-2 border-b border-border/60 bg-card/30 print:hidden">
+          <div className="px-2 sm:px-3 py-2 border-b border-border/60 bg-card/30 print:hidden min-h-[48px] lg:min-h-[52px] flex flex-col justify-center shrink-0">
             <div className="flex items-center gap-1.5">
               <Select value={selectedCustomer || "walk-in"} onValueChange={handleCustomerSelect}>
                 <SelectTrigger className="flex-1 h-8 text-xs rounded-lg">
@@ -2511,100 +2472,132 @@ const POS = () => {
             )}
           </div>
 
-          {/* Order Type Tabs + Table/Delivery inline */}
-          <div className="flex flex-wrap items-center gap-1 px-2 sm:px-3 py-1.5 border-b border-border/60 bg-card/50 print:hidden">
-            {orderTypes.map((t) => (
-              <Button key={t} variant={orderType === t ? "default" : "outline"} size="sm" onClick={() => handleOrderTypeChange(t)} className={cn("text-[10px] sm:text-[11px] h-6 sm:h-7 rounded-lg font-semibold transition-all px-2 sm:px-2.5", orderType === t ? "gradient-primary text-primary-foreground shadow-md" : "hover:bg-muted/60")}>
-                {t}
-              </Button>
-            ))}
-            {/* Urgent Order Toggle */}
-            <Button variant={isUrgent ? "default" : "outline"} size="sm" onClick={() => setIsUrgent(!isUrgent)} className={cn("text-[10px] h-6 sm:h-7 rounded-lg font-semibold transition-all px-2", isUrgent ? "bg-destructive text-destructive-foreground hover:bg-destructive/90" : "border-destructive/30 text-destructive hover:bg-destructive/5")}>
-              <Zap className="h-3 w-3 mr-0.5" />{isUrgent ? "URGENT" : "Urgent"}
-            </Button>
-            {/* Dine In: Table Dropdown & Guests count */}
-            {orderType === "Dine In" && (
-              <div className="flex items-center gap-1">
-                <Select value={tableNumber ? String(tableNumber) : ""} onValueChange={(v) => {
-                  const num = Number(v);
-                  setTableNumber(num);
-                  const tObj = backendTables.find(t => Number(t.number) === num);
-                  if (tObj) setDineInGuests(tObj.capacity || 2);
-                }}>
-                  <SelectTrigger className={cn("w-24 h-6 sm:h-7 text-[10px] sm:text-xs rounded-lg", tableNumber ? "border-primary text-primary font-semibold" : "")}>
-                    <SelectValue placeholder="Table #" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {backendTables.length > 0
-                      ? backendTables.map((t) => (
-                          <SelectItem key={t.id} value={String(Number(t.number))} disabled={t.status === "occupied" || t.status === "bill-requested"}>
-                            {t.status === "available" && "🟢 "}
-                            {t.status === "occupied" && "🔴 "}
-                            {t.status === "bill-requested" && "🧾 "}
-                            {t.status === "reserved" && "🟡 "}
-                            {t.status === "maintenance" && "🔧 "}
-                            Table {t.number}
-                            {t.floor ? ` (${t.floor})` : ""}
-                            {t.status && ` · ${t.status === 'bill-requested' ? 'Bill Req' : t.status.charAt(0).toUpperCase() + t.status.slice(1)}`}
-                          </SelectItem>
-                        ))
-                      : Array.from({ length: 12 }, (_, i) => i + 1).map((t) => (
-                          <SelectItem key={t} value={String(t)}>Table {t}</SelectItem>
-                        ))
-                    }
-                  </SelectContent>
-                </Select>
+          {/* ── Row 1: Order Type Segmented Control ── */}
+          <div className="flex items-center gap-2 px-3 py-2 border-b border-border/50 bg-muted/10 print:hidden">
+            {/* Segmented pill group — fills full width */}
+            <div className="flex items-center bg-muted/50 border border-border/60 rounded-xl p-0.5 gap-0.5 flex-1">
+              {(["Dine In", "Take Away", "Delivery"] as const).map((t) => (
+                <button
+                  key={t}
+                  onClick={() => handleOrderTypeChange(t)}
+                  className={cn(
+                    "inline-flex items-center justify-center gap-1.5 h-7 flex-1 rounded-[10px] text-xs font-semibold transition-all select-none",
+                    orderType === t
+                      ? "gradient-primary text-primary-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
+                  )}
+                >
+                  {t === "Dine In" && <UtensilsCrossed className="h-3 w-3 shrink-0" />}
+                  {t === "Take Away" && <ShoppingBag className="h-3 w-3 shrink-0" />}
+                  {t === "Delivery" && <Truck className="h-3 w-3 shrink-0" />}
+                  {t}
+                </button>
+              ))}
+            </div>
 
-                {tableNumber !== null && (
-                  <div className="flex items-center gap-1 bg-muted/40 border border-border/60 rounded-lg px-1.5 h-6 sm:h-7 text-[10px] sm:text-xs">
-                    <Users className="h-3 w-3 text-muted-foreground shrink-0" />
-                    <input
-                      type="number"
-                      min={1}
-                      max={50}
-                      value={dineInGuests}
-                      onChange={(e) => setDineInGuests(Math.max(1, Number(e.target.value)))}
-                      className="w-7 bg-transparent text-center font-bold outline-none"
-                      title="Guests / Persons Count"
-                    />
-                    <span className="text-[10px] text-muted-foreground font-semibold">Pax</span>
-                  </div>
-                )}
-              </div>
-            )}
             {loadedOrderId && (
-              <Badge variant="secondary" className={cn("text-[10px]", paymentOnlyMode ? "bg-warning/15 text-warning border-warning/30" : "bg-info/10 text-info")}>
-                {paymentOnlyMode ? (
-                  <><DollarSign className="h-3 w-3 mr-0.5" />Collecting Payment: {allOrdersData.find((o) => o.id === loadedOrderId)?.orderNumber}</>
-                ) : (
-                  <>Editing: {allOrdersData.find((o) => o.id === loadedOrderId)?.orderNumber}</>
-                )}
+              <Badge variant="secondary" className="text-[10px] bg-info/10 text-info shrink-0">
+                Editing: {allOrdersData.find((o) => o.id === loadedOrderId)?.orderNumber}
               </Badge>
             )}
           </div>
 
-          {/* Delivery: Address & Rider */}
-          {orderType === "Delivery" && (
-            <div className="p-2 sm:p-3 border-b border-border bg-muted/30 space-y-2 print:hidden">
-              <div className="flex items-center gap-2">
-                <MapPin className="h-4 w-4 text-muted-foreground shrink-0" />
-                <Input value={deliveryAddress} onChange={(e) => setDeliveryAddress(e.target.value)} placeholder="Delivery address *" className={cn("h-7 sm:h-8 text-xs", !deliveryAddress.trim() && "border-amber-500/40 focus:border-amber-500")} />
+          {/* ── Row 2: Dine In — Table + Pax ── */}
+          {orderType === "Dine In" && (
+            <div className="flex items-center gap-2 px-3 py-2 border-b border-border/50 bg-muted/10 print:hidden">
+              <MapPin className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+              <Select
+                value={tableNumber ? String(tableNumber) : ""}
+                onValueChange={(v) => {
+                  const num = Number(v);
+                  setTableNumber(num);
+                  const tObj = backendTables.find(t => Number(t.number) === num);
+                  if (tObj) setDineInGuests(tObj.capacity || 2);
+                }}
+              >
+                <SelectTrigger className={cn(
+                  "h-8 text-xs rounded-lg flex-1",
+                  tableNumber ? "border-primary/60 text-primary font-semibold" : "border-border/60"
+                )}>
+                  <SelectValue placeholder="Select Table" />
+                </SelectTrigger>
+                <SelectContent>
+                  {backendTables.length > 0
+                    ? backendTables.map((t) => (
+                        <SelectItem key={t.id} value={String(Number(t.number))} disabled={t.status === "occupied" || t.status === "bill-requested"}>
+                          {t.status === "available" && "🟢 "}
+                          {t.status === "occupied" && "🔴 "}
+                          {t.status === "bill-requested" && "🧾 "}
+                          {t.status === "reserved" && "🟡 "}
+                          {t.status === "maintenance" && "🔧 "}
+                          Table {t.number}
+                          {t.floor ? ` · ${t.floor}` : ""}
+                          {t.status && ` · ${t.status === 'bill-requested' ? 'Bill Req' : t.status.charAt(0).toUpperCase() + t.status.slice(1)}`}
+                        </SelectItem>
+                      ))
+                    : Array.from({ length: 12 }, (_, i) => i + 1).map((t) => (
+                        <SelectItem key={t} value={String(t)}>Table {t}</SelectItem>
+                      ))
+                  }
+                </SelectContent>
+              </Select>
+
+              {/* Pax / Guests — stepper */}
+              <div className="flex items-center gap-1 bg-muted/40 border border-border/60 rounded-lg h-8 shrink-0 overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => setDineInGuests(Math.max(1, dineInGuests - 1))}
+                  className="flex items-center justify-center h-full w-7 text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors border-r border-border/40 text-base font-bold select-none"
+                >
+                  <Minus className="h-3 w-3" />
+                </button>
+                <div className="flex items-center gap-1 px-2">
+                  <Users className="h-3 w-3 text-muted-foreground shrink-0" />
+                  <span className="text-xs font-bold tabular-nums w-4 text-center">{dineInGuests}</span>
+                  <span className="text-[10px] text-muted-foreground font-semibold">Pax</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setDineInGuests(Math.min(50, dineInGuests + 1))}
+                  className="flex items-center justify-center h-full w-7 text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors border-l border-border/40 text-base font-bold select-none"
+                >
+                  <Plus className="h-3 w-3" />
+                </button>
               </div>
-              <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
-                <Phone className="h-4 w-4 text-muted-foreground shrink-0" />
+            </div>
+          )}
+
+          {/* ── Row 2: Delivery — Address, Phone, Rider ── */}
+          {orderType === "Delivery" && (
+            <div className="px-3 py-2 border-b border-border/50 bg-muted/10 space-y-1.5 print:hidden">
+              {/* Address */}
+              <div className="flex items-center gap-2">
+                <MapPin className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                <Input
+                  value={deliveryAddress}
+                  onChange={(e) => setDeliveryAddress(e.target.value)}
+                  placeholder="Delivery address *"
+                  className={cn("h-8 text-xs", !deliveryAddress.trim() && "border-amber-500/40 focus:border-amber-500")}
+                />
+              </div>
+              {/* Phone + Rider */}
+              <div className="flex items-center gap-2">
+                <Phone className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                 <Input
                   value={deliveryPhone}
                   maxLength={12}
                   onChange={(e) => setDeliveryPhone(formatPakistaniPhone(e.target.value))}
-                  placeholder="Phone number (11 Digits) *"
-                  className={cn("h-7 sm:h-8 text-xs flex-1 font-mono", !((selectedCustomerData as any)?.phone || deliveryPhone.trim()) && "border-amber-500/40 focus:border-amber-500")}
+                  placeholder="Phone *"
+                  className={cn("h-8 text-xs flex-1 font-mono", !((selectedCustomerData as any)?.phone || deliveryPhone.trim()) && "border-amber-500/40 focus:border-amber-500")}
                 />
                 <Select value={selectedRiderId || "none"} onValueChange={val => {
                   if (val === "none") { setSelectedRiderId(""); setRider("Unassigned"); return; }
                   const r = apiRiders.find(r => r.id === val);
                   if (r) { setSelectedRiderId(r.id); setRider(r.name); }
                 }}>
-                  <SelectTrigger className="w-44 h-8 text-xs"><SelectValue placeholder="Assign Rider" /></SelectTrigger>
+                  <SelectTrigger className="w-36 h-8 text-xs shrink-0">
+                    <SelectValue placeholder="Assign Rider" />
+                  </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">Assign Rider</SelectItem>
                     {apiRiders.map((r) => (
@@ -2614,18 +2607,6 @@ const POS = () => {
                   </SelectContent>
                 </Select>
               </div>
-            </div>
-          )}
-
-          {/* Payment-only mode banner */}
-          {paymentOnlyMode && (
-            <div className="mx-2 mt-2 rounded-lg bg-warning/10 border border-warning/30 px-3 py-2 flex items-center gap-2">
-              <DollarSign className="h-4 w-4 text-warning shrink-0" />
-              <div className="flex-1 min-w-0">
-                <p className="text-xs font-semibold text-warning">Payment Collection Mode</p>
-                <p className="text-[10px] text-muted-foreground">Select payment method and click "Collect Payment" — order will NOT be resent to kitchen</p>
-              </div>
-              <Button variant="ghost" size="sm" className="h-6 text-[10px] text-muted-foreground hover:text-foreground shrink-0" onClick={cancelOrder}>Exit</Button>
             </div>
           )}
 
@@ -2769,33 +2750,121 @@ const POS = () => {
 
             <div className="space-y-2 pt-0.5">
               {/* Secondary Actions Row */}
-              <div className="grid grid-cols-4 gap-1.5">
+              <div className="grid grid-cols-3 gap-1.5">
                 <Button variant="outline" className="text-destructive border-destructive/30 text-[10px] h-8 rounded-lg hover:bg-destructive/10 font-semibold" onClick={cancelOrder}><Trash2 className="h-3 w-3 mr-1" />Clear</Button>
                 <Button variant="outline" className="text-amber-500 border-amber-500/30 text-[10px] h-8 rounded-lg hover:bg-amber-500/10 font-semibold" onClick={saveDraft}><FileText className="h-3 w-3 mr-1" />Draft</Button>
                 <Button variant="outline" className="text-blue-500 border-blue-500/30 text-[10px] h-8 rounded-lg hover:bg-blue-500/10 font-semibold" onClick={() => cart.length > 0 && setShowQuotation(true)}><FileText className="h-3 w-3 mr-1" />Quote</Button>
-                <Button variant="outline" className="text-indigo-500 border-indigo-500/30 text-[10px] h-8 rounded-lg hover:bg-indigo-500/10 font-semibold" onClick={() => cart.length > 0 && setShowInvoice(true)}><Printer className="h-3 w-3 mr-1" />Invoice</Button>
               </div>
-              {/* KOT Print & Primary Order Button Row */}
-              <div className="grid grid-cols-5 gap-2">
-                <Button variant="outline" className="col-span-2 text-amber-600 dark:text-amber-400 border-amber-500/30 text-xs h-10 rounded-xl hover:bg-amber-500/10 font-bold gap-1" onClick={() => {
-                  if (cart.length === 0) { toast.error("Add items first"); return; }
-                  setKotItems([...cart]); setKotOrderType(orderType); setKotTableNumber(tableNumber); setKotStaffName(selectedStaff);
-                  setKotOrderNumber("NEW"); setShowKOT(true);
-                }}><ChefHat className="h-4 w-4" />Print KOT</Button>
-                <Button className={cn("col-span-3 text-primary-foreground text-sm h-10 font-extrabold rounded-xl shadow-lg hover:shadow-xl transition-all duration-200", paymentOnlyMode ? "bg-warning hover:bg-warning/90" : "gradient-primary")} onClick={handlePlaceOrder}>
-                  {paymentOnlyMode ? "Collect Payment" : loadedOrderId ? "Update Order" : "Place Order"}
-                </Button>
-              </div>
+              {/* Primary Order Button Row */}
+              <Button className="w-full gradient-primary text-primary-foreground text-sm h-10 font-extrabold rounded-xl shadow-lg hover:shadow-xl transition-all duration-200" onClick={handlePlaceOrder}>
+                {loadedOrderId ? "Update Order" : "Place Order"}
+              </Button>
             </div>
           </div>
         </div>
 
         {/* RIGHT: Menu Grid — full width on mobile when menu view active, flex-1 on desktop */}
         <div className={cn(
-          "bg-card border-l border-border/60 flex flex-col min-w-0 print:hidden",
+          "bg-card flex flex-col min-w-0 print:hidden",
           "flex-1",
           mobileView === "menu" ? "flex" : "hidden xl:flex"
         )}>
+          {/* TOP TOOLBAR */}
+          <div className="h-12 border-b border-border/50 bg-muted/20 flex items-center px-3 gap-1.5 shrink-0 overflow-x-auto scrollbar-none">
+
+            {/* Mobile: sidebar + cart toggles (hidden on xl) */}
+            <div className="flex items-center gap-1.5 xl:hidden mr-1">
+              <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg text-muted-foreground hover:text-foreground" onClick={() => setShowLeftSidebar(!showLeftSidebar)}>
+                <ClipboardList className="h-4 w-4" />
+              </Button>
+              <Button variant="ghost" size="sm" className="h-8 text-xs rounded-lg px-2 relative text-muted-foreground hover:text-foreground gap-1.5" onClick={() => setMobileView("cart")}>
+                <ShoppingCart className="h-3.5 w-3.5" />
+                <span>Cart</span>
+                {cart.length > 0 && <Badge className="h-4 min-w-[16px] px-1 text-[9px] font-bold gradient-primary text-primary-foreground rounded-full">{cart.length}</Badge>}
+              </Button>
+              <div className="h-5 w-px bg-border/60 mx-0.5" />
+            </div>
+
+            {/* Utility Buttons — all same anatomy */}
+            <div className="flex items-center gap-1.5 flex-1">
+
+              {/* 1 · Order Status */}
+              <button
+                onClick={() => setShowOrderStatus(true)}
+                className="group inline-flex items-center gap-1.5 h-8 px-3 rounded-lg border border-border/60 bg-card/80 hover:bg-card hover:border-primary/40 transition-all text-xs font-medium text-foreground/80 hover:text-foreground shrink-0 select-none"
+              >
+                <ClipboardList className="h-3.5 w-3.5 text-primary shrink-0" />
+                <span>Order Status</span>
+                {activeOrdersCount > 0 && (
+                  <span className="inline-flex items-center justify-center h-5 min-w-[20px] px-1.5 rounded-full text-[10px] font-bold gradient-primary text-primary-foreground leading-none">
+                    {activeOrdersCount}
+                  </span>
+                )}
+              </button>
+
+              {/* 2 · Stock Alerts (conditional) */}
+              {(ingredientAlerts.length > 0 || lowStockFoodItems.length > 0) && (
+                <button
+                  onClick={() => setShowLowStock(true)}
+                  className={cn(
+                    "group inline-flex items-center gap-1.5 h-8 px-3 rounded-lg border bg-card/80 hover:bg-card transition-all text-xs font-medium text-foreground/80 hover:text-foreground shrink-0 select-none",
+                    (foodOutOfStockCount + ingOutOfStockCount) > 0
+                      ? "border-destructive/40 hover:border-destructive/60"
+                      : "border-border/60 hover:border-amber-500/40"
+                  )}
+                >
+                  <AlertTriangle className={cn("h-3.5 w-3.5 shrink-0", (foodOutOfStockCount + ingOutOfStockCount) > 0 ? "text-destructive animate-pulse" : "text-amber-500")} />
+                  <span className="hidden sm:inline">Stock Alerts</span>
+                  <span className={cn(
+                    "inline-flex items-center justify-center h-5 min-w-[20px] px-1.5 rounded-full text-[10px] font-bold leading-none",
+                    (foodOutOfStockCount + ingOutOfStockCount) > 0 ? "bg-destructive text-white" : "bg-amber-500 text-white"
+                  )}>
+                    {ingredientAlerts.length + lowStockFoodItems.length}
+                  </span>
+                </button>
+              )}
+
+              {/* 3 · Reservations */}
+              <button
+                onClick={() => setShowReservations(true)}
+                className="group inline-flex items-center gap-1.5 h-8 px-3 rounded-lg border border-border/60 bg-card/80 hover:bg-card hover:border-blue-400/40 transition-all text-xs font-medium text-foreground/80 hover:text-foreground shrink-0 select-none"
+              >
+                <CalendarClock className="h-3.5 w-3.5 text-blue-400 shrink-0" />
+                <span className="hidden sm:inline">Reservations</span>
+                {todayReservations.length > 0 && (
+                  <span className="inline-flex items-center justify-center h-5 min-w-[20px] px-1.5 rounded-full text-[10px] font-bold bg-blue-500 text-white leading-none">
+                    {todayReservations.length}
+                  </span>
+                )}
+              </button>
+
+              {/* 4 · Cash Register */}
+              <button
+                onClick={() => activeShift ? setShowRegisterClose(true) : setShowRegisterOpen(true)}
+                className="group inline-flex items-center gap-1.5 h-8 px-3 rounded-lg border border-border/60 bg-card/80 hover:bg-card hover:border-emerald-500/40 transition-all text-xs font-medium text-foreground/80 hover:text-foreground shrink-0 select-none"
+              >
+                <DollarSign className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+                <span className="hidden md:inline">{activeShift ? "Cash Register" : "Open Register"}</span>
+                <span className={cn("h-2 w-2 rounded-full shrink-0", activeShift ? "bg-emerald-500 shadow-[0_0_6px_rgba(34,197,94,0.6)]" : "bg-border")} />
+              </button>
+
+              {/* 5 · My Collection (conditional) */}
+              {(myActiveCash?.totalExpected ?? 0) > 0 && (
+                <button
+                  onClick={() => setShowCashHeldDialog(true)}
+                  className="group inline-flex items-center gap-1.5 h-8 px-3 rounded-lg border border-emerald-500/25 bg-emerald-500/8 hover:bg-emerald-500/15 hover:border-emerald-500/50 transition-all text-xs font-medium text-emerald-600 dark:text-emerald-400 shrink-0 select-none"
+                >
+                  <Wallet className="h-3.5 w-3.5 shrink-0" />
+                  <span className="hidden lg:inline font-semibold">My Collection</span>
+                  <span className="font-bold tabular-nums">
+                    {effectiveSettings.currency} {myActiveCash!.totalExpected.toLocaleString()}
+                  </span>
+                </button>
+              )}
+
+            </div>
+          </div>
+
           <div className="p-2 sm:p-3 border-b border-border/60">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -3195,7 +3264,6 @@ const POS = () => {
             )}
           </div>
         </div>
-      </div>
 
 
       {/* Customizable Deal — group-selection dialog */}
@@ -4525,7 +4593,7 @@ const POS = () => {
               </div>
               <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-medium bg-muted/60 text-muted-foreground border border-border/50 ml-auto">
                 <Package className="h-3 w-3" />
-                <span>{lowStockFoodItems.length + lowStockItems.length} Total</span>
+                <span>{lowStockFoodItems.length + ingredientAlerts.length} Total</span>
               </div>
             </div>
           </div>
@@ -4546,7 +4614,7 @@ const POS = () => {
                   <Package className="h-3.5 w-3.5 text-info" />
                   <span>Ingredients</span>
                   <Badge variant="secondary" className="h-5 px-1.5 text-[10px] font-bold rounded-full ml-0.5">
-                    {lowStockItems.length}
+                    {ingredientAlerts.length}
                   </Badge>
                 </TabsTrigger>
               </TabsList>
@@ -4709,7 +4777,7 @@ const POS = () => {
 
             {/* Ingredients Tab */}
             <TabsContent value="ingredients" className="flex-1 p-4 space-y-2.5 overflow-y-auto m-0 focus-visible:outline-none">
-              {lowStockItems.length === 0 ? (
+              {ingredientAlerts.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-14 text-center space-y-3">
                   <div className="h-14 w-14 rounded-3xl bg-emerald-500/10 border border-emerald-500/25 flex items-center justify-center text-emerald-500 shadow-inner">
                     <CheckCircle2 className="h-7 w-7" />

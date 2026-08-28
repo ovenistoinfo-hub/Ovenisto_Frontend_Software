@@ -138,6 +138,32 @@ plus a body explaining _why_ the change was made when that is not obvious.
 
 ## Frontend Dev Quick-Reference
 
+- **Refreshes are push-first, poll-as-safety-net — this is a cost rule, not a style one.** Neon bills
+  compute-hours and suspends when idle, so a screen left open on a fast timer is the most expensive
+  thing the frontend can do. Subscribe with `useOrderEvents`/`useTableEvents`/`useReservationEvents`/
+  `useModuleEvents` for correctness, then add a **long** `useVisiblePolling` behind it purely to
+  self-heal a dropped socket message. Prefer that hook over a raw `setInterval` or a bare react-query
+  `refetchInterval` — it stops entirely while the tab is hidden, and they don't. Standardised
+  intervals (2026-08-28): socket-backed page data **180s**; own cash balance **300s**; near-static
+  lists like customers **600s**; self-order status **20s** (it fires one request *per* unfinished
+  order, so it multiplies — a 4-order sitting was ~3,600 req/hr at the old 4s); genuinely live boards
+  (KitchenPanel, OrderStatusBoard) stay at 60s. Reservations' orders query was the worst offender:
+  a bare `refetchInterval: 10000` with **no** socket, pulling `getOrders({ limit: 300 })` — 300 orders
+  with all items, categories, cancellation requests and kitchen progress — every 10 seconds, all day.
+  It now has `useOrderEvents` and a 120s net. Don't reintroduce that shape.
+- **A POST that only reads must be listed in `api.ts`'s `READ_ONLY_POST_PATHS`.** Cache invalidation
+  keys off the base path, so `POST /orders/validate-coupon` would otherwise flush the whole `/orders`
+  + `/warehouses` + `/inventory` GET cache on every cart change.
+- **Any checkout screen must preview the order-level discount before charging.** The backend applies
+  a Promo Code / Minimum Spend deal on *every* `createOrder` whether the client asked or not, so a
+  screen that computes its own total will display, print and collect the pre-discount figure while the
+  saved order is lower — a real hole in the drawer, which is exactly what POS and Waiter Panel did
+  until 2026-08-28. Call `orderService.validateCoupon({ subtotal, orderType })` (debounced, basis =
+  the **raw items subtotal**, before any manual discount), subtract the result before computing tax,
+  and keep sending `discount` = the manual staff discount only — the server adds the deal on top, so
+  pre-adding it double-counts. Any bill or receipt that re-derives `subtotal + tax` instead of reading
+  the order's stored `discount`/`total` will disagree with what was charged.
+
 - **`SelfOrder.tsx`'s per-device `localStorage` never reflects another device's state.** A
   promoted/fresh host's local `orders`/session data starts empty regardless of what other
   devices already did at that table — always reconcile against the backend

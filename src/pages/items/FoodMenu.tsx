@@ -7,7 +7,8 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Plus, Search, Pencil, Trash2, Utensils, Timer } from "lucide-react";
+import { Plus, Search, Pencil, Trash2, Utensils, Timer, AlertTriangle } from "lucide-react";
+import { DEFAULT_LOW_STOCK_ALERT } from "@/utils/foodAvailability";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { menuService, type MenuItemRecord, type CategoryRecord } from "@/services/menu.service";
@@ -86,7 +87,7 @@ const FoodMenu = () => {
             <>
             <div className="rounded-lg border overflow-auto max-h-[calc(100vh-300px)]">
               <Table>
-                <TableHeader className="sticky top-0 z-10 bg-card"><TableRow className="bg-muted/50 hover:bg-muted/50"><TableHead>SN</TableHead><TableHead>Item</TableHead><TableHead>Category</TableHead><TableHead>Code</TableHead><TableHead>Price</TableHead><TableHead>Cost</TableHead><TableHead>Margin</TableHead><TableHead>Cooking Time</TableHead><TableHead>Available</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader>
+                <TableHeader className="sticky top-0 z-10 bg-card"><TableRow className="bg-muted/50 hover:bg-muted/50"><TableHead>SN</TableHead><TableHead>Item</TableHead><TableHead>Category</TableHead><TableHead>Code</TableHead><TableHead>Price</TableHead><TableHead>Cost</TableHead><TableHead>Margin</TableHead><TableHead>Cooking Time</TableHead><TableHead>Low Stock Alert</TableHead><TableHead>Available</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader>
                 <TableBody>{paginate(filtered, page).map((item, i) => {
                   const margin = item.price > 0 ? ((item.price - (item.costPrice || 0)) / item.price) * 100 : 0;
                   return (
@@ -99,6 +100,17 @@ const FoodMenu = () => {
                     <TableCell className="text-muted-foreground">{item.costPrice > 0 ? `Rs. ${item.costPrice.toFixed(0)}` : "—"}</TableCell>
                     <TableCell>{item.costPrice > 0 ? <span className={margin >= 0 ? "text-emerald-500" : "text-destructive"}>{margin.toFixed(0)}%</span> : "—"}</TableCell>
                     <TableCell>{item.cookingTime > 0 ? <span className="flex items-center gap-1 text-xs text-muted-foreground"><Timer className="h-3 w-3" />{item.cookingTime} min</span> : <span className="text-xs text-muted-foreground">—</span>}</TableCell>
+                    <TableCell>
+                      {/* Portions-remaining threshold POS warns at. 0 is a real
+                          setting ("out-of-stock only"), so it prints as such
+                          rather than falling through to the em-dash. */}
+                      <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                        <AlertTriangle className="h-3 w-3" />
+                        {(item.lowStockAlert ?? DEFAULT_LOW_STOCK_ALERT) === 0
+                          ? "Out only"
+                          : `${item.lowStockAlert ?? DEFAULT_LOW_STOCK_ALERT} portions`}
+                      </span>
+                    </TableCell>
                     <TableCell><Switch checked={item.available} onCheckedChange={() => toggleAvailable(item)} /></TableCell>
                     <TableCell><div className="flex gap-1"><Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => navigate(`/items/food-menu/edit/${item.id}`)}><Pencil className="h-3 w-3" /></Button>
                       <AlertDialog><AlertDialogTrigger asChild><Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10"><Trash2 className="h-3 w-3" /></Button></AlertDialogTrigger><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Delete {item.name}?</AlertDialogTitle><AlertDialogDescription>This action cannot be undone.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={() => handleDelete(item.id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Delete</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
