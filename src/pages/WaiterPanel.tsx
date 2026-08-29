@@ -1608,10 +1608,10 @@ const WaiterPanel = () => {
     }
   };
 
-  const openTableSlip = (overridePaymentMethod?: string) => {
-    if (!selectedTable || activeTableOrders.length === 0) return;
+  const openTableSlipFor = (tbl: TableRecord, tblOrders: OrderRecord[], overridePaymentMethod?: string) => {
+    if (!tbl || tblOrders.length === 0) return;
     const slipItems: any[] = [];
-    activeTableOrders.forEach((o) => {
+    tblOrders.forEach((o) => {
       (o.items || []).forEach((item: any) => {
         slipItems.push({
           id: item.id,
@@ -1626,24 +1626,25 @@ const WaiterPanel = () => {
       });
     });
 
-    const subtotal = activeTableOrders.reduce((s, o) => s + Number(o.subtotal ?? o.total ?? 0), 0);
-    const discountValue = activeTableOrders.reduce((s, o) => s + Number(o.discount || 0), 0);
-    const taxValue = activeTableOrders.reduce((s, o) => s + Number(o.tax || 0), 0);
-    const total = activeTableOrders.reduce((s, o) => s + Number(o.total || 0), 0);
+    const subtotal = tblOrders.reduce((s, o) => s + Number(o.subtotal ?? o.total ?? 0), 0);
+    const discountValue = tblOrders.reduce((s, o) => s + Number(o.discount || 0), 0);
+    const taxValue = tblOrders.reduce((s, o) => s + Number(o.tax || 0), 0);
+    const total = tblOrders.reduce((s, o) => s + Number(o.total || 0), 0);
+    const advSum = tblOrders.reduce((s, o) => s + Number(o.advancePayment || 0), 0);
 
-    const custName = selectedCustomerData?.name 
-      || activeTableOrders.find(o => o.customerName && o.customerName !== "Walk-in")?.customerName 
+    const custName = tblOrders.find(o => o.customerName && o.customerName !== "Walk-in")?.customerName 
+      || (tbl.id === selectedTableId ? selectedCustomerData?.name : undefined)
       || "Walk-in";
-    const custPhone = selectedCustomerData?.phone 
-      || activeTableOrders.find(o => o.phone)?.phone 
+    const custPhone = tblOrders.find(o => o.phone)?.phone 
+      || (tbl.id === selectedTableId ? selectedCustomerData?.phone : undefined)
       || "";
 
-    const primaryOrder = activeTableOrders[0];
+    const primaryOrder = tblOrders[0];
 
     setPlacedOrderSlip({
-      orderNumber: activeTableOrders.map(o => o.orderNumber).join(", ") || (primaryOrder ? primaryOrder.orderNumber : "TABLE-" + selectedTable.number),
+      orderNumber: tblOrders.map(o => o.orderNumber).join(", ") || (primaryOrder ? primaryOrder.orderNumber : "TABLE-" + tbl.number),
       orderType: "Dine In",
-      tableNumber: Number(selectedTable.number),
+      tableNumber: Number(tbl.number),
       customerName: custName,
       customerPhone: custPhone,
       customerAddress: undefined,
@@ -1653,9 +1654,9 @@ const WaiterPanel = () => {
       discount: discountValue,
       tax: taxValue,
       total: total,
-      advancePayment: currentAdvancePayment > 0 ? currentAdvancePayment : undefined,
-      netPayable: Math.max(0, total - currentAdvancePayment),
-      paymentMethod: overridePaymentMethod || activeTableOrders[0]?.paymentMethod || "Cash",
+      advancePayment: advSum > 0 ? advSum : undefined,
+      netPayable: Math.max(0, total - advSum),
+      paymentMethod: overridePaymentMethod || primaryOrder?.paymentMethod || "Cash",
       dateStr: new Date().toLocaleDateString(),
       timeStr: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       restaurantName: settings?.restaurantName || "OVENISTO",
@@ -1664,6 +1665,11 @@ const WaiterPanel = () => {
       currency: currency || "Rs.",
     });
     setShowOrderPlacedModal(true);
+  };
+
+  const openTableSlip = (overridePaymentMethod?: string) => {
+    if (!selectedTable || activeTableOrders.length === 0) return;
+    openTableSlipFor(selectedTable, activeTableOrders, overridePaymentMethod);
   };
 
   const settleBilling = async (paymentMethod: string) => {
@@ -2492,6 +2498,7 @@ const WaiterPanel = () => {
                         })();
 
                     const isOccupiedState = status === "occupied" || status === "bill-requested" || tOrders.length > 0;
+                    const isTablePaid = tOrders.length > 0 && !tOrders.some(isOrderUnpaid);
 
                     const hasFoodReady = isOccupiedState && tOrders.length > 0 && tOrders.some(
                       (o) => o.status === "ready" || o.kitchenStatus === "ready" || (o.items && o.items.some((i: any) => i.status === "ready" || i.kitchenStatus === "ready"))
@@ -2499,6 +2506,7 @@ const WaiterPanel = () => {
 
                     const statusDotColor =
                       status === "bill-requested" ? "bg-destructive animate-ping shadow-[0_0_8px_rgba(239,68,68,0.8)]" :
+                      isTablePaid ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)]" :
                       status === "available" ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)]" :
                       status === "occupied" ? (hasFoodReady ? "bg-orange-400 animate-ping shadow-[0_0_8px_rgba(249,115,22,0.8)]" : "bg-orange-500 shadow-[0_0_8px_rgba(249,115,22,0.6)]") :
                       "bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.6)]";
@@ -2506,6 +2514,8 @@ const WaiterPanel = () => {
                     const cardStatusClass =
                       status === "bill-requested"
                         ? "border-destructive/80 bg-destructive/10 hover:border-destructive animate-pulse ring-2 ring-destructive/40 shadow-[0_0_16px_rgba(239,68,68,0.4)]"
+                        : isTablePaid
+                        ? "border-emerald-500/50 bg-emerald-500/[0.04] dark:bg-emerald-500/[0.06] hover:border-emerald-500/80 ring-1 ring-emerald-500/30 shadow-[0_0_12px_rgba(16,185,129,0.15)]"
                         : isOccupiedState
                         ? cn(
                             "border-orange-500/40 bg-orange-500/[0.03] dark:bg-orange-500/[0.05] hover:border-orange-500/80",
@@ -2546,7 +2556,7 @@ const WaiterPanel = () => {
                             selectedTableId === t.id && "ring-2 ring-orange-500 ring-offset-2 dark:ring-offset-zinc-950 shadow-lg border-orange-500"
                           )}
                         >
-                          {/* Top Bar: Table Label, Status Dot & Capacity/Pax Pill */}
+                          {/* Top Bar: Table Label, Status Dot & Capacity/Pax Pill / Print Button */}
                           <div className="flex items-center justify-between w-full select-none shrink-0">
                             <div className="flex items-center gap-2">
                               <span className={cn(
@@ -2560,6 +2570,25 @@ const WaiterPanel = () => {
                               <Badge className="bg-destructive text-destructive-foreground font-extrabold text-[10px] animate-pulse gap-1 px-2 py-0.5 shadow-xs border-none">
                                 <Receipt className="h-3 w-3" /> Bill Req.
                               </Badge>
+                            ) : isTablePaid ? (
+                              <div className="flex items-center gap-1.5">
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-6 w-6 rounded-lg text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 hover:bg-emerald-500/20 bg-emerald-500/10 border border-emerald-500/30 transition-all p-0 shadow-2xs cursor-pointer"
+                                  title="Print Slip (Receipt / Bill)"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    openTableSlipFor(t, tOrders);
+                                  }}
+                                >
+                                  <Printer className="h-3.5 w-3.5" />
+                                </Button>
+                                <div className="flex items-center gap-1 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                                  <Users className="h-3 w-3 text-emerald-500 shrink-0" />
+                                  <span>{getGuestsCount(t)} Pax</span>
+                                </div>
+                              </div>
                             ) : isOccupiedState ? (
                               <div className="flex items-center gap-1 text-[10px] font-bold text-orange-500 bg-orange-500/10 px-2 py-0.5 rounded-full border border-orange-500/20">
                                 <Users className="h-3 w-3 text-orange-500 shrink-0" />
@@ -2660,13 +2689,15 @@ const WaiterPanel = () => {
                               {t.floor || "Ground Floor"}
                             </span>
                             <span className={cn(
-                              "text-[10px] font-bold uppercase tracking-wider",
+                              "text-[10px] font-bold uppercase tracking-wider flex items-center gap-1",
                               status === "bill-requested" ? "text-destructive" :
+                              isTablePaid ? "text-emerald-600 dark:text-emerald-400 font-extrabold" :
                               isOccupiedState ? "text-orange-500" :
                               status === "reserved" ? "text-amber-500" :
                               "text-emerald-500"
                             )}>
                               {status === "bill-requested" ? "Bill Req" :
+                               isTablePaid ? <><Check className="h-3 w-3" /> Paid</> :
                                isOccupiedState ? "Occupied" :
                                status === "reserved" ? "Reserved" :
                                "Available"}
