@@ -51,6 +51,7 @@ import type { Shift } from "@/contexts/DataContext";
 import { getRiderCollectAmount } from "@/utils/deliveryPayment";
 import { dealService, type DealRecord, type DealOptionItemRecord } from "@/services/deal.service";
 import { isDealLive, dealChannelPrice, dealChannelPercent, allocateDealDiscount, dealBogoSides, capFreeUnitPrice } from "@/lib/deals";
+import { OrderPlacedPrintModal, type PlacedOrderSlipData } from "@/components/pos/OrderPlacedPrintModal";
 
 interface CartItem extends OrderItem {
   modifiers?: string[];
@@ -514,6 +515,8 @@ const POS = () => {
   const [kotTableNumber, setKotTableNumber] = useState<number | null>(null);
   const [kotStaffName, setKotStaffName] = useState("");
   const [showFinalizeSale, setShowFinalizeSale] = useState(false);
+  const [showOrderPlacedModal, setShowOrderPlacedModal] = useState(false);
+  const [placedOrderSlip, setPlacedOrderSlip] = useState<PlacedOrderSlipData | null>(null);
 
   // Finalize Sale state
   const [finalizeMethod, setFinalizeMethod] = useState("Cash");
@@ -1008,7 +1011,30 @@ const POS = () => {
     };
   };
 
-  const runningOrders = allOrdersData.filter((o) => o.status === "preparing" || o.status === "pending");
+  const isPosOrder = useCallback((o: any) => {
+    if (!o) return false;
+    const src = (o.orderSource || "").toLowerCase().trim();
+    if (src === "waiter" || src === "self-order" || src === "website" || src === "online" || src === "qr") {
+      return false;
+    }
+    const typeStr = (o.type || "").toLowerCase().trim();
+    if (typeStr === "self order" || typeStr === "self-order" || typeStr === "online") {
+      return false;
+    }
+    const staff = (o.staff || o.staffName || "").toLowerCase().trim();
+    if (staff.includes("waiter") || staff.includes("self order") || staff.includes("online")) {
+      return false;
+    }
+    const staffRole = (o.staffRole || o.staff?.role || "").toLowerCase().trim();
+    if (staffRole.includes("waiter")) {
+      return false;
+    }
+    return true;
+  }, []);
+
+  const runningOrders = useMemo(() => {
+    return allOrdersData.filter((o) => (o.status === "preparing" || o.status === "pending") && isPosOrder(o));
+  }, [allOrdersData, isPosOrder]);
 
   // Load tables from backend
   const loadTables = useCallback(() => {
@@ -2240,13 +2266,65 @@ const POS = () => {
 
     localStorage.setItem("ovenisto-pos-cart", JSON.stringify({ cart: [], status: "completed", timestamp: Date.now() }));
 
+    const slipItems = cartDisplayRows.map((row) => {
+      if (row.kind === "deal") {
+        const gross = row.items.reduce((s, i) => s + i.price * i.qty, 0);
+        const disc = row.items.reduce((s, i) => s + i.discount, 0);
+        return {
+          name: row.dealName,
+          qty: 1,
+          price: gross,
+          discount: disc,
+          dealName: row.dealName,
+          dealItemsLabel: row.items.map((i) => `${i.qty}x ${i.name}`).join(", "),
+        };
+      }
+      return {
+        id: row.item.id,
+        name: row.item.name,
+        qty: row.item.qty,
+        price: row.item.price,
+        discount: row.item.discount,
+        modifiers: row.item.modifiers,
+        notes: row.item.notes,
+        cookingTime: row.item.cookingTime,
+        dealName: (row.item as any).dealName,
+      };
+    });
+
+    const slipData: PlacedOrderSlipData = {
+      orderNumber: finalOrderNumber,
+      orderType,
+      tableNumber: tableNumber || null,
+      customerName: selectedCustomerData?.name || "Walk-in",
+      customerPhone: (selectedCustomerData as any)?.phone || deliveryPhone || undefined,
+      customerAddress: deliveryAddress || undefined,
+      staffName: selectedStaff,
+      items: slipItems,
+      subtotal: itemsSubtotal,
+      discount: orderDiscount + dealDiscount,
+      tax,
+      total,
+      advancePayment: finalAdvancePayment || undefined,
+      netPayable,
+      paymentMethod: payMethodStr,
+      dateStr: new Date().toLocaleDateString(),
+      timeStr: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+      restaurantName: effectiveSettings.restaurantName || "OVENISTO",
+      restaurantAddress: effectiveSettings.address || undefined,
+      restaurantPhone: effectiveSettings.phone || undefined,
+      currency: effectiveSettings.currency || "Rs.",
+      isUrgent,
+    };
+
     setKotOrderNumber(finalOrderNumber);
     setKotItems([...cart]);
     setKotOrderType(orderType);
     setKotTableNumber(tableNumber);
     setKotStaffName(selectedStaff);
+    setPlacedOrderSlip(slipData);
     setShowFinalizeSale(false);
-    setShowKOT(true);
+    setShowOrderPlacedModal(true);
     cancelOrder();
     loadApiOrders();
   };
@@ -2417,6 +2495,43 @@ const POS = () => {
     }
   };
 
+  const handleOpenOrderSlip = (order: any) => {
+    const slipItems = (order.items || []).map((i: any) => ({
+      id: i.id,
+      name: i.name,
+      qty: Number(i.qty) || 1,
+      price: Number(i.price) || 0,
+      discount: Number(i.discount) || 0,
+      modifiers: i.modifiers || [],
+      notes: i.notes || null,
+      dealName: i.dealName || null,
+    }));
+    setPlacedOrderSlip({
+      orderNumber: order.orderNumber,
+      orderType: order.type,
+      tableNumber: order.tableNumber || null,
+      customerName: order.customer || "Walk-in",
+      customerPhone: order.phone,
+      customerAddress: order.deliveryAddress,
+      staffName: order.staff,
+      items: slipItems,
+      subtotal: Number(order.subtotal ?? order.total ?? 0),
+      discount: Number(order.discount) || 0,
+      tax: Number(order.tax) || 0,
+      total: Number(order.total) || 0,
+      advancePayment: order.advancePayment ? Number(order.advancePayment) : undefined,
+      netPayable: Number(order.total) - Number(order.advancePayment || 0),
+      paymentMethod: order.paymentMethod || "Cash",
+      dateStr: order.date,
+      timeStr: order.time,
+      restaurantName: effectiveSettings.restaurantName || "OVENISTO",
+      restaurantAddress: effectiveSettings.address,
+      restaurantPhone: effectiveSettings.phone,
+      currency: effectiveSettings.currency || "Rs.",
+    });
+    setShowOrderPlacedModal(true);
+  };
+
   if (user?.role === "Super Admin") {
     return (
       <div className="flex flex-col items-center justify-center min-h-[400px] text-center p-6 space-y-3">
@@ -2480,13 +2595,15 @@ const POS = () => {
                 </div>
               ) : (
                 drafts.map((d) => (
-                  <Card key={d.id} onClick={() => loadDraft(d)} className="p-3 cursor-pointer hover:shadow-md transition-all text-xs border-l-[3px] border-l-muted rounded-lg hover:-translate-y-0.5">
+                  <Card key={d.id} onClick={() => loadDraft(d)} className="p-3 cursor-pointer hover:shadow-md transition-all text-xs border border-border/60 rounded-2xl hover:border-border hover:bg-card/80 space-y-1.5 group">
                     <div className="flex items-center justify-between">
-                      <span className="font-semibold">{d.id.slice(0, 12)}</span>
-                      <Badge variant="secondary" className="text-[9px] bg-muted rounded-full">{d.orderType}</Badge>
+                      <span className="font-mono font-bold text-foreground text-xs">{d.id.slice(0, 14)}</span>
+                      <Badge variant="outline" className="text-[10px] font-semibold px-2 py-0.5 rounded-full border-border/60">{d.orderType}</Badge>
                     </div>
-                    <p className="text-muted-foreground mt-1">{d.items.length} items</p>
-                    <p className="text-muted-foreground">{d.customer}</p>
+                    <div className="flex items-center justify-between text-[11px] text-muted-foreground pt-1 border-t border-border/40">
+                      <span>{d.customer || "Walk-in"}</span>
+                      <span className="font-mono font-semibold text-foreground">{d.items.length} items</span>
+                    </div>
                   </Card>
                 ))
               )
@@ -2498,43 +2615,86 @@ const POS = () => {
                 </div>
               ) : (
               runningOrders.map((o) => (
-                <Card key={o.id} onClick={() => loadRunningOrder(o.id)} className={cn(
-                  "p-2.5 cursor-pointer hover:shadow-md transition-all text-xs border-l-[3px] rounded-xl hover:-translate-y-0.5 group",
-                  selectedRunningOrder === o.id ? "border-l-primary bg-primary/10 shadow-sm ring-1 ring-primary/30" : "border-l-transparent hover:bg-muted/40",
-                  o.type === "Delivery" ? "border-l-info" : o.type === "Take Away" ? "border-l-accent" : ""
-                )}>
+                <div
+                  key={o.id}
+                  onClick={() => loadRunningOrder(o.id)}
+                  className={cn(
+                    "p-2.5 rounded-2xl border transition-all duration-200 cursor-pointer text-xs space-y-2 group shadow-2xs relative",
+                    selectedRunningOrder === o.id
+                      ? "bg-orange-500/10 border-orange-500/80 shadow-sm ring-1 ring-orange-500/30"
+                      : "bg-muted/20 hover:bg-muted/40 border-border/60 hover:border-border/90"
+                  )}
+                >
+                  {/* Top Line: Order Number, Status Badge & Print Icon */}
                   <div className="flex items-center justify-between gap-1">
-                    <span className="font-bold tracking-tight text-foreground group-hover:text-primary transition-colors">{o.orderNumber}</span>
-                    <div className="flex items-center gap-1">
-                      <Badge variant="secondary" className="text-[9px] px-1.5 py-0 rounded-full font-medium">{o.type}</Badge>
-                      <Badge className={cn("text-[9px] px-1.5 py-0 rounded-full capitalize font-semibold",
-                        o.status === "preparing" ? "bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30" :
-                        o.status === "ready" ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30" :
-                        "bg-blue-500/15 text-blue-600 dark:text-blue-400 border border-blue-500/30"
-                      )}>
+                    <span className="font-mono font-black text-xs tracking-tight text-foreground group-hover:text-orange-500 transition-colors">
+                      #{o.orderNumber}
+                    </span>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <span
+                        className={cn(
+                          "text-[9px] px-1.5 py-0.5 rounded-full capitalize font-bold flex items-center gap-1",
+                          o.status === "preparing"
+                            ? "bg-orange-500/10 text-orange-500 border border-orange-500/30"
+                            : o.status === "ready"
+                            ? "bg-emerald-500/10 text-emerald-500 border border-emerald-500/30"
+                            : "bg-amber-500/10 text-amber-500 border border-amber-500/30"
+                        )}
+                      >
+                        {o.status === "preparing" ? (
+                          <Flame className="h-2.5 w-2.5" />
+                        ) : o.status === "ready" ? (
+                          <CheckCircle2 className="h-2.5 w-2.5" />
+                        ) : (
+                          <Clock className="h-2.5 w-2.5" />
+                        )}
                         {o.status}
-                      </Badge>
+                      </span>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 rounded-lg text-muted-foreground hover:text-orange-500 hover:bg-orange-500/10 transition-colors p-0"
+                        title="Print Slip (KOT / Bill)"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleOpenOrderSlip(o);
+                        }}
+                      >
+                        <Printer className="h-3.5 w-3.5" />
+                      </Button>
                     </div>
                   </div>
-                  <div className="flex items-center justify-between mt-1.5 text-[11px] text-muted-foreground">
-                    <span className="truncate max-w-[120px] font-medium text-foreground/80">{o.customer}{o.tableNumber ? ` · T#${o.tableNumber}` : ""}</span>
-                    <span className="text-[10px] opacity-80">{o.time}</span>
+
+                  {/* Middle Line: Order Type & Customer Name */}
+                  <div className="flex items-center justify-between text-[11px] gap-1">
+                    <Badge
+                      variant="outline"
+                      className="text-[9px] font-semibold px-1.5 py-0 rounded-md border-border/60 bg-background/60 text-foreground/90 shrink-0"
+                    >
+                      {o.type === "Dine In" && o.tableNumber
+                        ? `Table #${o.tableNumber}`
+                        : o.type}
+                    </Badge>
+                    <span className="truncate max-w-[100px] text-muted-foreground font-medium text-[11px] text-right">
+                      {o.customer || "Walk-in"}
+                    </span>
                   </div>
-                </Card>
+
+                  {/* Bottom Line: Total amount & Timestamp */}
+                  <div className="flex items-center justify-between pt-1 border-t border-border/40 text-[10px]">
+                    <span className="font-mono font-bold text-foreground">
+                      Rs. {Number(o.total || 0).toLocaleString()}
+                    </span>
+                    <span className="font-mono text-muted-foreground/80 flex items-center gap-1">
+                      <Clock className="h-2.5 w-2.5 opacity-60" />
+                      {o.time}
+                    </span>
+                  </div>
+                </div>
               ))
               )
             )}
-          </div>
-          <div className="p-2.5 border-t border-border/60">
-            <Button variant="outline" size="sm" className="w-full text-xs h-8 rounded-lg" onClick={() => {
-              if (selectedRunningOrder) {
-                const order = allOrdersData.find(o => o.id === selectedRunningOrder);
-                if (order) { setKotItems(order.items.map(i => ({ ...i, modifiers: i.modifiers }))); setKotOrderNumber(order.orderNumber); setKotOrderType(order.type); setKotTableNumber(order.tableNumber || null); setKotStaffName(order.staff); }
-              } else if (cart.length > 0) {
-                setKotItems([...cart]); setKotOrderType(orderType); setKotTableNumber(tableNumber); setKotStaffName(selectedStaff);
-              }
-              setShowKOT(true);
-            }}><Printer className="h-3 w-3 mr-1" />Re-print KOT</Button>
           </div>
         </div>
 
@@ -4078,6 +4238,13 @@ const POS = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Order Placed Print Options & Thermal Preview Modal */}
+      <OrderPlacedPrintModal
+        open={showOrderPlacedModal}
+        onOpenChange={setShowOrderPlacedModal}
+        slipData={placedOrderSlip}
+      />
 
       {/* KOT Dialog */}
       <Dialog open={showKOT} onOpenChange={setShowKOT}>

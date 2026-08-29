@@ -42,6 +42,7 @@ import { warehouseService, type WarehouseStockRecord } from "@/services/warehous
 import { stockService, type ProductionStockRecord } from "@/services/stock.service";
 import { calculateFoodAvailability, isFullyOutOfStock } from "@/utils/foodAvailability";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
+import { OrderPlacedPrintModal, type PlacedOrderSlipData } from "@/components/pos/OrderPlacedPrintModal";
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
@@ -384,6 +385,8 @@ const WaiterPanel = () => {
   const [showOrdersDialog, setShowOrdersDialog] = useState(false);
   const [showBillDialog, setShowBillDialog] = useState(false);
   const [showPayBillDialog, setShowPayBillDialog] = useState(false);
+  const [showOrderPlacedModal, setShowOrderPlacedModal] = useState(false);
+  const [placedOrderSlip, setPlacedOrderSlip] = useState<PlacedOrderSlipData | null>(null);
   const [isSplitPayment, setIsSplitPayment] = useState(false);
   const [waiterPaymentEntries, setWaiterPaymentEntries] = useState<{ id: string; method: string; amount: number }[]>([]);
   const [waiterGivenAmount, setWaiterGivenAmount] = useState<number>(0);
@@ -1458,20 +1461,28 @@ const WaiterPanel = () => {
         })),
       });
       if (selectedTable && selectedTable.status !== "occupied") {
-        const guests = guestsInput || selectedTable.capacity;
-        const updated = await tableService.updateTable(selectedTable.id, {
+        const tbl = selectedTable;
+        const guests = guestsInput || tbl.capacity;
+        // Don't hold the spinner on the table write — update local state
+        // optimistically and let the request settle in the background
+        // (useOrderEvents + the 180s poll reconcile it).
+        tableService.updateTable(tbl.id, {
           status: "occupied",
           currentOrderId: `${Date.now()}:${guests}`
-        });
-        setTables(prev => prev.map(t => t.id === selectedTable.id ? updated : t));
+        })
+          .then(updated => setTables(prev => prev.map(t => t.id === tbl.id ? updated : t)))
+          .catch(() => {});
         // A new sitting starts here — any self-order session left over from a
         // previous, improperly-ended visit to this table must not leak into it.
-        tableService.notifySelfOrderSessionEnded(selectedTable.id).catch(() => {});
+        tableService.notifySelfOrderSessionEnded(tbl.id).catch(() => {});
       }
       toast.success("Order sent to kitchen!");
       setCartItems([]);
       setIsOrderingMode(false);
-      await loadOrders();
+      // Fire-and-forget: createOrder already emitted order:created, which
+      // useOrderEvents turns into a loadOrders() — no need to block the button
+      // on a full 200-order refetch.
+      loadOrders();
     } catch (err: any) {
       toast.error(err?.message || "Failed to send order");
     } finally {
@@ -1597,6 +1608,64 @@ const WaiterPanel = () => {
     }
   };
 
+  const openTableSlip = (overridePaymentMethod?: string) => {
+    if (!selectedTable || activeTableOrders.length === 0) return;
+    const slipItems: any[] = [];
+    activeTableOrders.forEach((o) => {
+      (o.items || []).forEach((item: any) => {
+        slipItems.push({
+          id: item.id,
+          name: item.name,
+          qty: Number(item.qty) || 1,
+          price: Number(item.price) || 0,
+          discount: Number(item.discount) || 0,
+          modifiers: item.modifiers || [],
+          notes: item.notes || null,
+          dealName: item.dealName || null,
+        });
+      });
+    });
+
+    const subtotal = activeTableOrders.reduce((s, o) => s + Number(o.subtotal ?? o.total ?? 0), 0);
+    const discountValue = activeTableOrders.reduce((s, o) => s + Number(o.discount || 0), 0);
+    const taxValue = activeTableOrders.reduce((s, o) => s + Number(o.tax || 0), 0);
+    const total = activeTableOrders.reduce((s, o) => s + Number(o.total || 0), 0);
+
+    const custName = selectedCustomerData?.name 
+      || activeTableOrders.find(o => o.customerName && o.customerName !== "Walk-in")?.customerName 
+      || "Walk-in";
+    const custPhone = selectedCustomerData?.phone 
+      || activeTableOrders.find(o => o.phone)?.phone 
+      || "";
+
+    const primaryOrder = activeTableOrders[0];
+
+    setPlacedOrderSlip({
+      orderNumber: activeTableOrders.map(o => o.orderNumber).join(", ") || (primaryOrder ? primaryOrder.orderNumber : "TABLE-" + selectedTable.number),
+      orderType: "Dine In",
+      tableNumber: Number(selectedTable.number),
+      customerName: custName,
+      customerPhone: custPhone,
+      customerAddress: undefined,
+      staffName: user?.name || "Waiter",
+      items: slipItems,
+      subtotal: subtotal,
+      discount: discountValue,
+      tax: taxValue,
+      total: total,
+      advancePayment: currentAdvancePayment > 0 ? currentAdvancePayment : undefined,
+      netPayable: Math.max(0, total - currentAdvancePayment),
+      paymentMethod: overridePaymentMethod || activeTableOrders[0]?.paymentMethod || "Cash",
+      dateStr: new Date().toLocaleDateString(),
+      timeStr: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      restaurantName: settings?.restaurantName || "OVENISTO",
+      restaurantAddress: settings?.address,
+      restaurantPhone: settings?.phone,
+      currency: currency || "Rs.",
+    });
+    setShowOrderPlacedModal(true);
+  };
+
   const settleBilling = async (paymentMethod: string) => {
     if (!selectedTable || selectedTableNum === null) return;
     setSettlingBillingState(true);
@@ -1633,6 +1702,7 @@ const WaiterPanel = () => {
       toast.success(`Table ${selectedTable.number} settled via ${paymentMethod}`);
       setShowBillDialog(false);
       setShowPayBillDialog(false);
+      openTableSlip(paymentMethod);
     } catch {
       toast.error("Failed to settle billing");
     } finally {
@@ -1700,142 +1770,7 @@ const WaiterPanel = () => {
   };
 
   const printActiveBill = () => {
-    if (!selectedTable || activeTableOrders.length === 0) return;
-    // Read what each order was actually charged rather than re-deriving it
-    // from the subtotals: an order can carry an order-level discount (Promo
-    // Code / Minimum Spend, resolved server-side at createOrder), and
-    // recomputing `subtotal + tax` here printed a bill higher than the amount
-    // the Pay Bill dialog — which sums o.total — then collects.
-    const subtotal = activeTableOrders.reduce((s, o) => s + Number(o.subtotal), 0);
-    const discountValue = activeTableOrders.reduce((s, o) => s + Number(o.discount || 0), 0);
-    const taxValue = activeTableOrders.reduce((s, o) => s + Number(o.tax || 0), 0);
-    const total    = activeTableOrders.reduce((s, o) => s + Number(o.total), 0);
-
-    const custName = selectedCustomerData?.name 
-      || activeTableOrders.find(o => o.customerName && o.customerName !== "Walk-in")?.customerName 
-      || "Walk-in";
-    const custPhone = selectedCustomerData?.phone 
-      || activeTableOrders.find(o => o.phone)?.phone 
-      || "";
-
-    const win = window.open("", "_blank");
-    if (!win) return;
-    
-    let itemsHtml = "";
-    activeTableOrders.forEach((o) => {
-      o.items.forEach((item) => {
-        const itemTotal = item.price * item.qty;
-        itemsHtml += `
-          <tr style="font-size: 11px;">
-            <td style="padding: 4px 0; vertical-align: top; max-width: 130px; word-wrap: break-word;">
-              ${item.name}
-              ${item.modifiers && item.modifiers.length > 0 ? `<div style="font-size: 9px; color: #555; padding-left: 5px;">+ ${item.modifiers.join(', ')}</div>` : ''}
-            </td>
-            <td style="padding: 4px 0; text-align: center; vertical-align: top;">${item.qty}</td>
-            <td style="padding: 4px 0; text-align: right; vertical-align: top;">${item.price.toLocaleString()}</td>
-            <td style="padding: 4px 0; text-align: right; vertical-align: top;">${itemTotal.toLocaleString()}</td>
-          </tr>
-        `;
-      });
-    });
-
-    win.document.write(`
-      <html>
-        <head>
-          <title>Receipt - Table ${selectedTable.number}</title>
-          <style>
-            body { font-family: 'Courier New', Courier, monospace; padding: 20px; width: 280px; margin: auto; color: #000; }
-            .center { text-align: center; }
-            .divider { border-bottom: 1px dashed #000; margin: 10px 0; }
-            .header-logo { font-size: 20px; font-weight: bold; margin-bottom: 2px; }
-            .header-subtitle { font-size: 11px; margin-bottom: 5px; }
-            .receipt-info { font-size: 11px; margin-bottom: 10px; }
-            @media print { .no-print { display: none; } }
-          </style>
-        </head>
-        <body onload="window.print()">
-          <div class="center">
-            <div class="header-logo">OVENISTO</div>
-            <div class="header-subtitle">
-              ${settings.restaurantName || "Ovenisto Flame-Kissed Flavor"}<br/>
-              ${settings.address || "Islamabad Branch"}<br/>
-              Tel: ${settings.phone || "+92 51 111 222 333"}
-            </div>
-          </div>
-          
-          <div class="divider"></div>
-          
-          <div class="receipt-info">
-            <strong>Table:</strong> ${selectedTable.number}<br/>
-            <strong>Date:</strong> ${new Date().toLocaleDateString()}<br/>
-            <strong>Time:</strong> ${new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}<br/>
-            <strong>Server:</strong> ${user?.name || "Unknown"} (${user?.role || "Waiter"})<br/>
-            <strong>Customer:</strong> ${custName}${custPhone ? `<br/><strong>Phone:</strong> ${custPhone}` : ''}
-          </div>
-          
-          <table style="width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 11px; text-align: left;">
-            <thead>
-              <tr style="border-bottom: 1px dashed #000; border-top: 1px dashed #000;">
-                <th style="padding: 4px 0;">Item</th>
-                <th style="padding: 4px 0; text-align: center; width: 30px;">Qty</th>
-                <th style="padding: 4px 0; text-align: right; width: 50px;">Price</th>
-                <th style="padding: 4px 0; text-align: right; width: 60px;">Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${itemsHtml}
-            </tbody>
-          </table>
-          
-          <div class="divider"></div>
-          
-          <div style="font-size: 11px; line-height: 1.6;">
-            <div style="display: flex; justify-content: space-between;">
-              <span>Subtotal</span>
-              <span>${currency} ${subtotal.toLocaleString()}</span>
-            </div>
-            ${discountValue > 0 ? `
-              <div style="display: flex; justify-content: space-between;">
-                <span>Discount${activeTableDealName ? ` (${activeTableDealName})` : ''}</span>
-                <span>- ${currency} ${discountValue.toLocaleString()}</span>
-              </div>
-            ` : ''}
-            <div style="display: flex; justify-content: space-between;">
-              <span>GST ${taxRate}%</span>
-              <span>${currency} ${taxValue.toLocaleString()}</span>
-            </div>
-            <div class="divider"></div>
-            <div style="display: flex; justify-content: space-between; font-weight: bold; font-size: 11px;">
-              <span>Grand Total</span>
-              <span>${currency} ${total.toLocaleString()}</span>
-            </div>
-            ${currentAdvancePayment > 0 ? `
-              <div style="display: flex; justify-content: space-between; font-weight: bold; color: #059669; margin-top: 3px;">
-                <span>Advance Paid Credit</span>
-                <span>- ${currency} ${currentAdvancePayment.toLocaleString()}</span>
-              </div>
-              <div class="divider"></div>
-              <div style="display: flex; justify-content: space-between; font-weight: bold; font-size: 12px;">
-                <span>Net Payable</span>
-                <span>${currency} ${Math.max(0, total - currentAdvancePayment).toLocaleString()}</span>
-              </div>
-            ` : ''}
-          </div>
-          
-          <div class="divider"></div>
-          
-          <div class="center" style="font-size: 10px; margin-top: 15px;">
-            Thank you for dining with us!<br/>
-            Powered by Ovenisto POS
-          </div>
-          
-          <div style="margin-top: 20px;" class="no-print">
-            <button onclick="window.print()" style="width: 100%; padding: 8px; font-weight: bold; font-family: monospace; cursor: pointer;">Print Receipt</button>
-          </div>
-        </body>
-      </html>
-    `);
-    win.document.close();
+    openTableSlip();
   };
 
   const [searchQuery, setSearchQuery] = useState("");
@@ -4316,6 +4251,13 @@ const WaiterPanel = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* ── Order Placed / Settled Print Options Modal (KOT, Bill, Dual) ── */}
+      <OrderPlacedPrintModal
+        open={showOrderPlacedModal}
+        onOpenChange={setShowOrderPlacedModal}
+        slipData={placedOrderSlip}
+      />
     </div>
   );
 };
