@@ -4,7 +4,7 @@ import {
   ArrowLeft, RefreshCw, Bell, Clock, BarChart3, TrendingUp, ShoppingBag,
   AlertCircle, ChefHat, CheckCircle2, Timer, UtensilsCrossed,
   ShoppingCart, Truck, CreditCard, Banknote, Receipt, Check, Loader2,
-  Columns, LayoutGrid, Sparkles, User, Flame
+  Columns, LayoutGrid, Sparkles, User, Flame, Printer
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -18,9 +18,11 @@ import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useData } from "@/contexts/DataContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { orderService, KitchenRecord } from "@/services/order.service";
 import { useVisiblePolling } from "@/hooks/use-visible-polling";
 import { useOrderEvents } from "@/hooks/use-order-events";
+import { OrderPlacedPrintModal, type PlacedOrderSlipData } from "@/components/pos/OrderPlacedPrintModal";
 
 // ─── Status Definitions & Professional Theme Config ───────────────────────
 
@@ -153,7 +155,8 @@ const pktDateStr = (input?: string | number | Date): string => {
 
 const OrderStatusBoard = () => {
   const navigate = useNavigate();
-  const { foodMenuItems } = useData();
+  const { user } = useAuth();
+  const { foodMenuItems, settings, currency } = useData();
   const [allOrders, setAllOrders] = useState<any[]>([]);
   const [activeStatus, setActiveStatus] = useState<FilterStatus>("active");
   const [viewMode, setViewMode] = useState<"columns" | "grid">("columns");
@@ -163,9 +166,49 @@ const OrderStatusBoard = () => {
   const [kitchens, setKitchens] = useState<KitchenRecord[]>([]);
   const [updatingOrderId, setUpdatingOrderId] = useState<string | null>(null);
   const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
+  const [showOrderPlacedModal, setShowOrderPlacedModal] = useState(false);
+  const [placedOrderSlip, setPlacedOrderSlip] = useState<PlacedOrderSlipData | null>(null);
+
+  const handleOpenPrintModal = (order: any) => {
+    const slipItems = (order.items || []).map((i: any) => ({
+      id: i.id,
+      name: i.name,
+      qty: Number(i.qty) || 1,
+      price: Number(i.price) || 0,
+      discount: Number(i.discount) || 0,
+      modifiers: i.modifiers || [],
+      notes: i.notes || null,
+      dealName: i.dealName || null,
+    }));
+
+    setPlacedOrderSlip({
+      orderNumber: order.orderNumber,
+      orderType: order.type,
+      tableNumber: order.tableNumber || null,
+      customerName: order.customer || "Walk-in",
+      customerPhone: order.phone,
+      customerAddress: order.deliveryAddress,
+      staffName: order.staff || user?.name || "Cashier",
+      items: slipItems,
+      subtotal: Number(order.subtotal ?? order.total ?? 0),
+      discount: Number(order.discount) || 0,
+      tax: Number(order.tax) || 0,
+      total: Number(order.total) || 0,
+      advancePayment: order.advancePayment ? Number(order.advancePayment) : undefined,
+      netPayable: Number(order.total) - Number(order.advancePayment || 0),
+      paymentMethod: order.paymentMethod || "Cash",
+      dateStr: order.date || new Date().toLocaleDateString(),
+      timeStr: order.time || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      restaurantName: settings?.restaurantName || "OVENISTO",
+      restaurantAddress: settings?.address,
+      restaurantPhone: settings?.phone,
+      currency: currency || "Rs.",
+    });
+    setShowOrderPlacedModal(true);
+  };
 
   useEffect(() => {
-    orderService.getKitchens().then(setKitchens).catch(() => {});
+    orderService.getKitchens().then(setKitchens).catch(() => { });
   }, []);
 
   const loadOrders = useCallback(async () => {
@@ -175,7 +218,7 @@ const OrderStatusBoard = () => {
       setAllOrders((res.data || [])
         .filter((o) => !(o.type === "Self Order" && o.status === "pending" && !o.acceptedById))
         .map(normalize));
-    } catch {}
+    } catch { }
   }, []);
 
   const handleOrderEvent = useCallback((payload?: any) => {
@@ -396,11 +439,11 @@ const OrderStatusBoard = () => {
         className="cursor-pointer hover:border-primary/50 hover:shadow-md transition-all duration-150 border border-border/70 bg-card rounded-xl overflow-hidden group"
       >
         <CardContent className="p-0">
-          {/* Card Top Banner */}
+          {/* Card Top Banner with Order Number, Type, Table, Elapsed Time & Print Button */}
           <div className="px-3.5 py-2.5 flex items-center justify-between border-b border-border/50 bg-muted/20">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 flex-wrap">
               <span className="font-extrabold text-sm tracking-tight text-foreground">{order.orderNumber}</span>
-              <Badge variant="outline" className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-background/80 border-border/60">
+              <Badge variant="outline" className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-background/80 border-border/60">
                 {order.type}
               </Badge>
               {order.tableNumber && (() => {
@@ -413,10 +456,24 @@ const OrderStatusBoard = () => {
                 );
               })()}
             </div>
-            <span className="text-[10px] font-mono font-bold text-muted-foreground bg-background/80 px-2 py-0.5 rounded-full flex items-center gap-1 border border-border/50">
-              <Timer className="h-3 w-3 text-amber-500" />
-              {elapsed}
-            </span>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6 rounded-lg text-muted-foreground hover:text-orange-500 hover:bg-orange-500/10 transition-colors p-0 cursor-pointer border border-border/40 bg-background/80"
+                title="Print Slip (KOT / Bill)"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleOpenPrintModal(order);
+                }}
+              >
+                <Printer className="h-3.5 w-3.5" />
+              </Button>
+              <span className="text-[10px] font-mono font-bold text-muted-foreground bg-background/80 px-2 py-0.5 rounded-full flex items-center gap-1 border border-border/50">
+                <Timer className="h-3 w-3 text-amber-500" />
+                {elapsed}
+              </span>
+            </div>
           </div>
 
           {/* Card Main Info */}
@@ -530,17 +587,31 @@ const OrderStatusBoard = () => {
               </div>
             )}
 
-            {/* Footer: Price + Payment Status */}
-            <div className="flex items-center justify-between pt-1 border-t border-border/40">
-              <div>
-                <p className="text-[10px] text-muted-foreground font-medium">Total Bill</p>
-                <p className="text-sm font-extrabold text-primary font-mono">Rs. {order.total.toLocaleString()}</p>
-              </div>
-
-              <Badge className={cn("text-[10px] font-bold px-2 py-0.5 rounded-md flex items-center gap-1", paid ? "bg-emerald-500/10 text-emerald-500 border border-emerald-500/30" : "bg-amber-500/10 text-amber-500 border border-amber-500/30")}>
+            {/* Footer: Payment Status + Quick Print Action (No Bill Amount) */}
+            <div className="flex items-center justify-between pt-2 border-t border-border/40">
+              <Badge className={cn(
+                "text-[10px] font-bold px-2.5 py-1 rounded-lg flex items-center gap-1.5",
+                paid
+                  ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30"
+                  : "bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/30"
+              )}>
                 {paid ? <CreditCard className="h-3 w-3" /> : <Banknote className="h-3 w-3" />}
-                {paid ? (order.paymentMethod || "Paid") : "Unpaid"}
+                {paid ? (order.paymentMethod || "Paid") : "Payment Pending"}
               </Badge>
+
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 px-2.5 text-[11px] font-semibold gap-1.5 text-muted-foreground hover:text-foreground border-border/60 hover:bg-muted rounded-lg"
+                title="Print Slip"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleOpenPrintModal(order);
+                }}
+              >
+                <Printer className="h-3.5 w-3.5 text-orange-500" />
+                <span>Print Slip</span>
+              </Button>
             </div>
 
             {/* Action Button */}
@@ -915,6 +986,14 @@ const OrderStatusBoard = () => {
                 </div>
 
                 <DialogFooter className="flex-col sm:flex-row gap-2 pt-3 border-t">
+                  <Button
+                    variant="outline"
+                    className="w-full sm:w-auto rounded-xl font-bold gap-1.5"
+                    onClick={() => handleOpenPrintModal(selectedOrder)}
+                  >
+                    <Printer className="h-4 w-4 text-orange-500" /> Print Slip
+                  </Button>
+
                   <Button variant="outline" className="w-full sm:w-auto rounded-xl font-bold" onClick={() => setSelectedOrder(null)}>Close Window</Button>
 
                   {selectedOrder.status === "ready" && (
@@ -940,6 +1019,13 @@ const OrderStatusBoard = () => {
           })()}
         </DialogContent>
       </Dialog>
+
+      {/* ── Order Placed Print Modal (KOT, Bill, Dual Print) ── */}
+      <OrderPlacedPrintModal
+        open={showOrderPlacedModal}
+        onOpenChange={setShowOrderPlacedModal}
+        data={placedOrderSlip}
+      />
     </div>
   );
 };
