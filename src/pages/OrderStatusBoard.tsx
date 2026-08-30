@@ -1024,7 +1024,7 @@ const OrderStatusBoard = () => {
       <OrderPlacedPrintModal
         open={showOrderPlacedModal}
         onOpenChange={setShowOrderPlacedModal}
-        data={placedOrderSlip}
+        slipData={placedOrderSlip}
       />
     </div>
   );
