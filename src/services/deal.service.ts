@@ -27,9 +27,12 @@ export interface DealOptionGroupRecord {
   maxSelections: number;
   displayOrder: number;
   options: DealOptionItemRecord[];
+  /** null = an option_combo (Customizable) group. Set = this group is one
+   *  buy_x_get_y side's "Customizable" mode (see DealInput's buyMode/getMode). */
+  bogoSide?: 'BUY' | 'GET' | null;
 }
 
-export type DealTypeValue = 'combo' | 'option_combo' | 'percentage' | 'buy_x_get_y' | 'order_discount';
+export type DealTypeValue = 'combo' | 'option_combo' | 'percentage' | 'buy_x_get_y' | 'promo_code' | 'min_spend';
 
 export interface DealRecord {
   id: string;
@@ -55,6 +58,11 @@ export interface DealRecord {
   isActive: boolean;
   status: string;
   outletIds: string[];
+  /** Channel-availability gates, every deal type. Default true (server-side)
+   *  so an existing deal keeps working unchanged. */
+  availableDineIn: boolean;
+  availableTakeaway: boolean;
+  availableDelivery: boolean;
   validFrom: string;
   validTo: string | null;
   startTime: string | null;
@@ -62,13 +70,19 @@ export interface DealRecord {
   createdAt: string;
   updatedAt: string;
   components: DealComponentRecord[];
+  /** Every option group on this deal — option_combo's own groups (bogoSide
+   *  null) AND any buy_x_get_y side put in "Customizable" mode (bogoSide
+   *  BUY/GET). Split by bogoSide when loading into the form's buyGroups/
+   *  getGroups vs. optionGroups edit state. */
   optionGroups: DealOptionGroupRecord[];
   // percentage
   discountPercent: number | null;
   applicableItems: string[];
   applicableCategories: string[];
-  // buy_x_get_y — bogoItems is the real shape; the flat fields below mirror its
-  // first row per side, and are the whole offer on deals saved before it existed.
+  // buy_x_get_y — each side is independently "fixed" (bogoItems is the real
+  // shape; the flat fields below mirror its first row and are the whole
+  // offer on deals saved before it existed) or "customizable" (a bogoSide-
+  // tagged entry in optionGroups above — see buyMode/getMode on DealInput).
   bogoItems: DealBogoItemRecord[];
   buyItemId: string | null;
   /** Pins the offer to one size of the buy item. Null on deals saved before sizes were pinned. */
@@ -78,11 +92,11 @@ export interface DealRecord {
   /** Pins the free side to one size. Null on legacy deals, whose giveaway the server caps. */
   getVariantId: string | null;
   getQty: number | null;
-  // order_discount — `code` above doubles as the mode switch: set = Promo
-  // Code (customer enters it), null = Minimum Spend (auto-applies).
+  // promo_code / min_spend (formerly one order_discount type, split by which
+  // of the two the deal's own `type` now is — `code` above is only ever set
+  // on a promo_code deal).
   minSpend: number | null;
-  /** Flat Rs. off the order. Null = use discountPercent instead (Minimum
-   *  Spend only — a Promo Code is always flat). */
+  /** Flat Rs. off the order. Null = use discountPercent instead. */
   flatDiscount: number | null;
 }
 
@@ -143,6 +157,9 @@ export interface DealInput {
   foodpandaPercent?: number | null;
   isActive?: boolean;
   outletIds?: string[];
+  availableDineIn?: boolean;
+  availableTakeaway?: boolean;
+  availableDelivery?: boolean;
   validFrom: string;
   validTo?: string | null;
   startTime?: string | null;
@@ -153,16 +170,23 @@ export interface DealInput {
   discountPercent?: number | null;
   applicableItems?: string[];
   applicableCategories?: string[];
-  // buy_x_get_y
+  // buy_x_get_y — each side independently "fixed" (buyItems/getItems, the
+  // flat all-required list) or "customizable" (buyGroups/getGroups, the same
+  // shape option_combo's optionGroups uses). buyItemId/getItemId etc. are the
+  // legacy single-item fixed form, still accepted.
+  buyMode?: 'fixed' | 'customizable';
+  getMode?: 'fixed' | 'customizable';
   buyItems?: DealBogoItemInput[];
   getItems?: DealBogoItemInput[];
+  buyGroups?: DealOptionGroupInput[];
+  getGroups?: DealOptionGroupInput[];
   buyItemId?: string | null;
   buyVariantId?: string | null;
   buyQty?: number | null;
   getItemId?: string | null;
   getVariantId?: string | null;
   getQty?: number | null;
-  // order_discount
+  // promo_code / min_spend
   minSpend?: number | null;
   flatDiscount?: number | null;
 }

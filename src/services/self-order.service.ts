@@ -105,6 +105,9 @@ export interface SelfOrderDealOptionGroup {
   maxSelections: number;
   displayOrder: number;
   options: SelfOrderDealOptionItem[];
+  /** null = an option_combo (Customizable) group. Set = this group is one
+   *  buy_x_get_y side's "Customizable" mode. */
+  bogoSide?: "BUY" | "GET" | null;
 }
 
 export interface SelfOrderDealBogoItem {
@@ -115,7 +118,7 @@ export interface SelfOrderDealBogoItem {
   displayOrder: number;
 }
 
-export type SelfOrderDealType = "combo" | "option_combo" | "percentage" | "buy_x_get_y" | "order_discount";
+export type SelfOrderDealType = "combo" | "option_combo" | "percentage" | "buy_x_get_y" | "promo_code" | "min_spend";
 
 /** The public/self-order-safe deal shape from GET /self-order/deals — see
  *  the backend's mapDealOutPublic. Unlike the staff-facing DealRecord, this
