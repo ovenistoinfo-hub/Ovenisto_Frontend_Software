@@ -1246,12 +1246,73 @@ const DealForm = () => {
       };
     };
 
-    const buy = buyRows.map((r) => priceRow(r, "cheapest")).filter(Boolean) as NonNullable<
-      ReturnType<typeof priceRow>
-    >[];
-    const give = getRows.map((r) => priceRow(r, "priciest")).filter(Boolean) as NonNullable<
-      ReturnType<typeof priceRow>
-    >[];
+    /**
+     * For a "Customer Chooses" group list, compute worst-case aggregate totals
+     * per group. For the buy side we use the cheapest pick per group (revenue is
+     * at its lowest). For the get side we use the priciest pick per group (most
+     * we could give away for free). Each group becomes one synthetic summary row.
+     */
+    const priceGroups = (
+      groups: OptionGroupRow[],
+      worst: "cheapest" | "priciest"
+    ): NonNullable<ReturnType<typeof priceRow>>[] => {
+      const result: NonNullable<ReturnType<typeof priceRow>>[] = [];
+      for (const group of groups) {
+        const priced = group.choices
+          .filter((c) => c.itemId)
+          .map((c) => {
+            const item = menuItems.find((m) => m.id === c.itemId);
+            if (!item) return null;
+            const variants = item.variants || [];
+            const units = variants.length
+              ? variants.map((v) => ({
+                  id: v.id as string | null,
+                  label: v.name as string | null,
+                  price: Number(v.price ?? item.price ?? 0),
+                  cost: Number(v.costPrice ?? item.costPrice ?? 0),
+                }))
+              : [{ id: null, label: null, price: Number(item.price || 0), cost: Number(item.costPrice || 0) }];
+
+            const pinned = c.variantId ? units.find((u) => u.id === c.variantId) : undefined;
+            const chosen =
+              pinned ??
+              units.reduce((a, b) =>
+                worst === "cheapest" ? (b.price < a.price ? b : a) : b.price > a.price ? b : a
+              );
+            return { item, label: chosen.label, price: chosen.price, cost: chosen.cost, unpinned: units.length > 1 && !pinned };
+          })
+          .filter(Boolean) as { item: (typeof menuItems)[0]; label: string | null; price: number; cost: number; unpinned: boolean }[];
+
+        if (priced.length === 0) continue;
+
+        const pick = Math.min(group.maxSelections, priced.length);
+        const sorted = [...priced].sort((a, b) =>
+          worst === "cheapest" ? a.price - b.price : b.price - a.price
+        );
+        const picked = sorted.slice(0, pick);
+
+        result.push({
+          item: { ...picked[0].item, name: group.label || picked.map((p) => p.item.name).join(", ") } as (typeof menuItems)[0],
+          label: pick > 1 ? `${pick} picks` : picked[0].label,
+          qty: 1,
+          price: picked.reduce((s, p) => s + p.price, 0),
+          cost: picked.reduce((s, p) => s + p.cost, 0),
+          unpinned: picked.some((p) => p.unpinned),
+        });
+      }
+      return result;
+    };
+
+    const buy =
+      buyMode === "customizable"
+        ? priceGroups(buyGroups, "cheapest")
+        : (buyRows.map((r) => priceRow(r, "cheapest")).filter(Boolean) as NonNullable<ReturnType<typeof priceRow>>[]);
+
+    const give =
+      getMode === "customizable"
+        ? priceGroups(getGroups, "priciest")
+        : (getRows.map((r) => priceRow(r, "priciest")).filter(Boolean) as NonNullable<ReturnType<typeof priceRow>>[]);
+
     if (buy.length === 0 || give.length === 0) return null;
 
     const sum = (rows: typeof buy, key: "price" | "cost") =>
@@ -1287,7 +1348,7 @@ const DealForm = () => {
       hasCost: totalCost > 0,
       variantSpread: [...buy, ...give].some((r) => r.unpinned),
     };
-  }, [menuItems, buyRows, getRows]);
+  }, [menuItems, buyMode, getMode, buyRows, getRows, buyGroups, getGroups]);
 
   /** The "format" line of the setup checklist. Each deal type has its own idea
    *  of being configured, so it is derived here rather than hard-coded to the

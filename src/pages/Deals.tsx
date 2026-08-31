@@ -263,7 +263,7 @@ const Deals = () => {
                   </TableHeader>
                   <TableBody>
                     {paginate(filtered, page, 10).map((deal, i) => {
-                      const badge = formatBadge[deal.type];
+                      const badge = formatBadge[deal.type] ?? { icon: Tag, label: deal.type ?? "Unknown" };
                       const BadgeIcon = badge.icon;
 
                       return (
