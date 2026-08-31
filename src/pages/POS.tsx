@@ -50,7 +50,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import type { Shift } from "@/contexts/DataContext";
 import { getRiderCollectAmount } from "@/utils/deliveryPayment";
 import { dealService, type DealRecord, type DealOptionItemRecord } from "@/services/deal.service";
-import { isDealLive, dealChannelPrice, dealChannelPercent, allocateDealDiscount, dealBogoSides, capFreeUnitPrice } from "@/lib/deals";
+import { isDealLive, isDealAvailableForChannel, dealChannelPrice, dealChannelPercent, allocateDealDiscount, dealBogoSides, dealBogoSideMode, dealBogoOptionGroups, capFreeUnitPrice, type DealOptionItemForBogo } from "@/lib/deals";
 import { OrderPlacedPrintModal, type PlacedOrderSlipData } from "@/components/pos/OrderPlacedPrintModal";
 
 interface CartItem extends OrderItem {
@@ -123,9 +123,9 @@ interface PaymentEntry {
 const orderTypes: OrderType[] = ["Dine In", "Take Away", "Delivery"];
 
 // One accent, not four — the deal card grid's format tag is icon+label only,
-// matching Deals.tsx's admin list. order_discount is excluded from
-// sellableDeals so it never needs a badge here.
-const dealFormatBadge: Record<Exclude<DealRecord["type"], "order_discount">, { icon: typeof Package; label: string }> = {
+// matching Deals.tsx's admin list. promo_code/min_spend are excluded from
+// sellableDeals so they never need a badge here.
+const dealFormatBadge: Record<Exclude<DealRecord["type"], "promo_code" | "min_spend">, { icon: typeof Package; label: string }> = {
   combo: { icon: Package, label: "Fixed Bundle" },
   option_combo: { icon: Layers, label: "Customizable" },
   percentage: { icon: Percent, label: "% Discount" },
@@ -632,16 +632,37 @@ const POS = () => {
     staleTime: 60_000,
   });
   const sellableDeals = useMemo(
-    () => liveDeals.filter((d) => d.type !== "order_discount" && isDealLive(d).valid),
-    [liveDeals]
+    () =>
+      liveDeals.filter(
+        (d) => d.type !== "promo_code" && d.type !== "min_spend" && isDealLive(d).valid && isDealAvailableForChannel(d, orderType)
+      ),
+    [liveDeals, orderType]
   );
 
   // Customizable (option_combo): a group-selection dialog, keyed by
   // `${menuItemId}:${variantId ?? ''}` since one option can repeat across
-  // groups but never within the same group's own selection set.
+  // groups but never within the same group's own selection set. Also reused
+  // for a Buy X Get Y deal that has at least one side in "Customizable" mode
+  // (see customizeGroups below) — customizingDealLineId carries the shared
+  // redemption id when a Fixed side's items were already added to cart
+  // before the dialog opened.
   const [showDealCustomize, setShowDealCustomize] = useState(false);
   const [customizingDeal, setCustomizingDeal] = useState<DealRecord | null>(null);
+  const [customizingDealLineId, setCustomizingDealLineId] = useState<string | null>(null);
   const [dealGroupSelections, setDealGroupSelections] = useState<Record<string, string[]>>({});
+
+  const customizeGroups = useMemo(() => {
+    if (!customizingDeal) return [];
+    if (customizingDeal.type === "option_combo") return customizingDeal.optionGroups;
+    return [
+      ...(dealBogoSideMode(customizingDeal, "BUY") === "customizable" ? dealBogoOptionGroups(customizingDeal, "BUY") : []),
+      ...(dealBogoSideMode(customizingDeal, "GET") === "customizable" ? dealBogoOptionGroups(customizingDeal, "GET") : []),
+    ];
+  }, [customizingDeal]);
+
+  /** A deal card is blocked when its own channel toggle is off for the
+   *  current order type — independent of stock. */
+  const isDealChannelBlocked = (deal: DealRecord): boolean => !isDealAvailableForChannel(deal, orderType);
 
   // % Discount: pick which eligible item (and size/qty) the discount applies to.
   const [showDealItemPicker, setShowDealItemPicker] = useState(false);
@@ -687,6 +708,7 @@ const POS = () => {
    *  one click adds the whole redemption — no staff choice needed. Wanting
    *  the offer twice is another click, same as adding any menu item twice. */
   const addDealToCart = (deal: DealRecord) => {
+    if (isDealChannelBlocked(deal)) { toast.error(`"${deal.name}" is not available for ${orderType} orders`); return; }
     if (isDealOutOfStock(deal)) { toast.error(`"${deal.name}" is out of stock`); return; }
     if (deal.type === "combo") { addComboDealToCart(deal); return; }
     if (deal.type === "buy_x_get_y") { addBogoDealToCart(deal); return; }
@@ -719,42 +741,72 @@ const POS = () => {
     toast.success(`${deal.name} added to cart`);
   };
 
+  /** Each side is independently "Fixed" (added directly, unchanged from
+   *  before this feature) or "Customizable" (the customer picks from an
+   *  option set — routes into the same dialog Customizable deals use).
+   *  A deal with one Fixed side and one Customizable side adds the Fixed
+   *  side immediately and opens the dialog only for the Customizable one,
+   *  both sharing the same dealLineId so the server sees one redemption. */
   const addBogoDealToCart = (deal: DealRecord) => {
-    const { buy, get } = dealBogoSides(deal);
-    if (buy.length === 0 || get.length === 0) { toast.error(`"${deal.name}" is not configured correctly`); return; }
-
+    const buyMode = dealBogoSideMode(deal, "BUY");
+    const getMode = dealBogoSideMode(deal, "GET");
     const lineId = `deal-${deal.id}-${Date.now()}`;
     const newItems: CartItem[] = [];
-    for (const row of buy) {
-      const menuItem: any = foodMenuItems.find((m) => m.id === row.menuItemId);
-      if (!menuItem) { toast.error(`A menu item in "${deal.name}" is no longer available`); return; }
-      const variant = row.variantId ? menuItem.variants?.find((v: any) => v.id === row.variantId) : undefined;
-      newItems.push({
-        id: `${lineId}-buy-${newItems.length}`,
-        name: `${menuItem.name}${variant ? ` (${variant.name})` : ""}`,
-        price: resolvePrice(variant || menuItem, orderType), qty: row.qty, discount: 0, modifiers: [],
-        menuItemId: row.menuItemId, variantId: row.variantId,
-        dealId: deal.id, dealName: deal.name, dealLineId: lineId, dealRole: "buy",
-      });
+
+    if (buyMode === "fixed") {
+      const { buy } = dealBogoSides(deal);
+      if (buy.length === 0) { toast.error(`"${deal.name}" is not configured correctly`); return; }
+      for (const row of buy) {
+        const menuItem: any = foodMenuItems.find((m) => m.id === row.menuItemId);
+        if (!menuItem) { toast.error(`A menu item in "${deal.name}" is no longer available`); return; }
+        const variant = row.variantId ? menuItem.variants?.find((v: any) => v.id === row.variantId) : undefined;
+        newItems.push({
+          id: `${lineId}-buy-${newItems.length}`,
+          name: `${menuItem.name}${variant ? ` (${variant.name})` : ""}`,
+          price: resolvePrice(variant || menuItem, orderType), qty: row.qty, discount: 0, modifiers: [],
+          menuItemId: row.menuItemId, variantId: row.variantId,
+          dealId: deal.id, dealName: deal.name, dealLineId: lineId, dealRole: "buy",
+        });
+      }
     }
-    for (const row of get) {
-      const menuItem: any = foodMenuItems.find((m) => m.id === row.menuItemId);
-      if (!menuItem) { toast.error(`A menu item in "${deal.name}" is no longer available`); return; }
-      const variant = row.variantId ? menuItem.variants?.find((v: any) => v.id === row.variantId) : undefined;
-      const unitPrice = resolvePrice(variant || menuItem, orderType);
-      const variants = menuItem.variants ?? [];
-      const cheapest = variants.length === 0 ? unitPrice : Math.min(...variants.map((v: any) => resolvePrice(v, orderType)));
-      const cappedUnitPrice = capFreeUnitPrice(row.variantId, unitPrice, cheapest);
-      const coveragePercent = dealChannelPercent(deal, orderType, 100);
-      const freeUnitPrice = Math.round(cappedUnitPrice * (coveragePercent / 100) * 100) / 100;
-      newItems.push({
-        id: `${lineId}-get-${newItems.length}`,
-        name: `${menuItem.name}${variant ? ` (${variant.name})` : ""}${freeUnitPrice <= 0 ? "" : freeUnitPrice >= unitPrice ? " (Free)" : " (Discounted)"}`,
-        price: unitPrice, qty: row.qty, discount: freeUnitPrice * row.qty, modifiers: [],
-        menuItemId: row.menuItemId, variantId: row.variantId,
-        dealId: deal.id, dealName: deal.name, dealLineId: lineId, dealRole: "get",
-      });
+    if (getMode === "fixed") {
+      const { get } = dealBogoSides(deal);
+      if (get.length === 0) { toast.error(`"${deal.name}" is not configured correctly`); return; }
+      for (const row of get) {
+        const menuItem: any = foodMenuItems.find((m) => m.id === row.menuItemId);
+        if (!menuItem) { toast.error(`A menu item in "${deal.name}" is no longer available`); return; }
+        const variant = row.variantId ? menuItem.variants?.find((v: any) => v.id === row.variantId) : undefined;
+        const unitPrice = resolvePrice(variant || menuItem, orderType);
+        const variants = menuItem.variants ?? [];
+        const cheapest = variants.length === 0 ? unitPrice : Math.min(...variants.map((v: any) => resolvePrice(v, orderType)));
+        const cappedUnitPrice = capFreeUnitPrice(row.variantId, unitPrice, cheapest);
+        const coveragePercent = dealChannelPercent(deal, orderType, 100);
+        const freeUnitPrice = Math.round(cappedUnitPrice * (coveragePercent / 100) * 100) / 100;
+        newItems.push({
+          id: `${lineId}-get-${newItems.length}`,
+          name: `${menuItem.name}${variant ? ` (${variant.name})` : ""}${freeUnitPrice <= 0 ? "" : freeUnitPrice >= unitPrice ? " (Free)" : " (Discounted)"}`,
+          price: unitPrice, qty: row.qty, discount: freeUnitPrice * row.qty, modifiers: [],
+          menuItemId: row.menuItemId, variantId: row.variantId,
+          dealId: deal.id, dealName: deal.name, dealLineId: lineId, dealRole: "get",
+        });
+      }
     }
+
+    if (buyMode === "customizable" || getMode === "customizable") {
+      if (newItems.length > 0) setCart((prev) => [...prev, ...newItems]);
+      setCustomizingDeal(deal);
+      setCustomizingDealLineId(lineId);
+      const initial: Record<string, string[]> = {};
+      [
+        ...(buyMode === "customizable" ? dealBogoOptionGroups(deal, "BUY") : []),
+        ...(getMode === "customizable" ? dealBogoOptionGroups(deal, "GET") : []),
+      ].forEach((g) => { initial[g.id] = []; });
+      setDealGroupSelections(initial);
+      setShowDealCustomize(true);
+      return;
+    }
+
+    if (newItems.length === 0) { toast.error(`"${deal.name}" is not configured correctly`); return; }
     setCart((prev) => [...prev, ...newItems]);
     toast.success(`${deal.name} added to cart`);
   };
@@ -763,6 +815,7 @@ const POS = () => {
 
   const openDealCustomize = (deal: DealRecord) => {
     setCustomizingDeal(deal);
+    setCustomizingDealLineId(null);
     const initial: Record<string, string[]> = {};
     deal.optionGroups.forEach((g) => { initial[g.id] = []; });
     setDealGroupSelections(initial);
@@ -785,17 +838,54 @@ const POS = () => {
   const confirmDealCustomize = () => {
     if (!customizingDeal) return;
     const deal = customizingDeal;
-    const incomplete = deal.optionGroups.find((g) => (dealGroupSelections[g.id]?.length || 0) < g.minSelections);
+    const groups = customizeGroups;
+    const incomplete = groups.find((g) => (dealGroupSelections[g.id]?.length || 0) < g.minSelections);
     if (incomplete) { toast.error(`Select at least ${incomplete.minSelections} item(s) for "${incomplete.label}"`); return; }
 
-    const picks: { groupId: string; option: DealOptionItemRecord }[] = [];
-    for (const g of deal.optionGroups) {
+    const picks: { groupId: string; bogoSide: "BUY" | "GET" | null; option: DealOptionItemForBogo }[] = [];
+    for (const g of groups) {
       for (const key of dealGroupSelections[g.id] || []) {
         const option = g.options.find((o) => dealOptionKey(o.menuItemId, o.variantId) === key);
-        if (option) picks.push({ groupId: g.id, option });
+        if (option) picks.push({ groupId: g.id, bogoSide: g.bogoSide ?? null, option });
       }
     }
     if (picks.length === 0) { toast.error("Nothing selected"); return; }
+
+    if (deal.type === "buy_x_get_y") {
+      const lineId = customizingDealLineId ?? `deal-${deal.id}-${Date.now()}`;
+      const newItems: CartItem[] = [];
+      for (const { groupId, bogoSide, option } of picks) {
+        const menuItem: any = foodMenuItems.find((m) => m.id === option.menuItemId);
+        if (!menuItem) { toast.error(`A menu item in "${deal.name}" is no longer available`); return; }
+        const variant = option.variantId ? menuItem.variants?.find((v: any) => v.id === option.variantId) : undefined;
+        const unitPrice = resolvePrice(variant || menuItem, orderType) + (option.extraPrice || 0);
+        if (bogoSide === "GET") {
+          const coveragePercent = dealChannelPercent(deal, orderType, 100);
+          const freeUnitPrice = Math.round(unitPrice * (coveragePercent / 100) * 100) / 100;
+          newItems.push({
+            id: `${lineId}-get-${newItems.length}`,
+            name: `${menuItem.name}${variant ? ` (${variant.name})` : ""}${freeUnitPrice <= 0 ? "" : freeUnitPrice >= unitPrice ? " (Free)" : " (Discounted)"}`,
+            price: unitPrice, qty: 1, discount: freeUnitPrice, modifiers: [],
+            menuItemId: option.menuItemId, variantId: option.variantId,
+            dealId: deal.id, dealName: deal.name, dealLineId: lineId, dealGroupId: groupId, dealRole: "get",
+          });
+        } else {
+          newItems.push({
+            id: `${lineId}-buy-${newItems.length}`,
+            name: `${menuItem.name}${variant ? ` (${variant.name})` : ""}`,
+            price: unitPrice, qty: 1, discount: 0, modifiers: [],
+            menuItemId: option.menuItemId, variantId: option.variantId,
+            dealId: deal.id, dealName: deal.name, dealLineId: lineId, dealGroupId: groupId, dealRole: "buy",
+          });
+        }
+      }
+      setCart((prev) => [...prev, ...newItems]);
+      setShowDealCustomize(false);
+      setCustomizingDeal(null);
+      setCustomizingDealLineId(null);
+      toast.success(`${deal.name} added to cart`);
+      return;
+    }
 
     const rows = picks.map(({ groupId, option }) => {
       const menuItem: any = foodMenuItems.find((m) => m.id === option.menuItemId);
@@ -903,10 +993,20 @@ const POS = () => {
           : variants.every((v: any) => isMenuItemOutOfStock(m.id, v.id));
       });
     }
-    // buy_x_get_y
-    const { buy, get } = dealBogoSides(deal);
-    if (buy.length === 0 || get.length === 0) return false;
-    return buy.some((r) => isMenuItemOutOfStock(r.menuItemId, r.variantId)) || get.some((r) => isMenuItemOutOfStock(r.menuItemId, r.variantId));
+    // buy_x_get_y — each side independently, per its own Fixed/Customizable mode.
+    const sideOutOfStock = (side: "BUY" | "GET"): boolean => {
+      if (dealBogoSideMode(deal, side) === "fixed") {
+        const rows = dealBogoSides(deal)[side === "BUY" ? "buy" : "get"];
+        if (rows.length === 0) return false;
+        return rows.some((r) => isMenuItemOutOfStock(r.menuItemId, r.variantId));
+      }
+      const groups = dealBogoOptionGroups(deal, side);
+      if (groups.length === 0) return false;
+      // A Customizable group is out of stock only once every option in it is —
+      // same "step availability" rule option_combo already uses.
+      return groups.some((g) => g.options.every((o) => isMenuItemOutOfStock(o.menuItemId, o.variantId)));
+    };
+    return sideOutOfStock("BUY") || sideOutOfStock("GET");
   };
 
   /** Everything the rich POS deal card needs — the same "included items +
@@ -973,32 +1073,73 @@ const POS = () => {
         savingsPercent: percent,
       };
     }
-    // buy_x_get_y
-    const { buy, get } = dealBogoSides(deal);
+    // buy_x_get_y — a Fixed side lists its exact required rows; a
+    // Customizable side lists its group labels and prices the cheapest
+    // option in each (a preview only — the server prices the customer's
+    // actual pick once they choose).
     const lines: string[] = [];
     let buyTotal = 0, getTotal = 0, freeTotal = 0;
-    buy.forEach((row) => {
-      const menuItem: any = foodMenuItems.find((m) => m.id === row.menuItemId);
-      if (!menuItem) return;
-      const variant = row.variantId ? menuItem.variants?.find((v: any) => v.id === row.variantId) : undefined;
-      const unitPrice = resolvePrice(variant || menuItem, orderType);
-      buyTotal += unitPrice * row.qty;
-      lines.push(`Buy ${row.qty}x ${menuItem.name}${variant ? ` (${variant.name})` : ""}`);
-    });
-    get.forEach((row) => {
-      const menuItem: any = foodMenuItems.find((m) => m.id === row.menuItemId);
-      if (!menuItem) return;
-      const variant = row.variantId ? menuItem.variants?.find((v: any) => v.id === row.variantId) : undefined;
-      const unitPrice = resolvePrice(variant || menuItem, orderType);
-      const variants = menuItem.variants ?? [];
-      const cheapest = variants.length === 0 ? unitPrice : Math.min(...variants.map((v: any) => resolvePrice(v, orderType)));
-      const cappedUnitPrice = capFreeUnitPrice(row.variantId, unitPrice, cheapest);
+
+    if (dealBogoSideMode(deal, "BUY") === "fixed") {
+      dealBogoSides(deal).buy.forEach((row) => {
+        const menuItem: any = foodMenuItems.find((m) => m.id === row.menuItemId);
+        if (!menuItem) return;
+        const variant = row.variantId ? menuItem.variants?.find((v: any) => v.id === row.variantId) : undefined;
+        const unitPrice = resolvePrice(variant || menuItem, orderType);
+        buyTotal += unitPrice * row.qty;
+        lines.push(`Buy ${row.qty}x ${menuItem.name}${variant ? ` (${variant.name})` : ""}`);
+      });
+    } else {
+      dealBogoOptionGroups(deal, "BUY").forEach((g) => {
+        const prices = g.options
+          .map((o) => {
+            const menuItem: any = foodMenuItems.find((m) => m.id === o.menuItemId);
+            if (!menuItem) return null;
+            const variant = o.variantId ? menuItem.variants?.find((v: any) => v.id === o.variantId) : undefined;
+            return resolvePrice(variant || menuItem, orderType) + (o.extraPrice || 0);
+          })
+          .filter((p): p is number => p != null);
+        if (prices.length === 0) return;
+        buyTotal += Math.min(...prices);
+        lines.push(`Buy: ${g.label}`);
+      });
+    }
+
+    if (dealBogoSideMode(deal, "GET") === "fixed") {
+      dealBogoSides(deal).get.forEach((row) => {
+        const menuItem: any = foodMenuItems.find((m) => m.id === row.menuItemId);
+        if (!menuItem) return;
+        const variant = row.variantId ? menuItem.variants?.find((v: any) => v.id === row.variantId) : undefined;
+        const unitPrice = resolvePrice(variant || menuItem, orderType);
+        const variants = menuItem.variants ?? [];
+        const cheapest = variants.length === 0 ? unitPrice : Math.min(...variants.map((v: any) => resolvePrice(v, orderType)));
+        const cappedUnitPrice = capFreeUnitPrice(row.variantId, unitPrice, cheapest);
+        const coveragePercent = dealChannelPercent(deal, orderType, 100);
+        const freeUnitPrice = Math.round(cappedUnitPrice * (coveragePercent / 100) * 100) / 100;
+        getTotal += unitPrice * row.qty;
+        freeTotal += freeUnitPrice * row.qty;
+        lines.push(`Get ${row.qty}x ${menuItem.name}${variant ? ` (${variant.name})` : ""}${freeUnitPrice <= 0 ? "" : freeUnitPrice >= unitPrice ? " (Free)" : " (Discounted)"}`);
+      });
+    } else {
       const coveragePercent = dealChannelPercent(deal, orderType, 100);
-      const freeUnitPrice = Math.round(cappedUnitPrice * (coveragePercent / 100) * 100) / 100;
-      getTotal += unitPrice * row.qty;
-      freeTotal += freeUnitPrice * row.qty;
-      lines.push(`Get ${row.qty}x ${menuItem.name}${variant ? ` (${variant.name})` : ""}${freeUnitPrice <= 0 ? "" : freeUnitPrice >= unitPrice ? " (Free)" : " (Discounted)"}`);
-    });
+      dealBogoOptionGroups(deal, "GET").forEach((g) => {
+        const prices = g.options
+          .map((o) => {
+            const menuItem: any = foodMenuItems.find((m) => m.id === o.menuItemId);
+            if (!menuItem) return null;
+            const variant = o.variantId ? menuItem.variants?.find((v: any) => v.id === o.variantId) : undefined;
+            return resolvePrice(variant || menuItem, orderType) + (o.extraPrice || 0);
+          })
+          .filter((p): p is number => p != null);
+        if (prices.length === 0) return;
+        const minPrice = Math.min(...prices);
+        const freeUnitPrice = Math.round(minPrice * (coveragePercent / 100) * 100) / 100;
+        getTotal += minPrice;
+        freeTotal += freeUnitPrice;
+        lines.push(`Get: ${g.label}${freeUnitPrice <= 0 ? "" : freeUnitPrice >= minPrice ? " (Free)" : " (Discounted)"}`);
+      });
+    }
+
     const regular = buyTotal + getTotal;
     const dealPrice = Math.round(buyTotal + (getTotal - freeTotal));
     const savingsPercent = regular > 0 ? Math.round((freeTotal / regular) * 100) : 0;
@@ -3607,7 +3748,7 @@ const POS = () => {
 
 
       {/* Customizable Deal — group-selection dialog */}
-      <Dialog open={showDealCustomize} onOpenChange={(open) => { setShowDealCustomize(open); if (!open) setCustomizingDeal(null); }}>
+      <Dialog open={showDealCustomize} onOpenChange={(open) => { setShowDealCustomize(open); if (!open) { setCustomizingDeal(null); setCustomizingDealLineId(null); } }}>
         <DialogContent className="max-w-xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -3618,7 +3759,7 @@ const POS = () => {
           </DialogHeader>
           {customizingDeal && (
             <div className="space-y-5">
-              {customizingDeal.optionGroups.map((g, idx) => {
+              {customizeGroups.map((g, idx) => {
                 const selected = dealGroupSelections[g.id] || [];
                 const need = g.minSelections === g.maxSelections ? `${g.minSelections}` : `${g.minSelections}-${g.maxSelections}`;
                 return (

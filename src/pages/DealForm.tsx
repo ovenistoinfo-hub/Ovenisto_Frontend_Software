@@ -17,16 +17,21 @@ import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@
 import {
   Tag, Plus, Trash2, ArrowLeft, Loader2, Upload, Sparkles, Package, Check, Layers,
   Calendar, CheckCircle2, Percent, Gift, ShoppingBag, Eye, Image as ImageIcon,
-  Calculator, AlertTriangle, UtensilsCrossed, Truck, Ticket
+  Calculator, AlertTriangle, UtensilsCrossed, Truck, Ticket, PiggyBank, MapPin,
+  Utensils, ShoppingBasket, Bike, ListPlus,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { getAccessToken } from "@/services/api";
-import { dealService, type DealInput, type DealTypeValue } from "@/services/deal.service";
+import { dealService, type DealInput, type DealTypeValue, type DealOptionGroupInput } from "@/services/deal.service";
 import { menuService } from "@/services/menu.service";
+import { outletService } from "@/services/outlet.service";
 import { DAY_SHORT, activeDaysLabel } from "@/lib/deals";
 import { DatePicker, formatDateLabel } from "@/components/ui/date-picker";
 import { TimePicker, formatTimeLabel } from "@/components/ui/time-picker";
+import { useAuth } from "@/contexts/AuthContext";
+import { DealOutletPicker } from "@/components/deals/DealOutletPicker";
+import { CategoryVariantPicker, type CategoryVariantPick } from "@/components/deals/CategoryVariantPicker";
 
 /** One item in a Fixed Bundle. `categoryId` is a UI-only filter that narrows the
  *  row's item dropdown — it is never sent to the backend. */
@@ -153,6 +158,13 @@ const DealForm = () => {
     enabled: isEdit,
   });
 
+  const { user } = useAuth();
+  const isSuperAdmin = user?.role === "Super Admin";
+  const { data: outlets = [] } = useQuery({
+    queryKey: ["outlets-deal-picker"],
+    queryFn: () => outletService.getOutlets(),
+  });
+
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [calcMode, setCalcMode] = useState<"discount" | "margin">("discount");
@@ -224,23 +236,46 @@ const DealForm = () => {
 
   // Buy X Get Y
   // Both sides hold any number of items, so "Buy 1 Pizza + 1 Pasta, get 1 Drink
-  // + 1 Fries free" is one deal. Each row pins a size — without one the offer
-  // means "any size", and a customer can qualify with the cheapest while
-  // claiming the priciest free.
+  // + 1 Fries free" is one deal. Each side is independently "Fixed" (a flat,
+  // all-required item list — buyRows/getRows below, each row pins a size) or
+  // "Customizable" (an option set the customer chooses from — buyGroups/
+  // getGroups, the same shape Choice Steps uses). Buy can be Fixed while Get
+  // is Customizable, or any other combination.
+  const [buyMode, setBuyMode] = useState<"fixed" | "customizable">("fixed");
+  const [getMode, setGetMode] = useState<"fixed" | "customizable">("fixed");
   const [buyRows, setBuyRows] = useState<BogoRow[]>([emptyBogoRow()]);
   const [getRows, setGetRows] = useState<BogoRow[]>([emptyBogoRow()]);
+  const [buyGroups, setBuyGroups] = useState<OptionGroupRow[]>([]);
+  const [getGroups, setGetGroups] = useState<OptionGroupRow[]>([]);
   // UI-only category filters narrowing the two item dropdowns; never persisted.
 
-  // Order Discount — the only format with no items/bundle: it discounts the
-  // whole order total instead. `code` (declared above) doubles as the mode
-  // switch on save — set = Promo Code, empty = Minimum Spend — this local
-  // toggle just decides which fields the admin sees and is never itself sent.
-  const [orderDiscountMode, setOrderDiscountMode] = useState<"promo_code" | "min_spend">("promo_code");
+  // Promo Code / Minimum Spend — the only two formats with no items/bundle:
+  // they discount the whole order total instead. dealType itself now carries
+  // which of the two this is; `code` (declared above) is required for a Promo
+  // Code and unused for a Minimum Spend deal.
   const [minSpend, setMinSpend] = useState<string>("");
   // A Promo Code is flat-only by product decision; a Minimum Spend deal picks.
   const [orderDiscountValueMode, setOrderDiscountValueMode] = useState<"flat" | "percent">("flat");
   const [flatDiscountAmount, setFlatDiscountAmount] = useState<string>("");
   const [orderDiscountPercent, setOrderDiscountPercent] = useState<string>("");
+
+  // Channel availability — every deal type. Default on, so an existing deal
+  // (which has no explicit value until saved again) reads as available
+  // everywhere, matching the server's own default(true).
+  const [availableDineIn, setAvailableDineIn] = useState(true);
+  const [availableTakeaway, setAvailableTakeaway] = useState(true);
+  const [availableDelivery, setAvailableDelivery] = useState(true);
+
+  // Outlet targeting — [] = all branches (chain-wide). Only Super Admin can
+  // edit this; every other role is locked server-side to their own outlet
+  // regardless of what this state holds (see handleSave).
+  const [outletIds, setOutletIds] = useState<string[]>([]);
+
+  // Category bulk picker — one shared picker, opened against whichever
+  // target row-list is currently active.
+  const [categoryPickerTarget, setCategoryPickerTarget] = useState<
+    null | "combo" | "scope" | { kind: "optionGroup"; groupId: string } | { kind: "bogo"; side: "buy" | "get"; groupId: string }
+  >(null);
 
   // Validity & Schedule
   const todayStr = new Date().toISOString().split("T")[0];
@@ -303,25 +338,37 @@ const DealForm = () => {
       );
     }
 
-    if (existingDeal.optionGroups && existingDeal.optionGroups.length > 0) {
-      setOptionGroups(
-        existingDeal.optionGroups.map((g) => ({
-          id: g.id,
-          label: g.label,
-          maxSelections: g.maxSelections,
-          // A saved deal's wording is the admin's — keep it verbatim rather than
-          // re-deriving over it.
-          labelEdited: true,
-          // categoryId stays empty here — for a row that already has an item, the
-          // category shown is derived from that item at render time, so this never
-          // races the menuItems query.
-          choices: g.options.map((o) => ({
-            categoryId: "",
-            itemId: o.menuItemId,
-            variantId: o.variantId,
-          })),
-        }))
-      );
+    // optionGroups carries option_combo's own groups (bogoSide null) AND any
+    // buy_x_get_y side put in "Customizable" mode (bogoSide BUY/GET) — split
+    // by that tag into the three separate edit states.
+    const toGroupRow = (g: (typeof existingDeal.optionGroups)[number]): OptionGroupRow => ({
+      id: g.id,
+      label: g.label,
+      maxSelections: g.maxSelections,
+      // A saved deal's wording is the admin's — keep it verbatim rather than
+      // re-deriving over it.
+      labelEdited: true,
+      // categoryId stays empty here — for a row that already has an item, the
+      // category shown is derived from that item at render time, so this never
+      // races the menuItems query.
+      choices: g.options.map((o) => ({
+        categoryId: "",
+        itemId: o.menuItemId,
+        variantId: o.variantId,
+      })),
+    });
+    const allGroups = existingDeal.optionGroups ?? [];
+    const comboGroups = allGroups.filter((g) => !g.bogoSide);
+    const loadedBuyGroups = allGroups.filter((g) => g.bogoSide === "BUY");
+    const loadedGetGroups = allGroups.filter((g) => g.bogoSide === "GET");
+    if (comboGroups.length > 0) setOptionGroups(comboGroups.map(toGroupRow));
+    if (loadedBuyGroups.length > 0) {
+      setBuyMode("customizable");
+      setBuyGroups(loadedBuyGroups.map(toGroupRow));
+    }
+    if (loadedGetGroups.length > 0) {
+      setGetMode("customizable");
+      setGetGroups(loadedGetGroups.map(toGroupRow));
     }
 
     setDiscountPercent(existingDeal.discountPercent ?? 10);
@@ -371,8 +418,7 @@ const DealForm = () => {
       setEndTime(existingDeal.endTime);
     }
 
-    if (existingDeal.type === "order_discount") {
-      setOrderDiscountMode(existingDeal.code ? "promo_code" : "min_spend");
+    if (existingDeal.type === "promo_code" || existingDeal.type === "min_spend") {
       setMinSpend(existingDeal.minSpend != null ? String(existingDeal.minSpend) : "");
       if (existingDeal.flatDiscount != null) {
         setOrderDiscountValueMode("flat");
@@ -382,6 +428,11 @@ const DealForm = () => {
         setOrderDiscountPercent(String(existingDeal.discountPercent));
       }
     }
+
+    setAvailableDineIn(existingDeal.availableDineIn ?? true);
+    setAvailableTakeaway(existingDeal.availableTakeaway ?? true);
+    setAvailableDelivery(existingDeal.availableDelivery ?? true);
+    setOutletIds(existingDeal.outletIds ?? []);
 
     // Set last, in the same batch as every setter above, so the baseline below
     // is taken from a form that already holds the loaded deal.
@@ -402,20 +453,24 @@ const DealForm = () => {
         dealPrice, dineInPrice, takeAwayPrice, deliveryPrice, foodpandaPrice,
         dineInPercent, takeAwayPercent, deliveryPercent, foodpandaPercent,
         discountPercent, applicableCategoryIds, scopeItemRows,
-        comboRows, optionGroups, buyRows, getRows,
+        comboRows, optionGroups,
+        buyMode, getMode, buyRows, getRows, buyGroups, getGroups,
         validFrom, validTo, alwaysActive, activeDays,
         hasTimeRestriction, startTime, endTime,
-        orderDiscountMode, minSpend, orderDiscountValueMode, flatDiscountAmount, orderDiscountPercent,
+        minSpend, orderDiscountValueMode, flatDiscountAmount, orderDiscountPercent,
+        availableDineIn, availableTakeaway, availableDelivery, outletIds,
       ]),
     [
       name, code, description, imageUrl, dealType, isActive,
       dealPrice, dineInPrice, takeAwayPrice, deliveryPrice, foodpandaPrice,
       dineInPercent, takeAwayPercent, deliveryPercent, foodpandaPercent,
       discountPercent, applicableCategoryIds, scopeItemRows,
-      comboRows, optionGroups, buyRows, getRows,
+      comboRows, optionGroups,
+      buyMode, getMode, buyRows, getRows, buyGroups, getGroups,
       validFrom, validTo, alwaysActive, activeDays,
       hasTimeRestriction, startTime, endTime,
-      orderDiscountMode, minSpend, orderDiscountValueMode, flatDiscountAmount, orderDiscountPercent,
+      minSpend, orderDiscountValueMode, flatDiscountAmount, orderDiscountPercent,
+      availableDineIn, availableTakeaway, availableDelivery, outletIds,
     ]
   );
 
@@ -542,6 +597,18 @@ const DealForm = () => {
 
   const removeComboRow = (idx: number) => {
     setComboRows((prev) => prev.filter((_, i) => i !== idx));
+  };
+
+  /** Appends several bundle rows at once (from the category bulk picker),
+   *  skipping any item+variant pair already in the bundle. */
+  const addComboRowsBulk = (picks: CategoryVariantPick[]) => {
+    setComboRows((prev) => {
+      const existing = new Set(prev.map((r) => `${r.itemId}:${r.variantId ?? ""}`));
+      const newRows = picks
+        .filter((p) => !existing.has(`${p.itemId}:${p.variantId ?? ""}`))
+        .map((p) => ({ categoryId: "", itemId: p.itemId, variantId: p.variantId, qty: 1 }));
+      return [...prev, ...newRows];
+    });
   };
 
   const updateComboItem = (idx: number, itemId: string) => {
@@ -829,9 +896,13 @@ const DealForm = () => {
     </div>
   );
 
-  // Customizable Option Groups Helpers
-  const addOptionGroup = () => {
-    setOptionGroups((prev) => [
+  // Option Group Helpers — shared by Choice Steps (optionGroups) and a Buy X
+  // Get Y side in "Customizable" mode (buyGroups/getGroups), parameterised by
+  // which setter to drive, same idiom the Bogo row helpers below already use.
+  type GroupsSetter = React.Dispatch<React.SetStateAction<OptionGroupRow[]>>;
+
+  const addOptionGroup = (setGroups: GroupsSetter = setOptionGroups) => {
+    setGroups((prev) => [
       ...prev,
       {
         id: crypto.randomUUID(),
@@ -843,18 +914,18 @@ const DealForm = () => {
     ]);
   };
 
-  const removeOptionGroup = (groupId: string) => {
-    setOptionGroups((prev) => prev.filter((g) => g.id !== groupId));
+  const removeOptionGroup = (setGroups: GroupsSetter, groupId: string) => {
+    setGroups((prev) => prev.filter((g) => g.id !== groupId));
   };
 
-  const updateGroupLabel = (groupId: string, label: string) => {
-    setOptionGroups((prev) =>
+  const updateGroupLabel = (setGroups: GroupsSetter, groupId: string, label: string) => {
+    setGroups((prev) =>
       prev.map((g) => (g.id === groupId ? { ...g, label, labelEdited: true } : g))
     );
   };
 
-  const updateGroupMax = (groupId: string, maxSelections: number) => {
-    setOptionGroups((prev) =>
+  const updateGroupMax = (setGroups: GroupsSetter, groupId: string, maxSelections: number) => {
+    setGroups((prev) =>
       prev.map((g) =>
         g.id === groupId ? { ...g, maxSelections: Math.max(1, maxSelections) } : g
       )
@@ -863,11 +934,12 @@ const DealForm = () => {
 
   /** Rewrites one choice row inside one group, leaving every other row untouched. */
   const patchChoice = (
+    setGroups: GroupsSetter,
     groupId: string,
     idx: number,
     patch: Partial<OptionChoiceRow>
   ) => {
-    setOptionGroups((prev) =>
+    setGroups((prev) =>
       prev.map((g) =>
         g.id === groupId
           ? { ...g, choices: g.choices.map((c, i) => (i === idx ? { ...c, ...patch } : c)) }
@@ -876,8 +948,8 @@ const DealForm = () => {
     );
   };
 
-  const addChoiceRow = (groupId: string) => {
-    setOptionGroups((prev) =>
+  const addChoiceRow = (setGroups: GroupsSetter, groupId: string) => {
+    setGroups((prev) =>
       prev.map((g) =>
         g.id === groupId
           ? { ...g, choices: [...g.choices, { categoryId: "", itemId: "", variantId: null }] }
@@ -886,8 +958,23 @@ const DealForm = () => {
     );
   };
 
-  const removeChoiceRow = (groupId: string, idx: number) => {
-    setOptionGroups((prev) =>
+  /** Appends several choice rows at once (from the category bulk picker),
+   *  skipping any item+variant pair the group already has. */
+  const addChoiceRowsBulk = (setGroups: GroupsSetter, groupId: string, picks: CategoryVariantPick[]) => {
+    setGroups((prev) =>
+      prev.map((g) => {
+        if (g.id !== groupId) return g;
+        const existing = new Set(g.choices.map((c) => `${c.itemId}:${c.variantId ?? ""}`));
+        const newRows = picks
+          .filter((p) => !existing.has(`${p.itemId}:${p.variantId ?? ""}`))
+          .map((p) => ({ categoryId: "", itemId: p.itemId, variantId: p.variantId }));
+        return { ...g, choices: [...g.choices, ...newRows] };
+      })
+    );
+  };
+
+  const removeChoiceRow = (setGroups: GroupsSetter, groupId: string, idx: number) => {
+    setGroups((prev) =>
       prev.map((g) =>
         g.id === groupId ? { ...g, choices: g.choices.filter((_, i) => i !== idx) } : g
       )
@@ -897,17 +984,17 @@ const DealForm = () => {
   // Changing the category clears the item/variant beneath it — the old item is no
   // longer in the narrowed dropdown, so keeping it would show a value the list
   // doesn't contain.
-  const updateChoiceCategory = (groupId: string, idx: number, categoryId: string) =>
-    patchChoice(groupId, idx, { categoryId, itemId: "", variantId: null });
+  const updateChoiceCategory = (setGroups: GroupsSetter, groupId: string, idx: number, categoryId: string) =>
+    patchChoice(setGroups, groupId, idx, { categoryId, itemId: "", variantId: null });
 
   /** Picking an item defaults to its first variant, matching the Fixed Bundle rows. */
-  const updateChoiceItem = (groupId: string, idx: number, itemId: string) => {
+  const updateChoiceItem = (setGroups: GroupsSetter, groupId: string, idx: number, itemId: string) => {
     const item = menuItems.find((m) => m.id === itemId);
-    patchChoice(groupId, idx, { itemId, variantId: item?.variants?.[0]?.id ?? null });
+    patchChoice(setGroups, groupId, idx, { itemId, variantId: item?.variants?.[0]?.id ?? null });
   };
 
-  const updateChoiceVariant = (groupId: string, idx: number, variantId: string) =>
-    patchChoice(groupId, idx, { variantId });
+  const updateChoiceVariant = (setGroups: GroupsSetter, groupId: string, idx: number, variantId: string) =>
+    patchChoice(setGroups, groupId, idx, { variantId });
 
   /** Both Buy X Get Y sides are edited the same way, so they share one set of
    *  helpers parameterised by which setter to drive. */
@@ -982,6 +1069,26 @@ const DealForm = () => {
    *  single string shown in the label field, the preview, and saved to the deal. */
   const groupLabel = (group: OptionGroupRow): string =>
     group.labelEdited && group.label.trim() ? group.label : describeGroupPicks(group);
+
+  /** Option groups → the DealOptionGroupInput[] payload shape — shared by
+   *  Choice Steps and a Buy X Get Y side in "Customizable" mode. minSelections
+   *  is pinned to maxSelections: every group here is "pick exactly N", the
+   *  same all-required semantics a Fixed side's rows already carry. */
+  const toOptionGroupInput = (groups: OptionGroupRow[]): DealOptionGroupInput[] =>
+    groups.map((g, idx) => ({
+      label: groupLabel(g),
+      minSelections: g.maxSelections,
+      maxSelections: g.maxSelections,
+      displayOrder: idx,
+      options: g.choices
+        .filter((c) => c.itemId)
+        .map((c, oIdx) => ({
+          menuItemId: c.itemId,
+          variantId: c.variantId,
+          extraPrice: 0,
+          displayOrder: oIdx,
+        })),
+    }));
 
   /** The rows that name a real item, de-duplicated — what actually gets saved. */
   const applicableItemIds = useMemo(
@@ -1194,16 +1301,16 @@ const DealForm = () => {
       return { done: steps > 0, label: `${steps} choice step(s) configured` };
     }
     if (dealType === "buy_x_get_y") {
-      const buys = buyRows.filter((r) => r.itemId).length;
-      const gets = getRows.filter((r) => r.itemId).length;
+      const buys = buyMode === "fixed" ? buyRows.filter((r) => r.itemId).length : buyGroups.filter((g) => g.choices.length > 0).length;
+      const gets = getMode === "fixed" ? getRows.filter((r) => r.itemId).length : getGroups.filter((g) => g.choices.length > 0).length;
       return {
         done: buys > 0 && gets > 0,
-        label: buys > 0 && gets > 0 ? `Buy ${buys} item(s) → get ${gets} free` : "Pick the buy and free items",
+        label: buys > 0 && gets > 0 ? `Buy ${buys} option(s) → get ${gets} free option(s)` : "Pick the buy and free items",
       };
     }
     const scoped = applicableItemIds.length + applicableCategoryIds.length;
     return { done: scoped > 0, label: scoped > 0 ? `${scoped} item(s)/categor(ies) in scope` : "Choose what the discount applies to" };
-  }, [dealType, comboRows, optionGroups, buyRows, getRows, applicableItemIds, applicableCategoryIds]);
+  }, [dealType, comboRows, optionGroups, buyMode, getMode, buyRows, getRows, buyGroups, getGroups, applicableItemIds, applicableCategoryIds]);
 
   /** Names the discount's scope for the POS preview — the selected categories,
    *  plus a count of items named on their own. Items a selected category already
@@ -1233,10 +1340,10 @@ const DealForm = () => {
 
   // Every other deal type renders a section 4 — Pricing for the combo formats,
   // the Pricing & Cost Breakdown read-out for percentage / Buy X Get Y — so
-  // validity is 5 there. Order Discount has no cost/selling ladder (it isn't
-  // tied to specific items), so it never has a 4 — its schedule card is 4,
-  // not a 5 with a gap where 4 should be.
-  const validitySectionNumber = dealType === "order_discount" ? 4 : 5;
+  // validity is 5 there. Promo Code / Minimum Spend have no cost/selling
+  // ladder (they aren't tied to specific items), so neither ever has a 4 —
+  // its schedule card is 4, not a 5 with a gap where 4 should be.
+  const validitySectionNumber = dealType === "promo_code" || dealType === "min_spend" ? 4 : 5;
 
   // Percentage Scope Helpers
   const addScopeItemRow = () =>
@@ -1325,11 +1432,11 @@ const DealForm = () => {
         return;
       }
     } else if (dealType === "buy_x_get_y") {
-      const sides = [
-        { label: "buy", rows: buyRows, verb: "has to buy" },
-        { label: "get", rows: getRows, verb: "gets free" },
-      ];
-      for (const side of sides) {
+      const fixedSides = [
+        { label: "buy", rows: buyRows, mode: buyMode, verb: "has to buy" },
+        { label: "get", rows: getRows, mode: getMode, verb: "gets free" },
+      ].filter((s) => s.mode === "fixed");
+      for (const side of fixedSides) {
         const filled = side.rows.filter((r) => r.itemId);
         if (filled.length === 0) {
           toast.error(`Add at least one item the customer ${side.verb}`);
@@ -1360,13 +1467,59 @@ const DealForm = () => {
           seen.add(key);
         }
       }
-    } else if (dealType === "order_discount") {
-      if (orderDiscountMode === "promo_code" && !code.trim()) {
+
+      const customizableSides = [
+        { label: "buy", groups: buyGroups, verb: "can buy" },
+        { label: "get", groups: getGroups, verb: "can get free" },
+      ].filter((s) => (s.label === "buy" ? buyMode : getMode) === "customizable");
+      for (const side of customizableSides) {
+        if (side.groups.length === 0) {
+          toast.error(`Add at least one option group for what the customer ${side.verb}`);
+          return;
+        }
+        const emptyGroup = side.groups.find((g) => g.choices.length === 0);
+        if (emptyGroup) {
+          toast.error(`Please select at least 1 item for "${groupLabel(emptyGroup)}"`);
+          return;
+        }
+        const incompleteGroup = side.groups.find((g) => g.choices.some((c) => !c.itemId));
+        if (incompleteGroup) {
+          toast.error(`Pick a menu item for every choice row in "${groupLabel(incompleteGroup)}"`);
+          return;
+        }
+        const notEnoughGroup = side.groups.find((g) => g.choices.length < g.maxSelections);
+        if (notEnoughGroup) {
+          toast.error(`"${groupLabel(notEnoughGroup)}" needs at least ${notEnoughGroup.maxSelections} selectable item(s)`);
+          return;
+        }
+        for (const group of side.groups) {
+          for (const choice of group.choices) {
+            const item = menuItems.find((m) => m.id === choice.itemId);
+            if (item && (item.variants?.length ?? 0) > 0 && !choice.variantId) {
+              toast.error(`Pick which size of ${item.name} applies in "${groupLabel(group)}"`);
+              return;
+            }
+          }
+        }
+      }
+    } else if (dealType === "promo_code") {
+      if (!code.trim()) {
         toast.error("Enter the code customers will type at checkout");
         return;
       }
-      if (orderDiscountMode === "min_spend" && (!minSpend || Number(minSpend) <= 0)) {
-        toast.error("Set a minimum spend, or switch to Promo Code");
+      const usingPercent = orderDiscountValueMode === "percent";
+      if (usingPercent) {
+        if (!orderDiscountPercent || Number(orderDiscountPercent) <= 0 || Number(orderDiscountPercent) > 100) {
+          toast.error("Please specify a discount percentage between 1 and 100");
+          return;
+        }
+      } else if (!flatDiscountAmount || Number(flatDiscountAmount) <= 0) {
+        toast.error("Please specify a valid discount amount");
+        return;
+      }
+    } else if (dealType === "min_spend") {
+      if (!minSpend || Number(minSpend) <= 0) {
+        toast.error("Set a minimum spend for this deal to auto-apply at");
         return;
       }
       const usingPercent = orderDiscountValueMode === "percent";
@@ -1384,17 +1537,18 @@ const DealForm = () => {
     setSaving(true);
     try {
       // Every other format falls back to an auto-generated SKU when the admin
-      // never touched the code field. Order Discount is the one place `code`
-      // is a real, functional value — a Minimum Spend deal MUST have no code
+      // never touched the code field. Promo Code is the one place `code` is a
+      // real, functional value — a Minimum Spend deal MUST have no code
       // (that's what makes it auto-apply), so it skips the fallback entirely.
       const finalCode =
-        dealType === "order_discount"
-          ? orderDiscountMode === "promo_code"
-            ? code.trim().toUpperCase() || null
-            : null
-          : code.trim() || generateCodeFromName(name) || null;
+        dealType === "promo_code"
+          ? code.trim().toUpperCase() || null
+          : dealType === "min_spend"
+            ? null
+            : code.trim() || generateCodeFromName(name) || null;
       const usingOrderDiscountPercent =
-        dealType === "order_discount" && orderDiscountValueMode === "percent";
+        (dealType === "promo_code" || dealType === "min_spend") && orderDiscountValueMode === "percent";
+      const writableOutletIds = isSuperAdmin ? outletIds : user?.outletId ? [user.outletId] : [];
       const payload: DealInput = {
         name: name.trim(),
         code: finalCode,
@@ -1414,6 +1568,10 @@ const DealForm = () => {
         deliveryPercent: supportsChannelPercent ? channelPercentValue(deliveryPercent) : null,
         foodpandaPercent: supportsChannelPercent ? channelPercentValue(foodpandaPercent) : null,
         isActive,
+        availableDineIn,
+        availableTakeaway,
+        availableDelivery,
+        outletIds: writableOutletIds,
         validFrom,
         validTo: alwaysActive ? null : validTo || null,
         startTime: hasTimeRestriction ? startTime : null,
@@ -1430,21 +1588,7 @@ const DealForm = () => {
                 displayOrder: idx,
               }))
             : [],
-        optionGroups:
-          dealType === "option_combo"
-            ? optionGroups.map((g, idx) => ({
-                label: groupLabel(g),
-                minSelections: g.maxSelections,
-                maxSelections: g.maxSelections,
-                displayOrder: idx,
-                options: g.choices.map((c, oIdx) => ({
-                  menuItemId: c.itemId,
-                  variantId: c.variantId,
-                  extraPrice: 0,
-                  displayOrder: oIdx,
-                })),
-              }))
-            : [],
+        optionGroups: dealType === "option_combo" ? toOptionGroupInput(optionGroups) : [],
         discountPercent:
           dealType === "percentage"
             ? Number(discountPercent)
@@ -1454,14 +1598,15 @@ const DealForm = () => {
         applicableItems: dealType === "percentage" ? applicableItemIds : [],
         applicableCategories:
           dealType === "percentage" ? applicableCategoryIds : [],
-        buyItems: dealType === "buy_x_get_y" ? toBogoInput(buyRows) : [],
-        getItems: dealType === "buy_x_get_y" ? toBogoInput(getRows) : [],
-        minSpend:
-          dealType === "order_discount" && orderDiscountMode === "min_spend"
-            ? Number(minSpend)
-            : null,
+        buyMode,
+        getMode,
+        buyItems: dealType === "buy_x_get_y" && buyMode === "fixed" ? toBogoInput(buyRows) : [],
+        getItems: dealType === "buy_x_get_y" && getMode === "fixed" ? toBogoInput(getRows) : [],
+        buyGroups: dealType === "buy_x_get_y" && buyMode === "customizable" ? toOptionGroupInput(buyGroups) : [],
+        getGroups: dealType === "buy_x_get_y" && getMode === "customizable" ? toOptionGroupInput(getGroups) : [],
+        minSpend: dealType === "min_spend" ? Number(minSpend) : null,
         flatDiscount:
-          dealType === "order_discount" && !usingOrderDiscountPercent
+          (dealType === "promo_code" || dealType === "min_spend") && !usingOrderDiscountPercent
             ? Number(flatDiscountAmount)
             : null,
       };
@@ -1709,7 +1854,7 @@ const DealForm = () => {
               </CardDescription>
             </CardHeader>
             <CardContent className="p-5">
-              <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+              <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
                 {(
                   [
                     {
@@ -1741,11 +1886,18 @@ const DealForm = () => {
                       example: "e.g. Buy 2 Pizzas, Get 1 Cold Drink Free",
                     },
                     {
-                      type: "order_discount" as const,
+                      type: "promo_code" as const,
                       icon: Ticket,
-                      title: "Order Discount",
-                      subtitle: "Off the whole order, not specific items",
-                      example: "e.g. Code OVEN20 = Rs. 200 off, or Rs. 500 off orders over Rs. 2,500",
+                      title: "Promo Code",
+                      subtitle: "Customer types a code at checkout",
+                      example: "e.g. Code OVEN20 = Rs. 200 off the whole order",
+                    },
+                    {
+                      type: "min_spend" as const,
+                      icon: PiggyBank,
+                      title: "Minimum Spend",
+                      subtitle: "Auto-applies once the cart clears a floor",
+                      example: "e.g. Rs. 500 off automatically on orders over Rs. 2,500",
                     },
                   ] as const
                 ).map((opt) => {
@@ -1848,9 +2000,11 @@ const DealForm = () => {
                         ? "Custom"
                         : dealType === "percentage"
                         ? "Discount"
-                        : dealType === "order_discount"
-                        ? "Order Off"
-                        : "BOGO"}
+                        : dealType === "buy_x_get_y"
+                        ? "BOGO"
+                        : dealType === "promo_code"
+                        ? "Promo Code"
+                        : "Auto Off"}
                     </Badge>
                   </div>
                   <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
@@ -1911,9 +2065,9 @@ const DealForm = () => {
                         No categories or items selected
                       </p>
                     )
-                  ) : dealType === "order_discount" ? (
+                  ) : dealType === "promo_code" || dealType === "min_spend" ? (
                     <p className="text-[11px] text-foreground/90 font-medium">
-                      {orderDiscountMode === "promo_code"
+                      {dealType === "promo_code"
                         ? `• Code "${code || "..."}" — entered at checkout`
                         : `• Auto-applies on orders of Rs. ${minSpend || "0"}+`}
                     </p>
@@ -1968,7 +2122,7 @@ const DealForm = () => {
                         ? discountImpact.maxAfter > 0
                           ? `Rs. ${Math.round(discountImpact.minAfter).toLocaleString()} – ${Math.round(discountImpact.maxAfter).toLocaleString()}`
                           : "—"
-                        : dealType === "order_discount"
+                        : dealType === "promo_code" || dealType === "min_spend"
                         ? orderDiscountValueMode === "percent"
                           ? `${orderDiscountPercent || "0"}% OFF`
                           : `Rs. ${flatDiscountAmount || "0"} OFF`
@@ -2060,18 +2214,41 @@ const DealForm = () => {
                       Add every food item included in this fixed package
                     </CardDescription>
                   </div>
-                  <Button
-                    type="button"
-                    size="sm"
-                    onClick={addComboRow}
-                    className="bg-primary text-primary-foreground hover:bg-primary/90 gap-1.5 text-xs font-bold shadow-xs shrink-0"
-                  >
-                    <Plus className="h-3.5 w-3.5" /> Add Item
-                  </Button>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setCategoryPickerTarget(categoryPickerTarget === "combo" ? null : "combo")}
+                      className="gap-1.5 text-xs font-bold"
+                    >
+                      <ListPlus className="h-3.5 w-3.5" /> Bulk Add
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={addComboRow}
+                      className="bg-primary text-primary-foreground hover:bg-primary/90 gap-1.5 text-xs font-bold shadow-xs"
+                    >
+                      <Plus className="h-3.5 w-3.5" /> Add Item
+                    </Button>
+                  </div>
                 </div>
               </CardHeader>
 
-              <CardContent className="p-4">
+              <CardContent className="p-4 space-y-3">
+                {categoryPickerTarget === "combo" && (
+                  <CategoryVariantPicker
+                    categories={foodCategories}
+                    menuItems={menuItems}
+                    existingKeys={new Set(comboRows.map((r) => `${r.itemId}:${r.variantId ?? ""}`))}
+                    onAdd={(picks) => {
+                      addComboRowsBulk(picks);
+                      setCategoryPickerTarget(null);
+                    }}
+                    onClose={() => setCategoryPickerTarget(null)}
+                  />
+                )}
                 {comboRows.length === 0 ? (
                   <div className="text-center py-12 space-y-3 border-2 border-dashed border-border/60 rounded-xl bg-muted/10">
                     <div className="w-12 h-12 rounded-full bg-muted/60 flex items-center justify-center mx-auto">
@@ -2264,7 +2441,7 @@ const DealForm = () => {
                   <Button
                     type="button"
                     size="sm"
-                    onClick={addOptionGroup}
+                    onClick={() => addOptionGroup(setOptionGroups)}
                     className="bg-primary text-primary-foreground hover:bg-primary/90 gap-1.5 text-xs font-bold shadow-xs shrink-0"
                   >
                     <Plus className="h-3.5 w-3.5" /> Add Step Group
@@ -2282,7 +2459,7 @@ const DealForm = () => {
                       <p className="text-sm font-semibold text-foreground">No selection steps created yet</p>
                       <p className="text-xs text-muted-foreground mt-0.5">Create choice groups so customers can pick their own items</p>
                     </div>
-                    <Button type="button" size="sm" variant="outline" onClick={addOptionGroup} className="text-xs gap-1.5">
+                    <Button type="button" size="sm" variant="outline" onClick={() => addOptionGroup(setOptionGroups)} className="text-xs gap-1.5">
                       <Plus className="h-3.5 w-3.5" /> Add First Step Group
                     </Button>
                   </div>
@@ -2299,7 +2476,7 @@ const DealForm = () => {
                             </span>
                             <Input
                               value={groupLabel(group)}
-                              onChange={(e) => updateGroupLabel(group.id, e.target.value)}
+                              onChange={(e) => updateGroupLabel(setOptionGroups, group.id, e.target.value)}
                               placeholder="e.g. Choose 1st Pizza Flavor"
                               className="h-8 text-xs font-bold max-w-sm"
                             />
@@ -2314,7 +2491,7 @@ const DealForm = () => {
                                 type="number"
                                 min={1}
                                 value={group.maxSelections}
-                                onChange={(e) => updateGroupMax(group.id, Number(e.target.value))}
+                                onChange={(e) => updateGroupMax(setOptionGroups, group.id, Number(e.target.value))}
                                 className="h-8 w-16 text-xs text-center font-bold"
                               />
                             </div>
@@ -2322,13 +2499,46 @@ const DealForm = () => {
                               type="button"
                               variant="ghost"
                               size="sm"
-                              onClick={() => removeOptionGroup(group.id)}
+                              onClick={() => removeOptionGroup(setOptionGroups, group.id)}
                               className="h-8 text-xs text-muted-foreground hover:text-destructive hover:bg-destructive/10"
                             >
                               <Trash2 className="h-3.5 w-3.5 mr-1" /> Remove
                             </Button>
                           </div>
                         </div>
+
+                        {/* Bulk-add trigger + inline picker */}
+                        <div className="px-3 pt-3">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() =>
+                              setCategoryPickerTarget(
+                                categoryPickerTarget && typeof categoryPickerTarget === "object" && categoryPickerTarget.kind === "optionGroup" && categoryPickerTarget.groupId === group.id
+                                  ? null
+                                  : { kind: "optionGroup", groupId: group.id }
+                              )
+                            }
+                            className="h-7 text-xs gap-1.5"
+                          >
+                            <ListPlus className="h-3.5 w-3.5" /> Bulk Add From Category
+                          </Button>
+                        </div>
+                        {typeof categoryPickerTarget === "object" && categoryPickerTarget?.kind === "optionGroup" && categoryPickerTarget.groupId === group.id && (
+                          <div className="px-3 pt-3">
+                            <CategoryVariantPicker
+                              categories={foodCategories}
+                              menuItems={menuItems}
+                              existingKeys={new Set(group.choices.map((c) => `${c.itemId}:${c.variantId ?? ""}`))}
+                              onAdd={(picks) => {
+                                addChoiceRowsBulk(setOptionGroups, group.id, picks);
+                                setCategoryPickerTarget(null);
+                              }}
+                              onClose={() => setCategoryPickerTarget(null)}
+                            />
+                          </div>
+                        )}
 
                         {/* Choice rows — same row layout as the Fixed Bundle table */}
                         <div className="p-3">
@@ -2341,7 +2551,7 @@ const DealForm = () => {
                                 type="button"
                                 size="sm"
                                 variant="outline"
-                                onClick={() => addChoiceRow(group.id)}
+                                onClick={() => addChoiceRow(setOptionGroups, group.id)}
                                 className="text-xs gap-1.5"
                               >
                                 <Plus className="h-3.5 w-3.5" /> Add Choice
@@ -2386,7 +2596,7 @@ const DealForm = () => {
                                       <Select
                                         value={activeCategoryId || "all"}
                                         onValueChange={(val) =>
-                                          updateChoiceCategory(group.id, cIdx, val === "all" ? "" : val)
+                                          updateChoiceCategory(setOptionGroups, group.id, cIdx, val === "all" ? "" : val)
                                         }
                                       >
                                         <SelectTrigger className="h-8 text-xs border-0 bg-muted/30 hover:bg-muted/50 focus:ring-1">
@@ -2407,7 +2617,7 @@ const DealForm = () => {
                                         <span className="text-[10px] font-mono text-muted-foreground/60 shrink-0 w-4 text-right">{cIdx + 1}.</span>
                                         <Select
                                           value={choice.itemId}
-                                          onValueChange={(val) => updateChoiceItem(group.id, cIdx, val)}
+                                          onValueChange={(val) => updateChoiceItem(setOptionGroups, group.id, cIdx, val)}
                                         >
                                           <SelectTrigger className="h-8 text-xs border-0 bg-muted/30 hover:bg-muted/50 focus:ring-1">
                                             <SelectValue placeholder="Select item…" />
@@ -2433,7 +2643,7 @@ const DealForm = () => {
                                         {variants.length > 0 ? (
                                           <Select
                                             value={choice.variantId || variants[0]?.id || ""}
-                                            onValueChange={(val) => updateChoiceVariant(group.id, cIdx, val)}
+                                            onValueChange={(val) => updateChoiceVariant(setOptionGroups, group.id, cIdx, val)}
                                           >
                                             <SelectTrigger className="h-8 text-xs border-0 bg-muted/30 hover:bg-muted/50 focus:ring-1">
                                               <SelectValue placeholder="Select size…" />
@@ -2466,7 +2676,7 @@ const DealForm = () => {
                                         type="button"
                                         variant="ghost"
                                         size="icon"
-                                        onClick={() => removeChoiceRow(group.id, cIdx)}
+                                        onClick={() => removeChoiceRow(setOptionGroups, group.id, cIdx)}
                                         className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
                                       >
                                         <Trash2 className="h-3.5 w-3.5" />
@@ -2485,7 +2695,7 @@ const DealForm = () => {
                                   type="button"
                                   size="sm"
                                   variant="outline"
-                                  onClick={() => addChoiceRow(group.id)}
+                                  onClick={() => addChoiceRow(setOptionGroups, group.id)}
                                   className="h-7 text-xs gap-1.5"
                                 >
                                   <Plus className="h-3.5 w-3.5" /> Add Choice
@@ -3645,8 +3855,13 @@ const DealForm = () => {
                 {BOGO_SIDES.map((side) => {
                   const rows = side.key === "buy" ? buyRows : getRows;
                   const setRows = side.key === "buy" ? setBuyRows : setGetRows;
+                  const mode = side.key === "buy" ? buyMode : getMode;
+                  const setMode = side.key === "buy" ? setBuyMode : setGetMode;
+                  const groups = side.key === "buy" ? buyGroups : getGroups;
+                  const setGroups = side.key === "buy" ? setBuyGroups : setGetGroups;
                   const SideIcon = side.icon;
-                  const filledCount = rows.filter((r) => r.itemId).length;
+                  const filledCount =
+                    mode === "fixed" ? rows.filter((r) => r.itemId).length : groups.filter((g) => g.choices.length > 0).length;
 
                   return (
                     <div
@@ -3694,6 +3909,36 @@ const DealForm = () => {
                         </Badge>
                       </div>
 
+                      {/* Fixed vs. Customizable — independent per side. Fixed is
+                          today's all-required item list; Customizable lets the
+                          customer choose from an option set (the same shape
+                          Choice Steps uses). */}
+                      <div className="px-3 pt-3">
+                        <div className="inline-flex rounded-md border border-border overflow-hidden">
+                          <button
+                            type="button"
+                            onClick={() => setMode("fixed")}
+                            className={cn(
+                              "px-3 h-8 text-xs font-semibold transition-colors",
+                              mode === "fixed" ? "bg-primary text-primary-foreground" : "bg-transparent text-muted-foreground hover:bg-muted/50"
+                            )}
+                          >
+                            Fixed Items
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setMode("customizable")}
+                            className={cn(
+                              "px-3 h-8 text-xs font-semibold transition-colors border-l border-border",
+                              mode === "customizable" ? "bg-primary text-primary-foreground" : "bg-transparent text-muted-foreground hover:bg-muted/50"
+                            )}
+                          >
+                            Customer Chooses
+                          </button>
+                        </div>
+                      </div>
+
+                      {mode === "fixed" && (
                       <div className="p-3 space-y-2">
                         {/* Header row */}
                         <div className="grid gap-2 px-3 pb-1" style={{ gridTemplateColumns: ITEM_ROW_GRID }}>
@@ -3871,6 +4116,163 @@ const DealForm = () => {
                           </Button>
                         </div>
                       </div>
+                      )}
+
+                      {mode === "customizable" && (
+                        <div className="p-3 space-y-3">
+                          <p className="text-xs text-muted-foreground">
+                            {side.key === "buy"
+                              ? "Define option group(s) the customer chooses their purchase from"
+                              : "Define option group(s) the customer chooses their free item from"}
+                          </p>
+                          {groups.map((group, gIdx) => (
+                            <div key={group.id} className="rounded-xl border border-border/60 bg-muted/10 overflow-hidden">
+                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-3 py-2.5 border-b border-border/50 bg-muted/20">
+                                <div className="flex items-center gap-2 flex-1 min-w-0">
+                                  <span className="h-6 w-6 rounded-lg bg-primary/10 text-primary font-semibold text-xs flex items-center justify-center shrink-0">
+                                    #{gIdx + 1}
+                                  </span>
+                                  <Input
+                                    value={groupLabel(group)}
+                                    onChange={(e) => updateGroupLabel(setGroups, group.id, e.target.value)}
+                                    placeholder={side.key === "buy" ? "e.g. Choose a Pizza" : "e.g. Choose a Dessert"}
+                                    className="h-8 text-xs font-bold max-w-sm"
+                                  />
+                                </div>
+                                <div className="flex items-center gap-3 self-end sm:self-auto shrink-0">
+                                  <div className="flex items-center gap-1.5">
+                                    <Label className="text-[11px] text-muted-foreground font-medium whitespace-nowrap">
+                                      {side.key === "buy" ? "Customer Buys:" : "Customer Gets:"}
+                                    </Label>
+                                    <Input
+                                      type="number"
+                                      min={1}
+                                      value={group.maxSelections}
+                                      onChange={(e) => updateGroupMax(setGroups, group.id, Number(e.target.value))}
+                                      className="h-8 w-16 text-xs text-center font-bold"
+                                    />
+                                  </div>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => removeOptionGroup(setGroups, group.id)}
+                                    className="h-8 text-xs text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5 mr-1" /> Remove
+                                  </Button>
+                                </div>
+                              </div>
+
+                              <div className="px-3 pt-3">
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() =>
+                                    setCategoryPickerTarget(
+                                      categoryPickerTarget && typeof categoryPickerTarget === "object" && categoryPickerTarget.kind === "bogo" && categoryPickerTarget.groupId === group.id
+                                        ? null
+                                        : { kind: "bogo", side: side.key, groupId: group.id }
+                                    )
+                                  }
+                                  className="h-7 text-xs gap-1.5"
+                                >
+                                  <ListPlus className="h-3.5 w-3.5" /> Bulk Add From Category
+                                </Button>
+                              </div>
+                              {typeof categoryPickerTarget === "object" && categoryPickerTarget?.kind === "bogo" && categoryPickerTarget.side === side.key && categoryPickerTarget.groupId === group.id && (
+                                <div className="px-3 pt-3">
+                                  <CategoryVariantPicker
+                                    categories={foodCategories}
+                                    menuItems={menuItems}
+                                    existingKeys={new Set(group.choices.map((c) => `${c.itemId}:${c.variantId ?? ""}`))}
+                                    onAdd={(picks) => {
+                                      addChoiceRowsBulk(setGroups, group.id, picks);
+                                      setCategoryPickerTarget(null);
+                                    }}
+                                    onClose={() => setCategoryPickerTarget(null)}
+                                  />
+                                </div>
+                              )}
+
+                              <div className="p-3 space-y-1.5">
+                                {group.choices.map((choice, cIdx) => {
+                                  const selectedItem = menuItems.find((m) => m.id === choice.itemId);
+                                  const variants = selectedItem?.variants || [];
+                                  const unitCost = choice.itemId ? getItemCost(choice.itemId, choice.variantId) : 0;
+                                  return (
+                                    <div
+                                      key={cIdx}
+                                      className="grid gap-2 items-center px-3 py-2 rounded-lg border border-border/60 bg-background"
+                                      style={{ gridTemplateColumns: ITEM_ROW_GRID_NO_QTY }}
+                                    >
+                                      <span className="text-xs text-muted-foreground truncate">
+                                        {selectedItem?.category?.name ?? "—"}
+                                      </span>
+                                      <span className="text-xs font-medium text-foreground truncate">
+                                        {selectedItem?.name ?? "Item not found"}
+                                      </span>
+                                      <div>
+                                        {variants.length > 0 ? (
+                                          <Select
+                                            value={choice.variantId || undefined}
+                                            onValueChange={(val) => updateChoiceVariant(setGroups, group.id, cIdx, val)}
+                                          >
+                                            <SelectTrigger
+                                              className={cn(
+                                                "h-8 text-xs border-0 bg-muted/30 hover:bg-muted/50 focus:ring-1",
+                                                !choice.variantId && "ring-1 ring-destructive/50"
+                                              )}
+                                            >
+                                              <SelectValue placeholder="Pick size…" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                              {variants.map((v) => (
+                                                <SelectItem key={v.id} value={v.id} className="text-xs">{v.name}</SelectItem>
+                                              ))}
+                                            </SelectContent>
+                                          </Select>
+                                        ) : (
+                                          <span className="text-xs text-muted-foreground px-1">—</span>
+                                        )}
+                                      </div>
+                                      <span className="text-xs font-mono text-muted-foreground text-right">
+                                        {unitCost > 0 ? `Rs. ${unitCost.toLocaleString()}` : "—"}
+                                      </span>
+                                      <span className="text-xs font-mono font-semibold text-foreground text-right">
+                                        {selectedItem ? `Rs. ${Number(selectedItem.price || 0).toLocaleString()}` : "—"}
+                                      </span>
+                                      <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="icon"
+                                        onClick={() => removeChoiceRow(setGroups, group.id, cIdx)}
+                                        className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                                      >
+                                        <Trash2 className="h-3.5 w-3.5" />
+                                      </Button>
+                                    </div>
+                                  );
+                                })}
+                                {group.choices.length === 0 && (
+                                  <p className="text-xs text-muted-foreground text-center py-3">No options yet — bulk add from a category above</p>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => addOptionGroup(setGroups)}
+                            className="h-8 text-xs gap-1.5"
+                          >
+                            <Plus className="h-3.5 w-3.5" /> Add Option Group
+                          </Button>
+                        </div>
+                      )}
                     </div>
                   );
                 })}
@@ -4124,57 +4526,23 @@ const DealForm = () => {
             </Card>
           )}
 
-          {/* SECTION 3: Order Discount Configuration — the one format with no
-              items/bundle, so there is no row table and no cost/selling ladder
-              (sections 4 don't apply — this jumps straight to 5, same as every
-              other format's fixed final numbering). */}
-          {dealType === "order_discount" && (
+          {/* SECTION 3: Promo Code / Minimum Spend Configuration — neither format
+              has items/bundle, so there is no row table and no cost/selling
+              ladder (section 4 doesn't apply — this jumps straight to 5, same
+              as every other format's fixed final numbering). */}
+          {(dealType === "promo_code" || dealType === "min_spend") && (
             <Card className="shadow-xs border-border/80 overflow-hidden">
               <CardHeader className="pb-3 border-b bg-muted/20">
                 <CardTitle className="text-sm font-semibold uppercase tracking-wider text-foreground flex items-center gap-2">
                   <Ticket className="h-4 w-4 text-muted-foreground" />
-                  3. Order Discount Configuration
+                  3. {dealType === "promo_code" ? "Promo Code" : "Minimum Spend"} Configuration
                 </CardTitle>
                 <CardDescription className="text-xs">
                   A discount off the whole order — not tied to any specific item
                 </CardDescription>
               </CardHeader>
               <CardContent className="p-5 space-y-5">
-                {/* Mode — governs whether a code is required, mirroring the
-                    Rs./% shared-toggle pattern used elsewhere in this form. */}
-                <div className="space-y-2">
-                  <Label className="text-xs font-semibold text-foreground">How it's triggered</Label>
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setOrderDiscountMode("promo_code")}
-                      className={cn(
-                        "p-3 rounded-lg border text-left transition-colors",
-                        orderDiscountMode === "promo_code"
-                          ? "border-primary bg-primary/[0.06]"
-                          : "border-border hover:border-primary/40 hover:bg-muted/30"
-                      )}
-                    >
-                      <p className="text-xs font-semibold text-foreground">Promo Code</p>
-                      <p className="text-[11px] text-muted-foreground mt-0.5">Customer types a code at checkout</p>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setOrderDiscountMode("min_spend")}
-                      className={cn(
-                        "p-3 rounded-lg border text-left transition-colors",
-                        orderDiscountMode === "min_spend"
-                          ? "border-primary bg-primary/[0.06]"
-                          : "border-border hover:border-primary/40 hover:bg-muted/30"
-                      )}
-                    >
-                      <p className="text-xs font-semibold text-foreground">Minimum Spend</p>
-                      <p className="text-[11px] text-muted-foreground mt-0.5">Applies automatically, no code needed</p>
-                    </button>
-                  </div>
-                </div>
-
-                {orderDiscountMode === "promo_code" ? (
+                {dealType === "promo_code" ? (
                   <div className="space-y-1.5">
                     <Label htmlFor="promo-code" className="text-xs font-semibold text-foreground">
                       Code Customers Enter *
@@ -4265,7 +4633,7 @@ const DealForm = () => {
                         orderDiscountValueMode === "percent"
                           ? `${orderDiscountPercent || "0"}%`
                           : `Rs. ${flatDiscountAmount || "0"}`;
-                      return orderDiscountMode === "promo_code"
+                      return dealType === "promo_code"
                         ? `Code "${code || "..."}" = ${valueLabel} off the order`
                         : `${valueLabel} off orders of Rs. ${minSpend || "0"}+, applied automatically`;
                     })()}
@@ -4274,6 +4642,31 @@ const DealForm = () => {
               </CardContent>
             </Card>
           )}
+
+          {/* Outlet Availability — where this deal is offered. Super Admin picks
+              any/all branches; every other role is locked to their own. */}
+          <Card className="shadow-xs border-border/80 overflow-hidden">
+            <CardHeader className="pb-3 border-b bg-muted/20">
+              <CardTitle className="text-sm font-semibold uppercase tracking-wider text-foreground flex items-center gap-2">
+                <MapPin className="h-4 w-4 text-muted-foreground" />
+                Outlet Availability
+              </CardTitle>
+              <CardDescription className="text-xs">
+                {isSuperAdmin
+                  ? "Which branch(es) can offer this deal"
+                  : "Deals you publish only apply at your own branch"}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="p-5">
+              <DealOutletPicker
+                outlets={outlets}
+                isSuperAdmin={isSuperAdmin}
+                ownOutletId={user?.outletId ?? null}
+                value={outletIds}
+                onChange={setOutletIds}
+              />
+            </CardContent>
+          </Card>
 
           {/* Validity & Schedule — always the last section, so its number follows
               whatever the chosen deal type rendered above it. */}
@@ -4284,10 +4677,33 @@ const DealForm = () => {
                 {validitySectionNumber}. Availability & Schedule
               </CardTitle>
               <CardDescription className="text-xs">
-                When this deal can be ordered — the date range, which days of the week, and an optional happy-hour window
+                When this deal can be ordered — the channels it's sold on, the date range, which days of the week, and an optional happy-hour window
               </CardDescription>
             </CardHeader>
             <CardContent className="p-5 space-y-5">
+
+              {/* ── CHANNELS ── */}
+              <div className="space-y-2">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70">Channels</p>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {[
+                    { label: "Dine In", Icon: Utensils, checked: availableDineIn, set: setAvailableDineIn },
+                    { label: "Take Away", Icon: ShoppingBasket, set: setAvailableTakeaway, checked: availableTakeaway },
+                    { label: "Delivery", Icon: Bike, set: setAvailableDelivery, checked: availableDelivery },
+                  ].map((ch) => (
+                    <div
+                      key={ch.label}
+                      className="flex items-center justify-between gap-3 rounded-xl border border-border/70 bg-muted/20 px-3 py-2.5"
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <ch.Icon className="h-4 w-4 text-muted-foreground shrink-0" />
+                        <p className="text-xs font-bold text-foreground truncate">{ch.label}</p>
+                      </div>
+                      <Switch checked={ch.checked} onCheckedChange={ch.set} />
+                    </div>
+                  ))}
+                </div>
+              </div>
 
               {/* ── DATE RANGE ── */}
               <div className="space-y-2">

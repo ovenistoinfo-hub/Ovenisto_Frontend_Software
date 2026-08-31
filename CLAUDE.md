@@ -260,17 +260,29 @@ plus a body explaining _why_ the change was made when that is not obvious.
   Variant | (Qty) | Cost | Selling | delete, on a `grid` with an explicit `gridTemplateColumns`.
   Fixed Bundle, Choice Steps and Buy X Get Y all use it; a new format should too rather than
   inventing stacked dropdown cards (Buy X Get Y had those until 2026-08-22).
-- **Buy X Get Y sends `buyItems`/`getItems` arrays, not the flat fields** — both sides take several
-  items and are driven by one shared set of helpers (`patchBogoRow`/`addBogoRow`/`updateBogoItem`)
-  parameterised by which setter to use. Loading an existing deal reads `bogoItems` and falls back to
-  the flat `buyItemId`/`getItemId` for deals saved before the relation existed — keep that fallback
-  or editing an old deal silently drops its contents.
+- **Buy X Get Y sends `buyItems`/`getItems` arrays for a Fixed side, not the flat fields** — a Fixed
+  side takes several items and is driven by one shared set of helpers (`patchBogoRow`/`addBogoRow`/
+  `updateBogoItem`) parameterised by which setter to use. Loading an existing deal reads `bogoItems`
+  and falls back to the flat `buyItemId`/`getItemId` for deals saved before the relation existed —
+  keep that fallback or editing an old deal silently drops its contents.
 - **A Buy X Get Y row must pin a size** — `DealForm.tsx` shows the Size cell whenever the item has
   variants and blocks the save until one is picked, because the backend (`assertBuyXGetYVariants`)
   rejects it otherwise. Offer Impact is exact once every row is pinned; an unpinned multi-size row
   falls back to the worst case (bought cheapest, given away priciest) and says so in the footnote.
   Changing a row's item clears its variant — don't drop that reset, or the deal saves a size
   belonging to a different dish.
+- **Buy X Get Y's two sides (`buyMode`/`getMode`) are independently "Fixed" or "Customizable"**
+  (added 2026-09) — Fixed is the `buyRows`/`getRows` row table above, untouched; Customizable is
+  `buyGroups`/`getGroups: OptionGroupRow[]`, the exact same option-group shape and helpers Choice
+  Steps uses (`addOptionGroup`/`removeOptionGroup`/`updateGroupLabel`/`updateGroupMax`/
+  `addChoiceRow`/`removeChoiceRow`/`updateChoice*`), generalized to take a setter parameter (same
+  idiom `patchBogoRow`/`addBogoRow` already used for the two Fixed sides) so `optionGroups`,
+  `buyGroups` and `getGroups` share one code path. A deal can mix a Fixed buy side with a
+  Customizable get side. Loading an existing deal splits `optionGroups` by the server's `bogoSide`
+  tag: `null` rows go to `optionGroups` (Choice Steps' own), `BUY`/`GET` rows go to `buyGroups`/
+  `getGroups` and flip that side's mode to `"customizable"`. `handleSave` sends
+  `buyMode`/`getMode` plus whichever of `buyItems`/`buyGroups` (and `getItems`/`getGroups`) matches
+  each side's mode — never both for one side.
 - **Use `DatePicker`/`TimePicker`, never `<input type="date">`/`type="time"`** — the native controls
   paint their calendar/clock glyph in the browser's own colour, which is invisible on this app's dark
   surfaces, and their `mm/dd/yyyy` placeholder can't be themed. `src/components/ui/date-picker.tsx`
@@ -285,16 +297,20 @@ plus a body explaining _why_ the change was made when that is not obvious.
   take `className`, which `cn` merges last so a caller's `h-8 w-36` wins over the `h-10 w-full`
   default. Two fields were silently uncontrolled before the conversion (SMS's schedule inputs used
   `defaultValue`, Attendance's "Jump to date" had only an `onChange`) and now carry real state.
-- **A deal's schedule is three independent gates, all in the last card** (`Availability & Schedule`,
-  shared by all four formats): the `validFrom`/`validTo` date range, `activeDays` (weekday chips,
-  added 2026-08-23), and the optional `startTime`/`endTime` window. The form always shows an
-  explicit weekday selection — all seven ticked, which the payload collapses back to `[]` ("no
-  restriction", what every pre-existing row already means) — because no chips ticked would read as
-  "runs never". Saving with zero days is blocked. `src/lib/deals.ts`'s `isDealLive` mirrors the
-  server's rule exactly, including the midnight tail: a window that crosses midnight belongs to the
-  day it opened on, so a Saturday 23:00–03:00 deal is still live at 01:00 on Sunday. Keep the two
-  copies in step — `Deals.tsx`'s Live badge and Active filter both read the mirror, so a weekend-only
-  deal would read as plain "expired" on a Tuesday if the mirror lagged.
+- **A deal's schedule is four independent gates, all in the last card** (`Availability & Schedule`,
+  shared by all six types): the three Channels switches (`availableDineIn`/`availableTakeaway`/
+  `availableDelivery`, added 2026-09 — the one place they render, not duplicated per type), the
+  `validFrom`/`validTo` date range, `activeDays` (weekday chips, added 2026-08-23), and the optional
+  `startTime`/`endTime` window. The form always shows an explicit weekday selection — all seven
+  ticked, which the payload collapses back to `[]` ("no restriction", what every pre-existing row
+  already means) — because no chips ticked would read as "runs never". Saving with zero days is
+  blocked. `src/lib/deals.ts`'s `isDealLive` mirrors the server's rule exactly, including the
+  midnight tail: a window that crosses midnight belongs to the day it opened on, so a Saturday
+  23:00–03:00 deal is still live at 01:00 on Sunday. Keep the two copies in step — `Deals.tsx`'s Live
+  badge and Active filter both read the mirror, so a weekend-only deal would read as plain "expired"
+  on a Tuesday if the mirror lagged. Channel availability is a separate, independent gate from all of
+  this — `isDealAvailableForChannel` (also in `src/lib/deals.ts`) — a deal can be live on schedule
+  but still blocked for one channel.
 - **A form guards its own exits, by intercepting the click rather than the route** — `App.tsx` uses
   `BrowserRouter`, not a data router, so react-router's `useBlocker`/`usePrompt` do not exist here.
   `DealForm.tsx` covers all four ways out instead: the back arrow and Cancel call `leaveForm()`
@@ -311,6 +327,25 @@ plus a body explaining _why_ the change was made when that is not obvious.
   taken when `formReady` flips, which the edit-load effect sets *last* so it lands in the same batch
   as the field setters and the baseline is never captured pre-hydration; a successful save re-takes
   it so leaving afterwards does not warn. Adding a field means adding it to that one array.
+- **Outlet targeting (`Deal.outletIds`) is a `DealForm.tsx`-local concern, never `OutletContext`**
+  (added 2026-09) — `src/components/deals/DealOutletPicker.tsx` reads `useAuth()` directly: Super
+  Admin gets a multi-select checklist (sourced from `outletService.getOutlets()`, the same query
+  `useOutletFilter` already uses) plus an "All branches" toggle that clears the array to `[]`; every
+  other role sees a locked, read-only display of their own outlet and the array is never editable
+  for them — `handleSave` computes the actual payload value itself
+  (`isSuperAdmin ? outletIds : [user.outletId]`), so the picker's own state is irrelevant to what a
+  non-Super-Admin's deal actually saves as. `OutletContext`'s `selectedOutletId` is a different,
+  page-level "which branch's data am I viewing" concept — don't route this through it.
+- **`src/components/deals/CategoryVariantPicker.tsx` is the category-driven bulk item/variant
+  picker** (added 2026-09) — pick a category, see every item in it with its sizes as chips inline, tap
+  a chip once to select that size across every item in the category that has it (a header row of the
+  category's distinct variant names does the bulk tap; individual item chips stay individually
+  toggleable too). No existing precedent to mirror here — % Discount's category toggle is
+  whole-category/whole-item only, a different granularity. Wired into Fixed Bundle, Choice Steps
+  groups, and Buy X Get Y's Customizable groups as a "Bulk Add From Category" trigger alongside
+  (not replacing) the one-by-one dropdowns; on confirm it hands the parent concrete `{itemId,
+  variantId}` pairs to snapshot into that section's own row/choice array — never a dynamic category
+  rule, so an item added to the category later is not auto-included.
 - **One save button per form** — the header pair (Cancel + Publish/Update) is the only place the
   deal form saves from. It also had a "Save & Publish Deal" at the foot of the sticky preview card,
   and an Active/Draft badge beside the h1 duplicating the labelled toggle in section 1 (both removed
@@ -324,7 +359,8 @@ plus a body explaining _why_ the change was made when that is not obvious.
   independent copy** of `dealFormatBadge`, `dealCardPricing`, and the `addDealToCart` family
   (`addComboDealToCart`/`addBogoDealToCart`/`confirmDealCustomize`/`confirmDealItemPick`), not a
   shared component (2026-08-27). All three read `allocateDealDiscount`/`dealBogoSides`/
-  `capFreeUnitPrice` from `src/lib/deals.ts`, but the deal *record* type differs per surface:
+  `dealBogoSideMode`/`dealBogoOptionGroups`/`isDealAvailableForChannel`/`capFreeUnitPrice` from
+  `src/lib/deals.ts`, but the deal *record* type differs per surface:
   POS/WaiterPanel use the staff-facing `DealRecord` (per-channel `dineInPrice`…`foodpandaPrice`/
   `dineInPercent`…`foodpandaPercent`) and resolve the current channel themselves
   (`dealChannelPrice`/`dealChannelPercent`, "Dine In" hardcoded for WaiterPanel since every table
@@ -332,6 +368,29 @@ plus a body explaining _why_ the change was made when that is not obvious.
   shape the backend's `mapDealOutPublic` already resolves to a single `price`/`discountPercent` — no
   per-channel fields exist to read, so `deal.price`/`deal.discountPercent` are used directly.
   A change to one format's pricing/validation logic needs the same change ported to all three files.
+- **`order_discount` split into `promo_code`/`min_spend`** (2026-09) — both are excluded from every
+  surface's `sellableDeals`/`dealFormatBadge` exactly as `order_discount` was (they apply at
+  checkout via `validate-coupon`, never as a cart-addable card); the `Exclude<DealRecord["type"],
+  "order_discount">` idiom in all three files became `Exclude<..., "promo_code" | "min_spend">`.
+- **Channel-availability toggles (`availableDineIn`/`availableTakeaway`/`availableDelivery`)
+  gate every deal card on every surface** (2026-09) — POS's `sellableDeals` filters on
+  `isDealAvailableForChannel(d, orderType)` (its own `orderType` state); WaiterPanel's on the
+  literal `"Dine In"` (every table order is dine-in there); Self-Order needs no client-side check —
+  the backend's `getSelfOrderDeals` already excludes an `availableDineIn:false` deal from the public
+  listing entirely, so a blocked deal never reaches the page. `addDealToCart` re-checks the same
+  condition as a guard on all three (a card reaching it another way still can't be added).
+- **Buy X Get Y's `addBogoDealToCart`/`confirmDealCustomize` branch per side on
+  `dealBogoSideMode`** (2026-09) — a Fixed side still adds directly with zero UX change; a
+  Customizable side routes into the *same* Customizable-deal picker dialog `option_combo` already
+  uses (`showDealCustomize`/`customizingDeal`/`dealGroupSelections`), scoped to just that side's
+  groups via a `customizeGroups` memo (`option_combo` → `customizingDeal.optionGroups`;
+  `buy_x_get_y` → whichever side(s) are Customizable, via `dealBogoOptionGroups`). A deal with one
+  Fixed side and one Customizable side adds the Fixed side's items immediately and opens the dialog
+  only for the Customizable side, sharing one `dealLineId` (`customizingDealLineId`) across both so
+  the server sees a single redemption. `confirmDealCustomize` branches its cart-line building on
+  `deal.type`: a BOGO buy-side pick (`group.bogoSide === "BUY"`) adds at full price; a get-side pick
+  becomes free/discounted via the same `capFreeUnitPrice`+coverage-% math the Fixed path already
+  used. Porting a change to this flow means touching all three files' copies of both functions.
 - **Out-of-stock is a real gate, not just a warning, and it now covers deals too** — 
   `src/utils/foodAvailability.ts`'s `calculateFoodAvailability` (per item/variant) and
   `isFullyOutOfStock` (per item, across all its variants) are the one source of truth for "can this

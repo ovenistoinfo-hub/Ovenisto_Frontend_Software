@@ -151,6 +151,29 @@ export function dealChannelPercent(record: ChannelDiscounted, orderType: string 
   return Math.min(100, Math.max(0, override ?? base));
 }
 
+export interface ChannelAvailable {
+  availableDineIn?: boolean;
+  availableTakeaway?: boolean;
+  availableDelivery?: boolean;
+}
+
+const ORDER_TYPE_TO_AVAILABILITY_FIELD: Record<string, keyof ChannelAvailable> = {
+  'Dine In': 'availableDineIn',
+  'Take Away': 'availableTakeaway',
+  'Delivery': 'availableDelivery',
+};
+
+/** Whether this deal is orderable on this channel at all — mirrors the
+ *  backend's isDealAvailableForChannel. Independent of isDealLive: a deal can
+ *  be live but channel-blocked. No Foodpanda toggle (matches POS's own
+ *  3-channel order-type selector) — an unrecognized/undefined order type is
+ *  never blocked. */
+export function isDealAvailableForChannel(deal: ChannelAvailable, orderType: string | undefined): boolean {
+  const field = orderType ? ORDER_TYPE_TO_AVAILABILITY_FIELD[orderType] : undefined;
+  if (!field) return true;
+  return deal[field] ?? true;
+}
+
 function round2(n: number): number {
   return Math.round((n + Number.EPSILON) * 100) / 100;
 }
@@ -195,6 +218,21 @@ export interface BogoSideItem {
   qty: number;
 }
 
+export interface DealOptionItemForBogo {
+  menuItemId: string;
+  variantId: string | null;
+  extraPrice: number;
+}
+
+export interface DealOptionGroupForBogo {
+  id: string;
+  label: string;
+  minSelections: number;
+  maxSelections: number;
+  options: DealOptionItemForBogo[];
+  bogoSide?: 'BUY' | 'GET' | null;
+}
+
 export interface DealForBogoSides {
   bogoItems?: DealBogoItemForPricing[];
   buyItemId?: string | null;
@@ -203,6 +241,7 @@ export interface DealForBogoSides {
   getItemId?: string | null;
   getVariantId?: string | null;
   getQty?: number | null;
+  optionGroups?: DealOptionGroupForBogo[];
 }
 
 /** The two sides of a Buy X Get Y offer, from whichever shape the deal was
@@ -233,6 +272,24 @@ export function dealBogoSides(deal: DealForBogoSides): { buy: BogoSideItem[]; ge
     ? [{ menuItemId: deal.getItemId, variantId: deal.getVariantId ?? null, qty: Math.max(1, Math.trunc(deal.getQty ?? 1)) }]
     : [];
   return { buy, get };
+}
+
+/** Is this Buy X Get Y side "Fixed" (dealBogoSides above — the only shape
+ *  before this feature) or "Customizable" (an option set the customer
+ *  chooses from, admin-selectable per side)? Mirrors the backend's
+ *  resolveBogoSideMode: a side is Customizable exactly when the deal's
+ *  optionGroups has any row tagged with that bogoSide. */
+export function dealBogoSideMode(deal: DealForBogoSides, side: 'BUY' | 'GET'): 'fixed' | 'customizable' {
+  const groups = deal.optionGroups ?? [];
+  return groups.some((g) => g.bogoSide === side) ? 'customizable' : 'fixed';
+}
+
+/** The option groups configured for a Buy X Get Y side in "Customizable"
+ *  mode — mirrors the backend's resolveBogoOptionGroups. Meaningless (always
+ *  empty) for a side in "Fixed" mode. */
+export function dealBogoOptionGroups(deal: DealForBogoSides, side: 'BUY' | 'GET'): DealOptionGroupForBogo[] {
+  const groups = deal.optionGroups ?? [];
+  return groups.filter((g) => g.bogoSide === side);
 }
 
 /** How much of the free line the deal actually pays for — mirrors the

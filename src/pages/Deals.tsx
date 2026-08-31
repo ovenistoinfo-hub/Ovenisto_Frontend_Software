@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Tag, Plus, Search, Pencil, Trash2, Package, Layers, Sparkles, Clock, Calendar, Loader2, Percent, Gift, CalendarDays, Ticket } from "lucide-react";
+import { Tag, Plus, Search, Pencil, Trash2, Package, Layers, Sparkles, Clock, Calendar, Loader2, Percent, Gift, CalendarDays, Ticket, PiggyBank } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { TablePagination, paginate } from "@/components/TablePagination";
 import { dealService, type DealRecord } from "@/services/deal.service";
@@ -23,7 +23,8 @@ const formatBadge: Record<DealRecord["type"], { icon: typeof Package; label: str
   option_combo: { icon: Layers, label: "Customizable" },
   percentage: { icon: Percent, label: "Percentage Off" },
   buy_x_get_y: { icon: Gift, label: "Buy X Get Y" },
-  order_discount: { icon: Ticket, label: "Order Discount" },
+  promo_code: { icon: Ticket, label: "Promo Code" },
+  min_spend: { icon: PiggyBank, label: "Minimum Spend" },
 };
 
 const Deals = () => {
@@ -32,7 +33,7 @@ const Deals = () => {
 
   const [search, setSearch] = useState("");
   const [filterTab, setFilterTab] = useState<
-    "All" | "Active" | "Fixed" | "Custom" | "Percentage" | "Bogo" | "OrderDiscount" | "Inactive" | "Expired"
+    "All" | "Active" | "Fixed" | "Custom" | "Percentage" | "Bogo" | "PromoCode" | "MinSpend" | "Inactive" | "Expired"
   >("All");
   const [page, setPage] = useState(1);
   const [togglingId, setTogglingId] = useState<string | null>(null);
@@ -61,7 +62,8 @@ const Deals = () => {
     if (filterTab === "Custom") return d.type === "option_combo";
     if (filterTab === "Percentage") return d.type === "percentage";
     if (filterTab === "Bogo") return d.type === "buy_x_get_y";
-    if (filterTab === "OrderDiscount") return d.type === "order_discount";
+    if (filterTab === "PromoCode") return d.type === "promo_code";
+    if (filterTab === "MinSpend") return d.type === "min_spend";
     if (filterTab === "Inactive") return !d.isActive;
     if (filterTab === "Expired") return !!d.validTo && d.validTo.slice(0, 10) < pktDateStr();
 
@@ -127,8 +129,8 @@ const Deals = () => {
         return `Buy ${buys.join(" + ")} → Get ${gets.join(" + ")} Free`;
       }
     }
-    if (deal.type === "order_discount") {
-      return deal.code
+    if (deal.type === "promo_code" || deal.type === "min_spend") {
+      return deal.type === "promo_code"
         ? `Code "${deal.code}" — enter at checkout`
         : `Auto-applies on orders of Rs. ${(deal.minSpend ?? 0).toLocaleString()}+`;
     }
@@ -143,7 +145,7 @@ const Deals = () => {
     if (deal.type === "percentage") {
       return `${deal.discountPercent}% OFF`;
     }
-    if (deal.type === "order_discount") {
+    if (deal.type === "promo_code" || deal.type === "min_spend") {
       return deal.flatDiscount != null ? `Rs. ${deal.flatDiscount.toLocaleString()} OFF` : `${deal.discountPercent}% OFF`;
     }
     return "Free Item";
@@ -195,7 +197,8 @@ const Deals = () => {
                   { key: "Custom", label: "Customizable" },
                   { key: "Percentage", label: "% Discount" },
                   { key: "Bogo", label: "Buy X Get Y" },
-                  { key: "OrderDiscount", label: "Order Discount" },
+                  { key: "PromoCode", label: "Promo Code" },
+                  { key: "MinSpend", label: "Minimum Spend" },
                   { key: "Inactive", label: "Draft / Inactive" },
                   { key: "Expired", label: "Expired" },
                 ] as const
