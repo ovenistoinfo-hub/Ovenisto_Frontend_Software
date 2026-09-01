@@ -16,7 +16,7 @@ import {
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
 import {
   Tag, Plus, Trash2, ArrowLeft, Loader2, Upload, Sparkles, Package, Check, Layers,
-  Calendar, CheckCircle2, Percent, Gift, ShoppingBag, Eye, Image as ImageIcon,
+  Calendar, CheckCircle2, Percent, Gift, ShoppingBag,
   Calculator, AlertTriangle, UtensilsCrossed, Truck, Ticket, PiggyBank, MapPin,
   Utensils, ShoppingBasket, Bike, ListPlus,
 } from "lucide-react";
@@ -856,21 +856,21 @@ const DealForm = () => {
     raw.trim() === "" ? null : Math.min(100, Math.max(0, Number(raw) || 0));
 
   const renderChannelPercentOverrides = (title: string, basePercent: number, hint: string) => (
-    <div className="space-y-2.5 pt-4 border-t border-border/50">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-[11px] font-bold uppercase tracking-wider text-foreground">
+    <div className="space-y-3 pt-5 border-t border-border/60">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+        <p className="text-xs font-semibold text-foreground">
           {title}
         </p>
-        <span className="text-[10px] text-muted-foreground">{hint}</span>
+        <span className="text-xs text-muted-foreground">{hint}</span>
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {channelPercentRows.map((ch) => (
           <div key={ch.key} className="space-y-1.5">
-            <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1">
-              <ch.Icon className="h-3 w-3" /> {ch.label}
+            <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+              <ch.Icon className="h-3.5 w-3.5" /> {ch.label}
             </Label>
-            <div className="relative">
+            <div className="relative max-w-[160px]">
               <Input
                 type="number"
                 min={0}
@@ -884,9 +884,9 @@ const DealForm = () => {
                       : String(Math.min(100, Math.max(0, Number(e.target.value) || 0)))
                   )
                 }
-                className="h-9 text-xs font-mono pr-6"
+                className="h-9 text-xs font-mono pr-7"
               />
-              <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-bold text-muted-foreground">
+              <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs font-semibold text-muted-foreground">
                 %
               </span>
             </div>
@@ -1350,55 +1350,6 @@ const DealForm = () => {
     };
   }, [menuItems, buyMode, getMode, buyRows, getRows, buyGroups, getGroups]);
 
-  /** The "format" line of the setup checklist. Each deal type has its own idea
-   *  of being configured, so it is derived here rather than hard-coded to the
-   *  Fixed Bundle's row count. */
-  const formatChecklist = useMemo(() => {
-    if (dealType === "combo") {
-      return { done: comboRows.length > 0, label: `${comboRows.length} item(s) in bundle` };
-    }
-    if (dealType === "option_combo") {
-      const steps = optionGroups.filter((g) => g.choices.some((c) => c.itemId)).length;
-      return { done: steps > 0, label: `${steps} choice step(s) configured` };
-    }
-    if (dealType === "buy_x_get_y") {
-      const buys = buyMode === "fixed" ? buyRows.filter((r) => r.itemId).length : buyGroups.filter((g) => g.choices.length > 0).length;
-      const gets = getMode === "fixed" ? getRows.filter((r) => r.itemId).length : getGroups.filter((g) => g.choices.length > 0).length;
-      return {
-        done: buys > 0 && gets > 0,
-        label: buys > 0 && gets > 0 ? `Buy ${buys} option(s) → get ${gets} free option(s)` : "Pick the buy and free items",
-      };
-    }
-    const scoped = applicableItemIds.length + applicableCategoryIds.length;
-    return { done: scoped > 0, label: scoped > 0 ? `${scoped} item(s)/categor(ies) in scope` : "Choose what the discount applies to" };
-  }, [dealType, comboRows, optionGroups, buyMode, getMode, buyRows, getRows, buyGroups, getGroups, applicableItemIds, applicableCategoryIds]);
-
-  /** Names the discount's scope for the POS preview — the selected categories,
-   *  plus a count of items named on their own. Items a selected category already
-   *  covers are left out; counting them twice would overstate the scope. */
-  const discountScopeSummary = useMemo(() => {
-    const categoryNames = applicableCategoryIds
-      .map((id) => foodCategories.find((c) => c.id === id)?.name)
-      .filter(Boolean) as string[];
-
-    const standaloneItems = applicableItemIds.filter((id) => {
-      const item = menuItems.find((m) => m.id === id);
-      return !(item?.categoryId && applicableCategoryIds.includes(item.categoryId));
-    }).length;
-
-    const parts: string[] = [];
-    if (categoryNames.length > 0) {
-      parts.push(
-        categoryNames.slice(0, 2).join(", ") +
-          (categoryNames.length > 2 ? ` +${categoryNames.length - 2} more` : "")
-      );
-    }
-    if (standaloneItems > 0) {
-      parts.push(`${standaloneItems} item${standaloneItems !== 1 ? "s" : ""}`);
-    }
-    return parts.join(" + ");
-  }, [applicableCategoryIds, applicableItemIds, foodCategories, menuItems]);
-
   // Every other deal type renders a section 4 — Pricing for the combo formats,
   // the Pricing & Cost Breakdown read-out for percentage / Buy X Get Y — so
   // validity is 5 there. Promo Code / Minimum Spend have no cost/selling
@@ -1739,24 +1690,14 @@ const DealForm = () => {
         </div>
       </div>
 
-      {/* MAIN SPLIT-LAYOUT */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        
-        {/* LEFT FORM SECTION (8 COLS) */}
-        <div className="lg:col-span-8 space-y-6">
-          
-          {/* SECTION 1: General Information */}
-          <Card className="shadow-xs border-border/80 overflow-hidden">
+      {/* SECTION 1: General Information */}
+      <Card className="shadow-xs border-border/80 overflow-hidden">
             <CardHeader className="pb-3 border-b bg-muted/20">
               <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle className="text-sm font-semibold uppercase tracking-wider text-foreground flex items-center gap-2">
-                    <Tag className="h-4 w-4 text-muted-foreground" />
+                  <CardTitle className="text-sm font-semibold text-foreground">
                     1. General Information
                   </CardTitle>
-                  <CardDescription className="text-xs">
-                    Basic identity, description, and promotional image for POS & customer menus
-                  </CardDescription>
                 </div>
                 <div className="flex items-center gap-2 bg-background px-2.5 py-1 rounded-lg border">
                   <span className="text-xs font-semibold text-muted-foreground">Active:</span>
@@ -1770,7 +1711,7 @@ const DealForm = () => {
                 {/* Left: Title + Description — fills remaining space */}
                 <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: "12px" }}>
                   <div className="space-y-1.5">
-                    <Label className="text-xs font-semibold text-foreground/80 uppercase tracking-wide">
+                    <Label className="text-xs font-semibold text-foreground/80">
                       Deal Title <span className="text-destructive">*</span>
                     </Label>
                     <Input
@@ -1782,7 +1723,7 @@ const DealForm = () => {
                   </div>
 
                   <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "6px" }}>
-                    <Label className="text-xs font-semibold text-foreground/80 uppercase tracking-wide">
+                    <Label className="text-xs font-semibold text-foreground/80">
                       Description
                     </Label>
                     <Textarea
@@ -1797,7 +1738,7 @@ const DealForm = () => {
 
                 {/* Right: Promotional Image — fixed 200px wide square box */}
                 <div style={{ width: "200px", flexShrink: 0, display: "flex", flexDirection: "column", gap: "6px" }}>
-                  <Label className="text-xs font-semibold text-foreground/80 uppercase tracking-wide">
+                  <Label className="text-xs font-semibold text-foreground/80">
                     Cover Image
                   </Label>
 
@@ -1843,7 +1784,7 @@ const DealForm = () => {
                         <p className="text-xs font-bold text-foreground leading-tight">
                           {uploading ? "Uploading…" : "Click to Upload"}
                         </p>
-                        <p className="text-[10px] text-muted-foreground mt-1 leading-snug">
+                        <p className="text-xs text-muted-foreground mt-1 leading-normal">
                           PNG, JPG, WebP<br />Max 5 MB
                         </p>
                       </div>
@@ -1879,20 +1820,20 @@ const DealForm = () => {
                           size="sm"
                           onClick={() => fileInputRef.current?.click()}
                           disabled={uploading}
-                          className="h-7 text-[11px] font-semibold gap-1.5 flex-1"
+                          className="h-8 text-xs font-semibold gap-1.5 flex-1"
                         >
-                          {uploading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
+                          {uploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
                           Replace
                         </Button>
                         <Button
                           type="button"
                           variant="ghost"
-                          size="sm"
+                          size="icon"
                           onClick={() => setImageUrl("")}
                           disabled={uploading}
-                          className="h-7 w-7 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+                          className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
                         >
-                          <Trash2 className="h-3.5 w-3.5" />
+                          <Trash2 className="h-4 w-4" />
                         </Button>
                       </div>
                     </div>
@@ -1906,13 +1847,9 @@ const DealForm = () => {
           {/* SECTION 2: Choose Deal Format */}
           <Card className="shadow-xs border-border/80 overflow-hidden">
             <CardHeader className="pb-3 border-b bg-muted/20">
-              <CardTitle className="text-sm font-semibold uppercase tracking-wider text-foreground flex items-center gap-2">
-                <Layers className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="text-sm font-semibold text-foreground">
                 2. Choose Deal Format
               </CardTitle>
-              <CardDescription className="text-xs">
-                Select the structure of this deal — form fields adapt dynamically
-              </CardDescription>
             </CardHeader>
             <CardContent className="p-5">
               <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
@@ -1922,43 +1859,31 @@ const DealForm = () => {
                       type: "combo" as const,
                       icon: Package,
                       title: "Fixed Bundle",
-                      subtitle: "Pre-set items at a special price",
-                      example: "e.g. 1 Pizza + 1 Fries + 1 Drink for Rs. 1,499",
                     },
                     {
                       type: "option_combo" as const,
                       icon: Layers,
                       title: "Customizable",
-                      subtitle: "Customer picks items from defined steps",
-                      example: "e.g. Choose 1 Pizza + 2 Drinks for Rs. 999",
                     },
                     {
                       type: "percentage" as const,
                       icon: Percent,
                       title: "% Discount",
-                      subtitle: "Percentage off selected items or categories",
-                      example: "e.g. 20% off all Burgers & Beverages",
                     },
                     {
                       type: "buy_x_get_y" as const,
                       icon: Gift,
                       title: "Buy X Get Y",
-                      subtitle: "Buy N items, get M free",
-                      example: "e.g. Buy 2 Pizzas, Get 1 Cold Drink Free",
                     },
                     {
                       type: "promo_code" as const,
                       icon: Ticket,
                       title: "Promo Code",
-                      subtitle: "Customer types a code at checkout",
-                      example: "e.g. Code OVEN20 = Rs. 200 off the whole order",
                     },
                     {
                       type: "min_spend" as const,
                       icon: PiggyBank,
                       title: "Minimum Spend",
-                      subtitle: "Auto-applies once the cart clears a floor",
-                      example: "e.g. Rs. 500 off automatically on orders over Rs. 2,500",
                     },
                   ] as const
                 ).map((opt) => {
@@ -1970,7 +1895,7 @@ const DealForm = () => {
                       type="button"
                       onClick={() => setDealType(opt.type)}
                       className={cn(
-                        "relative p-4 rounded-xl border text-left transition-colors flex flex-col gap-3 select-none cursor-pointer",
+                        "relative p-3.5 rounded-xl border text-left transition-colors flex items-center gap-3 select-none cursor-pointer",
                         selected
                           ? "border-primary bg-primary/[0.06]"
                           : "border-border bg-transparent hover:border-primary/40 hover:bg-muted/30"
@@ -1978,13 +1903,12 @@ const DealForm = () => {
                     >
                       {/* Selected checkmark */}
                       {selected && (
-                        <span className="absolute top-3 right-3 h-5 w-5 rounded-full bg-primary text-primary-foreground flex items-center justify-center">
-                          <Check className="h-3 w-3 stroke-[3]" />
+                        <span className="absolute top-2.5 right-2.5 h-4 w-4 rounded-full bg-primary text-primary-foreground flex items-center justify-center">
+                          <Check className="h-2.5 w-2.5 stroke-[3]" />
                         </span>
                       )}
 
-                      {/* Icon — the format is named right below it, so the icon is
-                          an anchor, not a colour code: one accent, not four. */}
+                      {/* Icon */}
                       <div
                         className={cn(
                           "w-9 h-9 rounded-lg flex items-center justify-center shrink-0 transition-colors",
@@ -1994,20 +1918,10 @@ const DealForm = () => {
                         <Icon className="h-4 w-4" />
                       </div>
 
-                      {/* Text */}
-                      <div className="space-y-0.5 min-w-0">
-                        <p className="font-semibold text-[13px] leading-tight text-foreground">
-                          {opt.title}
-                        </p>
-                        <p className="text-[11px] text-muted-foreground leading-snug">
-                          {opt.subtitle}
-                        </p>
-                      </div>
-
-                      {/* Example strip */}
-                      <div className="text-[10px] text-muted-foreground bg-background/60 px-2.5 py-1.5 rounded-md border border-border/50 leading-snug">
-                        {opt.example}
-                      </div>
+                      {/* Title */}
+                      <p className="font-semibold text-sm leading-tight text-foreground">
+                        {opt.title}
+                      </p>
                     </button>
                   );
                 })}
@@ -2015,265 +1929,20 @@ const DealForm = () => {
             </CardContent>
           </Card>
 
-        </div>
-
-        {/* RIGHT STICKY PREVIEW (4 COLS) — paired with Sections 1–2 only */}
-        <div className="lg:col-span-4 space-y-4 lg:sticky lg:top-6">
-          <Card className="shadow-xs border-border/80 overflow-hidden">
-            <CardHeader className="pb-3 border-b bg-muted/30">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-xs font-bold uppercase tracking-wider text-foreground flex items-center gap-1.5">
-                  <Eye className="h-4 w-4 text-muted-foreground" />
-                  Live POS Card Preview
-                </CardTitle>
-                <Badge variant="outline" className="text-[10px] font-mono">
-                  {code || "NO-CODE"}
-                </Badge>
-              </div>
-            </CardHeader>
-            <CardContent className="p-5 space-y-4">
-              {/* Promotional Card */}
-              <div className="rounded-xl border border-border bg-card p-4 space-y-3">
-                {imageUrl ? (
-                  <div className="h-32 w-full rounded-xl overflow-hidden border">
-                    <img
-                      src={imageUrl}
-                      alt={name}
-                      className="h-full w-full object-cover"
-                    />
-                  </div>
-                ) : (
-                  <div className="h-24 w-full rounded-xl border border-dashed flex flex-col items-center justify-center text-muted-foreground bg-muted/20">
-                    <ImageIcon className="h-6 w-6 stroke-[1.5] mb-1 opacity-50" />
-                    <span className="text-[11px]">No promotional image uploaded</span>
-                  </div>
-                )}
-
-                <div>
-                  <div className="flex items-center justify-between gap-2">
-                    <h3 className="font-semibold text-sm text-foreground leading-snug">
-                      {name || "Untitled Deal Name"}
-                    </h3>
-                    <Badge className="bg-primary text-primary-foreground hover:bg-primary/90 text-[10px] px-2 py-0.5 font-bold">
-                      {dealType === "combo"
-                        ? "Bundle"
-                        : dealType === "option_combo"
-                        ? "Custom"
-                        : dealType === "percentage"
-                        ? "Discount"
-                        : dealType === "buy_x_get_y"
-                        ? "BOGO"
-                        : dealType === "promo_code"
-                        ? "Promo Code"
-                        : "Auto Off"}
-                    </Badge>
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
-                    {description || "No description provided yet."}
-                  </p>
-                </div>
-
-                {/* Items preview */}
-                <div className="p-2.5 rounded-lg bg-muted/30 border text-xs space-y-1">
-                  <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide">
-                    Included / Structure:
-                  </p>
-                  {dealType === "combo" ? (
-                    comboRows.length === 0 ? (
-                      <p className="text-muted-foreground italic text-[11px]">
-                        No items added
-                      </p>
-                    ) : (
-                      comboRows.map((r, i) => {
-                        const it = menuItems.find((m) => m.id === r.itemId);
-                        return (
-                          <div
-                            key={i}
-                            className="flex justify-between text-[11px] text-foreground/90 font-medium"
-                          >
-                            <span>
-                              • {r.qty}x {it?.name || "Item"}
-                            </span>
-                          </div>
-                        );
-                      })
-                    )
-                  ) : dealType === "option_combo" ? (
-                    optionGroups.length === 0 ? (
-                      <p className="text-muted-foreground italic text-[11px]">
-                        No choice steps defined
-                      </p>
-                    ) : (
-                      optionGroups.map((g, i) => (
-                        <p
-                          key={i}
-                          className="text-[11px] text-foreground/90 font-medium truncate"
-                        >
-                          • {groupLabel(g)}
-                        </p>
-                      ))
-                    )
-                  ) : dealType === "percentage" ? (
-                    discountScopeSummary ? (
-                      <p className="text-[11px] text-foreground/90 font-medium">
-                        • {discountScopeSummary}
-                        <span className="text-muted-foreground">
-                          {" "}({discountImpact.itemCount} item{discountImpact.itemCount !== 1 ? "s" : ""})
-                        </span>
-                      </p>
-                    ) : (
-                      <p className="text-muted-foreground italic text-[11px]">
-                        No categories or items selected
-                      </p>
-                    )
-                  ) : dealType === "promo_code" || dealType === "min_spend" ? (
-                    <p className="text-[11px] text-foreground/90 font-medium">
-                      {dealType === "promo_code"
-                        ? `• Code "${code || "..."}" — entered at checkout`
-                        : `• Auto-applies on orders of Rs. ${minSpend || "0"}+`}
-                    </p>
-                  ) : bogoImpact ? (
-                    <>
-                      {bogoImpact.buy.map((r, i) => (
-                        <p key={`b${i}`} className="text-[11px] text-foreground/90 font-medium truncate">
-                          • Buy {r.qty} × {r.item.name}
-                          {r.label ? ` (${r.label})` : ""}
-                        </p>
-                      ))}
-                      {bogoImpact.give.map((r, i) => (
-                        <p key={`g${i}`} className="text-[11px] text-foreground/90 font-medium truncate">
-                          • Get {r.qty} × {r.item.name}
-                          {r.label ? ` (${r.label})` : ""} free
-                        </p>
-                      ))}
-                    </>
-                  ) : (
-                    <p className="text-muted-foreground italic text-[11px]">
-                      Buy and free items not chosen yet
-                    </p>
-                  )}
-                </div>
-
-                {/* Pricing Footer */}
-                <div className="pt-2 border-t flex items-end justify-between">
-                  <div>
-                    {dealType === "combo" && bundleRegularValue > 0 && (
-                      <span className="text-[10px] text-muted-foreground line-through font-mono block">
-                        Rs. {bundleRegularValue.toLocaleString()}
-                      </span>
-                    )}
-                    {/* A percentage deal has no single price, so this slot carries what
-                        the customer actually saves — money, like every other type. */}
-                    {dealType === "percentage" && discountImpact.maxBefore > 0 && (
-                      <span className="text-[10px] text-muted-foreground font-mono block">
-                        was Rs. {Math.round(discountImpact.minBefore).toLocaleString()} – {Math.round(discountImpact.maxBefore).toLocaleString()}
-                      </span>
-                    )}
-                    {/* Same slot, same meaning: what the customer hands over, against
-                        what the whole basket would otherwise have cost. */}
-                    {dealType === "buy_x_get_y" && bogoImpact && bogoImpact.savings > 0 && (
-                      <span className="text-[10px] text-muted-foreground line-through font-mono block">
-                        Rs. {Math.round(bogoImpact.regularValue).toLocaleString()}
-                      </span>
-                    )}
-                    <span className="text-xl font-semibold text-primary font-mono">
-                      {dealType === "combo" || dealType === "option_combo"
-                        ? `Rs. ${(dealPrice || 0).toLocaleString()}`
-                        : dealType === "percentage"
-                        ? discountImpact.maxAfter > 0
-                          ? `Rs. ${Math.round(discountImpact.minAfter).toLocaleString()} – ${Math.round(discountImpact.maxAfter).toLocaleString()}`
-                          : "—"
-                        : dealType === "promo_code" || dealType === "min_spend"
-                        ? orderDiscountValueMode === "percent"
-                          ? `${orderDiscountPercent || "0"}% OFF`
-                          : `Rs. ${flatDiscountAmount || "0"} OFF`
-                        : bogoImpact
-                        ? `Rs. ${Math.round(bogoImpact.dealPrice).toLocaleString()}`
-                        : "—"}
-                    </span>
-                  </div>
-
-                  {dealType === "combo" && bundleSavingsPercent > 0 && (
-                    <span className="text-[10px] font-semibold text-primary bg-primary/10 border border-primary/30 px-2 py-0.5 rounded">
-                      SAVE {bundleSavingsPercent}%
-                    </span>
-                  )}
-
-                  {dealType === "percentage" && (discountPercent || 0) > 0 && (
-                    <span className="text-[10px] font-semibold text-primary bg-primary/10 border border-primary/30 px-2 py-0.5 rounded shrink-0">
-                      SAVE {discountPercent}%
-                    </span>
-                  )}
-
-                  {dealType === "buy_x_get_y" && bogoImpact && bogoImpact.savingsPercent > 0 && (
-                    <span className="text-[10px] font-semibold text-primary bg-primary/10 border border-primary/30 px-2 py-0.5 rounded shrink-0">
-                      SAVE {bogoImpact.savingsPercent}%
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              {/* Ready Checklist */}
-              <div className="p-3.5 rounded-xl border bg-muted/10 space-y-2 text-xs">
-                <p className="font-bold text-foreground flex items-center gap-1.5">
-                  <CheckCircle2 className="h-4 w-4 text-muted-foreground" />
-                  Deal Setup Checklist:
-                </p>
-                <ul className="space-y-1 text-muted-foreground text-[11px]">
-                  <li className="">
-                    {name ? (
-                      <Check className="h-3 w-3 text-foreground" />
-                    ) : (
-                      <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/40" />
-                    )}
-                    <span>Deal Name specified</span>
-                  </li>
-                  <li className="">
-                    {formatChecklist.done ? (
-                      <Check className="h-3 w-3 text-foreground" />
-                    ) : (
-                      <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/40" />
-                    )}
-                    <span>{formatChecklist.label}</span>
-                  </li>
-                  <li className="">
-                    {dealPrice > 0 || dealType !== "combo" ? (
-                      <Check className="h-3 w-3 text-foreground" />
-                    ) : (
-                      <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/40" />
-                    )}
-                    <span>Pricing configured</span>
-                  </li>
-                </ul>
-              </div>
-
-            </CardContent>
-          </Card>
-        </div>
-
-      </div>
-
-      {/* REMAINING SECTIONS — use the full page width, no longer sharing the row with the preview */}
-      <div className="space-y-6">
-
           {/* SECTION 3: Included Bundle Items (Fixed Bundle only) — shown BEFORE pricing */}
           {dealType === "combo" && (
             <Card className="shadow-xs border-border/80 overflow-hidden">
               <CardHeader className="pb-3 border-b bg-muted/20">
                 <div className="flex items-center justify-between gap-2">
                   <div>
-                    <CardTitle className="text-sm font-semibold uppercase tracking-wider text-foreground flex items-center gap-2">
-                      <Package className="h-4 w-4 text-muted-foreground" />
-                      3. Included Bundle Items
+                    <CardTitle className="text-sm font-semibold text-foreground flex items-center gap-2">
+                      <span>3. Included Bundle Items</span>
                       {comboRows.length > 0 && (
-                        <span className="ml-1 px-1.5 py-0.5 rounded-md bg-primary/10 text-primary text-[10px] font-bold">
+                        <span className="ml-1 px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-semibold">
                           {comboRows.length}
                         </span>
                       )}
                     </CardTitle>
-                    <CardDescription className="text-xs mt-0.5">
-                      Add every food item included in this fixed package
-                    </CardDescription>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     <Button
@@ -2281,7 +1950,7 @@ const DealForm = () => {
                       size="sm"
                       variant="outline"
                       onClick={() => setCategoryPickerTarget(categoryPickerTarget === "combo" ? null : "combo")}
-                      className="gap-1.5 text-xs font-bold"
+                      className="gap-1.5 text-xs font-semibold"
                     >
                       <ListPlus className="h-3.5 w-3.5" /> Bulk Add
                     </Button>
@@ -2289,7 +1958,7 @@ const DealForm = () => {
                       type="button"
                       size="sm"
                       onClick={addComboRow}
-                      className="bg-primary text-primary-foreground hover:bg-primary/90 gap-1.5 text-xs font-bold shadow-xs"
+                      className="gap-1.5 text-xs font-semibold"
                     >
                       <Plus className="h-3.5 w-3.5" /> Add Item
                     </Button>
@@ -2326,13 +1995,13 @@ const DealForm = () => {
                 ) : (
                   <div className="space-y-2">
                     {/* Header row */}
-                    <div className="grid gap-2 px-3 pb-1" style={{ gridTemplateColumns: ITEM_ROW_GRID }}>
-                      <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Category</span>
-                      <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Menu Item</span>
-                      <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Size / Variant</span>
-                      <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground text-right">Cost</span>
-                      <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground text-right">Selling</span>
-                      <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground text-center">Qty</span>
+                    <div className="grid gap-2 px-3 pb-1 text-xs font-medium text-muted-foreground" style={{ gridTemplateColumns: ITEM_ROW_GRID }}>
+                      <span>Category</span>
+                      <span>Menu Item</span>
+                      <span>Size / Variant</span>
+                      <span className="text-right">Cost</span>
+                      <span className="text-right">Selling</span>
+                      <span className="text-center">Qty</span>
                       <span />
                     </div>
 
@@ -2340,8 +2009,6 @@ const DealForm = () => {
                     <div className="space-y-1.5">
                       {comboRows.map((row, idx) => {
                         const selectedItem = menuItems.find((m) => m.id === row.itemId);
-                        // A row with an item shows that item's real category; only an
-                        // empty row falls back to whatever category was picked to filter.
                         const activeCategoryId = selectedItem?.categoryId ?? row.categoryId;
                         const itemChoices = activeCategoryId
                           ? menuItems.filter((m) => m.categoryId === activeCategoryId)
@@ -2352,7 +2019,7 @@ const DealForm = () => {
                           const v = variants.find((vr) => vr.id === row.variantId);
                           if (v && v.price != null) unitPrice = Number(v.price);
                         }
-                        const unitCost = getItemCost(row.itemId, row.variantId);
+                        const unitCost = row.itemId ? getItemCost(row.itemId, row.variantId) : 0;
 
                         return (
                           <div
@@ -2360,7 +2027,6 @@ const DealForm = () => {
                             className="grid gap-2 items-center px-3 py-2.5 rounded-lg border border-border/60 bg-background hover:bg-muted/20 transition-colors"
                             style={{ gridTemplateColumns: ITEM_ROW_GRID }}
                           >
-                            {/* Category filter — narrows the item dropdown beside it */}
                             <Select
                               value={activeCategoryId || "all"}
                               onValueChange={(val) => updateComboCategory(idx, val === "all" ? "" : val)}
@@ -2378,10 +2044,12 @@ const DealForm = () => {
                               </SelectContent>
                             </Select>
 
-                            {/* Item select — only items from the category above */}
                             <div className="flex items-center gap-2 min-w-0">
                               <span className="text-[10px] font-mono text-muted-foreground/60 shrink-0 w-4 text-right">{idx + 1}.</span>
-                              <Select value={row.itemId} onValueChange={(val) => updateComboItem(idx, val)}>
+                              <Select
+                                value={row.itemId}
+                                onValueChange={(val) => updateComboItem(idx, val)}
+                              >
                                 <SelectTrigger className="h-8 text-xs border-0 bg-muted/30 hover:bg-muted/50 focus:ring-1">
                                   <SelectValue placeholder="Select item…" />
                                 </SelectTrigger>
@@ -2401,14 +2069,18 @@ const DealForm = () => {
                               </Select>
                             </div>
 
-                            {/* Variant */}
                             <div>
                               {variants.length > 0 ? (
                                 <Select
                                   value={row.variantId || variants[0]?.id || ""}
                                   onValueChange={(val) => updateComboVariant(idx, val)}
                                 >
-                                  <SelectTrigger className="h-8 text-xs border-0 bg-muted/30 hover:bg-muted/50 focus:ring-1">
+                                  <SelectTrigger
+                                    className={cn(
+                                      "h-8 text-xs border-0 bg-muted/30 hover:bg-muted/50 focus:ring-1",
+                                      !row.variantId && "ring-1 ring-destructive/50"
+                                    )}
+                                  >
                                     <SelectValue placeholder="Select size…" />
                                   </SelectTrigger>
                                   <SelectContent>
@@ -2424,17 +2096,14 @@ const DealForm = () => {
                               )}
                             </div>
 
-                            {/* Line cost — scales with Qty (from saved recipe cost) */}
                             <span className="text-xs font-mono text-muted-foreground text-right">
                               {unitCost > 0 ? `Rs. ${(unitCost * row.qty).toLocaleString()}` : "—"}
                             </span>
 
-                            {/* Line selling price — scales with Qty */}
-                            <span className="text-xs font-mono font-semibold text-foreground text-right">
-                              Rs. {(unitPrice * row.qty).toLocaleString()}
+                            <span className="text-xs font-mono font-semibold text-right text-foreground">
+                              {row.itemId ? `Rs. ${(unitPrice * row.qty).toLocaleString()}` : "—"}
                             </span>
 
-                            {/* Qty stepper */}
                             <div className="flex items-center justify-center gap-1">
                               <button
                                 type="button"
@@ -2453,7 +2122,6 @@ const DealForm = () => {
                               </button>
                             </div>
 
-                            {/* Delete */}
                             <Button
                               type="button"
                               variant="ghost"
@@ -2467,43 +2135,32 @@ const DealForm = () => {
                         );
                       })}
                     </div>
-
-                    {/* Footer — item count only */}
-                    <div className="flex items-center px-3 pt-2 border-t border-border/50 mt-1">
-                      <span className="text-xs text-muted-foreground">
-                        {comboRows.length} item{comboRows.length !== 1 ? "s" : ""} in bundle
-                      </span>
-                    </div>
                   </div>
                 )}
               </CardContent>
             </Card>
           )}
 
-          {/* SECTION 3: Choice Steps & Groups (option_combo only) */}
-          {dealType === "option_combo" ? (
+          {/* SECTION 3: Choice Steps & Groups (Customizable option_combo only) */}
+          {dealType === "option_combo" && (
             <Card className="shadow-xs border-border/80 overflow-hidden">
               <CardHeader className="pb-3 border-b bg-muted/20">
                 <div className="flex items-center justify-between gap-2">
                   <div>
-                    <CardTitle className="text-sm font-semibold uppercase tracking-wider text-foreground flex items-center gap-2">
-                      <Layers className="h-4 w-4 text-muted-foreground" />
-                      3. Choice Steps & Groups
+                    <CardTitle className="text-sm font-semibold text-foreground flex items-center gap-2">
+                      <span>3. Choice Steps & Groups</span>
                       {optionGroups.length > 0 && (
-                        <span className="ml-1 px-1.5 py-0.5 rounded-md bg-primary/10 text-primary text-[10px] font-bold">
+                        <span className="ml-1 px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-semibold">
                           {optionGroups.length}
                         </span>
                       )}
                     </CardTitle>
-                    <CardDescription className="text-xs mt-0.5">
-                      Define pick-and-choose steps (e.g. Choose 1st Pizza, Choose Soft Drink)
-                    </CardDescription>
                   </div>
                   <Button
                     type="button"
                     size="sm"
                     onClick={() => addOptionGroup(setOptionGroups)}
-                    className="bg-primary text-primary-foreground hover:bg-primary/90 gap-1.5 text-xs font-bold shadow-xs shrink-0"
+                    className="gap-1.5 text-xs font-semibold shrink-0"
                   >
                     <Plus className="h-3.5 w-3.5" /> Add Step Group
                   </Button>
@@ -2539,13 +2196,13 @@ const DealForm = () => {
                               value={groupLabel(group)}
                               onChange={(e) => updateGroupLabel(setOptionGroups, group.id, e.target.value)}
                               placeholder="e.g. Choose 1st Pizza Flavor"
-                              className="h-8 text-xs font-bold max-w-sm"
+                              className="h-8 text-xs font-semibold max-w-sm"
                             />
                           </div>
 
                           <div className="flex items-center gap-3 self-end sm:self-auto shrink-0">
                             <div className="flex items-center gap-1.5">
-                              <Label className="text-[11px] text-muted-foreground font-medium whitespace-nowrap">
+                              <Label className="text-xs text-muted-foreground font-medium whitespace-nowrap">
                                 Customer Picks:
                               </Label>
                               <Input
@@ -2581,7 +2238,7 @@ const DealForm = () => {
                                   : { kind: "optionGroup", groupId: group.id }
                               )
                             }
-                            className="h-7 text-xs gap-1.5"
+                            className="h-7 text-xs gap-1.5 font-semibold"
                           >
                             <ListPlus className="h-3.5 w-3.5" /> Bulk Add From Category
                           </Button>
@@ -2601,13 +2258,11 @@ const DealForm = () => {
                           </div>
                         )}
 
-                        {/* Choice rows — same row layout as the Fixed Bundle table */}
+                        {/* Choices list */}
                         <div className="p-3">
                           {group.choices.length === 0 ? (
-                            <div className="text-center py-8 space-y-2.5 border border-dashed border-border/60 rounded-lg bg-background/40">
-                              <p className="text-xs text-muted-foreground">
-                                No selectable items in this step yet
-                              </p>
+                            <div className="text-center py-6 border border-dashed rounded-lg bg-background/50 space-y-2">
+                              <p className="text-xs text-muted-foreground">No choices added to this step yet</p>
                               <Button
                                 type="button"
                                 size="sm"
@@ -2621,20 +2276,18 @@ const DealForm = () => {
                           ) : (
                             <div className="space-y-2">
                               {/* Header row */}
-                              <div className="grid gap-2 px-3 pb-1" style={{ gridTemplateColumns: ITEM_ROW_GRID_NO_QTY }}>
-                                <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Category</span>
-                                <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Menu Item</span>
-                                <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Size / Variant</span>
-                                <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground text-right">Cost</span>
-                                <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground text-right">Selling</span>
+                              <div className="grid gap-2 px-3 pb-1 text-xs font-medium text-muted-foreground" style={{ gridTemplateColumns: ITEM_ROW_GRID_NO_QTY }}>
+                                <span>Category</span>
+                                <span>Menu Item</span>
+                                <span>Size / Variant</span>
+                                <span className="text-right">Cost</span>
+                                <span className="text-right">Selling</span>
                                 <span />
                               </div>
 
                               <div className="space-y-1.5">
                                 {group.choices.map((choice, cIdx) => {
                                   const selectedItem = menuItems.find((m) => m.id === choice.itemId);
-                                  // A row with an item shows that item's real category; only an
-                                  // empty row falls back to whatever category was picked to filter.
                                   const activeCategoryId = selectedItem?.categoryId ?? choice.categoryId;
                                   const itemChoices = activeCategoryId
                                     ? menuItems.filter((m) => m.categoryId === activeCategoryId)
@@ -2653,7 +2306,6 @@ const DealForm = () => {
                                       className="grid gap-2 items-center px-3 py-2.5 rounded-lg border border-border/60 bg-background hover:bg-muted/20 transition-colors"
                                       style={{ gridTemplateColumns: ITEM_ROW_GRID_NO_QTY }}
                                     >
-                                      {/* Category filter — narrows the item dropdown beside it */}
                                       <Select
                                         value={activeCategoryId || "all"}
                                         onValueChange={(val) =>
@@ -2673,7 +2325,6 @@ const DealForm = () => {
                                         </SelectContent>
                                       </Select>
 
-                                      {/* Item select — only items from the category above */}
                                       <div className="flex items-center gap-2 min-w-0">
                                         <span className="text-[10px] font-mono text-muted-foreground/60 shrink-0 w-4 text-right">{cIdx + 1}.</span>
                                         <Select
@@ -2699,7 +2350,6 @@ const DealForm = () => {
                                         </Select>
                                       </div>
 
-                                      {/* Variant */}
                                       <div>
                                         {variants.length > 0 ? (
                                           <Select
@@ -2722,13 +2372,13 @@ const DealForm = () => {
                                         )}
                                       </div>
 
-                                      {/* Cost */}
+                                      {/* Line cost */}
                                       <span className="text-xs font-mono text-muted-foreground text-right">
                                         {unitCost > 0 ? `Rs. ${unitCost.toLocaleString()}` : "—"}
                                       </span>
 
-                                      {/* Selling price */}
-                                      <span className="text-xs font-mono font-semibold text-foreground text-right">
+                                      {/* Line selling price */}
+                                      <span className="text-xs font-mono font-semibold text-right text-foreground">
                                         {choice.itemId ? `Rs. ${unitPrice.toLocaleString()}` : "—"}
                                       </span>
 
@@ -2746,32 +2396,30 @@ const DealForm = () => {
                                   );
                                 })}
                               </div>
-
-                              {/* Footer — count + add another choice */}
-                              <div className="flex items-center justify-between px-3 pt-2 border-t border-border/50 mt-1">
-                                <span className="text-xs text-muted-foreground">
-                                  {group.choices.length} choice{group.choices.length !== 1 ? "s" : ""} · {describeGroupPicks(group)}
-                                </span>
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => addChoiceRow(setOptionGroups, group.id)}
-                                  className="h-7 text-xs gap-1.5"
-                                >
-                                  <Plus className="h-3.5 w-3.5" /> Add Choice
-                                </Button>
-                              </div>
                             </div>
                           )}
+
+                          {/* Add Choice button */}
+                          <div className="pt-2">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={() => addChoiceRow(setOptionGroups, group.id)}
+                              className="h-7 text-xs gap-1.5 font-semibold"
+                            >
+                              <Plus className="h-3.5 w-3.5" /> Add Choice
+                            </Button>
+                          </div>
                         </div>
+
                       </div>
                     ))}
                   </div>
                 )}
               </CardContent>
             </Card>
-          ) : null}
+          )}
 
           {/* SECTION 4: Pricing & Channels (combo / option_combo) */}
           {(dealType === "combo" || dealType === "option_combo") && (
@@ -2779,19 +2427,13 @@ const DealForm = () => {
               <CardHeader className="pb-3 border-b bg-muted/20">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
                   <div>
-                    <CardTitle className="text-sm font-semibold uppercase tracking-wider text-foreground flex items-center gap-2">
-                      <Sparkles className="h-4 w-4 text-muted-foreground" />
+                    <CardTitle className="text-sm font-semibold text-foreground">
                       4. Pricing & Cost Breakdown
                     </CardTitle>
-                    <CardDescription className="text-xs">
-                      {dealType === "combo"
-                        ? "Analyze recipe cost price, menu selling total, and determine promotional deal pricing"
-                        : "Cost and selling range across every possible pick, and the deal price you set against it"}
-                    </CardDescription>
                   </div>
                   {dealType === "combo" && comboRows.length > 0 && (
-                    <Badge variant="outline" className="text-[11px] font-mono self-start sm:self-auto gap-1">
-                      <Calculator className="h-3 w-3 text-muted-foreground" />
+                    <Badge variant="outline" className="text-xs font-mono self-start sm:self-auto gap-1">
+                      <Calculator className="h-3.5 w-3.5 text-muted-foreground" />
                       Cost-to-Price Calculator Active
                     </Badge>
                   )}
@@ -2803,21 +2445,21 @@ const DealForm = () => {
                 {/* ── ROW 1 · AT MENU PRICE (baseline, informational) ── */}
                 {dealType === "combo" && (
                   <div className="space-y-2">
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70">At Regular Menu Price</p>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <p className="text-xs font-semibold text-muted-foreground">At Regular Menu Price</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-6 gap-3">
 
                       {/* Total Cost */}
-                      <div className="rounded-xl border border-border/70 bg-muted/25 p-4 flex flex-col justify-between gap-2">
+                      <div className="sm:col-span-2 rounded-xl border border-border/70 bg-muted/25 p-4 flex flex-col justify-between gap-2">
                         <div className="flex items-center justify-between">
-                          <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                          <span className="text-xs font-medium text-muted-foreground">
                             Total Cost
                           </span>
                           {bundleCostPrice > 0 ? (
-                            <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                            <Badge variant="secondary" className="text-[11px] px-1.5 py-0">
                               Recipe Cost
                             </Badge>
                           ) : (
-                            <Badge variant="outline" className="text-[10px] text-muted-foreground/60 px-1.5 py-0">
+                            <Badge variant="outline" className="text-[11px] text-muted-foreground/60 px-1.5 py-0">
                               No Recipe
                             </Badge>
                           )}
@@ -2826,7 +2468,7 @@ const DealForm = () => {
                           <p className="text-xl font-semibold font-mono text-foreground tracking-tight">
                             Rs.&nbsp;{bundleCostPrice.toLocaleString()}
                           </p>
-                          <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">
+                          <p className="text-xs text-muted-foreground mt-0.5 leading-tight">
                             {bundleCostPrice > 0
                               ? "Raw ingredients & recipe cost"
                               : "Set recipes in Menu Items for live cost"}
@@ -2835,30 +2477,30 @@ const DealForm = () => {
                       </div>
 
                       {/* Total Selling Price */}
-                      <div className="rounded-xl border border-border/70 bg-muted/25 p-4 flex flex-col justify-between gap-2">
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                      <div className="sm:col-span-2 rounded-xl border border-border/70 bg-muted/25 p-4 flex flex-col justify-between gap-2">
+                        <span className="text-xs font-medium text-muted-foreground">
                           Total Selling Price
                         </span>
                         <div>
                           <p className="text-xl font-semibold font-mono text-foreground tracking-tight">
                             Rs.&nbsp;{bundleRegularValue.toLocaleString()}
                           </p>
-                          <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">
+                          <p className="text-xs text-muted-foreground mt-0.5 leading-tight">
                             Standalone menu retail value
                           </p>
                         </div>
                       </div>
 
                       {/* Total Profit % at menu price */}
-                      <div className="rounded-xl border border-border/70 bg-muted/25 p-4 flex flex-col justify-between gap-2">
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                      <div className="sm:col-span-2 rounded-xl border border-border/70 bg-muted/25 p-4 flex flex-col justify-between gap-2">
+                        <span className="text-xs font-medium text-muted-foreground">
                           Total Profit %
                         </span>
                         <div>
                           <p className="text-xl font-semibold font-mono text-foreground tracking-tight">
                             {bundleRegularValue > 0 ? `${bundleMenuMargin}%` : "—"}
                           </p>
-                          <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">
+                          <p className="text-xs text-muted-foreground mt-0.5 leading-tight">
                             Margin before any deal discount
                           </p>
                         </div>
@@ -2871,17 +2513,17 @@ const DealForm = () => {
                 {/* ── ROW 2 · THIS DEAL (the decision, updates live) ── */}
                 {dealType === "combo" && (
                   <div className="space-y-2">
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-primary/80">This Deal</p>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <p className="text-xs font-semibold text-primary">This Deal</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-6 gap-3">
 
                       {/* Deal Price */}
-                      <div className="rounded-xl border border-primary bg-primary/[0.06] p-4 flex flex-col justify-between gap-2">
+                      <div className="sm:col-span-3 rounded-xl border border-primary bg-primary/[0.06] p-4 flex flex-col justify-between gap-2">
                         <div className="flex items-center justify-between">
-                          <span className="text-[10px] font-bold uppercase tracking-wider text-primary">
+                          <span className="text-xs font-semibold text-primary">
                             Deal Price
                           </span>
                           {bundleSavingsPercent > 0 && (
-                            <span className="text-[10px] font-bold text-primary px-1.5 py-0.5 rounded bg-primary/10">
+                            <span className="text-xs font-bold text-primary px-2 py-0.5 rounded bg-primary/10">
                               {bundleSavingsPercent}% OFF
                             </span>
                           )}
@@ -2890,7 +2532,7 @@ const DealForm = () => {
                           <p className="text-xl font-semibold font-mono text-primary tracking-tight">
                             Rs.&nbsp;{(dealPrice || 0).toLocaleString()}
                           </p>
-                          <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">
+                          <p className="text-xs text-muted-foreground mt-0.5 leading-tight">
                             {bundleSavings > 0
                               ? `Customer saves Rs. ${bundleSavings.toLocaleString()}`
                               : "Customer pays at POS & Web"}
@@ -2900,13 +2542,13 @@ const DealForm = () => {
 
                       {/* Deal Profit % */}
                       <div className={cn(
-                        "rounded-xl border p-4 flex flex-col justify-between gap-2 transition-all",
+                        "sm:col-span-3 rounded-xl border p-4 flex flex-col justify-between gap-2 transition-all",
                         dealPrice > 0 && bundleProfit > 0
                           ? "border-border/70 bg-muted/25"
                           : "border-border/70 bg-muted/25"
                       )}>
                         <span className={cn(
-                          "text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5",
+                          "text-xs font-semibold flex items-center gap-1.5",
                           bundleProfit > 0 ? "text-foreground" : "text-muted-foreground"
                         )}>
                           Deal Profit %
@@ -2925,14 +2567,14 @@ const DealForm = () => {
                                   (Rs.&nbsp;{bundleProfit.toLocaleString()})
                                 </span>
                               </div>
-                              <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">
+                              <p className="text-xs text-muted-foreground mt-0.5 leading-tight">
                                 Profit over ingredient cost
                               </p>
                             </>
                           ) : (
                             <>
                               <p className="text-xl font-semibold font-mono text-muted-foreground/40">—</p>
-                              <p className="text-[10px] text-muted-foreground mt-0.5">
+                              <p className="text-xs text-muted-foreground mt-0.5">
                                 {dealPrice > 0 ? "Add recipes for profit %" : "Enter deal price below"}
                               </p>
                             </>
@@ -2943,25 +2585,22 @@ const DealForm = () => {
                     </div>
                   </div>
                 )}
-
-                {/* ── CUSTOMIZABLE · the same cost/selling read-out as a Fixed Bundle, but
-                     as a range, because the customer's picks decide the real total ── */}
                 {dealType === "option_combo" && optionComboTotals.maxSelling > 0 && (
                   <>
                     <div className="space-y-2">
-                      <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70">At Regular Menu Price</p>
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <p className="text-xs font-semibold text-muted-foreground">At Regular Menu Price</p>
+                      <div className="grid grid-cols-1 sm:grid-cols-6 gap-3">
 
                         {/* Total Cost range */}
-                        <div className="rounded-xl border border-border/70 bg-muted/25 p-4 flex flex-col justify-between gap-2">
+                        <div className="sm:col-span-2 rounded-xl border border-border/70 bg-muted/25 p-4 flex flex-col justify-between gap-2">
                           <div className="flex items-center justify-between">
-                            <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                            <span className="text-xs font-medium text-muted-foreground">
                               Total Cost
                             </span>
                             {optionComboTotals.maxCost > 0 ? (
-                              <Badge variant="secondary" className="text-[10px] px-1.5 py-0">Recipe Cost</Badge>
+                              <Badge variant="secondary" className="text-[11px] px-1.5 py-0">Recipe Cost</Badge>
                             ) : (
-                              <Badge variant="outline" className="text-[10px] text-muted-foreground/60 px-1.5 py-0">No Recipe</Badge>
+                              <Badge variant="outline" className="text-[11px] text-muted-foreground/60 px-1.5 py-0">No Recipe</Badge>
                             )}
                           </div>
                           <div>
@@ -2970,7 +2609,7 @@ const DealForm = () => {
                                 ? moneyRange(optionComboTotals.minCost, optionComboTotals.maxCost)
                                 : "—"}
                             </p>
-                            <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">
+                            <p className="text-xs text-muted-foreground mt-0.5 leading-tight">
                               {optionComboTotals.maxCost === 0
                                 ? "Set recipes in Menu Items for live cost"
                                 : optionComboTotals.hasSpread
@@ -2981,15 +2620,15 @@ const DealForm = () => {
                         </div>
 
                         {/* Total Selling range */}
-                        <div className="rounded-xl border border-border/70 bg-muted/25 p-4 flex flex-col justify-between gap-2">
-                          <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                        <div className="sm:col-span-2 rounded-xl border border-border/70 bg-muted/25 p-4 flex flex-col justify-between gap-2">
+                          <span className="text-xs font-medium text-muted-foreground">
                             Total Selling Price
                           </span>
                           <div>
                             <p className="text-xl font-semibold font-mono text-foreground tracking-tight">
                               {moneyRange(optionComboTotals.minSelling, optionComboTotals.maxSelling)}
                             </p>
-                            <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">
+                            <p className="text-xs text-muted-foreground mt-0.5 leading-tight">
                               {optionComboTotals.hasSpread
                                 ? "Standalone menu retail value, cheapest → priciest"
                                 : "Standalone menu retail value"}
@@ -2998,8 +2637,8 @@ const DealForm = () => {
                         </div>
 
                         {/* Worst-case menu margin */}
-                        <div className="rounded-xl border border-border/70 bg-muted/25 p-4 flex flex-col justify-between gap-2">
-                          <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                        <div className="sm:col-span-2 rounded-xl border border-border/70 bg-muted/25 p-4 flex flex-col justify-between gap-2">
+                          <span className="text-xs font-medium text-muted-foreground">
                             Total Profit %
                           </span>
                           <div>
@@ -3008,7 +2647,7 @@ const DealForm = () => {
                                 ? `${Math.round(((optionComboTotals.maxSelling - optionComboTotals.maxCost) / optionComboTotals.maxSelling) * 100)}%`
                                 : "—"}
                             </p>
-                            <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">
+                            <p className="text-xs text-muted-foreground mt-0.5 leading-tight">
                               {optionComboTotals.hasSpread
                                 ? "Margin at the priciest combination"
                                 : "Margin before any deal discount"}
@@ -3020,17 +2659,17 @@ const DealForm = () => {
                     </div>
 
                     <div className="space-y-2">
-                      <p className="text-[10px] font-bold uppercase tracking-wider text-primary/80">This Deal</p>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <p className="text-xs font-semibold text-primary">This Deal</p>
+                      <div className="grid grid-cols-1 sm:grid-cols-6 gap-3">
 
                         {/* Deal Price + biggest discount the customer can extract */}
-                        <div className="rounded-xl border border-primary bg-primary/[0.06] p-4 flex flex-col justify-between gap-2">
+                        <div className="sm:col-span-3 rounded-xl border border-primary bg-primary/[0.06] p-4 flex flex-col justify-between gap-2">
                           <div className="flex items-center justify-between">
-                            <span className="text-[10px] font-bold uppercase tracking-wider text-primary">
+                            <span className="text-xs font-semibold text-primary">
                               Deal Price
                             </span>
                             {dealPrice > 0 && optionComboTotals.maxSelling > dealPrice && (
-                              <span className="text-[10px] font-bold text-primary px-1.5 py-0.5 rounded bg-primary/10">
+                              <span className="text-xs font-bold text-primary px-2 py-0.5 rounded bg-primary/10">
                                 up to {Math.round(((optionComboTotals.maxSelling - dealPrice) / optionComboTotals.maxSelling) * 100)}% OFF
                               </span>
                             )}
@@ -3039,7 +2678,7 @@ const DealForm = () => {
                             <p className="text-xl font-semibold font-mono text-primary tracking-tight">
                               Rs.&nbsp;{(dealPrice || 0).toLocaleString()}
                             </p>
-                            <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">
+                            <p className="text-xs text-muted-foreground mt-0.5 leading-tight">
                               {dealPrice > 0 && optionComboTotals.maxSelling > dealPrice
                                 ? `Customer saves up to Rs. ${Math.round(optionComboTotals.maxSelling - dealPrice).toLocaleString()}`
                                 : "Customer pays at POS & Web"}
@@ -3049,7 +2688,7 @@ const DealForm = () => {
 
                         {/* Worst-case profit — the number that must stay positive */}
                         <div className={cn(
-                          "rounded-xl border p-4 flex flex-col justify-between gap-2 transition-all",
+                          "sm:col-span-3 rounded-xl border p-4 flex flex-col justify-between gap-2 transition-all",
                           dealPrice > 0 && optionComboTotals.maxCost > 0 && dealPrice > optionComboTotals.maxCost
                             ? "border-border/70 bg-muted/25"
                             : dealPrice > 0 && optionComboTotals.maxCost > 0
@@ -3057,7 +2696,7 @@ const DealForm = () => {
                             : "border-border/70 bg-muted/25"
                         )}>
                           <span className={cn(
-                            "text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5",
+                            "text-xs font-semibold flex items-center gap-1.5",
                             dealPrice > optionComboTotals.maxCost && optionComboTotals.maxCost > 0
                               ? "text-foreground"
                               : "text-muted-foreground"
@@ -3080,7 +2719,7 @@ const DealForm = () => {
                                     (Rs.&nbsp;{Math.round(dealPrice - optionComboTotals.maxCost).toLocaleString()})
                                   </span>
                                 </div>
-                                <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">
+                                <p className="text-xs text-muted-foreground mt-0.5 leading-tight">
                                   {optionComboTotals.hasSpread
                                     ? "If the customer picks the priciest options"
                                     : "Profit over ingredient cost"}
@@ -3089,7 +2728,7 @@ const DealForm = () => {
                             ) : (
                               <>
                                 <p className="text-xl font-semibold font-mono text-muted-foreground/40">—</p>
-                                <p className="text-[10px] text-muted-foreground mt-0.5">
+                                <p className="text-xs text-muted-foreground mt-0.5">
                                   {dealPrice > 0 ? "Add recipes for profit %" : "Enter deal price below"}
                                 </p>
                               </>
@@ -3102,17 +2741,14 @@ const DealForm = () => {
                   </>
                 )}
 
-                {/* Which step is responsible for any spread. A step whose choices are
-                    all the same price is the ordinary case and says so plainly;
-                    a step that varies is the one to look at when the totals above
-                    read as a range rather than a figure. */}
+                {/* Which step is responsible for any spread */}
                 {dealType === "option_combo" && optionComboTotals.steps.length > 0 && (
                   <div className="rounded-xl border border-border/70 bg-muted/20 px-4 py-3 space-y-2">
                     <div className="flex flex-wrap items-center justify-between gap-2">
-                      <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                      <p className="text-xs font-semibold text-muted-foreground">
                         Price Per Step
                       </p>
-                      <span className="text-[10px] text-muted-foreground">
+                      <span className="text-xs text-muted-foreground">
                         {optionComboTotals.hasSpread
                           ? "One step or more varies, so the totals above are a range"
                           : "Every step is one fixed price, so the totals above are exact"}
@@ -3322,13 +2958,9 @@ const DealForm = () => {
           {dealType === "percentage" && (
             <Card className="shadow-xs border-border/80 overflow-hidden">
               <CardHeader className="pb-3 border-b bg-muted/20">
-                <CardTitle className="text-sm font-semibold uppercase tracking-wider text-foreground flex items-center gap-2">
-                  <Percent className="h-4 w-4 text-muted-foreground" />
+                <CardTitle className="text-sm font-semibold text-foreground">
                   3. Applicable Scope
                 </CardTitle>
-                <CardDescription className="text-xs">
-                  Choose the categories or items this discount qualifies — the rate itself is set in the pricing card below
-                </CardDescription>
               </CardHeader>
               <CardContent className="p-5 space-y-6">
                 <div className="space-y-5">
@@ -3339,7 +2971,7 @@ const DealForm = () => {
                     <Badge
                       variant="outline"
                       className={cn(
-                        "text-[10px]",
+                        "text-xs",
                         discountScopeItems.length > 0 && "border-primary/50 text-primary"
                       )}
                     >
@@ -3349,7 +2981,7 @@ const DealForm = () => {
 
                   {/* Whole-category toggles — the bulk path */}
                   <div className="space-y-2">
-                    <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+                    <p className="text-xs font-semibold text-muted-foreground">
                       Entire Categories
                     </p>
                     <div className="flex flex-wrap gap-1.5">
@@ -3362,7 +2994,7 @@ const DealForm = () => {
                             type="button"
                             onClick={() => toggleApplicableCategory(c.id)}
                             className={cn(
-                              "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border transition-all cursor-pointer select-none",
+                              "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer select-none",
                               selected
                                 ? "bg-primary text-primary-foreground border-primary shadow-xs"
                                 : "bg-muted/30 border-border text-foreground hover:border-primary/40 hover:bg-muted/60"
@@ -3375,7 +3007,7 @@ const DealForm = () => {
                             )}
                             <span>{c.name}</span>
                             <span className={cn(
-                              "text-[10px] font-mono px-1 rounded",
+                              "text-xs font-mono px-1 rounded",
                               selected ? "bg-primary-foreground/20" : "bg-muted-foreground/10 text-muted-foreground"
                             )}>
                               {count}
@@ -3386,10 +3018,10 @@ const DealForm = () => {
                     </div>
                   </div>
 
-                  {/* Individually-named items — same row layout as the other sections */}
+                  {/* Individually-named items */}
                   <div className="space-y-2">
                     <div className="flex items-center justify-between gap-3">
-                      <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+                      <p className="text-xs font-semibold text-muted-foreground">
                         Or Specific Individual Items
                       </p>
                       <Button
@@ -3397,7 +3029,7 @@ const DealForm = () => {
                         size="sm"
                         variant="outline"
                         onClick={addScopeItemRow}
-                        className="h-7 text-xs gap-1.5"
+                        className="h-7 text-xs gap-1.5 font-semibold"
                       >
                         <Plus className="h-3.5 w-3.5" /> Add Item
                       </Button>
@@ -3414,12 +3046,12 @@ const DealForm = () => {
                     ) : (
                       <div className="space-y-2">
                         {/* Header row */}
-                        <div className="grid gap-2 px-3 pb-1" style={{ gridTemplateColumns: SCOPE_ROW_GRID }}>
-                          <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Category</span>
-                          <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Menu Item</span>
-                          <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Size / Variant</span>
-                          <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground text-right">Price</span>
-                          <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground text-right">After {discountPercent || 0}%</span>
+                        <div className="grid gap-2 px-3 pb-1 text-xs font-medium text-muted-foreground" style={{ gridTemplateColumns: SCOPE_ROW_GRID }}>
+                          <span>Category</span>
+                          <span>Menu Item</span>
+                          <span>Size / Variant</span>
+                          <span className="text-right">Price</span>
+                          <span className="text-right">After {discountPercent || 0}%</span>
                           <span />
                         </div>
 
@@ -3427,8 +3059,6 @@ const DealForm = () => {
                           {scopeItemRows.map((row, idx) => {
                             const selectedItem = menuItems.find((m) => m.id === row.itemId);
                             const activeCategoryId = selectedItem?.categoryId ?? row.categoryId;
-                            // Hide items already named on another row — picking the same
-                            // item twice adds nothing to the scope.
                             const takenElsewhere = new Set(
                               scopeItemRows.filter((_, i) => i !== idx).map((r) => r.itemId).filter(Boolean)
                             );
@@ -3437,11 +3067,6 @@ const DealForm = () => {
                                 !takenElsewhere.has(m.id) &&
                                 (!activeCategoryId || m.categoryId === activeCategoryId)
                             );
-                            // A percentage deal is scoped per menu item, never per size,
-                            // so every size of a named item is discounted. Price the row
-                            // across all of them — showing only item.price understated a
-                            // multi-size item and disagreed with the Discount Impact
-                            // figures below, which have always walked the variants.
                             const scopePrices = (selectedItem?.variants?.length ?? 0) > 0
                               ? selectedItem!.variants.map((v) => Number(v.price ?? selectedItem!.price ?? 0))
                               : [Number(selectedItem?.price || 0)];
@@ -3456,7 +3081,6 @@ const DealForm = () => {
                             const afterLabel = minPrice === maxPrice
                               ? `Rs. ${money(minPrice * (1 - pctOff))}`
                               : `Rs. ${money(minPrice * (1 - pctOff))}–${money(maxPrice * (1 - pctOff))}`;
-                            // Already covered by a whole-category selection above.
                             const redundant =
                               !!selectedItem?.categoryId &&
                               applicableCategoryIds.includes(selectedItem.categoryId);
@@ -3518,14 +3142,12 @@ const DealForm = () => {
                                   </Select>
                                 </div>
 
-                                {/* Size / Variant — read-only. The scope is stored per
-                                    menu item, so a discount necessarily covers every size;
-                                    a picker here would imply a choice the backend cannot keep. */}
+                                {/* Size / Variant */}
                                 <div className="min-w-0">
                                   {!row.itemId ? (
                                     <span className="text-xs text-muted-foreground px-1">—</span>
                                   ) : sizeCount > 1 ? (
-                                    <Badge variant="secondary" className="text-[10px] px-1.5 py-0 font-normal">
+                                    <Badge variant="secondary" className="text-xs px-1.5 py-0 font-normal">
                                       All {sizeCount} sizes
                                     </Badge>
                                   ) : (
@@ -3564,8 +3186,8 @@ const DealForm = () => {
                           const it = menuItems.find((m) => m.id === r.itemId);
                           return !!it?.categoryId && applicableCategoryIds.includes(it.categoryId);
                         }) && (
-                          <p className="text-[10px] text-muted-foreground flex items-center gap-1.5 px-3 pt-1">
-                            <AlertTriangle className="h-3 w-3 shrink-0" />
+                          <p className="text-xs text-muted-foreground flex items-center gap-1.5 px-3 pt-1">
+                            <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
                             Highlighted rows are already covered by a category selected above — they change nothing.
                           </p>
                         )}
@@ -3577,19 +3199,13 @@ const DealForm = () => {
             </Card>
           )}
 
-          {/* SECTION 4: Pricing & Cost Breakdown (Percentage Mode) — same card, same
-              name and same two-row ladder as every other format, answered for a
-              percentage-off deal. */}
+          {/* SECTION 4: Pricing & Cost Breakdown (Percentage Mode) */}
           {dealType === "percentage" && (
             <Card className="shadow-xs border-border/80 overflow-hidden">
               <CardHeader className="pb-3 border-b bg-muted/20">
-                <CardTitle className="text-sm font-semibold uppercase tracking-wider text-foreground flex items-center gap-2">
-                  <Sparkles className="h-4 w-4 text-muted-foreground" />
+                <CardTitle className="text-sm font-semibold text-foreground">
                   4. Pricing & Cost Breakdown
                 </CardTitle>
-                <CardDescription className="text-xs">
-                  What the items in scope are worth at menu price, and what {discountPercent || 0}% off leaves you
-                </CardDescription>
               </CardHeader>
 
               <CardContent className="p-5 space-y-5">
@@ -3605,24 +3221,21 @@ const DealForm = () => {
                   </div>
                 ) : (
                 <>
-                {/* ── ROW 1 · AT MENU PRICE (baseline, informational) ──
-                    Same ladder every other format reports through; a percentage
-                    deal just carries ranges, since each item in scope is priced
-                    on its own rather than summing into one bundle total. */}
+                {/* ── ROW 1 · AT MENU PRICE (baseline, informational) ── */}
                 <div className="space-y-2">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70">At Regular Menu Price</p>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <p className="text-xs font-semibold text-muted-foreground">At Regular Menu Price</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-6 gap-3">
 
                     {/* Total Cost */}
-                    <div className="rounded-xl border border-border/70 bg-muted/25 p-4 flex flex-col justify-between gap-2">
+                    <div className="sm:col-span-2 rounded-xl border border-border/70 bg-muted/25 p-4 flex flex-col justify-between gap-2">
                       <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                        <span className="text-xs font-medium text-muted-foreground">
                           Total Cost
                         </span>
                         {discountImpact.hasCost ? (
-                          <Badge variant="secondary" className="text-[10px] px-1.5 py-0">Recipe Cost</Badge>
+                          <Badge variant="secondary" className="text-[11px] px-1.5 py-0">Recipe Cost</Badge>
                         ) : (
-                          <Badge variant="outline" className="text-[10px] text-muted-foreground/60 px-1.5 py-0">No Recipe</Badge>
+                          <Badge variant="outline" className="text-[11px] text-muted-foreground/60 px-1.5 py-0">No Recipe</Badge>
                         )}
                       </div>
                       <div>
@@ -3631,7 +3244,7 @@ const DealForm = () => {
                             ? moneyRange(discountImpact.minCost, discountImpact.maxCost)
                             : "—"}
                         </p>
-                        <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">
+                        <p className="text-xs text-muted-foreground mt-0.5 leading-tight">
                           {discountImpact.hasCost
                             ? "Cheapest → priciest item in scope"
                             : "Set recipes in Menu Items for live cost"}
@@ -3640,30 +3253,30 @@ const DealForm = () => {
                     </div>
 
                     {/* Total Selling Price */}
-                    <div className="rounded-xl border border-border/70 bg-muted/25 p-4 flex flex-col justify-between gap-2">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                    <div className="sm:col-span-2 rounded-xl border border-border/70 bg-muted/25 p-4 flex flex-col justify-between gap-2">
+                      <span className="text-xs font-medium text-muted-foreground">
                         Total Selling Price
                       </span>
                       <div>
                         <p className="text-xl font-semibold font-mono text-foreground tracking-tight">
                           {moneyRange(discountImpact.minBefore, discountImpact.maxBefore)}
                         </p>
-                        <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">
+                        <p className="text-xs text-muted-foreground mt-0.5 leading-tight">
                           Standalone menu retail value
                         </p>
                       </div>
                     </div>
 
                     {/* Total Profit % at menu price */}
-                    <div className="rounded-xl border border-border/70 bg-muted/25 p-4 flex flex-col justify-between gap-2">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                    <div className="sm:col-span-2 rounded-xl border border-border/70 bg-muted/25 p-4 flex flex-col justify-between gap-2">
+                      <span className="text-xs font-medium text-muted-foreground">
                         Total Profit %
                       </span>
                       <div>
                         <p className="text-xl font-semibold font-mono text-foreground tracking-tight">
                           {discountImpact.avgMenuMargin != null ? `${discountImpact.avgMenuMargin}%` : "—"}
                         </p>
-                        <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">
+                        <p className="text-xs text-muted-foreground mt-0.5 leading-tight">
                           {discountImpact.avgMenuMargin != null
                             ? "Margin before any deal discount"
                             : "Set recipes in Menu Items for live margin"}
@@ -3676,17 +3289,17 @@ const DealForm = () => {
 
                 {/* ── ROW 2 · THIS DEAL (the decision, updates live) ── */}
                 <div className="space-y-2">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-primary/80">This Deal</p>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <p className="text-xs font-semibold text-primary">This Deal</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-6 gap-3">
 
                     {/* Deal Price — what the customer actually pays, per item */}
-                    <div className="rounded-xl border border-primary bg-primary/[0.06] p-4 flex flex-col justify-between gap-2">
+                    <div className="sm:col-span-3 rounded-xl border border-primary bg-primary/[0.06] p-4 flex flex-col justify-between gap-2">
                       <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-primary">
+                        <span className="text-xs font-semibold text-primary">
                           Deal Price
                         </span>
                         {(discountPercent || 0) > 0 && (
-                          <span className="text-[10px] font-bold text-primary px-1.5 py-0.5 rounded bg-primary/10">
+                          <span className="text-xs font-bold text-primary px-2 py-0.5 rounded bg-primary/10">
                             {discountPercent}% OFF
                           </span>
                         )}
@@ -3695,7 +3308,7 @@ const DealForm = () => {
                         <p className="text-xl font-semibold font-mono text-primary tracking-tight">
                           {moneyRange(discountImpact.minAfter, discountImpact.maxAfter)}
                         </p>
-                        <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">
+                        <p className="text-xs text-muted-foreground mt-0.5 leading-tight">
                           {discountImpact.maxSave > 0
                             ? `Customer saves ${moneyRange(discountImpact.minSave, discountImpact.maxSave)}`
                             : "Customer pays at POS & Web"}
@@ -3703,18 +3316,16 @@ const DealForm = () => {
                       </div>
                     </div>
 
-                    {/* Deal Profit % — coloured by its own value, so a healthy
-                        average stays green even while specific items are
-                        underwater; the badge carries that warning instead. */}
+                    {/* Deal Profit % */}
                     <div className={cn(
-                      "rounded-xl border p-4 flex flex-col justify-between gap-2 transition-all",
+                      "sm:col-span-3 rounded-xl border p-4 flex flex-col justify-between gap-2 transition-all",
                       discountImpact.avgMargin != null && discountImpact.avgMargin > 0
                         ? "border-border/70 bg-muted/25"
                         : "border-border/70 bg-muted/25"
                     )}>
                       <div className="flex items-center justify-between gap-2">
                         <span className={cn(
-                          "text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5",
+                          "text-xs font-semibold flex items-center gap-1.5",
                           discountImpact.avgMargin != null && discountImpact.avgMargin > 0
                             ? "text-foreground"
                             : "text-muted-foreground"
@@ -3722,7 +3333,7 @@ const DealForm = () => {
                           Deal Profit %
                         </span>
                         {discountImpact.belowCost.length > 0 && (
-                          <span className="text-[10px] font-semibold text-destructive px-1.5 py-0.5 rounded bg-destructive/10 shrink-0">
+                          <span className="text-xs font-semibold text-destructive px-2 py-0.5 rounded bg-destructive/10 shrink-0">
                             {discountImpact.belowCost.length} at a loss
                           </span>
                         )}
@@ -3897,19 +3508,13 @@ const DealForm = () => {
             </Card>
           )}
 
-          {/* SECTION 3C: Buy X Get Y Configuration — both sides use the same row
-              table as the Fixed Bundle and Choice Steps sections, so an admin
-              reads one layout across every deal format. */}
+          {/* SECTION 3C: Buy X Get Y Configuration */}
           {dealType === "buy_x_get_y" && (
             <Card className="shadow-xs border-border/80 overflow-hidden">
               <CardHeader className="pb-3 border-b bg-muted/20">
-                <CardTitle className="text-sm font-semibold uppercase tracking-wider text-foreground flex items-center gap-2">
-                  <Gift className="h-4 w-4 text-muted-foreground" />
+                <CardTitle className="text-sm font-semibold text-foreground">
                   3. Buy X Get Y Configuration
                 </CardTitle>
-                <CardDescription className="text-xs">
-                  Define what the customer buys and what they receive for free — both sides take several items
-                </CardDescription>
               </CardHeader>
 
               <CardContent className="p-5 space-y-4">
@@ -3943,26 +3548,14 @@ const DealForm = () => {
                             : "border-border/50 bg-muted/20"
                         )}
                       >
-                        <p
-                          className={cn(
-                            "text-xs font-bold uppercase tracking-wide flex items-center gap-1.5",
-                            side.key === "get"
-                              ? "text-foreground"
-                              : "text-foreground"
-                          )}
-                        >
-                          <SideIcon
-                            className={cn(
-                              "h-4 w-4",
-                              "text-muted-foreground"
-                            )}
-                          />
+                        <p className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                          <SideIcon className="h-4 w-4 text-muted-foreground" />
                           {side.title}
                         </p>
                         <Badge
                           variant="outline"
                           className={cn(
-                            "text-[10px] font-mono px-1.5 py-0 shrink-0",
+                            "text-xs font-mono px-1.5 py-0 shrink-0",
                             side.key === "get" && "border-border text-muted-foreground"
                           )}
                         >
@@ -3970,10 +3563,7 @@ const DealForm = () => {
                         </Badge>
                       </div>
 
-                      {/* Fixed vs. Customizable — independent per side. Fixed is
-                          today's all-required item list; Customizable lets the
-                          customer choose from an option set (the same shape
-                          Choice Steps uses). */}
+                      {/* Fixed vs. Customizable */}
                       <div className="px-3 pt-3">
                         <div className="inline-flex rounded-md border border-border overflow-hidden">
                           <button
@@ -4002,21 +3592,19 @@ const DealForm = () => {
                       {mode === "fixed" && (
                       <div className="p-3 space-y-2">
                         {/* Header row */}
-                        <div className="grid gap-2 px-3 pb-1" style={{ gridTemplateColumns: ITEM_ROW_GRID }}>
-                          <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Category</span>
-                          <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Menu Item</span>
-                          <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Size / Variant</span>
-                          <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground text-right">Cost</span>
-                          <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground text-right">Selling</span>
-                          <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground text-center">Qty</span>
+                        <div className="grid gap-2 px-3 pb-1 text-xs font-medium text-muted-foreground" style={{ gridTemplateColumns: ITEM_ROW_GRID }}>
+                          <span>Category</span>
+                          <span>Menu Item</span>
+                          <span>Size / Variant</span>
+                          <span className="text-right">Cost</span>
+                          <span className="text-right">Selling</span>
+                          <span className="text-center">Qty</span>
                           <span />
                         </div>
 
                         <div className="space-y-1.5">
                           {rows.map((row, idx) => {
                             const selectedItem = menuItems.find((m) => m.id === row.itemId);
-                            // A row with an item shows that item's real category; only an
-                            // empty row falls back to whatever category was picked to filter.
                             const activeCategoryId = selectedItem?.categoryId ?? row.categoryId;
                             const itemChoices = activeCategoryId
                               ? menuItems.filter((m) => m.categoryId === activeCategoryId)
@@ -4035,7 +3623,7 @@ const DealForm = () => {
                                 className="grid gap-2 items-center px-3 py-2.5 rounded-lg border border-border/60 bg-background hover:bg-muted/20 transition-colors"
                                 style={{ gridTemplateColumns: ITEM_ROW_GRID }}
                               >
-                                {/* Category filter — narrows the item dropdown beside it */}
+                                {/* Category filter */}
                                 <Select
                                   value={activeCategoryId || "all"}
                                   onValueChange={(val) =>
@@ -4055,7 +3643,7 @@ const DealForm = () => {
                                   </SelectContent>
                                 </Select>
 
-                                {/* Item select — only items from the category above */}
+                                {/* Item select */}
                                 <div className="flex items-center gap-2 min-w-0">
                                   <span className="text-[10px] font-mono text-muted-foreground/60 shrink-0 w-4 text-right">
                                     {idx + 1}.
@@ -4083,8 +3671,7 @@ const DealForm = () => {
                                   </Select>
                                 </div>
 
-                                {/* Size — mandatory when the item has any, or the offer
-                                    means "any size" and the server rejects the save. */}
+                                {/* Size */}
                                 <div>
                                   {variants.length > 0 ? (
                                     <Select
@@ -4112,12 +3699,12 @@ const DealForm = () => {
                                   )}
                                 </div>
 
-                                {/* Line cost — scales with Qty (from saved recipe cost) */}
+                                {/* Line cost */}
                                 <span className="text-xs font-mono text-muted-foreground text-right">
                                   {unitCost > 0 ? `Rs. ${(unitCost * row.qty).toLocaleString()}` : "—"}
                                 </span>
 
-                                {/* Line selling price — scales with Qty */}
+                                {/* Line selling price */}
                                 <span
                                   className={cn(
                                     "text-xs font-mono font-semibold text-right",
@@ -4129,7 +3716,7 @@ const DealForm = () => {
                                   {row.itemId ? `Rs. ${(unitPrice * row.qty).toLocaleString()}` : "—"}
                                 </span>
 
-                                {/* Qty stepper — same control as the Fixed Bundle rows */}
+                                {/* Qty stepper */}
                                 <div className="flex items-center justify-center gap-1">
                                   <button
                                     type="button"
@@ -4163,7 +3750,7 @@ const DealForm = () => {
                           })}
                         </div>
 
-                        {/* Footer — add another item to this side */}
+                        {/* Footer */}
                         <div className="flex items-center justify-between px-3 pt-2 border-t border-border/50 mt-1">
                           <span className="text-xs text-muted-foreground">{side.hint}</span>
                           <Button
@@ -4171,7 +3758,7 @@ const DealForm = () => {
                             size="sm"
                             variant="outline"
                             onClick={() => addBogoRow(setRows)}
-                            className="h-7 text-xs gap-1.5"
+                            className="h-7 text-xs gap-1.5 font-semibold"
                           >
                             <Plus className="h-3.5 w-3.5" /> Add Item
                           </Button>
@@ -4197,12 +3784,12 @@ const DealForm = () => {
                                     value={groupLabel(group)}
                                     onChange={(e) => updateGroupLabel(setGroups, group.id, e.target.value)}
                                     placeholder={side.key === "buy" ? "e.g. Choose a Pizza" : "e.g. Choose a Dessert"}
-                                    className="h-8 text-xs font-bold max-w-sm"
+                                    className="h-8 text-xs font-semibold max-w-sm"
                                   />
                                 </div>
                                 <div className="flex items-center gap-3 self-end sm:self-auto shrink-0">
                                   <div className="flex items-center gap-1.5">
-                                    <Label className="text-[11px] text-muted-foreground font-medium whitespace-nowrap">
+                                    <Label className="text-xs text-muted-foreground font-medium whitespace-nowrap">
                                       {side.key === "buy" ? "Customer Buys:" : "Customer Gets:"}
                                     </Label>
                                     <Input
@@ -4237,7 +3824,7 @@ const DealForm = () => {
                                         : { kind: "bogo", side: side.key, groupId: group.id }
                                     )
                                   }
-                                  className="h-7 text-xs gap-1.5"
+                                  className="h-7 text-xs gap-1.5 font-semibold"
                                 >
                                   <ListPlus className="h-3.5 w-3.5" /> Bulk Add From Category
                                 </Button>
@@ -4258,6 +3845,17 @@ const DealForm = () => {
                               )}
 
                               <div className="p-3 space-y-1.5">
+                                {group.choices.length > 0 && (
+                                  <div className="grid gap-2 px-3 pb-1 text-xs font-medium text-muted-foreground" style={{ gridTemplateColumns: ITEM_ROW_GRID_NO_QTY }}>
+                                    <span>Category</span>
+                                    <span>Menu Item</span>
+                                    <span>Size / Variant</span>
+                                    <span className="text-right">Cost</span>
+                                    <span className="text-right">Selling</span>
+                                    <span />
+                                  </div>
+                                )}
+
                                 {group.choices.map((choice, cIdx) => {
                                   const selectedItem = menuItems.find((m) => m.id === choice.itemId);
                                   const variants = selectedItem?.variants || [];
@@ -4328,7 +3926,7 @@ const DealForm = () => {
                             size="sm"
                             variant="outline"
                             onClick={() => addOptionGroup(setGroups)}
-                            className="h-8 text-xs gap-1.5"
+                            className="text-xs gap-1.5 font-semibold"
                           >
                             <Plus className="h-3.5 w-3.5" /> Add Option Group
                           </Button>
@@ -4341,256 +3939,9 @@ const DealForm = () => {
             </Card>
           )}
 
-          {/* SECTION 4: Pricing & Cost Breakdown (Buy X Get Y) — deliberately the
-              same two-row ladder the Fixed Bundle uses: what everything is worth
-              at regular menu price, then what this deal changes. Same card
-              styling and the same labels, so an admin reads one vocabulary
-              across every deal format. The only difference is that a Buy X Get Y
-              price is derived, not typed — the customer pays menu price for what
-              they buy, so there is no deal-price input or channel override. */}
-          {dealType === "buy_x_get_y" && (
-            <Card className="shadow-xs border-border/80 overflow-hidden">
-              <CardHeader className="pb-3 border-b bg-muted/20">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
-                  <div>
-                    <CardTitle className="text-sm font-semibold uppercase tracking-wider text-foreground flex items-center gap-2">
-                      <Sparkles className="h-4 w-4 text-muted-foreground" />
-                      4. Pricing & Cost Breakdown
-                    </CardTitle>
-                    <CardDescription className="text-xs">
-                      What the offer is worth at menu price, and what it earns per redemption
-                    </CardDescription>
-                  </div>
-                  {bogoImpact && (
-                    <Badge variant="outline" className="text-[11px] font-mono self-start sm:self-auto gap-1">
-                      <Calculator className="h-3 w-3 text-muted-foreground" />
-                      Price Set By Items Bought
-                    </Badge>
-                  )}
-                </div>
-              </CardHeader>
-
-              <CardContent className="p-5 space-y-6">
-                {!bogoImpact ? (
-                  <div className="text-center py-10 space-y-2 border-2 border-dashed border-border/60 rounded-xl bg-muted/10">
-                    <div className="w-12 h-12 rounded-full bg-muted/60 flex items-center justify-center mx-auto">
-                      <Gift className="h-5 w-5 text-muted-foreground/50" />
-                    </div>
-                    <p className="text-sm font-semibold text-foreground">Nothing configured yet</p>
-                    <p className="text-xs text-muted-foreground">
-                      Pick what the customer buys and what they get free to see what this offer costs you
-                    </p>
-                  </div>
-                ) : (
-                  <>
-                    {/* ── ROW 1 · AT MENU PRICE (baseline, informational) ── */}
-                    <div className="space-y-2">
-                      <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70">At Regular Menu Price</p>
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-
-                        {/* Total Cost */}
-                        <div className="rounded-xl border border-border/70 bg-muted/25 p-4 flex flex-col justify-between gap-2">
-                          <div className="flex items-center justify-between">
-                            <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                              Total Cost
-                            </span>
-                            {bogoImpact.hasCost ? (
-                              <Badge variant="secondary" className="text-[10px] px-1.5 py-0">Recipe Cost</Badge>
-                            ) : (
-                              <Badge variant="outline" className="text-[10px] text-muted-foreground/60 px-1.5 py-0">No Recipe</Badge>
-                            )}
-                          </div>
-                          <div>
-                            <p className="text-xl font-semibold font-mono text-foreground tracking-tight">
-                              Rs.&nbsp;{Math.round(bogoImpact.totalCost).toLocaleString()}
-                            </p>
-                            <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">
-                              {bogoImpact.hasCost
-                                ? "Raw ingredients & recipe cost"
-                                : "Set recipes in Menu Items for live cost"}
-                            </p>
-                          </div>
-                        </div>
-
-                        {/* Total Selling Price */}
-                        <div className="rounded-xl border border-border/70 bg-muted/25 p-4 flex flex-col justify-between gap-2">
-                          <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                            Total Selling Price
-                          </span>
-                          <div>
-                            <p className="text-xl font-semibold font-mono text-foreground tracking-tight">
-                              Rs.&nbsp;{Math.round(bogoImpact.regularValue).toLocaleString()}
-                            </p>
-                            <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">
-                              Everything they carry out, at menu price
-                            </p>
-                          </div>
-                        </div>
-
-                        {/* Total Profit % at menu price */}
-                        <div className="rounded-xl border border-border/70 bg-muted/25 p-4 flex flex-col justify-between gap-2">
-                          <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                            Total Profit %
-                          </span>
-                          <div>
-                            <p className="text-xl font-semibold font-mono text-foreground tracking-tight">
-                              {bogoImpact.hasCost && bogoImpact.menuMargin != null ? `${bogoImpact.menuMargin}%` : "—"}
-                            </p>
-                            <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">
-                              Margin before any deal discount
-                            </p>
-                          </div>
-                        </div>
-
-                      </div>
-                    </div>
-
-                    {/* ── ROW 2 · THIS DEAL (the decision) ── */}
-                    <div className="space-y-2">
-                      <p className="text-[10px] font-bold uppercase tracking-wider text-primary/80">This Deal</p>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-
-                        {/* Deal Price — derived from what they buy, not typed */}
-                        <div className="rounded-xl border border-primary bg-primary/[0.06] p-4 flex flex-col justify-between gap-2">
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="text-[10px] font-bold uppercase tracking-wider text-primary">
-                              Deal Price
-                            </span>
-                            {bogoImpact.savingsPercent > 0 && (
-                              <span className="text-[10px] font-bold text-primary px-1.5 py-0.5 rounded bg-primary/10 shrink-0">
-                                {bogoImpact.savingsPercent}% OFF
-                              </span>
-                            )}
-                          </div>
-                          <div>
-                            <p className="text-xl font-semibold font-mono text-primary tracking-tight">
-                              Rs.&nbsp;{Math.round(bogoImpact.dealPrice).toLocaleString()}
-                            </p>
-                            <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">
-                              {bogoImpact.savings > 0
-                                ? `Customer saves Rs. ${Math.round(bogoImpact.savings).toLocaleString()}`
-                                : "Customer pays at POS & Web"}
-                            </p>
-                          </div>
-                        </div>
-
-                        {/* Deal Profit % */}
-                        <div className={cn(
-                          "rounded-xl border p-4 flex flex-col justify-between gap-2 transition-all",
-                          !bogoImpact.hasCost
-                            ? "border-border/70 bg-muted/25"
-                            : bogoImpact.profit > 0
-                            ? "border-border/70 bg-muted/25"
-                            : "border-destructive/40 bg-destructive/[0.04]"
-                        )}>
-                          <span className={cn(
-                            "text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5",
-                            !bogoImpact.hasCost
-                              ? "text-muted-foreground"
-                              : bogoImpact.profit > 0
-                              ? "text-foreground"
-                              : "text-destructive"
-                          )}>
-                            Deal Profit %
-                          </span>
-                          <div>
-                            {bogoImpact.hasCost && bogoImpact.margin != null ? (
-                              <>
-                                <div className="flex items-baseline gap-1.5">
-                                  <p className={cn(
-                                    "text-xl font-semibold font-mono tracking-tight",
-                                    bogoImpact.profit > 0
-                                      ? "text-foreground"
-                                      : "text-destructive"
-                                  )}>
-                                    {bogoImpact.margin}%
-                                  </p>
-                                  <span className="text-xs font-mono font-bold text-muted-foreground">
-                                    (Rs.&nbsp;{Math.round(bogoImpact.profit).toLocaleString()})
-                                  </span>
-                                </div>
-                                <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">
-                                  Profit over ingredient cost
-                                </p>
-                              </>
-                            ) : (
-                              <>
-                                <p className="text-xl font-semibold font-mono text-muted-foreground/40">—</p>
-                                <p className="text-[10px] text-muted-foreground mt-0.5">
-                                  Add recipes for profit %
-                                </p>
-                              </>
-                            )}
-                          </div>
-                        </div>
-
-                      </div>
-                    </div>
-
-                    {/* What is actually being given away — the one number a Fixed
-                        Bundle has no equivalent for, so it is spelled out rather
-                        than left implicit in "Customer saves". */}
-                    <div className="rounded-xl border border-border/70 bg-muted/20 px-4 py-3 space-y-1.5">
-                      <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Given Away Free</p>
-                      {bogoImpact.give.map((r, i) => (
-                        <div key={i} className="flex items-center justify-between gap-3 text-xs">
-                          <span className="text-foreground/90 truncate">
-                            {r.qty} × {r.item.name}
-                            {r.label ? ` (${r.label})` : ""}
-                          </span>
-                          <span className="font-mono text-muted-foreground shrink-0">
-                            Rs.&nbsp;{Math.round(r.price).toLocaleString()}
-                            {r.cost > 0 && (
-                              <span className="text-muted-foreground/60">
-                                {" "}· costs you Rs.&nbsp;{Math.round(r.cost).toLocaleString()}
-                              </span>
-                            )}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-
-                    {/* Loss warning */}
-                    {bogoImpact.hasCost && bogoImpact.profit <= 0 && (
-                      <div className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2.5">
-                        <AlertTriangle className="h-4 w-4 text-destructive shrink-0 mt-0.5" />
-                        <div className="space-y-0.5">
-                          <p className="text-xs font-bold text-destructive">
-                            This offer loses Rs. {Math.abs(Math.round(bogoImpact.profit)).toLocaleString()} every time it is redeemed
-                          </p>
-                          <p className="text-[11px] text-muted-foreground">
-                            Raise what the customer has to buy, or give away something cheaper.
-                          </p>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Unpinned sizes make these figures a worst case, not a fact */}
-                    {bogoImpact.variantSpread && (
-                      <p className="text-[11px] text-muted-foreground leading-relaxed">
-                        A size is still unpinned, so any size qualifies — these figures assume the worst case: bought at the cheapest size, taken free at the priciest. Pick a size on every row for the real numbers.
-                      </p>
-                    )}
-                  </>
-                )}
-
-                {/* Buy X Get Y has no deal price to override per channel — what it
-                    can vary is how much of the free item the offer actually covers
-                    there, so 100% is the default and a lower figure charges the
-                    difference on that channel. */}
-                {renderChannelPercentOverrides(
-                  "Channel Free-Item Overrides",
-                  100,
-                  "Leave empty to give the free item away in full (100% covered)"
-                )}
-              </CardContent>
-            </Card>
-          )}
-
           {/* SECTION 3: Promo Code / Minimum Spend Configuration — neither format
               has items/bundle, so there is no row table and no cost/selling
-              ladder (section 4 doesn't apply — this jumps straight to 5, same
-              as every other format's fixed final numbering). */}
+              ladder. */}
           {(dealType === "promo_code" || dealType === "min_spend") && (
             <Card className="shadow-xs border-border/80 overflow-hidden">
               <CardHeader className="pb-3 border-b bg-muted/20">
@@ -4598,9 +3949,6 @@ const DealForm = () => {
                   <Ticket className="h-4 w-4 text-muted-foreground" />
                   3. {dealType === "promo_code" ? "Promo Code" : "Minimum Spend"} Configuration
                 </CardTitle>
-                <CardDescription className="text-xs">
-                  A discount off the whole order — not tied to any specific item
-                </CardDescription>
               </CardHeader>
               <CardContent className="p-5 space-y-5">
                 {dealType === "promo_code" ? (
@@ -4685,8 +4033,7 @@ const DealForm = () => {
                   </div>
                 </div>
 
-                {/* Live preview — this format has no cost/selling ladder to show
-                    instead, since it isn't tied to specific items. */}
+                {/* Live preview */}
                 <div className="rounded-lg border border-primary bg-primary/[0.06] p-3">
                   <p className="text-xs font-semibold text-foreground">
                     {(() => {
@@ -4708,15 +4055,10 @@ const DealForm = () => {
               any/all branches; every other role is locked to their own. */}
           <Card className="shadow-xs border-border/80 overflow-hidden">
             <CardHeader className="pb-3 border-b bg-muted/20">
-              <CardTitle className="text-sm font-semibold uppercase tracking-wider text-foreground flex items-center gap-2">
+              <CardTitle className="text-sm font-semibold text-foreground flex items-center gap-2">
                 <MapPin className="h-4 w-4 text-muted-foreground" />
                 Outlet Availability
               </CardTitle>
-              <CardDescription className="text-xs">
-                {isSuperAdmin
-                  ? "Which branch(es) can offer this deal"
-                  : "Deals you publish only apply at your own branch"}
-              </CardDescription>
             </CardHeader>
             <CardContent className="p-5">
               <DealOutletPicker
@@ -4729,23 +4071,19 @@ const DealForm = () => {
             </CardContent>
           </Card>
 
-          {/* Validity & Schedule — always the last section, so its number follows
-              whatever the chosen deal type rendered above it. */}
+          {/* SECTION 4: Availability & Rules */}
           <Card className="shadow-xs border-border/80 overflow-hidden">
             <CardHeader className="pb-3 border-b bg-muted/20">
-              <CardTitle className="text-sm font-semibold uppercase tracking-wider text-foreground flex items-center gap-2">
-                <Calendar className="h-4 w-4 text-muted-foreground" />
-                {validitySectionNumber}. Availability & Schedule
+              <CardTitle className="text-sm font-semibold text-foreground">
+                {validitySectionNumber}. Availability & Rules
               </CardTitle>
-              <CardDescription className="text-xs">
-                When this deal can be ordered — the channels it's sold on, the date range, which days of the week, and an optional happy-hour window
-              </CardDescription>
             </CardHeader>
+
             <CardContent className="p-5 space-y-5">
 
               {/* ── CHANNELS ── */}
               <div className="space-y-2">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70">Channels</p>
+                <p className="text-xs font-semibold text-foreground">Channels</p>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   {[
                     { label: "Dine In", Icon: Utensils, checked: availableDineIn, set: setAvailableDineIn },
@@ -4754,13 +4092,13 @@ const DealForm = () => {
                   ].map((ch) => (
                     <div
                       key={ch.label}
-                      className="flex items-center justify-between gap-3 rounded-xl border border-border/70 bg-muted/20 px-3 py-2.5"
+                      className="flex items-center gap-3 rounded-xl border border-border/70 bg-card px-3.5 py-3"
                     >
-                      <div className="flex items-center gap-2 min-w-0">
+                      <Switch id={`channel-${ch.label}`} checked={ch.checked} onCheckedChange={ch.set} />
+                      <Label htmlFor={`channel-${ch.label}`} className="flex items-center gap-2 cursor-pointer select-none">
                         <ch.Icon className="h-4 w-4 text-muted-foreground shrink-0" />
-                        <p className="text-xs font-bold text-foreground truncate">{ch.label}</p>
-                      </div>
-                      <Switch checked={ch.checked} onCheckedChange={ch.set} />
+                        <span className="text-xs font-semibold text-foreground">{ch.label}</span>
+                      </Label>
                     </div>
                   ))}
                 </div>
@@ -4768,9 +4106,9 @@ const DealForm = () => {
 
               {/* ── DATE RANGE ── */}
               <div className="space-y-2">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70">Date Range</p>
+                <p className="text-xs font-semibold text-foreground">Date Range</p>
                 <div className="rounded-xl border border-border/70 bg-card p-4 shadow-xs">
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
                     <div className="space-y-1.5">
                       <Label className="text-xs font-medium text-muted-foreground">Valid From</Label>
                       <DatePicker
@@ -4792,27 +4130,24 @@ const DealForm = () => {
                       />
                     </div>
 
-                    <div className="flex items-center justify-between gap-3 rounded-xl border border-border/70 bg-muted/20 px-3 py-2.5 self-end">
-                      <div className="min-w-0">
-                        <p className="text-xs font-bold text-foreground truncate">Never Expires</p>
-                        <p className="text-[11px] text-muted-foreground truncate">Runs until switched off</p>
-                      </div>
-                      <Switch checked={alwaysActive} onCheckedChange={setAlwaysActive} />
+                    <div className="flex items-center gap-3 rounded-xl border border-border/70 bg-muted/20 px-3.5 py-2.5 h-10">
+                      <Switch id="never-expires-switch" checked={alwaysActive} onCheckedChange={setAlwaysActive} />
+                      <Label htmlFor="never-expires-switch" className="cursor-pointer select-none">
+                        <p className="text-xs font-semibold text-foreground leading-tight">Never Expires</p>
+                        <p className="text-[11px] text-muted-foreground leading-none mt-0.5">Runs indefinitely</p>
+                      </Label>
                     </div>
                   </div>
                 </div>
               </div>
 
-              {/* ── DAYS OF THE WEEK ──
-                  A deal that only runs at the weekend is a weekend deal, not a
-                  deal someone has to remember to switch off on Monday. All seven
-                  ticked is the default and saves as "no restriction". */}
+              {/* ── DAYS OF THE WEEK ── */}
               <div className="space-y-2">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70">Days Of The Week</p>
+                <div className="flex items-center gap-2.5">
+                  <p className="text-xs font-semibold text-foreground">Days Of The Week</p>
                   <span className={cn(
-                    "text-[10px] font-bold",
-                    activeDays.length === 0 ? "text-destructive" : "text-muted-foreground"
+                    "text-xs font-medium px-2 py-0.5 rounded-full border",
+                    activeDays.length === 0 ? "text-destructive border-destructive/30 bg-destructive/10" : "text-muted-foreground border-border bg-muted/30"
                   )}>
                     {activeDays.length === 0
                       ? "Pick at least one day"
@@ -4837,7 +4172,7 @@ const DealForm = () => {
                           }
                           aria-pressed={selected}
                           className={cn(
-                            "h-9 min-w-[56px] px-3 rounded-lg text-xs font-bold border transition-all",
+                            "h-9 min-w-[56px] px-3 rounded-lg text-xs font-semibold border transition-all",
                             selected
                               ? "bg-primary text-primary-foreground border-primary shadow-xs"
                               : "bg-muted/30 border-border text-muted-foreground hover:border-primary/40 hover:bg-muted/60"
@@ -4850,7 +4185,7 @@ const DealForm = () => {
                   </div>
 
                   <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-border/50">
-                    <span className="text-[10px] text-muted-foreground mr-1 pt-1">Quick set</span>
+                    <span className="text-xs text-muted-foreground mr-1 pt-1">Quick set</span>
                     {DAY_PRESETS.map((preset) => {
                       const active =
                         activeDays.length === preset.days.length &&
@@ -4861,7 +4196,7 @@ const DealForm = () => {
                           type="button"
                           onClick={() => setActiveDays([...preset.days])}
                           className={cn(
-                            "text-[11px] font-bold px-2.5 py-1.5 rounded-md transition-all mt-1",
+                            "text-xs font-semibold px-2.5 py-1.5 rounded-md transition-all mt-1",
                             active
                               ? "bg-primary text-primary-foreground shadow-xs"
                               : "bg-muted/40 hover:bg-muted text-muted-foreground"
@@ -4877,21 +4212,22 @@ const DealForm = () => {
 
               {/* ── TIME SLOT ── */}
               <div className="space-y-2">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70">Time Slot</p>
+                <p className="text-xs font-semibold text-foreground">Time Slot</p>
                 <div className="rounded-xl border border-border/70 bg-card p-4 space-y-3 shadow-xs">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="text-xs font-bold text-foreground">
-                        Happy Hour / Midnight Deal
-                      </p>
-                      <p className="text-[11px] text-muted-foreground">
-                        Limit the deal to set hours (e.g. 4PM–7PM, or 11PM–3AM)
-                      </p>
-                    </div>
+                  <div className="flex items-center gap-3">
                     <Switch
+                      id="happy-hour-switch"
                       checked={hasTimeRestriction}
                       onCheckedChange={setHasTimeRestriction}
                     />
+                    <Label htmlFor="happy-hour-switch" className="cursor-pointer select-none">
+                      <p className="text-xs font-semibold text-foreground">
+                        Happy Hour / Time-Specific Deal
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Limit the deal to set hours (e.g. 4PM–7PM, or 11PM–3AM)
+                      </p>
+                    </Label>
                   </div>
 
                   {hasTimeRestriction && (
@@ -4906,10 +4242,8 @@ const DealForm = () => {
                           <TimePicker value={endTime} onChange={setEndTime} />
                         </div>
                       </div>
-                      {/* A window that runs past midnight belongs to the day it
-                          opened on, so the day chips above still read correctly. */}
                       {startTime > endTime && (
-                        <p className="text-[11px] text-muted-foreground">
+                        <p className="text-xs text-muted-foreground">
                           Runs past midnight — a {activeDaysLabel(activeDays)} deal stays live into the small hours of the next morning.
                         </p>
                       )}
@@ -4918,10 +4252,9 @@ const DealForm = () => {
                 </div>
               </div>
 
-              {/* One line saying exactly when this deal is orderable, so the
-                  three blocks above don't have to be re-read to find out. */}
+              {/* Orderable summary pill */}
               <div className="rounded-xl border border-primary/40 bg-primary/[0.04] px-4 py-3 flex flex-wrap items-center gap-x-2 gap-y-1">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-primary">Orderable
+                <span className="text-xs font-semibold text-primary">Orderable
                 </span>
                 <span className="text-xs font-mono text-foreground/90">
                   {[
@@ -4940,7 +4273,6 @@ const DealForm = () => {
 
             </CardContent>
           </Card>
-      </div>
 
       <AlertDialog
         open={confirmLeave}
