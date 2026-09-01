@@ -415,16 +415,18 @@ plus a body explaining _why_ the change was made when that is not obvious.
   cart column already occupies that slot in the ordering layout, so hiding the sidebar hands its
   width to the item grid instead of splitting the screen three ways, matching POS.tsx's two-column
   cart+grid layout.
-- **Order Monitor's column is `order.status` verbatim; the item badges are derived — they can
+- **Order Monitor's column is `order.status` verbatim; the item badges are per-dish — they can
   disagree.** `OrderStatusBoard.tsx` buckets an order into Pending/Preparing/Ready purely by
-  `order.status`, but each item's green/amber badge comes from `getItemKitchenStatus` walking
-  `order.kitchenProgress` / `order.kitchenDealProgress`. Every item badge can read "Ready" while the
-  card still sits in Preparing, because the backend only flips `order.status` to `READY` once
-  **every** active kitchen assigned to each item's category has marked it ready — so two kitchens
-  sharing a category strands the order (see backend CLAUDE.md). `getItemKitchenStatus` and
-  KitchenPanel.tsx's `getKitchenItemStatus` both fall back to `order.status` for a dish with no
-  progress row, so an untouched sibling deal dish visually inherits "preparing" once any dish moves
-  the order forward.
+  `order.status`, but each dish's green/amber badge comes from `getItemKitchenStatus`, which reads
+  **that dish's own ticket** in `order.kitchenDealProgress` by its `dealItemKey` (a legacy line
+  with no key falls back to the shared `order.kitchenProgress` row). Every badge can read "Ready"
+  while the card still sits in Preparing, because the backend only flips `order.status` to `READY`
+  once **every** active kitchen assigned to each dish's category has marked that dish ready — so
+  two kitchens sharing a category strands the order (see backend CLAUDE.md). **A dish with no
+  ticket yet reads `pending`** — `getItemKitchenStatus` and KitchenPanel.tsx's
+  `getKitchenItemStatus` do NOT inherit `preparing` from a sibling dish (that fallback was removed
+  2026-09-01 with per-dish tickets); they only fall through to `order.status` when it's terminally
+  `ready`/`completed`, or for a dish whose category no active kitchen owns.
 - **`normalizeApiOrder` (POS.tsx) must spread the raw item before overriding fields, never whitelist
   them** — it once explicitly listed only `{id, name, price, qty, discount, modifiers, cookingTime,
   notes, status}`, silently dropping `menuItemId`/`variantId`/`dealId`/`dealName`/`dealLineId` off

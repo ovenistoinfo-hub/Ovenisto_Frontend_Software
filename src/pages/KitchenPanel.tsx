@@ -4,10 +4,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { Progress } from "@/components/ui/progress";
 import {
-  ArrowLeft, Bell, Clock, Flame, ChefHat, CheckCircle2, Timer,
-  Utensils, Loader2, Hourglass, Gift, Check, Sparkles
+  ArrowLeft, Bell, Clock, Flame, ChefHat, CheckCircle2,
+  Utensils, Loader2, Hourglass, Gift, Check
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -30,7 +29,7 @@ export interface KitchenItemEntry {
   dealItemKey?: string | null;
   status: "pending" | "preparing" | "ready";
   preparingAt: Date | null;
-  actionKey: string; // "shared" or dealItemKey
+  actionKey: string; // this dish's own dealItemKey; "shared" only for legacy pre-key orders
 }
 
 export interface UnifiedKitchenOrder {
@@ -64,14 +63,21 @@ const formatDuration = (totalMinutes: number) => {
 };
 
 /**
- * Resolves what THIS kitchen's status is for a specific dish or shared ticket.
+ * Resolves THIS kitchen's status for one specific dish, by that dish's own
+ * per-item ticket (`itemKey` = the line's dealItemKey). A legacy line with no
+ * key falls back to the order's one shared per-kitchen ticket.
+ *
+ * When no ticket exists yet, the dish is `pending` — it does NOT inherit
+ * `preparing` from a sibling dish that was started. The only inherited state is
+ * the order's terminal one: a fully-legacy order with no per-dish rows, or an
+ * order the backend auto-marked ready because none of its items route to a
+ * kitchen.
  */
-const getKitchenItemStatus = (order: OrderRecord, kitchenId: string, dealItemKey: string | null): "pending" | "preparing" | "ready" => {
-  const progress = dealItemKey
-    ? order.kitchenDealProgress?.find((p) => p.kitchenId === kitchenId && p.dealItemKey === dealItemKey)
+const getKitchenItemStatus = (order: OrderRecord, kitchenId: string, itemKey: string | null): "pending" | "preparing" | "ready" => {
+  const progress = itemKey
+    ? order.kitchenDealProgress?.find((p) => p.kitchenId === kitchenId && p.dealItemKey === itemKey)
     : order.kitchenProgress?.find((p) => p.kitchenId === kitchenId);
   if (progress) return progress.status as "pending" | "preparing" | "ready";
-  if (order.status === "preparing") return "preparing";
   if (order.status === "ready" || order.status === "completed") return "ready";
   return "pending";
 };
@@ -123,16 +129,18 @@ const KitchenPanel = () => {
 
       for (let i = 0; i < relevantItems.length; i++) {
         const rawItem = relevantItems[i];
-        const isDealItem = Boolean(rawItem.dealId && rawItem.dealItemKey);
-        const actionKey = isDealItem ? (rawItem.dealItemKey as string) : "shared";
+        // Every dish now carries its own per-item ticket key (deal or plain).
+        // "shared" is only reached by a legacy line whose row predates keys.
+        const itemKey = (rawItem.dealItemKey as string) || null;
+        const actionKey = itemKey ?? "shared";
         const itemTicketId = `${o.id}::${actionKey}`;
 
-        const status = getKitchenItemStatus(o, kitch.id, isDealItem ? (rawItem.dealItemKey as string) : null);
+        const status = getKitchenItemStatus(o, kitch.id, itemKey);
 
         if (status === "preparing" && !preparingAtMap.current[itemTicketId]) {
           // If already preparing in backend, estimate start
-          const itemProg = isDealItem
-            ? o.kitchenDealProgress?.find(p => p.kitchenId === kitch.id && p.dealItemKey === rawItem.dealItemKey)
+          const itemProg = itemKey
+            ? o.kitchenDealProgress?.find(p => p.kitchenId === kitch.id && p.dealItemKey === itemKey)
             : o.kitchenProgress?.find(p => p.kitchenId === kitch.id);
           preparingAtMap.current[itemTicketId] = itemProg?.updatedAt ? new Date(itemProg.updatedAt) : new Date(o.createdAt || Date.now());
         }
@@ -280,7 +288,8 @@ const KitchenPanel = () => {
 
   // ── Action Handlers ──
 
-  /** Advance a single item or deal dish from new->preparing or preparing->ready */
+  /** Advance ONE dish (by its own actionKey) from pending->preparing or
+   *  preparing->ready. Only that dish moves — its siblings are untouched. */
   const handleItemAdvance = async (orderId: string, actionKey: string, currentStatus: "pending" | "preparing" | "ready") => {
     if (!kitchen || currentStatus === "ready") return;
     const nextApiStatus = currentStatus === "pending" ? "preparing" : "ready";
@@ -296,53 +305,30 @@ const KitchenPanel = () => {
         preparingAtMap.current[lockKey] = new Date();
       }
 
-      // Optimistically update item status in local state
+      // Optimistically flip ONLY the touched dish, in place — keep the exact
+      // grouping buildKitchenOrders produced (dealLineId / cleaned names), so
+      // the card doesn't reshuffle on the first press.
       setKitchenOrders(prev => {
         return prev.map(order => {
           if (order.id !== orderId) return order;
-
-          const updatedItems = order.allItems.map(item => {
-            if (item.actionKey === actionKey) {
-              return {
-                ...item,
-                status: nextApiStatus as "pending" | "preparing" | "ready",
-                preparingAt: nextApiStatus === "preparing" ? (preparingAtMap.current[lockKey] || new Date()) : item.preparingAt,
-              };
-            }
-            return item;
-          });
-
-          // Rebuild dealGroups and plainItems
-          const updatedDealGroups: Record<string, { dealName: string; items: KitchenItemEntry[] }> = {};
-          const updatedPlainItems: KitchenItemEntry[] = [];
-
-          for (const item of updatedItems) {
-            let dealKey: string | null = null;
-            let dealName: string | null = null;
-            if (item.dealItemKey) {
-              dealKey = `deal-${item.dealName || "Deal"}`;
-              dealName = item.dealName || "Deal";
-            }
-            if (dealKey && dealName) {
-              if (!updatedDealGroups[dealKey]) updatedDealGroups[dealKey] = { dealName, items: [] };
-              updatedDealGroups[dealKey].items.push(item);
-            } else {
-              updatedPlainItems.push(item);
-            }
+          const patch = (it: KitchenItemEntry): KitchenItemEntry =>
+            it.actionKey === actionKey
+              ? {
+                  ...it,
+                  status: nextApiStatus as "pending" | "preparing" | "ready",
+                  preparingAt: nextApiStatus === "preparing" ? (preparingAtMap.current[lockKey] || new Date()) : it.preparingAt,
+                }
+              : it;
+          const allItems = order.allItems.map(patch);
+          const dealGroups: Record<string, { dealName: string; items: KitchenItemEntry[] }> = {};
+          for (const [k, g] of Object.entries(order.dealGroups)) {
+            dealGroups[k] = { dealName: g.dealName, items: g.items.map(patch) };
           }
-
-          const hasPreparing = updatedItems.some(i => i.status === "preparing");
-          const overallStatus: KitchenOrderStatus = hasPreparing || updatedItems.some(i => i.status === "ready")
+          const plainItems = order.plainItems.map(patch);
+          const overallStatus: KitchenOrderStatus = allItems.some(i => i.status === "preparing" || i.status === "ready")
             ? "preparing"
             : "new";
-
-          return {
-            ...order,
-            allItems: updatedItems,
-            dealGroups: updatedDealGroups,
-            plainItems: updatedPlainItems,
-            status: overallStatus,
-          };
+          return { ...order, allItems, dealGroups, plainItems, status: overallStatus };
         }).filter(order => !order.allItems.every(i => i.status === "ready")); // remove once all items are ready
       });
 
@@ -362,19 +348,25 @@ const KitchenPanel = () => {
 
     try {
       markMine();
-      // Group distinct action keys that need transition
-      const targetItems = order.allItems.filter(i => targetStatus === "preparing" ? i.status === "pending" : i.status !== "ready");
+      // "Start All Cooking" starts every pending dish; "Mark All Ready" readies
+      // only what's actually cooking — a still-pending dish is never swept to
+      // ready (it was never cooked).
+      const targetItems = order.allItems.filter(i => targetStatus === "preparing" ? i.status === "pending" : i.status === "preparing");
       const distinctActionKeys = Array.from(new Set(targetItems.map(i => i.actionKey)));
+      if (distinctActionKeys.length === 0) {
+        toast.info("Nothing to update");
+        return;
+      }
 
-      await Promise.all(
-        distinctActionKeys.map(key =>
-          orderService.updateOrderKitchenStatus(
-            order.id,
-            kitchen.id,
-            targetStatus,
-            key === "shared" ? undefined : key
-          )
-        )
+      // ONE request for every dish — the backend upserts them all in a single
+      // transaction and emits a single order:updated (vs. one round-trip,
+      // transaction and socket broadcast per dish).
+      await orderService.updateOrderKitchenStatus(
+        order.id,
+        kitchen.id,
+        targetStatus,
+        undefined,
+        distinctActionKeys.map(k => (k === "shared" ? "" : k)).filter(Boolean),
       );
 
       if (targetStatus === "preparing") {
@@ -383,40 +375,30 @@ const KitchenPanel = () => {
         });
       }
 
+      const touched = new Set(distinctActionKeys);
       setKitchenOrders(prev => {
         return prev.map(o => {
           if (o.id !== order.id) return o;
-          const updatedItems = o.allItems.map(item => ({
-            ...item,
-            status: targetStatus as "pending" | "preparing" | "ready",
-            preparingAt: targetStatus === "preparing" ? (preparingAtMap.current[`${o.id}::${item.actionKey}`] || new Date()) : item.preparingAt,
-          }));
-
-          const updatedDealGroups: Record<string, { dealName: string; items: KitchenItemEntry[] }> = {};
-          const updatedPlainItems: KitchenItemEntry[] = [];
-
-          for (const item of updatedItems) {
-            let dealKey: string | null = null;
-            let dealName: string | null = null;
-            if (item.dealItemKey) {
-              dealKey = `deal-${item.dealName || "Deal"}`;
-              dealName = item.dealName || "Deal";
-            }
-            if (dealKey && dealName) {
-              if (!updatedDealGroups[dealKey]) updatedDealGroups[dealKey] = { dealName, items: [] };
-              updatedDealGroups[dealKey].items.push(item);
-            } else {
-              updatedPlainItems.push(item);
-            }
+          const patch = (it: KitchenItemEntry): KitchenItemEntry =>
+            touched.has(it.actionKey)
+              ? {
+                  ...it,
+                  status: targetStatus as "pending" | "preparing" | "ready",
+                  preparingAt: targetStatus === "preparing" ? (preparingAtMap.current[`${o.id}::${it.actionKey}`] || new Date()) : it.preparingAt,
+                }
+              : it;
+          const allItems = o.allItems.map(patch);
+          const dealGroups: Record<string, { dealName: string; items: KitchenItemEntry[] }> = {};
+          for (const [k, g] of Object.entries(o.dealGroups)) {
+            dealGroups[k] = { dealName: g.dealName, items: g.items.map(patch) };
           }
-
-          return {
-            ...o,
-            allItems: updatedItems,
-            dealGroups: updatedDealGroups,
-            plainItems: updatedPlainItems,
-            status: targetStatus === "ready" ? "ready" : "preparing",
-          };
+          const plainItems = o.plainItems.map(patch);
+          const status: KitchenOrderStatus = allItems.every(i => i.status === "ready")
+            ? "ready"
+            : allItems.some(i => i.status === "preparing" || i.status === "ready")
+              ? "preparing"
+              : "new";
+          return { ...o, allItems, dealGroups, plainItems, status };
         }).filter(o => !o.allItems.every(i => i.status === "ready"));
       });
 

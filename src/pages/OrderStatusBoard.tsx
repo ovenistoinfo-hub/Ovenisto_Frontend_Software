@@ -157,6 +157,14 @@ const OrderStatusBoard = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { foodMenuItems, settings, currency } = useData();
+  // name → menu item, built once per menu change. The board's per-item status
+  // and cook-time helpers run for every item of every card on the 1-second
+  // clock tick; a linear `foodMenuItems.find` there was O(items × menu).
+  const menuItemByName = useMemo(() => {
+    const m = new Map<string, any>();
+    for (const fi of foodMenuItems as any[]) if (!m.has(fi.name)) m.set(fi.name, fi);
+    return m;
+  }, [foodMenuItems]);
   const [allOrders, setAllOrders] = useState<any[]>([]);
   const [activeStatus, setActiveStatus] = useState<FilterStatus>("active");
   const [viewMode, setViewMode] = useState<"columns" | "grid">("columns");
@@ -321,32 +329,31 @@ const OrderStatusBoard = () => {
   const getItemKitchenStatus = useCallback((item: any, order: any): "pending" | "preparing" | "ready" => {
     if (order.status === "ready" || order.status === "completed") return "ready";
 
-    const categoryName = item.categoryName || foodMenuItems.find((fi: any) => fi.name === item.name)?.category?.name || (item.category as any)?.name;
+    const categoryName = item.categoryName || menuItemByName.get(item.name)?.category?.name || (item.category as any)?.name;
 
+    // No category, or no active kitchen owns it → this dish isn't kitchen-routed,
+    // so it just tracks the order's own state.
     if (!categoryName) {
       return order.status === "preparing" ? "preparing" : "pending";
     }
-
     const assignedKitchen = kitchens.find(k => (k.status === "active" || !k.status) && k.assignedCategories?.includes(categoryName));
+    if (!assignedKitchen) return order.status === "preparing" ? "preparing" : "pending";
 
-    // If no kitchen is specifically assigned to this category, return order's overall status!
-    if (!assignedKitchen) return order.status === "preparing" ? "preparing" : order.status === "ready" ? "ready" : "pending";
-
-    // A deal dish tracks its own ready state separately from the order's shared
-    // kitchen ticket (see KitchenPanel) — prefer that when this item carries one.
-    if (item.dealId && item.dealItemKey && order.kitchenDealProgress && Array.isArray(order.kitchenDealProgress)) {
-      const dealProg = order.kitchenDealProgress.find(
-        (p: any) => p.kitchenId === assignedKitchen.id && p.dealItemKey === item.dealItemKey
-      );
-      if (dealProg) return dealProg.status as "pending" | "preparing" | "ready";
-    } else if (order.kitchenProgress && Array.isArray(order.kitchenProgress)) {
-      const prog = order.kitchenProgress.find((p: any) => p.kitchenId === assignedKitchen.id);
-      if (prog) return prog.status as "pending" | "preparing" | "ready";
-    }
-
-    if (order.status === "preparing") return "preparing";
+    // This dish IS kitchen-routed: its status is its OWN per-item ticket's
+    // status, by its per-line key (deal or plain); a legacy line with no key
+    // uses the shared per-kitchen ticket. No ticket yet → pending. It does NOT
+    // inherit "preparing" from a sibling dish that was started.
+    const itemKey = item.dealItemKey || null;
+    const prog = itemKey
+      ? (Array.isArray(order.kitchenDealProgress) ? order.kitchenDealProgress : []).find(
+          (p: any) => p.kitchenId === assignedKitchen.id && p.dealItemKey === itemKey,
+        )
+      : (Array.isArray(order.kitchenProgress) ? order.kitchenProgress : []).find(
+          (p: any) => p.kitchenId === assignedKitchen.id,
+        );
+    if (prog) return prog.status as "pending" | "preparing" | "ready";
     return "pending";
-  }, [kitchens, foodMenuItems]);
+  }, [kitchens, menuItemByName]);
 
   const getElapsed = (order: any) => {
     try {
@@ -360,8 +367,7 @@ const OrderStatusBoard = () => {
   const getCookingInfo = (order: any) => {
     const maxCookTime = Math.max(...order.items.map((i: any) => {
       if (i.cookingTime) return i.cookingTime;
-      const mi = foodMenuItems.find((fi: any) => fi.name === i.name);
-      return (mi as any)?.cookingTime || 0;
+      return menuItemByName.get(i.name)?.cookingTime || 0;
     }), 0);
     if (maxCookTime <= 0) return null;
     try {
@@ -374,17 +380,21 @@ const OrderStatusBoard = () => {
   };
 
   const getItemCookingInfo = useCallback((item: any, order: any) => {
-    const mi = foodMenuItems.find((fi: any) => fi.name === item.name);
+    const mi = menuItemByName.get(item.name);
     const cookTime = item.cookingTime || (mi as any)?.cookingTime || 0;
     try {
       const categoryName = item.categoryName || mi?.category?.name || (item.category as any)?.name;
       const assignedKitchen = categoryName ? kitchens.find(k => (k.status === "active" || !k.status) && k.assignedCategories?.includes(categoryName)) : null;
-      // Same deal-dish-first preference as getItemKitchenStatus above.
-      const prog = item.dealId && item.dealItemKey && assignedKitchen && order.kitchenDealProgress && Array.isArray(order.kitchenDealProgress)
-        ? order.kitchenDealProgress.find((p: any) => p.kitchenId === assignedKitchen.id && p.dealItemKey === item.dealItemKey)
-        : (assignedKitchen && order.kitchenProgress && Array.isArray(order.kitchenProgress))
-          ? order.kitchenProgress.find((p: any) => p.kitchenId === assignedKitchen.id)
-          : null;
+      // This dish's own per-item ticket (deal or plain key); legacy null-key
+      // lines fall back to the shared per-kitchen ticket.
+      const itemKey = item.dealItemKey || null;
+      const prog = !assignedKitchen
+        ? null
+        : itemKey && Array.isArray(order.kitchenDealProgress)
+          ? order.kitchenDealProgress.find((p: any) => p.kitchenId === assignedKitchen.id && p.dealItemKey === itemKey)
+          : Array.isArray(order.kitchenProgress)
+            ? order.kitchenProgress.find((p: any) => p.kitchenId === assignedKitchen.id)
+            : null;
 
       // Start elapsed calculation ONLY from when THIS kitchen accepted the order (prog.updatedAt).
       // Fallback to order.updatedAt (if order is preparing) or current time (so 0m elapsed if no timestamp exists).
@@ -402,7 +412,7 @@ const OrderStatusBoard = () => {
     } catch {
       return { cookTime: 0, elapsedMin: 0, remainingMin: 0, isOverdue: false, overdueMin: 0 };
     }
-  }, [foodMenuItems, kitchens, time]);
+  }, [menuItemByName, kitchens, time]);
 
   const handleStatusUpdate = async (orderId: string, newStatus: string) => {
     const targetOrder = allOrders.find(o => o.id === orderId);
@@ -479,9 +489,10 @@ const OrderStatusBoard = () => {
           item.name.toLowerCase().includes("deal") ||
           item.name.toLowerCase().includes("offer") ||
           item.name.toLowerCase().includes("combo") ||
-          item.name.toLowerCase().includes("feast") ||
-          (item.discount && item.discount > 0))
+          item.name.toLowerCase().includes("feast"))
       ) {
+        // A plain line-item discount does NOT make something a deal — only the
+        // dealId/dealName fields or an explicit deal marker in the name do.
         const parts = item.name.split(":");
         dealName = parts[0].trim();
         dealKey = `deal-prefix-${dealName}`;

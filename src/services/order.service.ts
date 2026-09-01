@@ -25,9 +25,11 @@ export interface OrderItemRecord {
   dealId?: string | null;
   dealName?: string | null;
   dealLineId?: string | null;
-  /** Stable per-dish key within one deal redemption — lets the kitchen
-   *  accept/prepare/ready this specific dish independently of the rest of
-   *  the deal. Null for a plain (non-deal) item. */
+  /** Stable per-dish kitchen-ticket key, server-computed — lets the kitchen
+   *  accept/prepare/ready this specific dish independently of every other dish
+   *  on the order. Deal dishes: `${dealLineId}#${n}`; plain dishes:
+   *  `p:${menuItemId|name}:${variantId|-}#${n}`. Null only on a line written
+   *  before per-dish keys existed. */
   dealItemKey?: string | null;
 }
 
@@ -84,11 +86,13 @@ export interface OrderRecord {
   createdAt: string;
   updatedAt?: string;
   items: OrderItemRecord[];
-  kitchenProgress?: { kitchenId: string; status: string }[];
-  /** Per-dish kitchen status for deal redemptions — a sibling to
-   *  kitchenProgress above, which still covers every non-deal item as one
-   *  shared ticket per kitchen. */
-  kitchenDealProgress?: { kitchenId: string; dealItemKey: string; status: string }[];
+  /** Legacy shared per-kitchen ticket — only orders whose items predate
+   *  per-dish keys still use it (see kitchenDealProgress). */
+  kitchenProgress?: { kitchenId: string; status: string; updatedAt?: string }[];
+  /** Per-dish kitchen status, one row per (kitchen, dealItemKey). Every item —
+   *  deal or plain — now has its own dealItemKey and its own row here, so each
+   *  dish is accepted / prepared / readied independently. */
+  kitchenDealProgress?: { kitchenId: string; dealItemKey: string; status: string; updatedAt?: string }[];
 }
 
 export interface KitchenRecord {
@@ -203,11 +207,22 @@ export const orderService = {
     return res.data;
   },
 
-  /** dealItemKey targets one specific dish from a deal redemption's own
-   *  ticket instead of the order's shared per-kitchen ticket — omit it to
-   *  advance the shared ticket exactly as before. */
-  async updateOrderKitchenStatus(id: string, kitchenId: string, status: string, dealItemKey?: string): Promise<OrderRecord> {
-    const res = await api.put<{ success: boolean; data: OrderRecord }>(`/orders/${id}/kitchen-status`, { kitchenId, status, dealItemKey });
+  /** Advance a kitchen's progress on an order. `dealItemKey` targets one dish's
+   *  own ticket; `dealItemKeys` targets several in a SINGLE request/transaction
+   *  ("Start All Cooking" / "Mark All Ready") instead of one call apiece. Omit
+   *  both only for a legacy order whose items predate per-dish keys — that
+   *  advances the shared per-kitchen ticket. */
+  async updateOrderKitchenStatus(
+    id: string,
+    kitchenId: string,
+    status: string,
+    dealItemKey?: string,
+    dealItemKeys?: string[],
+  ): Promise<OrderRecord> {
+    const res = await api.put<{ success: boolean; data: OrderRecord }>(
+      `/orders/${id}/kitchen-status`,
+      { kitchenId, status, dealItemKey, dealItemKeys },
+    );
     return res.data;
   },
 

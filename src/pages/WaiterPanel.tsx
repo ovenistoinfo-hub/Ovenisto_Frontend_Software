@@ -1933,7 +1933,9 @@ const WaiterPanel = () => {
       } else if (item.dealName) {
         dealKey = `deal-${item.dealName}-${item.orderNum || item.orderNumber || ""}`;
         dealName = item.dealName;
-      } else if (item.name && item.name.includes(":") && (item.name.includes("(Free)") || item.name.includes("(Discounted)") || item.name.toLowerCase().includes("deal") || (item.discount && item.discount > 0))) {
+      } else if (item.name && item.name.includes(":") && (item.name.includes("(Free)") || item.name.includes("(Discounted)") || item.name.toLowerCase().includes("deal"))) {
+        // A plain per-line discount does NOT make an item a deal — only
+        // dealId/dealName or an explicit deal marker in the name does.
         const parts = item.name.split(":");
         dealName = parts[0].trim();
         dealKey = `deal-prefix-${dealName}-${item.orderNum || item.orderNumber || ""}`;
