@@ -5,7 +5,10 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Progress } from "@/components/ui/progress";
-import { ArrowLeft, Bell, Clock, Flame, ChefHat, CheckCircle2, Timer, Utensils, Loader2, Hourglass, Gift } from "lucide-react";
+import {
+  ArrowLeft, Bell, Clock, Flame, ChefHat, CheckCircle2, Timer,
+  Utensils, Loader2, Hourglass, Gift, Check, Sparkles
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { orderService, type OrderRecord, type KitchenRecord } from "@/services/order.service";
@@ -18,24 +21,30 @@ import { useAuth } from "@/contexts/AuthContext";
 
 type KitchenOrderStatus = "new" | "preparing" | "ready" | "completed";
 
-interface KitchenOrder {
-  /** Ticket id — the order's own id for the shared (non-deal) ticket, or
-   *  `${orderId}::${dealItemKey}` for one specific deal dish's own ticket. */
+export interface KitchenItemEntry {
+  key: string;
+  name: string;
+  qty: number;
+  cookingTime: number;
+  dealName?: string | null;
+  dealItemKey?: string | null;
+  status: "pending" | "preparing" | "ready";
+  preparingAt: Date | null;
+  actionKey: string; // "shared" or dealItemKey
+}
+
+export interface UnifiedKitchenOrder {
   id: string;
-  /** The real order id, for API calls — see `id` above. */
-  orderId: string;
   orderNumber: string;
   type: string;
-  items: { name: string; qty: number; cookingTime?: number; dealName?: string | null }[];
+  tableNumber?: number | null;
+  customer?: string | null;
   placedAt: Date;
-  /** Set when "Accept Order" is clicked — null until then */
-  preparingAt: Date | null;
+  dealGroups: Record<string, { dealName: string; items: KitchenItemEntry[] }>;
+  plainItems: KitchenItemEntry[];
+  allItems: KitchenItemEntry[];
   status: KitchenOrderStatus;
-  maxCookingTime: number;
   hasPendingCancellationRequest?: boolean;
-  /** Set when this ticket is one specific dish from a deal redemption rather
-   *  than the order's shared ticket — see `id` above. */
-  dealItemKey?: string | null;
 }
 
 const typeColors = ORDER_TYPE_COLORS;
@@ -47,28 +56,15 @@ const statusConfig: Record<KitchenOrderStatus, { border: string; bg: string; ico
   completed: { border: "border-l-muted-foreground/30", bg: "bg-muted/30 opacity-60", icon: CheckCircle2, iconColor: "text-muted-foreground", label: "Completed" },
 };
 
-const mapApiStatusToKitchen = (status: string): KitchenOrderStatus => {
-  if (status === "preparing") return "preparing";
-  if (status === "ready") return "ready";
-  if (status === "completed") return "completed";
-  return "new";
-};
-
-const mapKitchenStatusToApi = (status: KitchenOrderStatus): string => {
-  if (status === "new") return "preparing";
-  if (status === "preparing") return "ready";
-  if (status === "ready") return "completed";
-  return "completed";
+const formatDuration = (totalMinutes: number) => {
+  if (totalMinutes < 60) return `${totalMinutes}m`;
+  const h = Math.floor(totalMinutes / 60);
+  const m = totalMinutes % 60;
+  return `${h}h ${m}m`;
 };
 
 /**
- * Resolves what THIS kitchen's own status is for an order — from its
- * OrderKitchenProgress row, not the order's shared status field. With a
- * dealItemKey, resolves one specific deal dish's own OrderKitchenDealProgress
- * row instead, so that dish can be accepted/prepared/readied independently of
- * the rest of the order. Falls back to the order's own status for orders (or
- * dishes) with no progress row yet, so historic orders and freshly-placed
- * deals don't break.
+ * Resolves what THIS kitchen's status is for a specific dish or shared ticket.
  */
 const getKitchenItemStatus = (order: OrderRecord, kitchenId: string, dealItemKey: string | null): "pending" | "preparing" | "ready" => {
   const progress = dealItemKey
@@ -86,147 +82,180 @@ const KitchenPanel = () => {
   const { markMine, isLikelyOwnEcho } = useSelfMutationGuard();
 
   const [kitchen, setKitchen] = useState<KitchenRecord | null>(null);
-  const [kitchenOrders, setKitchenOrders] = useState<KitchenOrder[]>([]);
+  const [kitchenOrders, setKitchenOrders] = useState<UnifiedKitchenOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [clock, setClock] = useState(new Date());
   const [statusFilter, setStatusFilter] = useState<"all" | KitchenOrderStatus>("all");
-  const [updatingOrderId, setUpdatingOrderId] = useState<string | null>(null);
+  const [updatingKeys, setUpdatingKeys] = useState<Record<string, boolean>>({});
 
-  // placedAt: when the order was received (display only)
+  // placedAt: when the order was received
   const placedAtMap = useRef<Record<string, Date>>({});
-  // preparingAt: when "Accept Order" was clicked (timer starts here)
+  // preparingAt: when item was accepted (timer starts here)
   const preparingAtMap = useRef<Record<string, Date>>({});
 
   const loadSeq = useRef(0);
 
-  /** Builds one ticket for a slice of an order's items — either the shared
-   *  (non-deal) slice (dealItemKey null) or one specific deal dish
-   *  (dealItemKey set). Returns null once that ticket's own portion is ready
-   *  (hidden from the board) or if it has nothing relevant to this kitchen. */
-  const buildTicket = useCallback((
-    o: OrderRecord,
-    kitch: KitchenRecord,
-    items: OrderRecord["items"],
-    dealItemKey: string | null,
-  ): KitchenOrder | null => {
-    const relevantItems = items.map((item) => ({
-      name: item.name,
-      qty: item.qty,
-      cookingTime: item.cookingTime ?? 0,
-      dealName: item.dealName ?? null,
-    }));
-    if (!relevantItems.length) return null;
-
-    const kitchenItemStatus = getKitchenItemStatus(o, kitch.id, dealItemKey);
-    // Hide once THIS ticket's own portion is ready — another ticket on the same
-    // order (a different dish, or another kitchen) finishing first or being
-    // slower no longer affects this one's view.
-    if (kitchenItemStatus === "ready") return null;
-
-    const maxCookingTime = Math.max(...relevantItems.map(i => i.cookingTime || 0), 0);
-    const ticketId = dealItemKey ? `${o.id}::${dealItemKey}` : o.id;
-
-    // placedAt: first time we see this order — shared across every ticket it produces.
-    if (!placedAtMap.current[o.id]) {
-      placedAtMap.current[o.id] = new Date(o.createdAt || Date.now());
-    }
-
-    // preparingAt: if already "preparing" when loaded and not yet tracked, use updatedAt as best estimate
-    if (kitchenItemStatus === "preparing" && !preparingAtMap.current[ticketId]) {
-      preparingAtMap.current[ticketId] = new Date((o as any).updatedAt || o.createdAt || Date.now());
-    }
-
-    return {
-      id: ticketId,
-      orderId: o.id,
-      orderNumber: o.orderNumber,
-      type: o.type,
-      items: relevantItems,
-      placedAt: placedAtMap.current[o.id],
-      preparingAt: kitchenItemStatus === "preparing" ? preparingAtMap.current[ticketId] ?? placedAtMap.current[o.id] : null,
-      status: mapApiStatusToKitchen(kitchenItemStatus),
-      maxCookingTime,
-      hasPendingCancellationRequest: !!o.hasPendingCancellationRequest,
-      dealItemKey,
-    };
-  }, []);
-
-  const buildKitchenOrders = useCallback((orders: OrderRecord[], kitch: KitchenRecord) => {
+  const buildKitchenOrders = useCallback((orders: OrderRecord[], kitch: KitchenRecord): UnifiedKitchenOrder[] => {
     const cats = kitch.assignedCategories ?? [];
     const hasFilter = cats.length > 0;
-
-    const tickets: KitchenOrder[] = [];
+    const unifiedList: UnifiedKitchenOrder[] = [];
 
     for (const o of orders) {
       if (o.status === "cancelled") continue;
-      // Exclude self-orders that are still pending AND not yet accepted by a waiter —
-      // once accepted (acceptedById set) it behaves exactly like any other pending order.
+      // Exclude self-orders that are still pending AND not yet accepted by a waiter
       if (o.type === "Self Order" && o.status === "pending" && !o.acceptedById) continue;
 
       // Only consider items whose category matches this kitchen's assigned categories
       const relevantItems = o.items.filter((item) => {
-        if (!hasFilter) return true; // no categories assigned → show all
+        if (!hasFilter) return true;
         return item.categoryName ? cats.includes(item.categoryName) : false;
       });
       if (!relevantItems.length) continue;
 
-      // A deal dish gets its own ticket (its own Accept/Prepare/Ready), so a
-      // multi-dish deal doesn't force the kitchen to move every dish together.
-      // Every non-deal item still shares one ticket, unchanged.
-      const sharedItems = relevantItems.filter((item) => !(item.dealId && item.dealItemKey));
-      const dealItems = relevantItems.filter((item) => item.dealId && item.dealItemKey);
-
-      const sharedTicket = buildTicket(o, kitch, sharedItems, null);
-      if (sharedTicket) tickets.push(sharedTicket);
-
-      for (const item of dealItems) {
-        const ticket = buildTicket(o, kitch, [item], item.dealItemKey as string);
-        if (ticket) tickets.push(ticket);
+      // Track placedAt date
+      if (!placedAtMap.current[o.id]) {
+        placedAtMap.current[o.id] = new Date(o.createdAt || Date.now());
       }
+
+      const allItems: KitchenItemEntry[] = [];
+      const dealGroups: Record<string, { dealName: string; items: KitchenItemEntry[] }> = {};
+      const plainItems: KitchenItemEntry[] = [];
+
+      for (let i = 0; i < relevantItems.length; i++) {
+        const rawItem = relevantItems[i];
+        const isDealItem = Boolean(rawItem.dealId && rawItem.dealItemKey);
+        const actionKey = isDealItem ? (rawItem.dealItemKey as string) : "shared";
+        const itemTicketId = `${o.id}::${actionKey}`;
+
+        const status = getKitchenItemStatus(o, kitch.id, isDealItem ? (rawItem.dealItemKey as string) : null);
+
+        if (status === "preparing" && !preparingAtMap.current[itemTicketId]) {
+          // If already preparing in backend, estimate start
+          const itemProg = isDealItem
+            ? o.kitchenDealProgress?.find(p => p.kitchenId === kitch.id && p.dealItemKey === rawItem.dealItemKey)
+            : o.kitchenProgress?.find(p => p.kitchenId === kitch.id);
+          preparingAtMap.current[itemTicketId] = itemProg?.updatedAt ? new Date(itemProg.updatedAt) : new Date(o.createdAt || Date.now());
+        }
+
+        const entry: KitchenItemEntry = {
+          key: `${o.id}_${rawItem.name}_${i}`,
+          name: rawItem.name,
+          qty: rawItem.qty,
+          cookingTime: rawItem.cookingTime ?? 0,
+          dealName: rawItem.dealName ?? null,
+          dealItemKey: rawItem.dealItemKey ?? null,
+          status,
+          preparingAt: status === "preparing" ? (preparingAtMap.current[itemTicketId] ?? placedAtMap.current[o.id]) : null,
+          actionKey,
+        };
+
+        allItems.push(entry);
+
+        // Group into Deal or Plain
+        let dealKey: string | null = null;
+        let dealName: string | null = null;
+
+        if (rawItem.dealLineId) {
+          dealKey = rawItem.dealLineId;
+          dealName = rawItem.dealName || "Deal";
+        } else if (rawItem.dealName) {
+          dealKey = `deal-${rawItem.dealName}`;
+          dealName = rawItem.dealName;
+        } else if (
+          rawItem.name &&
+          rawItem.name.includes(":") &&
+          (rawItem.name.includes("(Free)") ||
+            rawItem.name.includes("(Discounted)") ||
+            rawItem.name.toLowerCase().includes("deal") ||
+            rawItem.name.toLowerCase().includes("offer") ||
+            rawItem.name.toLowerCase().includes("combo") ||
+            rawItem.name.toLowerCase().includes("feast"))
+        ) {
+          const parts = rawItem.name.split(":");
+          dealName = parts[0].trim();
+          dealKey = `deal-prefix-${dealName}`;
+        }
+
+        if (dealKey && dealName) {
+          if (!dealGroups[dealKey]) {
+            dealGroups[dealKey] = { dealName, items: [] };
+          }
+          const cleanName =
+            rawItem.name && rawItem.name.startsWith(`${dealName}:`)
+              ? rawItem.name.replace(`${dealName}:`, "").trim()
+              : rawItem.name;
+          dealGroups[dealKey].items.push({ ...entry, name: cleanName });
+        } else {
+          plainItems.push(entry);
+        }
+      }
+
+      // If all items for this kitchen are already "ready", hide the order from active KDS
+      const allReady = allItems.every((item) => item.status === "ready");
+      if (allReady) continue;
+
+      // Determine overall card status
+      const hasPreparing = allItems.some((item) => item.status === "preparing");
+      const overallStatus: KitchenOrderStatus = hasPreparing || allItems.some(i => i.status === "ready")
+        ? "preparing"
+        : "new";
+
+      unifiedList.push({
+        id: o.id,
+        orderNumber: o.orderNumber,
+        type: o.type,
+        tableNumber: o.tableNumber,
+        customer: (o as any).customerName || (o as any).customer,
+        placedAt: placedAtMap.current[o.id] || new Date(),
+        dealGroups,
+        plainItems,
+        allItems,
+        status: overallStatus,
+        hasPendingCancellationRequest: Boolean(o.hasPendingCancellationRequest),
+      });
     }
 
-    return tickets;
-  }, [buildTicket]);
+    return unifiedList;
+  }, []);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (isSilent = false) => {
     const seq = ++loadSeq.current;
     try {
       const [kitchens, { data: orders }] = await Promise.all([
         orderService.getKitchens(),
         orderService.getOrders({ limit: 100 }),
       ]);
-      if (seq !== loadSeq.current) return; // a newer load() started since this one fired — discard stale response
+      if (seq !== loadSeq.current) return;
 
       const kitch = id ? kitchens.find(k => k.id === id) : kitchens[0];
-      if (!kitch) { setLoading(false); return; }
+      if (!kitch) {
+        setLoading(false);
+        return;
+      }
 
       setKitchen(kitch);
       setKitchenOrders(buildKitchenOrders(orders, kitch));
     } catch {
-      if (seq === loadSeq.current) toast.error("Failed to load kitchen data");
+      if (seq === loadSeq.current && !isSilent) {
+        toast.error("Failed to load kitchen data");
+      }
     } finally {
       if (seq === loadSeq.current) setLoading(false);
     }
   }, [id, buildKitchenOrders]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(false); }, [load]);
 
-  // Clock — ticks every second for live countdown
+  // Live second clock for accurate countdowns
   useEffect(() => {
     const interval = setInterval(() => setClock(new Date()), 1000);
     return () => clearInterval(interval);
   }, []);
 
-  // KDS updates on real-time order push (instant), plus a 60s visibility-gated
-  // safety poll. A wall-mounted KDS left on overnight now stops querying when the
-  // tab is hidden, letting the Neon compute scale to zero.
-  useOrderEvents(load);
-  useVisiblePolling(load, 60000, !!kitchen);
+  useOrderEvents(() => load(true));
+  useVisiblePolling(() => load(true), 60000, !!kitchen);
 
-  // Friendly toast for orders pushed from elsewhere (POS, waiter, self-order) — a new order is
-  // the single most useful KDS alert. Suppressed for a few seconds after this kitchen's own
-  // status-advance action (see markMine() above), and filtered to this outlet since order
-  // events aren't outlet-room-scoped server-side (unlike table/reservation).
+  // Sound & Toast for newly pushed orders
   useEffect(() => {
     const socket = getSocket();
     const onOrderCreated = (payload: OrderRecord) => {
@@ -249,46 +278,153 @@ const KitchenPanel = () => {
     };
   }, [isLikelyOwnEcho, user?.outletId]);
 
-  /** Returns elapsed seconds since preparingAt started */
-  const getElapsedSeconds = (preparingAt: Date) =>
-    Math.floor((clock.getTime() - preparingAt.getTime()) / 1000);
+  // ── Action Handlers ──
 
-  const advanceStatus = async (ticketId: string) => {
-    const order = kitchenOrders.find(o => o.id === ticketId);
-    if (!order || !kitchen) return;
+  /** Advance a single item or deal dish from new->preparing or preparing->ready */
+  const handleItemAdvance = async (orderId: string, actionKey: string, currentStatus: "pending" | "preparing" | "ready") => {
+    if (!kitchen || currentStatus === "ready") return;
+    const nextApiStatus = currentStatus === "pending" ? "preparing" : "ready";
+    const lockKey = `${orderId}::${actionKey}`;
+    const dealItemKey = actionKey === "shared" ? undefined : actionKey;
 
-    const nextStatusMap: Record<KitchenOrderStatus, KitchenOrderStatus> = {
-      new: "preparing",
-      preparing: "ready",
-      ready: "ready",
-      completed: "completed",
-    };
-    const newKitchenStatus = nextStatusMap[order.status];
-    const newApiStatus = mapKitchenStatusToApi(order.status);
+    setUpdatingKeys(prev => ({ ...prev, [lockKey]: true }));
+    try {
+      markMine();
+      await orderService.updateOrderKitchenStatus(orderId, kitchen.id, nextApiStatus, dealItemKey);
 
-    setUpdatingOrderId(ticketId);
+      if (nextApiStatus === "preparing") {
+        preparingAtMap.current[lockKey] = new Date();
+      }
+
+      // Optimistically update item status in local state
+      setKitchenOrders(prev => {
+        return prev.map(order => {
+          if (order.id !== orderId) return order;
+
+          const updatedItems = order.allItems.map(item => {
+            if (item.actionKey === actionKey) {
+              return {
+                ...item,
+                status: nextApiStatus as "pending" | "preparing" | "ready",
+                preparingAt: nextApiStatus === "preparing" ? (preparingAtMap.current[lockKey] || new Date()) : item.preparingAt,
+              };
+            }
+            return item;
+          });
+
+          // Rebuild dealGroups and plainItems
+          const updatedDealGroups: Record<string, { dealName: string; items: KitchenItemEntry[] }> = {};
+          const updatedPlainItems: KitchenItemEntry[] = [];
+
+          for (const item of updatedItems) {
+            let dealKey: string | null = null;
+            let dealName: string | null = null;
+            if (item.dealItemKey) {
+              dealKey = `deal-${item.dealName || "Deal"}`;
+              dealName = item.dealName || "Deal";
+            }
+            if (dealKey && dealName) {
+              if (!updatedDealGroups[dealKey]) updatedDealGroups[dealKey] = { dealName, items: [] };
+              updatedDealGroups[dealKey].items.push(item);
+            } else {
+              updatedPlainItems.push(item);
+            }
+          }
+
+          const hasPreparing = updatedItems.some(i => i.status === "preparing");
+          const overallStatus: KitchenOrderStatus = hasPreparing || updatedItems.some(i => i.status === "ready")
+            ? "preparing"
+            : "new";
+
+          return {
+            ...order,
+            allItems: updatedItems,
+            dealGroups: updatedDealGroups,
+            plainItems: updatedPlainItems,
+            status: overallStatus,
+          };
+        }).filter(order => !order.allItems.every(i => i.status === "ready")); // remove once all items are ready
+      });
+
+      toast.success(`Dish updated to ${nextApiStatus}`);
+    } catch {
+      toast.error("Failed to update dish status");
+    } finally {
+      setUpdatingKeys(prev => ({ ...prev, [lockKey]: false }));
+    }
+  };
+
+  /** Batch advance all active items in the order (Start All Cooking / Mark All Ready) */
+  const handleBatchAdvance = async (order: UnifiedKitchenOrder, targetStatus: "preparing" | "ready") => {
+    if (!kitchen) return;
+    const lockKey = `order_batch_${order.id}`;
+    setUpdatingKeys(prev => ({ ...prev, [lockKey]: true }));
 
     try {
       markMine();
-      await orderService.updateOrderKitchenStatus(order.orderId, kitchen.id, newApiStatus, order.dealItemKey ?? undefined);
+      // Group distinct action keys that need transition
+      const targetItems = order.allItems.filter(i => targetStatus === "preparing" ? i.status === "pending" : i.status !== "ready");
+      const distinctActionKeys = Array.from(new Set(targetItems.map(i => i.actionKey)));
 
-      // Record preparation start timestamp upon successful backend confirmation
-      if (order.status === "new" && !preparingAtMap.current[ticketId]) {
-        preparingAtMap.current[ticketId] = new Date();
+      await Promise.all(
+        distinctActionKeys.map(key =>
+          orderService.updateOrderKitchenStatus(
+            order.id,
+            kitchen.id,
+            targetStatus,
+            key === "shared" ? undefined : key
+          )
+        )
+      );
+
+      if (targetStatus === "preparing") {
+        distinctActionKeys.forEach(k => {
+          preparingAtMap.current[`${order.id}::${k}`] = new Date();
+        });
       }
 
-      // Synchronized update: update card status & fire toast together after backend success
-      setKitchenOrders(prev => prev.map(o =>
-        o.id === ticketId
-          ? { ...o, status: newKitchenStatus, preparingAt: order.status === "new" ? (preparingAtMap.current[ticketId] || new Date()) : o.preparingAt }
-          : o
-      ));
+      setKitchenOrders(prev => {
+        return prev.map(o => {
+          if (o.id !== order.id) return o;
+          const updatedItems = o.allItems.map(item => ({
+            ...item,
+            status: targetStatus as "pending" | "preparing" | "ready",
+            preparingAt: targetStatus === "preparing" ? (preparingAtMap.current[`${o.id}::${item.actionKey}`] || new Date()) : item.preparingAt,
+          }));
 
-      toast.success(`Order ${order.orderNumber} moved to ${newKitchenStatus}`);
+          const updatedDealGroups: Record<string, { dealName: string; items: KitchenItemEntry[] }> = {};
+          const updatedPlainItems: KitchenItemEntry[] = [];
+
+          for (const item of updatedItems) {
+            let dealKey: string | null = null;
+            let dealName: string | null = null;
+            if (item.dealItemKey) {
+              dealKey = `deal-${item.dealName || "Deal"}`;
+              dealName = item.dealName || "Deal";
+            }
+            if (dealKey && dealName) {
+              if (!updatedDealGroups[dealKey]) updatedDealGroups[dealKey] = { dealName, items: [] };
+              updatedDealGroups[dealKey].items.push(item);
+            } else {
+              updatedPlainItems.push(item);
+            }
+          }
+
+          return {
+            ...o,
+            allItems: updatedItems,
+            dealGroups: updatedDealGroups,
+            plainItems: updatedPlainItems,
+            status: targetStatus === "ready" ? "ready" : "preparing",
+          };
+        }).filter(o => !o.allItems.every(i => i.status === "ready"));
+      });
+
+      toast.success(targetStatus === "preparing" ? `Order #${order.orderNumber} started cooking` : `Order #${order.orderNumber} marked ready!`);
     } catch {
-      toast.error("Failed to update order status");
+      toast.error("Failed to update order");
     } finally {
-      setUpdatingOrderId(null);
+      setUpdatingKeys(prev => ({ ...prev, [lockKey]: false }));
     }
   };
 
@@ -299,36 +435,32 @@ const KitchenPanel = () => {
     .filter((o) => statusFilter === "all" || o.status === statusFilter)
     .sort((a, b) => a.placedAt.getTime() - b.placedAt.getTime());
 
-  const btnLabel: Record<KitchenOrderStatus, string> = { new: "Accept Order", preparing: "Mark Ready", ready: "Complete", completed: "Done" };
-  const btnColors: Record<KitchenOrderStatus, string> = {
-    new: "bg-warning hover:bg-warning/90 text-warning-foreground shadow-md",
-    preparing: "gradient-primary text-primary-foreground shadow-md ring-2 ring-accent/50 ring-offset-2",
-    ready: "bg-success hover:bg-success/90 text-success-foreground shadow-md",
-    completed: "bg-muted text-muted-foreground",
-  };
-
-  if (loading) return (
-    <div className="fixed inset-0 z-50 bg-background flex items-center justify-center">
-      <Loader2 className="h-8 w-8 animate-spin text-primary" />
-    </div>
-  );
-
-  if (!kitchen) return (
-    <div className="fixed inset-0 z-50 bg-background flex items-center justify-center">
-      <div className="text-center">
-        <ChefHat className="h-16 w-16 text-muted-foreground/30 mx-auto mb-4" />
-        <p className="text-lg font-semibold">Kitchen not found</p>
-        <Button asChild className="mt-4"><Link to="/kitchens">Back to Kitchens</Link></Button>
+  if (loading) {
+    return (
+      <div className="fixed inset-0 z-50 bg-background flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
-    </div>
-  );
+    );
+  }
+
+  if (!kitchen) {
+    return (
+      <div className="fixed inset-0 z-50 bg-background flex items-center justify-center">
+        <div className="text-center">
+          <ChefHat className="h-16 w-16 text-muted-foreground/30 mx-auto mb-4" />
+          <p className="text-lg font-semibold">Kitchen not found</p>
+          <Button asChild className="mt-4"><Link to="/kitchens">Back to Kitchens</Link></Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 z-50 bg-background flex flex-col">
-      {/* Header */}
+      {/* ── Header ── */}
       <div className="h-16 bg-card border-b-2 border-primary/15 flex items-center justify-between px-5 shrink-0 shadow-sm">
         <div className="flex items-center gap-4">
-          <Button variant="ghost" size="sm" className="rounded-lg hover:bg-primary/10" asChild>
+          <Button variant="ghost" size="sm" className="rounded-lg hover:bg-primary/10 cursor-pointer" asChild>
             <Link to="/kitchens"><ArrowLeft className="h-4 w-4 mr-1.5" />Back</Link>
           </Button>
           <Separator orientation="vertical" className="h-8" />
@@ -338,7 +470,7 @@ const KitchenPanel = () => {
             </div>
             <div>
               <h1 className="text-lg font-bold tracking-tight text-foreground">{kitchen.name}</h1>
-              <p className="text-xs text-muted-foreground">Kitchen Display</p>
+              <p className="text-xs text-muted-foreground">Kitchen Display Console</p>
             </div>
           </div>
         </div>
@@ -353,11 +485,11 @@ const KitchenPanel = () => {
                 size="sm"
                 onClick={() => setStatusFilter(s)}
                 className={cn(
-                  "text-xs capitalize rounded-lg h-8 px-3 transition-all",
+                  "text-xs capitalize rounded-lg h-8 px-3 transition-all cursor-pointer",
                   statusFilter === s && "gradient-primary text-primary-foreground shadow-sm"
                 )}
               >
-                {s === "all" ? "All" : s}
+                {s === "all" ? "All Active" : s === "new" ? "New" : "Preparing"}
               </Button>
             ))}
           </div>
@@ -394,7 +526,7 @@ const KitchenPanel = () => {
         </div>
       </div>
 
-      {/* Orders Grid */}
+      {/* ── Orders Grid ── */}
       <div className="flex-1 overflow-y-auto p-5">
         {displayed.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
@@ -405,172 +537,258 @@ const KitchenPanel = () => {
             <p className="text-sm text-muted-foreground">Orders will appear here when placed</p>
           </div>
         ) : (
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4.5">
             {displayed.map((order) => {
               const cfg = statusConfig[order.status];
               const StatusIcon = cfg.icon;
-              const cookTime = order.maxCookingTime || 10;
 
-              // Timer: only active once preparation starts
-              const isPreparing = order.status === "preparing" && order.preparingAt !== null;
-              const elapsedSec = isPreparing ? getElapsedSeconds(order.preparingAt!) : 0;
-              const elapsedMin = Math.floor(elapsedSec / 60);
-              const remainingSec = Math.max(0, cookTime * 60 - elapsedSec);
-              const remainingMin = Math.floor(remainingSec / 60);
-              const remainingSecPart = remainingSec % 60;
-              const isOverdue = isPreparing && elapsedSec > cookTime * 60;
-              const progress = isPreparing ? Math.min(100, (elapsedSec / (cookTime * 60)) * 100) : 0;
-
-              // Waiting time for new orders (informational only)
-              const waitingSec = order.status === "new"
-                ? Math.floor((clock.getTime() - order.placedAt.getTime()) / 1000)
-                : 0;
-              const waitingMin = Math.floor(waitingSec / 60);
+              const waitingMin = Math.floor(Math.max(0, (clock.getTime() - order.placedAt.getTime()) / 60000));
+              const hasPendingItems = order.allItems.some(i => i.status === "pending");
+              const hasPreparingItems = order.allItems.some(i => i.status === "preparing");
+              const isBatchUpdating = updatingKeys[`order_batch_${order.id}`];
 
               return (
                 <Card
                   key={order.id}
                   className={cn(
-                    "transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5 border-l-4 rounded-xl overflow-hidden group",
+                    "transition-all duration-200 hover:shadow-lg border-l-4 rounded-xl overflow-hidden group flex flex-col justify-between bg-card",
                     cfg.border, cfg.bg,
-                    order.status === "preparing" && "animate-pulse"
+                    order.status === "preparing" && "border-warning/80"
                   )}
                 >
-                  <CardContent className="p-0">
-                    {/* Card Header */}
-                    <div className="px-4 pt-4 pb-3 flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <div className={cn("h-8 w-8 rounded-lg flex items-center justify-center",
-                          `bg-${order.status === "new" ? "info" : order.status === "preparing" ? "warning" : order.status === "ready" ? "success" : "muted"}/10`)}>
-                          <StatusIcon className={cn("h-4 w-4", cfg.iconColor)} />
-                        </div>
-                        <span className="text-lg font-bold tracking-tight text-foreground">{order.orderNumber}</span>
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        {order.hasPendingCancellationRequest && (
-                          <Badge className="bg-amber-500/20 text-amber-700 dark:text-amber-300 border-amber-500/40 text-[10px] font-bold px-2 py-0.5 flex items-center gap-1">
-                            <Clock className="h-3 w-3 text-amber-500" />
-                            Cancel Pending
-                          </Badge>
-                        )}
-                        <Badge variant="secondary" className={cn("text-[10px] font-semibold rounded-full px-2.5 border", (typeColors as any)[order.type] ?? "")}>
-                          {order.type}
-                        </Badge>
-                      </div>
-                    </div>
-
-                    {/* Timer Row */}
-                    <div className="mx-4 mb-2 space-y-1.5">
-                      {order.status === "new" ? (
-                        /* Waiting state — no countdown, just elapsed wait time */
-                        <div className="flex items-center justify-between text-sm px-2.5 py-1 rounded-lg bg-info/5 text-info">
-                          <div className="flex items-center gap-1.5">
-                            <Hourglass className="h-3.5 w-3.5" />
-                            <span className="font-medium text-xs">Waiting {waitingMin}m</span>
-                          </div>
-                          <span className="text-[10px] font-semibold opacity-70">Not started</span>
-                        </div>
-                      ) : order.status === "preparing" && order.preparingAt ? (
-                        /* Active countdown from moment of acceptance */
-                        <>
+                  <CardContent className="p-0 flex flex-col h-full justify-between">
+                    <div>
+                      {/* ── Top Header ── */}
+                      <div className="px-4 pt-3.5 pb-2.5 flex items-center justify-between border-b border-border/50 bg-muted/20">
+                        <div className="flex items-center gap-2">
                           <div className={cn(
-                            "flex items-center justify-between text-sm px-2.5 py-1 rounded-lg",
-                            isOverdue ? "bg-destructive/10 text-destructive font-bold" : "bg-muted/50 text-muted-foreground"
+                            "h-7 w-7 rounded-lg flex items-center justify-center",
+                            order.status === "new" ? "bg-info/15 text-info" : "bg-warning/15 text-warning"
                           )}>
-                            <div className="flex items-center gap-1.5">
-                              <Timer className="h-3.5 w-3.5" />
-                              <span className="font-medium">{elapsedMin}m {elapsedSec % 60}s</span>
-                            </div>
-                            <span className={cn("text-xs font-bold tabular-nums", isOverdue ? "text-destructive" : remainingMin <= 1 ? "text-warning" : "text-muted-foreground")}>
-                              {isOverdue
-                                ? `+${elapsedMin - cookTime}m over`
-                                : `${remainingMin}:${String(remainingSecPart).padStart(2, "0")} left`}
-                            </span>
+                            <StatusIcon className="h-3.5 w-3.5" />
                           </div>
-                          {cookTime > 0 && (
-                            <Progress
-                              value={progress}
-                              className={cn(
-                                "h-1.5 mx-0.5",
-                                isOverdue && "[&>div]:bg-destructive",
-                                !isOverdue && progress > 75 && "[&>div]:bg-warning"
-                              )}
-                            />
+                          <span className="text-base font-extrabold tracking-tight text-foreground">{order.orderNumber}</span>
+                          {order.tableNumber && (
+                            <Badge className="text-[10px] font-extrabold px-1.5 py-0.5 bg-rose-500 text-white rounded-md">
+                              T-{order.tableNumber}
+                            </Badge>
                           )}
-                        </>
-                      ) : null}
-                    </div>
+                        </div>
 
-                    {/* Items List — each dish is its own line even when several
-                        came from one deal, since this board may only be
-                        showing this kitchen's own category slice of that
-                        deal (its other dish could be on a different
-                        kitchen's board entirely). The deal name is its own
-                        badge rather than baked into the dish name, so it
-                        still reads correctly however this kitchen's items
-                        get filtered. */}
-                    <div className="px-4 pb-3 space-y-2 min-h-[70px]">
-                      {order.items.map((item, idx) => {
-                        const dealPrefix = item.dealName ? `${item.dealName}: ` : null;
-                        const displayName = dealPrefix && item.name.startsWith(dealPrefix)
-                          ? item.name.slice(dealPrefix.length)
-                          : item.name;
-                        return (
-                          <div key={idx} className="text-sm rounded-lg border border-border/60 bg-muted/10 p-2">
-                            {item.dealName && (
-                              <span className="inline-flex items-center gap-1 text-[10px] font-bold text-primary uppercase tracking-wide mb-0.5">
-                                <Gift className="h-2.5 w-2.5" /> {item.dealName}
-                              </span>
-                            )}
-                            <div className="flex justify-between items-center">
-                              <span className="font-medium text-foreground">{displayName}</span>
-                              <div className="flex items-center gap-1.5">
-                                {item.cookingTime ? <span className="text-[10px] text-muted-foreground">{item.cookingTime}m</span> : null}
-                                <span className="text-xs font-bold bg-muted/60 px-2 py-0.5 rounded-full text-muted-foreground">×{item.qty}</span>
+                        <div className="flex items-center gap-1.5">
+                          {order.hasPendingCancellationRequest && (
+                            <Badge className="bg-amber-500/20 text-amber-700 dark:text-amber-300 border-amber-500/40 text-[9px] font-bold px-1.5 py-0.5 flex items-center gap-1">
+                              <Clock className="h-2.5 w-2.5 text-amber-500" /> Cancel Req
+                            </Badge>
+                          )}
+                          <Badge variant="secondary" className={cn("text-[10px] font-bold rounded-md px-2 py-0.5 border", (typeColors as any)[order.type] ?? "")}>
+                            {order.type}
+                          </Badge>
+                        </div>
+                      </div>
+
+                      {/* ── Waiting Time Banner ── */}
+                      <div className="px-3.5 py-1.5 flex items-center justify-between text-xs bg-muted/10 border-b border-border/30">
+                        <div className="flex items-center gap-1.5 text-muted-foreground">
+                          <Hourglass className="h-3.5 w-3.5 text-amber-500" />
+                          <span className="font-medium text-[11px]">Waiting {formatDuration(waitingMin)}</span>
+                        </div>
+                        <span className="text-[10px] font-mono text-muted-foreground">{order.allItems.length} items total</span>
+                      </div>
+
+                      {/* ── Items List with Deal Bundling & Per-Item Controls ── */}
+                      <div className="p-3 space-y-2.5 max-h-80 overflow-y-auto scrollbar-thin">
+                        {/* 1. Grouped Deals */}
+                        {Object.entries(order.dealGroups).map(([dealKey, group]) => (
+                          <div key={dealKey} className="rounded-xl border border-primary/30 bg-card p-2 space-y-1.5 shadow-2xs">
+                            {/* Deal Header */}
+                            <div className="flex items-center justify-between text-xs pb-1 border-b border-primary/20">
+                              <div className="flex items-center gap-1.5 truncate min-w-0">
+                                <Badge variant="outline" className="text-[9px] font-extrabold text-primary border-primary/30 bg-primary/10 px-1.5 py-0 h-4 uppercase tracking-wider shrink-0 gap-0.5">
+                                  <Gift className="h-2.5 w-2.5" /> Deal
+                                </Badge>
+                                <span className="font-extrabold text-xs text-foreground truncate">{group.dealName}</span>
                               </div>
                             </div>
+
+                            {/* Deal Sub-Items */}
+                            <div className="space-y-1.5 pt-0.5">
+                              {group.items.map((item) => {
+                                const lockKey = `${order.id}::${item.actionKey}`;
+                                const isUpdating = updatingKeys[lockKey];
+                                const cookTime = item.cookingTime || 10;
+                                const elapsedSec = item.preparingAt ? Math.floor((clock.getTime() - item.preparingAt.getTime()) / 1000) : 0;
+                                const elapsedMin = Math.floor(elapsedSec / 60);
+                                const remainingSec = Math.max(0, cookTime * 60 - elapsedSec);
+                                const remainingMin = Math.floor(remainingSec / 60);
+                                const isOverdue = item.status === "preparing" && elapsedSec > cookTime * 60;
+
+                                return (
+                                  <div
+                                    key={item.key}
+                                    className="flex items-center justify-between gap-2 p-1.5 rounded-lg bg-background/80 dark:bg-muted/30 border border-border/40 hover:border-primary/30 transition-all text-xs"
+                                  >
+                                    {/* Item Qty & Name */}
+                                    <div className="flex items-center gap-1.5 truncate min-w-0">
+                                      <span className="font-black text-primary font-mono text-xs shrink-0">{item.qty}×</span>
+                                      <span className="font-semibold text-foreground truncate text-xs">{item.name}</span>
+                                    </div>
+
+                                    {/* Per-Item Action Pill */}
+                                    <div className="shrink-0 flex items-center gap-1.5">
+                                      {item.status === "pending" ? (
+                                        <Button
+                                          size="sm"
+                                          disabled={isUpdating}
+                                          onClick={() => handleItemAdvance(order.id, item.actionKey, "pending")}
+                                          className="h-6 px-2 text-[10px] font-bold bg-amber-500/15 hover:bg-amber-500/25 text-amber-500 border border-amber-500/30 rounded-md cursor-pointer transition-all gap-1"
+                                          title="Start cooking this dish"
+                                        >
+                                          {isUpdating ? <Loader2 className="h-3 w-3 animate-spin" /> : <ChefHat className="h-3 w-3" />}
+                                          {item.cookingTime ? `${item.cookingTime}m Prep` : "Start Prep"}
+                                        </Button>
+                                      ) : item.status === "preparing" ? (
+                                        <div className="flex items-center gap-1.5">
+                                          <span className={cn(
+                                            "text-[10px] font-mono font-bold px-1.5 py-0.5 rounded border",
+                                            isOverdue
+                                              ? "bg-destructive/15 text-destructive border-destructive/30 animate-pulse"
+                                              : "bg-sky-500/15 text-sky-400 border-sky-500/30"
+                                          )}>
+                                            {isOverdue ? `+${elapsedMin - cookTime}m` : `${remainingMin}:${String(remainingSec % 60).padStart(2, "0")}`}
+                                          </span>
+                                          <Button
+                                            size="sm"
+                                            disabled={isUpdating}
+                                            onClick={() => handleItemAdvance(order.id, item.actionKey, "preparing")}
+                                            className="h-6 px-2 text-[10px] font-bold bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-500 border border-emerald-500/30 rounded-md cursor-pointer transition-all gap-1"
+                                            title="Mark this dish ready"
+                                          >
+                                            {isUpdating ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3 stroke-[2.5]" />}
+                                            Ready
+                                          </Button>
+                                        </div>
+                                      ) : (
+                                        <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 rounded-md flex items-center gap-1">
+                                          <CheckCircle2 className="h-3 w-3 text-emerald-400" /> Done
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
                           </div>
-                        );
-                      })}
+                        ))}
+
+                        {/* 2. Standalone Plain Items */}
+                        {order.plainItems.map((item) => {
+                          const lockKey = `${order.id}::${item.actionKey}`;
+                          const isUpdating = updatingKeys[lockKey];
+                          const cookTime = item.cookingTime || 10;
+                          const elapsedSec = item.preparingAt ? Math.floor((clock.getTime() - item.preparingAt.getTime()) / 1000) : 0;
+                          const elapsedMin = Math.floor(elapsedSec / 60);
+                          const remainingSec = Math.max(0, cookTime * 60 - elapsedSec);
+                          const remainingMin = Math.floor(remainingSec / 60);
+                          const isOverdue = item.status === "preparing" && elapsedSec > cookTime * 60;
+
+                          return (
+                            <div
+                              key={item.key}
+                              className="flex items-center justify-between gap-2 p-2 rounded-xl bg-muted/20 border border-border/60 hover:border-primary/40 transition-all text-xs"
+                            >
+                              {/* Item Qty & Name */}
+                              <div className="flex items-center gap-1.5 truncate min-w-0">
+                                <span className="font-black text-foreground font-mono text-xs shrink-0">{item.qty}×</span>
+                                <span className="font-bold text-foreground truncate text-xs">{item.name}</span>
+                              </div>
+
+                              {/* Per-Item Action Pill */}
+                              <div className="shrink-0 flex items-center gap-1.5">
+                                {item.status === "pending" ? (
+                                  <Button
+                                    size="sm"
+                                    disabled={isUpdating}
+                                    onClick={() => handleItemAdvance(order.id, item.actionKey, "pending")}
+                                    className="h-6 px-2 text-[10px] font-bold bg-amber-500/15 hover:bg-amber-500/25 text-amber-500 border border-amber-500/30 rounded-md cursor-pointer transition-all gap-1"
+                                    title="Start cooking this dish"
+                                  >
+                                    {isUpdating ? <Loader2 className="h-3 w-3 animate-spin" /> : <ChefHat className="h-3 w-3" />}
+                                    {item.cookingTime ? `${item.cookingTime}m Prep` : "Start Prep"}
+                                  </Button>
+                                ) : item.status === "preparing" ? (
+                                  <div className="flex items-center gap-1.5">
+                                    <span className={cn(
+                                      "text-[10px] font-mono font-bold px-1.5 py-0.5 rounded border",
+                                      isOverdue
+                                        ? "bg-destructive/15 text-destructive border-destructive/30 animate-pulse"
+                                        : "bg-sky-500/15 text-sky-400 border-sky-500/30"
+                                    )}>
+                                      {isOverdue ? `+${elapsedMin - cookTime}m` : `${remainingMin}:${String(remainingSec % 60).padStart(2, "0")}`}
+                                    </span>
+                                    <Button
+                                      size="sm"
+                                      disabled={isUpdating}
+                                      onClick={() => handleItemAdvance(order.id, item.actionKey, "preparing")}
+                                      className="h-6 px-2 text-[10px] font-bold bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-500 border border-emerald-500/30 rounded-md cursor-pointer transition-all gap-1"
+                                      title="Mark this dish ready"
+                                    >
+                                      {isUpdating ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3 stroke-[2.5]" />}
+                                      Ready
+                                    </Button>
+                                  </div>
+                                ) : (
+                                  <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 rounded-md flex items-center gap-1">
+                                    <CheckCircle2 className="h-3 w-3 text-emerald-400" /> Done
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
 
-                    <Separator />
-
-                    {/* Action Button */}
-                    <div className="p-3">
-                      {order.hasPendingCancellationRequest ? (
-                        <div className="flex items-center justify-center gap-1.5 text-xs text-amber-700 dark:text-amber-300 font-bold bg-amber-500/15 border border-amber-500/30 py-2.5 rounded-lg select-none" title="Cancellation request pending branch admin approval">
-                          <Clock className="h-4 w-4 text-amber-500" /> Cancel Pending
-                        </div>
-                      ) : order.status === "ready" ? (
-                        <div className="flex items-center justify-center gap-1.5 text-sm text-green-500 font-bold bg-green-500/10 border border-green-500/20 py-2.5 rounded-lg select-none">
-                          <CheckCircle2 className="h-4 w-4" /> Ready to Serve
-                        </div>
-                      ) : order.status !== "completed" ? (
-                        <Button
-                          disabled={updatingOrderId === order.id}
-                          className={cn("w-full text-sm font-semibold rounded-lg h-11 transition-all", btnColors[order.status])}
-                          onClick={() => advanceStatus(order.id)}
-                        >
-                          {updatingOrderId === order.id ? (
-                            <>
-                              <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
-                              {order.status === "new" ? "Accepting Order..." : "Marking Ready..."}
-                            </>
-                          ) : (
-                            <>
-                              {order.status === "new" && <Bell className="h-4 w-4 mr-1.5" />}
-                              {order.status === "preparing" && <Flame className="h-4 w-4 mr-1.5" />}
-                              {btnLabel[order.status]}
-                            </>
-                          )}
-                        </Button>
-                      ) : (
-                        <div className="flex items-center justify-center gap-1.5 text-sm text-muted-foreground font-medium py-2">
-                          <CheckCircle2 className="h-4 w-4" />
-                          Completed
-                        </div>
-                      )}
+                    {/* ── Card Footer Master Batch Action ── */}
+                    <div>
+                      <Separator />
+                      <div className="p-3 bg-muted/10">
+                        {order.hasPendingCancellationRequest ? (
+                          <div className="flex items-center justify-center gap-1.5 text-xs text-amber-700 dark:text-amber-300 font-bold bg-amber-500/15 border border-amber-500/30 py-2.5 rounded-lg select-none">
+                            <Clock className="h-4 w-4 text-amber-500" /> Cancel Pending Approval
+                          </div>
+                        ) : hasPendingItems ? (
+                          <Button
+                            disabled={isBatchUpdating}
+                            className="w-full text-xs font-bold rounded-lg h-9 bg-warning hover:bg-warning/90 text-warning-foreground shadow-sm cursor-pointer transition-all gap-1.5"
+                            onClick={() => handleBatchAdvance(order, "preparing")}
+                          >
+                            {isBatchUpdating ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Flame className="h-4 w-4" />
+                            )}
+                            Start All Cooking ({order.allItems.filter(i => i.status === "pending").length} items)
+                          </Button>
+                        ) : hasPreparingItems ? (
+                          <Button
+                            disabled={isBatchUpdating}
+                            className="w-full text-xs font-bold rounded-lg h-9 gradient-primary text-primary-foreground shadow-md cursor-pointer transition-all gap-1.5"
+                            onClick={() => handleBatchAdvance(order, "ready")}
+                          >
+                            {isBatchUpdating ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <CheckCircle2 className="h-4 w-4" />
+                            )}
+                            Mark All Ready ({order.allItems.filter(i => i.status === "preparing").length} items)
+                          </Button>
+                        ) : (
+                          <div className="flex items-center justify-center gap-1.5 text-xs font-bold text-emerald-500 bg-emerald-500/10 border border-emerald-500/20 py-2 rounded-lg select-none">
+                            <CheckCircle2 className="h-4 w-4" /> Ready to Serve
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </CardContent>
                 </Card>

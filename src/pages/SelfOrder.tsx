@@ -3,7 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import {
   Flame, Search, ShoppingCart, Plus, Minus, Send, ChevronUp, Loader2,
   XCircle, CheckCircle2, Users, Phone, User, BellRing, Utensils, Sparkles,
-  ArrowRight, X, Receipt, FileText, Ticket, Gift, Package, Layers, Percent, Check,
+  ArrowRight, X, Receipt, FileText, Ticket, Gift, Package, Layers, Percent, Check, CreditCard,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -68,12 +68,12 @@ const formatPhoneNumber = (val: string): string => {
 };
 
 const PRESET_INSTRUCTIONS = [
-  "Less Spicy 🌶️",
-  "Extra Spicy 🌶️🔥",
-  "No Onions 🧅",
-  "Extra Sauce 🥣",
-  "Separate Packaging 📦",
-  "Serve Hot 🔥",
+  "Less Spicy",
+  "Extra Spicy",
+  "No Onions",
+  "Extra Sauce",
+  "Separate Packaging",
+  "Serve Hot",
 ];
 
 interface PlacedOrder {
@@ -1442,13 +1442,21 @@ const SelfOrder = () => {
 
               <span
                 className={cn(
-                  "text-[10px] font-extrabold px-2.5 py-0.5 rounded-full border",
+                  "text-[10px] font-extrabold px-2.5 py-0.5 rounded-full border inline-flex items-center gap-1",
                   isSittingFullyPaid
                     ? "bg-success/15 text-success border-success/30"
                     : "bg-warning/15 text-warning-foreground border-warning/30"
                 )}
               >
-                {isSittingFullyPaid ? "✔ Bill Settled" : "💳 Pay at Counter / Server"}
+                {isSittingFullyPaid ? (
+                  <>
+                    <CheckCircle2 className="h-3 w-3" /> Bill Settled
+                  </>
+                ) : (
+                  <>
+                    <CreditCard className="h-3 w-3" /> Pay at Counter / Server
+                  </>
+                )}
               </span>
             </div>
 
@@ -1592,10 +1600,20 @@ const SelfOrder = () => {
 
                 {/* Footer Notice */}
                 <div className="text-center space-y-1 text-[10px] text-muted-foreground font-sans pt-1">
-                  <p className="font-semibold text-foreground">
-                    {isSittingFullyPaid ? "✔ Thank you for your payment!" : "💳 Please present this bill at the counter or to your server."}
+                  <p className="font-semibold text-foreground flex items-center justify-center gap-1.5">
+                    {isSittingFullyPaid ? (
+                      <>
+                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+                        Thank you for your payment!
+                      </>
+                    ) : (
+                      <>
+                        <CreditCard className="h-3.5 w-3.5 text-primary shrink-0" />
+                        Please present this bill at the counter or to your server.
+                      </>
+                    )}
                   </p>
-                  <p>Thank you for dining with us! 🔥</p>
+                  <p>Thank you for dining with us!</p>
                 </div>
               </div>
 
@@ -2194,67 +2212,149 @@ const SelfOrder = () => {
           </div>
 
           <div className="flex-1 overflow-y-auto p-5 space-y-5">
-            <div className="space-y-3">
+            <div className="space-y-2.5">
               {cartDisplayRows.map((row) => {
                 if (row.kind === "deal") {
                   const gross = row.items.reduce((s, i) => s + i.price * i.qty, 0);
                   const discount = row.items.reduce((s, i) => s + (i.discount || 0), 0);
+                  const netTotal = gross - discount;
+
                   return (
-                    <div key={row.dealLineId} className="flex items-center justify-between gap-3 p-3 rounded-xl bg-primary/[0.05] border border-primary/20">
-                      <div className="flex-1 min-w-0">
-                        <span className="inline-flex items-center gap-1 text-[10px] font-bold text-primary uppercase tracking-wide">
-                          <Gift className="h-3 w-3" /> Deal
-                        </span>
-                        <p className="font-semibold text-sm text-foreground truncate">{row.dealName}</p>
-                        <p className="text-[11px] text-muted-foreground truncate">
-                          {row.items.map((i) => `${i.qty}x ${i.name}`).join(", ")}
-                        </p>
+                    <div
+                      key={row.dealLineId}
+                      className="rounded-2xl border border-primary/25 bg-primary/[0.04] p-3 space-y-2.5 shadow-2xs group relative"
+                    >
+                      {/* Header: Deal Badge + Deal Name + Price + Delete */}
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="space-y-0.5 min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="inline-flex items-center gap-1 text-[10px] font-extrabold text-primary uppercase tracking-wider bg-primary/10 border border-primary/30 px-1.5 py-0.5 rounded-full">
+                              <Gift className="h-2.5 w-2.5" /> Deal
+                            </span>
+                            {discount > 0 && (
+                              <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
+                                Save {currency} {Math.round(discount).toLocaleString()}
+                              </span>
+                            )}
+                          </div>
+                          <h4 className="font-bold text-xs text-foreground break-words leading-snug pt-0.5">
+                            {row.dealName}
+                          </h4>
+                        </div>
+
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <div className="text-right">
+                            <span className="font-bold text-xs text-foreground font-mono">
+                              {currency} {Math.round(netTotal).toLocaleString()}
+                            </span>
+                            {gross > netTotal && (
+                              <span className="block text-[10px] text-muted-foreground line-through font-mono">
+                                {currency} {Math.round(gross).toLocaleString()}
+                              </span>
+                            )}
+                          </div>
+                          <button
+                            onClick={() => removeDealGroup(row.dealLineId)}
+                            className="text-muted-foreground/60 hover:text-destructive hover:bg-destructive/10 p-1 rounded-lg transition-colors"
+                            title="Remove Deal"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <span className="font-bold text-sm">{currency} {(gross - discount).toLocaleString()}</span>
-                        <Button size="icon" variant="ghost" className="h-7 w-7 rounded-md hover:bg-destructive/10 hover:text-destructive" onClick={() => removeDealGroup(row.dealLineId)}>
-                          <X className="h-3.5 w-3.5" />
-                        </Button>
+
+                      {/* Included Items Details */}
+                      <div className="bg-background/80 dark:bg-background/50 rounded-xl p-2.5 border border-border/50 space-y-1">
+                        <div className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider">
+                          Included Items ({row.items.reduce((s, i) => s + i.qty, 0)})
+                        </div>
+                        <ul className="space-y-0.5 text-[11px] text-foreground/90 font-medium">
+                          {row.items.map((i, itemIdx) => (
+                            <li key={itemIdx} className="flex items-start gap-1.5 leading-tight">
+                              <span className="text-primary font-bold font-mono text-[10px] shrink-0 mt-0.5">
+                                {i.qty}x
+                              </span>
+                              <span className="break-words min-w-0 flex-1">{i.name}</span>
+                            </li>
+                          ))}
+                        </ul>
                       </div>
                     </div>
                   );
                 }
-                const item = row.item;
-                return (
-                <div key={item.id} className="flex items-center justify-between gap-3 p-3 rounded-xl bg-muted/20 border border-border/50">
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-sm text-foreground truncate">{item.name}</p>
-                    {item.modifiers && item.modifiers.length > 0 && (
-                      <p className="text-[11px] text-muted-foreground">+ {item.modifiers.join(", ")}</p>
-                    )}
-                    <p className="text-xs font-bold text-primary mt-0.5">{currency} {item.price.toLocaleString()} each</p>
-                  </div>
 
-                  <div className="flex items-center gap-2 shrink-0">
-                    <div className="flex items-center gap-1 bg-card border border-border rounded-lg p-0.5 shadow-xs">
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="h-7 w-7 rounded-md hover:bg-muted"
-                        onClick={() => updateQty(item.id, -1)}
-                      >
-                        <Minus className="h-3 w-3" />
-                      </Button>
-                      <span className="font-extrabold text-xs w-6 text-center">{item.qty}</span>
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="h-7 w-7 rounded-md hover:bg-muted"
-                        onClick={() => updateQty(item.id, 1)}
-                      >
-                        <Plus className="h-3 w-3" />
-                      </Button>
+                const item = row.item;
+                const lineGross = item.price * item.qty;
+                const lineNet = lineGross - (item.discount || 0);
+
+                return (
+                  <div
+                    key={item.id}
+                    className="rounded-2xl border border-border/70 bg-card p-3 space-y-2.5 shadow-2xs group"
+                  >
+                    {/* Top Row: Name + Line Total + Remove */}
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="space-y-0.5 min-w-0 flex-1">
+                        <h4 className="font-semibold text-xs text-foreground break-words leading-snug">
+                          {item.name}
+                        </h4>
+                        {item.modifiers && item.modifiers.length > 0 && (
+                          <p className="text-[10px] text-muted-foreground/90 font-medium break-words leading-tight">
+                            {item.modifiers.join(" • ")}
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <div className="text-right">
+                          <span className="font-bold text-xs text-foreground font-mono">
+                            {currency} {Math.round(lineNet).toLocaleString()}
+                          </span>
+                          {item.discount && item.discount > 0 && (
+                            <span className="block text-[10px] text-destructive font-mono">
+                              -{currency} {Math.round(item.discount).toLocaleString()}
+                            </span>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => removeCartItem(item.id)}
+                          className="text-muted-foreground/60 hover:text-destructive hover:bg-destructive/10 p-1 rounded-lg transition-colors"
+                          title="Remove Item"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
                     </div>
-                    <span className="font-bold text-sm w-16 text-right">
-                      {currency} {(item.price * item.qty).toLocaleString()}
-                    </span>
+
+                    {/* Bottom Controls Bar: Qty Stepper & Unit Price */}
+                    <div className="flex items-center justify-between gap-2 pt-1.5 border-t border-border/40 text-xs">
+                      <div className="flex items-center gap-1 bg-muted/40 p-0.5 rounded-xl border border-border/50 shrink-0">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 rounded-lg hover:bg-background shadow-xs text-foreground"
+                          onClick={() => updateQty(item.id, -1)}
+                        >
+                          <Minus className="h-3 w-3" />
+                        </Button>
+                        <span className="w-6 text-center font-bold text-xs font-mono">
+                          {item.qty}
+                        </span>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 rounded-lg hover:bg-background shadow-xs text-foreground"
+                          onClick={() => updateQty(item.id, 1)}
+                        >
+                          <Plus className="h-3 w-3" />
+                        </Button>
+                      </div>
+
+                      <span className="text-[11px] text-muted-foreground font-mono">
+                        {currency} {Math.round(item.price).toLocaleString()} ea
+                      </span>
+                    </div>
                   </div>
-                </div>
                 );
               })}
             </div>
@@ -2299,7 +2399,7 @@ const SelfOrder = () => {
               {appliedCoupon?.code && manualCouponApplied ? (
                 <div className="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-primary/10 border border-primary/30">
                   <span className="text-xs font-bold text-primary">
-                    "{appliedCoupon.code}" applied — {currency} {appliedCoupon.amount.toLocaleString()} off
+                    "{appliedCoupon.code}" applied — {currency} {Math.round(appliedCoupon.amount).toLocaleString()} off
                   </span>
                   <Button size="icon" variant="ghost" className="h-6 w-6 shrink-0" onClick={removeCoupon}>
                     <X className="h-3.5 w-3.5" />
@@ -2329,7 +2429,7 @@ const SelfOrder = () => {
                   only surfaced here, never as an input the customer has to fill. */}
               {appliedCoupon && !appliedCoupon.code && (
                 <p className="text-[11px] text-primary font-semibold">
-                  {appliedCoupon.dealName} applied automatically — {currency} {appliedCoupon.amount.toLocaleString()} off
+                  {appliedCoupon.dealName} applied automatically — {currency} {Math.round(appliedCoupon.amount).toLocaleString()} off
                 </p>
               )}
             </div>
@@ -2337,21 +2437,21 @@ const SelfOrder = () => {
             <div className="bg-muted/30 rounded-xl p-3.5 border border-border/60 space-y-1.5 text-xs">
               <div className="flex justify-between text-muted-foreground">
                 <span>Subtotal</span>
-                <span>{currency} {cartTotal.toLocaleString()}</span>
+                <span className="font-mono">{currency} {Math.round(cartTotal).toLocaleString()}</span>
               </div>
               {discountAmount > 0 && (
                 <div className="flex justify-between text-primary font-semibold">
                   <span>Discount</span>
-                  <span>- {currency} {discountAmount.toLocaleString()}</span>
+                  <span className="font-mono">- {currency} {Math.round(discountAmount).toLocaleString()}</span>
                 </div>
               )}
               <div className="flex justify-between text-muted-foreground">
                 <span>{taxName} ({taxRate}%)</span>
-                <span>{currency} {tax.toLocaleString()}</span>
+                <span className="font-mono">{currency} {Math.round(tax).toLocaleString()}</span>
               </div>
               <div className="flex justify-between font-extrabold text-sm pt-2 border-t border-border/60 text-foreground">
                 <span>Total Amount</span>
-                <span className="text-primary text-base">{currency} {grandTotal.toLocaleString()}</span>
+                <span className="text-primary text-base font-mono font-bold">{currency} {Math.round(grandTotal).toLocaleString()}</span>
               </div>
             </div>
 
@@ -2365,10 +2465,11 @@ const SelfOrder = () => {
               ) : (
                 <Send className="h-5 w-5 mr-2" />
               )}
-              Send Order to Kitchen 🔥
+              Send Order to Kitchen
             </Button>
-            <p className="text-center text-[11px] font-medium text-muted-foreground">
-              💳 Pay at counter or with server when finished dining
+            <p className="text-center text-[11px] font-medium text-muted-foreground flex items-center justify-center gap-1.5">
+              <CreditCard className="h-3.5 w-3.5 text-primary shrink-0" />
+              Pay at counter or with server when finished dining
             </p>
           </div>
         </SheetContent>
@@ -2404,12 +2505,19 @@ const SelfOrder = () => {
                         const isChecked = selected.includes(key);
                         const optionOutOfStock = isMenuItemUnavailable(o.menuItemId, o.variantId);
                         return (
-                          <button
+                          <div
                             key={key}
-                            disabled={optionOutOfStock}
-                            onClick={() => toggleDealOption(g.id, key, g.maxSelections)}
+                            role="button"
+                            tabIndex={optionOutOfStock ? -1 : 0}
+                            onClick={() => !optionOutOfStock && toggleDealOption(g.id, key, g.maxSelections)}
+                            onKeyDown={(e) => {
+                              if ((e.key === " " || e.key === "Enter") && !optionOutOfStock) {
+                                e.preventDefault();
+                                toggleDealOption(g.id, key, g.maxSelections);
+                              }
+                            }}
                             className={cn(
-                              "w-full flex items-start gap-3 p-3 rounded-xl border text-left text-sm transition-colors",
+                              "w-full flex items-start gap-3 p-3 rounded-xl border text-left text-sm transition-colors cursor-pointer select-none",
                               optionOutOfStock
                                 ? "opacity-50 cursor-not-allowed border-border bg-muted/30"
                                 : isChecked ? "border-primary bg-primary/5" : "border-border hover:border-primary/40 hover:bg-muted/30"
@@ -2424,7 +2532,7 @@ const SelfOrder = () => {
                                 <span className="inline-block text-[10px] font-semibold text-destructive bg-destructive/10 px-1.5 py-0.5 rounded">Out of Stock</span>
                               )}
                             </div>
-                          </button>
+                          </div>
                         );
                       })}
                     </div>

@@ -576,7 +576,7 @@ const WaiterPanel = () => {
     };
     const onCallWaiter = (payload: { tableId?: string; tableNumber?: string; outletId?: string }) => {
       if (payload.outletId && payload.outletId !== user?.outletId) return;
-      toast.warning(`🔔 Customer at Table ${payload.tableNumber ?? "—"} is requesting a waiter!`, {
+      toast.warning(`Customer at Table ${payload.tableNumber ?? "—"} is requesting a waiter!`, {
         duration: 10000,
       });
     };
@@ -1914,6 +1914,63 @@ const WaiterPanel = () => {
     return diff < 60 ? `${diff}m` : `${Math.floor(diff / 60)}h ${diff % 60}m`;
   };
 
+  /** Groups raw order items into deals & plain items for consistent POS-aligned receipts */
+  const groupOrderItemsForDisplay = (rawItems: any[]) => {
+    type DisplayRow =
+      | { kind: "deal"; dealKey: string; dealName: string; items: any[]; gross: number; discount: number; netTotal: number }
+      | { kind: "plain"; item: any };
+
+    const rows: DisplayRow[] = [];
+    const dealGroups: Record<string, { dealName: string; items: any[] }> = {};
+
+    for (const item of rawItems) {
+      let dealKey: string | null = null;
+      let dealName: string | null = null;
+
+      if (item.dealLineId) {
+        dealKey = item.dealLineId;
+        dealName = item.dealName || "Deal";
+      } else if (item.dealName) {
+        dealKey = `deal-${item.dealName}-${item.orderNum || item.orderNumber || ""}`;
+        dealName = item.dealName;
+      } else if (item.name && item.name.includes(":") && (item.name.includes("(Free)") || item.name.includes("(Discounted)") || item.name.toLowerCase().includes("deal") || (item.discount && item.discount > 0))) {
+        const parts = item.name.split(":");
+        dealName = parts[0].trim();
+        dealKey = `deal-prefix-${dealName}-${item.orderNum || item.orderNumber || ""}`;
+      }
+
+      if (dealKey && dealName) {
+        if (!dealGroups[dealKey]) {
+          dealGroups[dealKey] = { dealName, items: [] };
+        }
+        const cleanName = item.name && item.name.startsWith(`${dealName}:`)
+          ? item.name.replace(`${dealName}:`, "").trim()
+          : item.name;
+        dealGroups[dealKey].items.push({ ...item, name: cleanName });
+      } else {
+        rows.push({ kind: "plain", item });
+      }
+    }
+
+    const dealRows: DisplayRow[] = Object.entries(dealGroups).map(([key, group]) => {
+      const gross = group.items.reduce((s, i) => s + Number(i.price || 0) * Number(i.qty || 1), 0);
+      const discount = group.items.reduce((s, i) => s + Number(i.discount || 0), 0);
+      const netTotal = Math.max(0, gross - discount);
+
+      return {
+        kind: "deal",
+        dealKey: key,
+        dealName: group.dealName,
+        items: group.items,
+        gross,
+        discount,
+        netTotal,
+      };
+    });
+
+    return [...dealRows, ...rows];
+  };
+
   const handleTableClick = (t: TableRecord) => {
     setSelectedTableId(t.id);
     setCartItems([]);
@@ -2297,94 +2354,213 @@ const WaiterPanel = () => {
         </div>
       ) : (
         /* Cart Selection Column in Ordering Mode */
-        <div className="w-full lg:w-80 xl:w-96 shrink-0 flex flex-col justify-between h-full bg-zinc-50 border border-zinc-200 dark:bg-zinc-900/30 dark:border-zinc-800/80 rounded-2xl p-4 lg:p-4.5 space-y-3 select-none overflow-hidden">
+        <div className="w-full lg:w-80 xl:w-96 shrink-0 flex flex-col justify-between h-full bg-card/60 backdrop-blur-md border border-border/80 rounded-2xl p-3.5 sm:p-4 space-y-3 select-none overflow-hidden shadow-xs">
           <div className="space-y-3 flex-grow overflow-hidden flex flex-col min-h-0">
-            <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 pb-2 shrink-0">
-              <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                <ShoppingCart className="h-4 w-4" /> Cart Selection
-              </span>
+            <div className="flex items-center justify-between border-b border-border/60 pb-2.5 shrink-0">
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                  <ShoppingCart className="h-4 w-4 text-primary" /> Cart Selection
+                </span>
+                {cartItems.length > 0 && (
+                  <Badge variant="secondary" className="text-[10px] font-mono font-bold px-1.5 py-0 h-4">
+                    {cartItems.reduce((s, c) => s + c.qty, 0)}
+                  </Badge>
+                )}
+              </div>
               {cartItems.length > 0 && (
-                <button onClick={() => setCartItems([])} className="text-[10px] text-muted-foreground hover:text-destructive flex items-center gap-1 transition-colors">
+                <button
+                  onClick={() => setCartItems([])}
+                  className="text-[11px] font-medium text-muted-foreground hover:text-destructive flex items-center gap-1 transition-colors px-1.5 py-0.5 rounded-md hover:bg-destructive/10"
+                >
                   <Trash2 className="h-3 w-3" /> Clear
                 </button>
               )}
             </div>
 
             {/* Cart Item rows */}
-            <div className="space-y-1.5 overflow-y-auto pr-0.5 flex-1 min-h-0">
-              {cartDisplayRows.map((row) => {
-                if (row.kind === "deal") {
-                  const gross = row.items.reduce((s, i) => s + i.price * i.qty, 0);
-                  const discount = row.items.reduce((s, i) => s + (i.discount || 0), 0);
-                  return (
-                    <div key={row.dealLineId} className="flex items-center gap-3 px-3 py-2.5 bg-primary/[0.04] border border-primary/20 rounded-xl">
-                      <div className="flex-1 min-w-0">
-                        <span className="inline-flex items-center gap-1 text-[9px] font-bold text-primary uppercase tracking-wide">
-                          <Gift className="h-3 w-3" /> Deal
-                        </span>
-                        <p className="text-xs font-bold truncate text-foreground leading-tight">{row.dealName}</p>
-                        <p className="text-[9px] text-muted-foreground truncate">
-                          {row.items.map((i) => `${i.qty}x ${i.name}`).join(", ")}
-                        </p>
-                        <p className="text-[11px] text-primary font-bold mt-0.5">{currency} {(gross - discount).toLocaleString()}</p>
+            <div className="space-y-2 overflow-y-auto pr-0.5 flex-1 min-h-0 scrollbar-thin">
+              {cartItems.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-full py-12 text-center text-muted-foreground select-none">
+                  <div className="h-14 w-14 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center mb-2.5 text-primary/70 shadow-inner">
+                    <ShoppingCart className="h-7 w-7" />
+                  </div>
+                  <p className="text-xs font-bold text-foreground">Your cart is empty</p>
+                  <p className="text-[11px] text-muted-foreground mt-1 max-w-[190px] leading-relaxed">
+                    Select menu items or deals to build the table order
+                  </p>
+                </div>
+              ) : (
+                cartDisplayRows.map((row) => {
+                  if (row.kind === "deal") {
+                    const gross = row.items.reduce((s, i) => s + i.price * i.qty, 0);
+                    const discount = row.items.reduce((s, i) => s + (i.discount || 0), 0);
+                    const netTotal = gross - discount;
+
+                    return (
+                      <div
+                        key={row.dealLineId}
+                        className="rounded-xl border border-primary/25 bg-primary/[0.04] p-2.5 sm:p-3 space-y-2 hover:border-primary/40 transition-all shadow-2xs group relative"
+                      >
+                        {/* Header: Deal Badge + Name + Price + Delete */}
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="space-y-0.5 min-w-0 flex-1">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <Badge
+                                variant="outline"
+                                className="text-[9px] font-extrabold text-primary border-primary/30 bg-primary/10 px-1.5 py-0 h-4 uppercase tracking-wider gap-0.5 shrink-0"
+                              >
+                                <Gift className="h-2.5 w-2.5" /> Deal
+                              </Badge>
+                              {discount > 0 && (
+                                <span className="text-[9px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-1.5 py-0 rounded border border-emerald-500/20">
+                                  Save {currency} {Math.round(discount).toLocaleString()}
+                                </span>
+                              )}
+                            </div>
+                            <h4 className="font-bold text-xs text-foreground break-words leading-snug pt-0.5">
+                              {row.dealName}
+                            </h4>
+                          </div>
+
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <div className="text-right">
+                              <span className="font-bold text-xs text-foreground font-mono">
+                                {currency} {Math.round(netTotal).toLocaleString()}
+                              </span>
+                              {gross > netTotal && (
+                                <span className="block text-[10px] text-muted-foreground line-through font-mono">
+                                  {currency} {Math.round(gross).toLocaleString()}
+                                </span>
+                              )}
+                            </div>
+                            <button
+                              onClick={() => removeDealGroup(row.dealLineId)}
+                              className="text-muted-foreground/60 hover:text-destructive hover:bg-destructive/10 p-1 rounded-md transition-colors"
+                              title="Remove Deal"
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Included Items Details */}
+                        <div className="bg-background/80 dark:bg-background/50 rounded-lg p-2 border border-border/50 space-y-1">
+                          <div className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider">
+                            Included Items ({row.items.reduce((s, i) => s + i.qty, 0)})
+                          </div>
+                          <ul className="space-y-0.5 text-[11px] text-foreground/90 font-medium">
+                            {row.items.map((i, itemIdx) => (
+                              <li key={itemIdx} className="flex items-start gap-1.5 leading-tight">
+                                <span className="text-primary font-bold font-mono text-[10px] shrink-0 mt-0.5">
+                                  {i.qty}x
+                                </span>
+                                <span className="break-words min-w-0 flex-1">{i.name}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
                       </div>
-                      <button onClick={() => removeDealGroup(row.dealLineId)} className="text-muted-foreground/45 hover:text-destructive p-1 ml-0.5 transition-colors shrink-0">
-                        <X className="h-3.5 w-3.5" />
-                      </button>
+                    );
+                  }
+
+                  const item = row.item;
+                  const lineGross = item.price * item.qty;
+                  const lineNet = lineGross - (item.discount || 0);
+
+                  return (
+                    <div
+                      key={item.id}
+                      className="rounded-xl border border-border/70 bg-card p-2.5 sm:p-3 space-y-2 hover:border-border transition-all shadow-2xs group"
+                    >
+                      {/* Top Row: Name + Line Total + Remove */}
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="space-y-0.5 min-w-0 flex-1">
+                          <h4 className="font-semibold text-xs text-foreground break-words leading-snug">
+                            {item.name}
+                          </h4>
+                          {item.modifiers && item.modifiers.length > 0 && (
+                            <p className="text-[10px] text-muted-foreground/90 font-medium break-words leading-tight">
+                              {item.modifiers.join(" • ")}
+                            </p>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <div className="text-right">
+                            <span className="font-bold text-xs text-foreground font-mono">
+                              {currency} {Math.round(lineNet).toLocaleString()}
+                            </span>
+                            {item.discount && item.discount > 0 && (
+                              <span className="block text-[10px] text-destructive font-mono">
+                                -{currency} {Math.round(item.discount).toLocaleString()}
+                              </span>
+                            )}
+                          </div>
+                          <button
+                            onClick={() => removeCartItem(item.id)}
+                            className="text-muted-foreground/60 hover:text-destructive hover:bg-destructive/10 p-1 rounded-md transition-colors"
+                            title="Remove Item"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Bottom Controls Bar: Qty Stepper & Unit Price */}
+                      <div className="flex items-center justify-between gap-2 pt-1 border-t border-border/40 text-xs">
+                        <div className="flex items-center gap-1 bg-muted/40 p-0.5 rounded-lg border border-border/50 shrink-0">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 rounded-md hover:bg-background shadow-xs text-foreground"
+                            onClick={() => updateQty(item.id, -1)}
+                          >
+                            <Minus className="h-3 w-3" />
+                          </Button>
+                          <span className="w-5 text-center font-bold text-xs font-mono">
+                            {item.qty}
+                          </span>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 rounded-md hover:bg-background shadow-xs text-foreground"
+                            onClick={() => updateQty(item.id, 1)}
+                          >
+                            <Plus className="h-3 w-3" />
+                          </Button>
+                        </div>
+
+                        <span className="text-[11px] text-muted-foreground font-mono">
+                          {currency} {Math.round(item.price).toLocaleString()} ea
+                        </span>
+                      </div>
                     </div>
                   );
-                }
-                const item = row.item;
-                return (
-                  <div key={item.id} className="flex items-center gap-3 px-3 py-2.5 bg-zinc-100/50 dark:bg-zinc-950/20 border border-zinc-200 dark:border-zinc-800/40 rounded-xl">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-bold truncate text-foreground leading-tight">{item.name}</p>
-                      {item.modifiers && item.modifiers.length > 0 && (
-                        <p className="text-[9px] text-muted-foreground">+{item.modifiers.join(", ")}</p>
-                      )}
-                      <p className="text-[11px] text-primary font-bold mt-0.5">{currency} {item.price.toLocaleString()}</p>
-                    </div>
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <Button variant="outline" size="icon" className="h-6 w-6 rounded border-zinc-200 dark:border-zinc-800" onClick={() => updateQty(item.id, -1)}>
-                        <Minus className="h-3 w-3" />
-                      </Button>
-                      <span className="w-5 text-center text-xs font-bold">{item.qty}</span>
-                      <Button variant="outline" size="icon" className="h-6 w-6 rounded border-zinc-200 dark:border-zinc-800" onClick={() => updateQty(item.id, 1)}>
-                        <Plus className="h-3 w-3" />
-                      </Button>
-                      <button onClick={() => removeCartItem(item.id)} className="text-muted-foreground/45 hover:text-destructive p-1 ml-0.5 transition-colors">
-                        <X className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-              {cartItems.length === 0 && (
-                <p className="text-center text-xs text-muted-foreground py-10">Cart is empty</p>
+                })
               )}
             </div>
           </div>
 
           {/* Confirm order footer */}
-          <div className="border-t border-zinc-200 dark:border-zinc-800 pt-3 space-y-2.5 shrink-0">
+          <div className="border-t border-border/60 pt-3 space-y-2.5 shrink-0">
             {dealDiscount > 0 && dealPreview && (
               <>
                 <div className="flex justify-between items-center text-xs">
                   <span className="text-muted-foreground">Subtotal</span>
-                  <span className="font-mono text-muted-foreground">{currency} {cartTotal.toLocaleString()}</span>
+                  <span className="font-mono text-muted-foreground">{currency} {Math.round(cartTotal).toLocaleString()}</span>
                 </div>
                 <div className="flex justify-between items-center text-xs text-emerald-600 dark:text-emerald-400 font-semibold">
                   <span className="flex items-center gap-1 min-w-0">
                     <Tag className="h-3 w-3 shrink-0" />
                     <span className="truncate">{dealPreview.code ? `${dealPreview.dealName} (${dealPreview.code})` : dealPreview.dealName}</span>
                   </span>
-                  <span className="font-mono shrink-0">-{currency} {dealDiscount.toLocaleString()}</span>
+                  <span className="font-mono shrink-0">-{currency} {Math.round(dealDiscount).toLocaleString()}</span>
                 </div>
               </>
             )}
             <div className="flex justify-between items-center text-xs">
               <span className="text-muted-foreground font-semibold">Total Amount</span>
-              <span className="text-base font-extrabold text-primary">{currency} {Math.max(0, cartTotal - dealDiscount).toLocaleString()}</span>
+              <span className="text-base font-extrabold text-primary font-mono">{currency} {Math.round(Math.max(0, cartTotal - dealDiscount)).toLocaleString()}</span>
             </div>
             <Button
               onClick={handlePlaceOrderClick}
@@ -2521,8 +2697,9 @@ const WaiterPanel = () => {
 
                     {/* Special Instructions Note if present */}
                     {((order as any).specialInstructions || order.futureNotes) && (
-                      <div className="text-[10px] bg-amber-500/10 text-amber-700 dark:text-amber-400 p-1.5 rounded-lg font-medium border border-amber-500/20">
-                        📝 <span className="font-bold">Note:</span> {(order as any).specialInstructions || order.futureNotes}
+                      <div className="text-[10px] bg-amber-500/10 text-amber-700 dark:text-amber-400 p-1.5 rounded-lg font-medium border border-amber-500/20 flex items-start gap-1">
+                        <FileText className="h-3 w-3 shrink-0 mt-0.5" />
+                        <span><span className="font-bold">Note:</span> {(order as any).specialInstructions || order.futureNotes}</span>
                       </div>
                     )}
                   </div>
@@ -3393,42 +3570,177 @@ const WaiterPanel = () => {
       </Dialog>
 
 
-      {/* ── View Orders Dialog ── */}
+      {/* ── View Orders Dialog (POS-Aligned High-Craft Modal) ── */}
       <Dialog open={showOrdersDialog} onOpenChange={setShowOrdersDialog}>
-        <DialogContent className="w-[90vw] max-w-[500px] rounded-2xl overflow-y-auto max-h-[85vh]">
-          <DialogHeader>
-            <DialogTitle className="text-center text-lg font-bold">Active Orders — Table {selectedTable?.number}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            {activeTableOrders.map((o) => (
-              <div key={o.id} className="border border-zinc-800 rounded-xl bg-zinc-950/20 px-4 py-3 space-y-3">
-                <div className="flex justify-between items-center pb-2 border-b border-zinc-800/80">
-                  <span className="text-sm font-bold text-foreground">Order {o.orderNumber}</span>
-                  <Badge className="bg-primary/20 text-primary border-none rounded-full text-[10px] uppercase font-bold">{o.status}</Badge>
-                </div>
-                <div className="space-y-2">
-                  {o.items.map((item, idx) => (
-                    <div key={idx} className="flex justify-between text-xs text-muted-foreground">
-                      <span>{item.name} ×{item.qty}</span>
-                      <span>{currency} {(item.price * item.qty).toLocaleString()}</span>
-                    </div>
-                  ))}
-                </div>
-                <div className="flex justify-between text-xs font-bold pt-2 border-t border-zinc-800/80">
-                  <span>Subtotal</span>
-                  <span>{currency} {o.subtotal.toLocaleString()}</span>
-                </div>
-              </div>
-            ))}
-            {activeTableOrders.length === 0 && (
-              <p className="text-center text-xs text-muted-foreground py-6">No active orders</p>
-            )}
+    <DialogContent className="max-w-[95vw] sm:max-w-xl p-4 sm:p-6 gap-0 overflow-hidden rounded-3xl bg-card/95 backdrop-blur-xl border border-border/80 shadow-2xl shadow-black/40">
+      {/* Modal Header */}
+      <div className="flex items-center justify-between pb-3 border-b border-border/40">
+        <div className="flex items-center gap-2.5">
+          <div className="h-9 w-9 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary shadow-inner">
+            <Eye className="h-4 w-4" />
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowOrdersDialog(false)} className="rounded-xl w-full border-zinc-200 dark:border-zinc-800">Close</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          <div>
+            <DialogTitle className="text-base font-bold text-foreground tracking-tight">Active Table Orders</DialogTitle>
+            <DialogDescription className="text-[11px] text-muted-foreground">Orders placed for Table {selectedTable?.number}</DialogDescription>
+          </div>
+        </div>
+        <Badge variant="outline" className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 border-primary/40 text-primary bg-primary/10 rounded-full">
+          Table {selectedTable?.number}{selectedTable?.floorName ? ` · ${selectedTable.floorName}` : ""}
+        </Badge>
+      </div>
+
+      <div className="pt-4 space-y-3.5 max-h-[75vh] overflow-y-auto pr-0.5 scrollbar-thin">
+        {activeTableOrders.map((o) => {
+          const displayRows = groupOrderItemsForDisplay(o.items || []);
+          const isPaid = !isOrderUnpaid(o);
+
+          return (
+            <div key={o.id} className="rounded-2xl border border-border/70 bg-muted/20 p-3.5 sm:p-4 space-y-3 shadow-2xs">
+              {/* Order Card Header */}
+              <div className="flex items-center justify-between pb-2.5 border-b border-border/40">
+                <div className="space-y-0.5">
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono font-extrabold text-sm text-foreground">
+                      Order #{o.orderNumber}
+                    </span>
+                    {isPaid ? (
+                      <Badge className="bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 text-[10px] font-bold uppercase px-2 py-0.5 rounded-full">
+                        Paid
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full border-amber-500/30 text-amber-500 bg-amber-500/10">
+                        Unpaid
+                      </Badge>
+                    )}
+                  </div>
+                  <p className="text-[10px] text-muted-foreground font-mono flex items-center gap-1">
+                    <Clock className="h-3 w-3" />
+                    {new Date(o.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                    {o.customerName && o.customerName !== "Walk-in" && ` · ${o.customerName}`}
+                  </p>
+                </div>
+
+                <Badge
+                  className={cn(
+                    "text-[10px] font-extrabold uppercase tracking-wider px-2.5 py-1 rounded-full border shadow-2xs",
+                    o.status === "ready"
+                      ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/30"
+                      : o.status === "preparing"
+                      ? "bg-blue-500/10 text-blue-500 border-blue-500/30"
+                      : "bg-amber-500/10 text-amber-500 border-amber-500/30"
+                  )}
+                >
+                  {o.status}
+                </Badge>
+              </div>
+
+              {/* Grouped Items List */}
+              <div className="bg-background/80 dark:bg-background/50 rounded-xl p-3 border border-border/50 space-y-2">
+                {displayRows.map((row, idx) => {
+                  if (row.kind === "deal") {
+                    return (
+                      <div key={row.dealKey || idx} className="space-y-1 pb-1.5 border-b border-border/30 last:border-0 last:pb-0">
+                        <div className="flex justify-between items-center text-xs">
+                          <div className="flex items-center gap-1.5 min-w-0 pr-2">
+                            <Badge variant="outline" className="text-[9px] font-extrabold text-primary border-primary/30 bg-primary/10 px-1.5 py-0 h-4 uppercase tracking-wider shrink-0 gap-0.5">
+                              <Gift className="h-2.5 w-2.5" /> Deal
+                            </Badge>
+                            <span className="font-bold text-foreground truncate">{row.dealName}</span>
+                          </div>
+                          <span className="font-mono font-bold text-foreground shrink-0 tabular-nums text-xs">
+                            {currency} {Math.round(row.netTotal).toLocaleString()}
+                          </span>
+                        </div>
+                        <ul className="space-y-0.5 pl-3 border-l-2 border-primary/20 text-[10px] text-muted-foreground font-medium">
+                          {row.items.map((i, itemIdx) => (
+                            <li key={itemIdx} className="flex items-center justify-between">
+                              <span className="truncate pr-1">• {i.qty}x {i.name}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    );
+                  }
+
+                  const item = row.item;
+                  const lineGross = Number(item.price || 0) * Number(item.qty || 1);
+                  const lineNet = lineGross - Number(item.discount || 0);
+
+                  return (
+                    <div key={item.id || idx} className="space-y-0.5 pb-1 border-b border-border/30 last:border-0 last:pb-0">
+                      <div className="flex justify-between items-center text-xs">
+                        <div className="flex items-center gap-1.5 min-w-0 pr-2">
+                          <span className="inline-flex items-center justify-center h-4 px-1 rounded bg-muted text-foreground font-mono font-bold text-[10px]">
+                            {item.qty}x
+                          </span>
+                          <span className="font-semibold text-foreground truncate">{item.name}</span>
+                        </div>
+                        <span className="font-mono font-bold text-foreground shrink-0 tabular-nums text-xs">
+                          {currency} {Math.round(lineNet).toLocaleString()}
+                        </span>
+                      </div>
+                      {item.modifiers && item.modifiers.length > 0 && (
+                        <p className="text-[10px] text-muted-foreground/80 pl-6 truncate">
+                          {item.modifiers.join(", ")}
+                        </p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Financials for this Order */}
+              <div className="flex justify-between items-center pt-1 text-xs font-semibold">
+                <span className="text-muted-foreground text-[11px]">
+                  Subtotal: {currency} {Math.round(o.subtotal).toLocaleString()} · Tax: {currency} {Math.round(o.tax).toLocaleString()}
+                </span>
+                <span className="font-mono font-bold text-foreground">
+                  Total: <span className="text-primary font-black text-sm">{currency} {Math.round(o.total).toLocaleString()}</span>
+                </span>
+              </div>
+            </div>
+          );
+        })}
+
+        {activeTableOrders.length === 0 && (
+          <div className="text-center py-10 space-y-2">
+            <div className="h-12 w-12 rounded-2xl bg-muted flex items-center justify-center mx-auto text-muted-foreground">
+              <Eye className="h-6 w-6" />
+            </div>
+            <p className="text-xs font-bold text-foreground">No active orders</p>
+            <p className="text-[11px] text-muted-foreground">This table currently has no orders placed.</p>
+          </div>
+        )}
+      </div>
+
+      <DialogFooter className="pt-3 border-t border-border/40 flex sm:flex-row gap-2">
+        <Button
+          variant="outline"
+          onClick={() => setShowOrdersDialog(false)}
+          className="rounded-xl flex-1 border-border"
+        >
+          Close
+        </Button>
+        {canPayBill && (
+          <Button
+            onClick={() => {
+              setShowOrdersDialog(false);
+              const totalBill = activeTableOrders.reduce((sum, o) => sum + Number(o.total || 0), 0);
+              const adv = currentAdvancePayment;
+              const netDue = Math.max(0, totalBill - adv);
+              setSettlePaymentMethod("Cash");
+              setWaiterGivenAmount(netDue);
+              setWaiterPaymentEntries([]);
+              setShowPayBillDialog(true);
+            }}
+            className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl flex-1 gap-1.5 shadow-sm"
+          >
+            <CreditCard className="h-3.5 w-3.5" /> Pay Table Bill
+          </Button>
+        )}
+      </DialogFooter>
+    </DialogContent>
+  </Dialog>
 
       {/* ── View Bill Receipt Preview Dialog ── */}
       <Dialog open={showBillDialog} onOpenChange={setShowBillDialog}>
@@ -3562,9 +3874,9 @@ const WaiterPanel = () => {
         </DialogContent>
       </Dialog>
 
-      {/* ── Pay Bill Dialog (POS High-Craft Checkout Style) ── */}
+      {/* ── Pay Bill Dialog (POS High-Craft Unified 2-Column Checkout Style) ── */}
       <Dialog open={showPayBillDialog} onOpenChange={setShowPayBillDialog}>
-        <DialogContent className="max-w-[95vw] sm:max-w-[490px] p-5 gap-0 overflow-hidden rounded-3xl bg-card/95 backdrop-blur-xl border border-border/80 shadow-2xl shadow-black/40">
+        <DialogContent className="max-w-[95vw] md:max-w-4xl lg:max-w-5xl p-4 sm:p-6 gap-0 overflow-hidden rounded-3xl bg-card/95 backdrop-blur-xl border border-border/80 shadow-2xl shadow-black/40">
 
           {/* Modal Header with Icon Badge */}
           <div className="flex items-center justify-between pb-3 border-b border-border/40">
@@ -3574,7 +3886,7 @@ const WaiterPanel = () => {
               </div>
               <div>
                 <DialogTitle className="text-base font-bold text-foreground tracking-tight">Payment Checkout</DialogTitle>
-                <p className="text-[11px] text-muted-foreground">Settle Table {selectedTable?.number} billing</p>
+                <DialogDescription className="text-[11px] text-muted-foreground">Settle Table {selectedTable?.number} billing</DialogDescription>
               </div>
             </div>
             <Badge variant="outline" className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 border-orange-500/40 text-orange-500 bg-orange-500/10 rounded-full">
@@ -3582,79 +3894,131 @@ const WaiterPanel = () => {
             </Badge>
           </div>
 
-          <div className="pt-3.5 space-y-3 max-h-[82vh] overflow-y-auto pr-0.5">
+          <div className="pt-4 max-h-[82vh] overflow-y-auto pr-0.5 grid grid-cols-1 md:grid-cols-2 gap-4 lg:gap-6 items-start">
 
-            {/* 1. Order Summary Card */}
-            <div className="bg-muted/20 hover:bg-muted/30 transition-colors p-3.5 rounded-2xl border border-border/50 space-y-2.5">
-              {/* Customer Row */}
-              <div className="flex items-center justify-between text-xs">
-                <div className="flex items-center gap-1.5 font-medium text-foreground">
-                  <User className="h-3.5 w-3.5 text-muted-foreground" />
-                  <span className="font-semibold">{selectedCustomerData?.name || "Walk-in Customer"}</span>
-                  {selectedCustomerData?.phone && (
-                    <span className="text-[11px] text-muted-foreground font-mono">({selectedCustomerData.phone})</span>
-                  )}
-                </div>
-                <span className="text-[11px] text-muted-foreground">
-                  {activeTableOrders.length} {activeTableOrders.length === 1 ? "order" : "orders"}
-                </span>
-              </div>
-
-              {/* Items List snippet */}
-              {(() => {
-                const allItems = activeTableOrders.flatMap(o => (o.items || []).map(item => ({ ...item, orderNum: o.orderNumber })));
-                if (allItems.length === 0) return null;
-                return (
-                  <div className="bg-background/70 rounded-xl p-2.5 border border-border/40 space-y-1.5 text-xs max-h-24 overflow-y-auto">
-                    {allItems.map((item: any, idx: number) => (
-                      <div key={item.id || idx} className="flex justify-between items-center text-xs">
-                        <span className="truncate pr-2 text-muted-foreground">
-                          <span className="inline-flex items-center justify-center h-4 px-1.5 rounded-md bg-muted/60 text-foreground font-mono font-semibold text-[10px] mr-1.5">
-                            {item.qty}x
-                          </span>
-                          {item.name}
-                        </span>
-                        <span className="font-mono font-semibold text-foreground shrink-0 tabular-nums">
-                          Rs. {((Number(item.price) * Number(item.qty)) - Number(item.discount || 0)).toLocaleString()}
-                        </span>
-                      </div>
-                    ))}
+            {/* LEFT COLUMN: Order Details & Digital Receipt Card */}
+            <div className="bg-muted/30 p-3.5 sm:p-4 rounded-2xl border border-border/60 space-y-3 h-full flex flex-col justify-between">
+              <div className="space-y-3">
+                {/* Customer Info Header */}
+                <div className="flex items-center justify-between pb-2 border-b border-border/50">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="h-7 w-7 rounded-lg bg-orange-500/10 text-orange-500 flex items-center justify-center shrink-0">
+                      <User className="h-3.5 w-3.5" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="font-bold text-xs text-foreground truncate">{selectedCustomerData?.name || "Walk-in Customer"}</p>
+                      {selectedCustomerData?.phone && (
+                        <p className="text-[10px] text-muted-foreground font-mono truncate">{selectedCustomerData.phone}</p>
+                      )}
+                    </div>
                   </div>
-                );
-              })()}
+                  <div className="flex items-center gap-1.5">
+                    <Badge variant="outline" className="text-[10px] font-bold px-2 py-0.5 bg-background border-border/70">
+                      Table {selectedTable?.number}
+                    </Badge>
+                    <span className="text-[11px] text-muted-foreground font-mono font-medium">
+                      {activeTableOrders.length} {activeTableOrders.length === 1 ? "order" : "orders"}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Items List - Grouped with Deals & Combos support */}
+                {(() => {
+                  const allItems = activeTableOrders.flatMap(o => (o.items || []).map(item => ({ ...item, orderNum: o.orderNumber })));
+                  if (allItems.length === 0) return null;
+                  const displayRows = groupOrderItemsForDisplay(allItems);
+
+                  return (
+                    <div className="bg-background/80 dark:bg-background/50 rounded-xl p-3 border border-border/50 space-y-2.5 max-h-56 md:max-h-[300px] overflow-y-auto scrollbar-thin">
+                      {displayRows.map((row, idx) => {
+                        if (row.kind === "deal") {
+                          return (
+                            <div key={row.dealKey || idx} className="space-y-1 pb-2 border-b border-border/30 last:border-0 last:pb-0">
+                              <div className="flex justify-between items-center text-xs">
+                                <div className="flex items-center gap-1.5 min-w-0 pr-2">
+                                  <Badge variant="outline" className="text-[9px] font-extrabold text-primary border-primary/30 bg-primary/10 px-1.5 py-0 h-4 uppercase tracking-wider shrink-0 gap-0.5">
+                                    <Gift className="h-2.5 w-2.5" /> Deal
+                                  </Badge>
+                                  <span className="font-bold text-foreground truncate">{row.dealName}</span>
+                                </div>
+                                <span className="font-mono font-bold text-foreground shrink-0 tabular-nums text-xs">
+                                  {currency} {Math.round(row.netTotal).toLocaleString()}
+                                </span>
+                              </div>
+                              <ul className="space-y-0.5 pl-3 border-l-2 border-primary/20 text-[10px] text-muted-foreground font-medium">
+                                {row.items.map((i, itemIdx) => (
+                                  <li key={itemIdx} className="flex items-center justify-between">
+                                    <span className="truncate pr-1">• {i.qty}x {i.name}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          );
+                        }
+
+                        const item = row.item;
+                        const lineGross = Number(item.price || 0) * Number(item.qty || 1);
+                        const lineNet = lineGross - Number(item.discount || 0);
+
+                        return (
+                          <div key={item.id || idx} className="space-y-0.5 pb-1.5 border-b border-border/30 last:border-0 last:pb-0">
+                            <div className="flex justify-between items-center text-xs">
+                              <div className="flex items-center gap-1.5 min-w-0 pr-2">
+                                <span className="inline-flex items-center justify-center h-4 px-1 rounded bg-muted text-foreground font-mono font-bold text-[10px]">
+                                  {item.qty}x
+                                </span>
+                                <span className="font-semibold text-foreground truncate">{item.name}</span>
+                              </div>
+                              <span className="font-mono font-bold text-foreground shrink-0 tabular-nums text-xs">
+                                {currency} {Math.round(lineNet).toLocaleString()}
+                              </span>
+                            </div>
+                            {item.modifiers && item.modifiers.length > 0 && (
+                              <p className="text-[10px] text-muted-foreground/80 pl-6 truncate">
+                                {item.modifiers.join(", ")}
+                              </p>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
+              </div>
 
               {/* Financial Calculation Breakdown */}
               {(() => {
-                const subtotalSum = activeTableOrders.reduce((s, o) => s + Number(o.subtotal), 0);
-                const taxSum = activeTableOrders.reduce((s, o) => s + Number(o.tax), 0);
-                const totalSum = activeTableOrders.reduce((s, o) => s + Number(o.total), 0);
-                const netAmountDue = Math.max(0, totalSum - currentAdvancePayment);
+                const subtotalSum = Math.round(activeTableOrders.reduce((s, o) => s + Number(o.subtotal), 0));
+                const taxSum = Math.round(activeTableOrders.reduce((s, o) => s + Number(o.tax), 0));
+                const totalSum = Math.round(activeTableOrders.reduce((s, o) => s + Number(o.total), 0));
+                const netAmountDue = Math.max(0, totalSum - Math.round(currentAdvancePayment));
 
                 return (
-                  <div className="space-y-1 pt-1 text-xs border-t border-border/40">
+                  <div className="space-y-1.5 pt-2 text-xs border-t border-border/50">
                     <div className="flex justify-between text-muted-foreground text-[11px]">
                       <span>Subtotal</span>
-                      <span className="font-mono tabular-nums">Rs. {subtotalSum.toLocaleString()}</span>
+                      <span className="font-mono tabular-nums">{currency} {subtotalSum.toLocaleString()}</span>
                     </div>
                     {activeTableDiscount > 0 && (
                       <div className="flex justify-between text-emerald-500 text-[11px]">
                         <span>{activeTableDealName ?? "Discount"}</span>
-                        <span className="font-mono tabular-nums">-Rs. {activeTableDiscount.toLocaleString()}</span>
+                        <span className="font-mono tabular-nums">-{currency} {Math.round(activeTableDiscount).toLocaleString()}</span>
                       </div>
                     )}
                     <div className="flex justify-between text-muted-foreground text-[11px]">
                       <span>GST Tax ({taxRate}%)</span>
-                      <span className="font-mono tabular-nums">Rs. {taxSum.toLocaleString()}</span>
+                      <span className="font-mono tabular-nums">{currency} {taxSum.toLocaleString()}</span>
                     </div>
                     {currentAdvancePayment > 0 && (
                       <div className="flex justify-between text-emerald-500 font-semibold text-[11px]">
                         <span>Advance Paid Credit</span>
-                        <span className="font-mono tabular-nums">-Rs. {currentAdvancePayment.toLocaleString()}</span>
+                        <span className="font-mono tabular-nums">-{currency} {Math.round(currentAdvancePayment).toLocaleString()}</span>
                       </div>
                     )}
-                    <div className="flex justify-between items-center pt-1.5 border-t border-border/40 font-bold">
+
+                    <div className="flex justify-between items-center pt-2 border-t border-border/60 font-bold">
                       <span className="uppercase tracking-wider text-[11px] text-muted-foreground">Order Total</span>
-                      <span className="text-2xl font-black text-amber-500 dark:text-amber-400 font-mono tracking-tight tabular-nums">
+                      <span className="text-2xl lg:text-3xl font-black text-amber-500 dark:text-amber-400 font-mono tracking-tight tabular-nums">
                         {currency} {netAmountDue.toLocaleString()}
                       </span>
                     </div>
@@ -3663,164 +4027,170 @@ const WaiterPanel = () => {
               })()}
             </div>
 
-            {/* 2. Unified Settlement Card */}
-            {(() => {
-              const totalSum = activeTableOrders.reduce((s, o) => s + Number(o.total), 0);
-              const netAmountDue = Math.max(0, totalSum - currentAdvancePayment);
-              const waiterEntriesTotal = waiterPaymentEntries.reduce((s, e) => s + e.amount, 0);
-              const waiterTotalPaid = waiterEntriesTotal;
-              const waiterTotalDue = Math.max(0, netAmountDue - waiterEntriesTotal);
+            {/* RIGHT COLUMN: Payment Methods & Settlement Flow */}
+            <div className="space-y-3.5">
+              {(() => {
+                const totalSum = Math.round(activeTableOrders.reduce((s, o) => s + Number(o.total), 0));
+                const netAmountDue = Math.max(0, totalSum - Math.round(currentAdvancePayment));
+                const waiterEntriesTotal = Math.round(waiterPaymentEntries.reduce((s, e) => s + e.amount, 0));
+                const waiterTotalPaid = waiterEntriesTotal;
+                const waiterTotalDue = Math.max(0, netAmountDue - waiterEntriesTotal);
 
-              return (
-                <div className="bg-muted/20 p-3.5 rounded-2xl border border-border/50 space-y-3">
-                  <div className="flex justify-between items-center text-xs">
-                    <span className="font-semibold text-muted-foreground text-[11px] uppercase tracking-wider">Payment Method &amp; Amount</span>
-                    <span className="font-mono text-muted-foreground text-[11px]">
-                      {waiterPaymentEntries.length > 0 ? (
-                        waiterTotalPaid > netAmountDue ? (
-                          <span className="text-emerald-500 font-bold">Change: Rs. {(waiterTotalPaid - netAmountDue).toLocaleString()}</span>
+                return (
+                  <div className="bg-muted/30 p-3.5 sm:p-4 rounded-2xl border border-border/60 space-y-3">
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="font-bold text-foreground text-xs uppercase tracking-wider">Select Payment Method</span>
+                      <span className="font-mono text-muted-foreground text-[11px]">
+                        {waiterPaymentEntries.length > 0 ? (
+                          waiterTotalPaid > netAmountDue ? (
+                            <span className="text-emerald-500 font-bold">Change: {currency} {(waiterTotalPaid - netAmountDue).toLocaleString()}</span>
+                          ) : (
+                            <>Remaining: <strong className={cn(waiterTotalDue > 0 ? "text-amber-500 font-bold" : "text-emerald-500 font-bold")}>{currency} {waiterTotalDue.toLocaleString()}</strong></>
+                          )
                         ) : (
-                          <>Remaining: <strong className={cn(waiterTotalDue > 0 ? "text-amber-500 font-bold" : "text-emerald-500 font-bold")}>Rs. {waiterTotalDue.toLocaleString()}</strong></>
-                        )
-                      ) : (
-                        <>Due: <strong className="text-foreground font-bold">Rs. {netAmountDue.toLocaleString()}</strong></>
-                      )}
-                    </span>
-                  </div>
-
-                  {/* Method Chips */}
-                  <div className="grid grid-cols-2 gap-2">
-                    {(settings.paymentMethods ?? ["Cash", "JazzCash", "EasyPaisa", "Credit Card"]).map(pm => {
-                      const IconComponent = getPaymentIcon(pm);
-                      const isSelected = settlePaymentMethod === pm;
-                      return (
-                        <button
-                          key={pm}
-                          type="button"
-                          onClick={() => setSettlePaymentMethod(pm)}
-                          className={cn(
-                            "flex items-center justify-center gap-2 h-10 rounded-xl border text-xs font-semibold transition-all",
-                            isSelected
-                              ? "border-2 border-orange-500 bg-orange-500/10 text-orange-500 font-bold shadow-sm shadow-orange-500/10"
-                              : "border-border/60 text-muted-foreground hover:text-foreground hover:bg-muted/50"
-                          )}
-                        >
-                          <IconComponent className="h-4 w-4 shrink-0" />
-                          <span>{pm}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-
-                  {/* Amount Input with Add Button */}
-                  <div className="flex gap-2">
-                    <div className="relative flex-1">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-mono font-bold text-muted-foreground">Rs.</span>
-                      <Input
-                        type="number"
-                        placeholder={`Amount (Due: ${waiterPaymentEntries.length > 0 ? waiterTotalDue : netAmountDue})`}
-                        value={waiterGivenAmount === 0 ? "" : waiterGivenAmount}
-                        onChange={(e) => setWaiterGivenAmount(Number(e.target.value))}
-                        className="h-10 pl-9 text-sm font-mono font-bold rounded-xl border-border/70 focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
-                      />
+                          <>Due: <strong className="text-foreground font-bold">{currency} {netAmountDue.toLocaleString()}</strong></>
+                        )}
+                      </span>
                     </div>
+
+                    {/* Method Chips */}
+                    <div className="grid grid-cols-2 gap-2">
+                      {(settings.paymentMethods ?? ["Cash", "JazzCash", "EasyPaisa", "Credit Card"]).map(pm => {
+                        const IconComponent = getPaymentIcon(pm);
+                        const isSelected = settlePaymentMethod === pm;
+                        return (
+                          <button
+                            key={pm}
+                            type="button"
+                            onClick={() => setSettlePaymentMethod(pm)}
+                            className={cn(
+                              "flex items-center justify-center gap-2 h-10 rounded-xl border text-xs font-semibold transition-all cursor-pointer",
+                              isSelected
+                                ? "border-2 border-orange-500 bg-orange-500/10 text-orange-500 font-bold shadow-xs"
+                                : "border-border/60 text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                            )}
+                          >
+                            <IconComponent className="h-4 w-4 shrink-0" />
+                            <span>{pm}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {/* Amount Input with Add Button */}
+                    <div className="flex gap-2">
+                      <div className="relative flex-1">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-mono font-bold text-muted-foreground">Rs.</span>
+                        <Input
+                          type="number"
+                          step="1"
+                          placeholder={`Amount (Due: ${waiterPaymentEntries.length > 0 ? waiterTotalDue : netAmountDue})`}
+                          value={waiterGivenAmount === 0 ? "" : Math.round(waiterGivenAmount)}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setWaiterGivenAmount(val === "" ? 0 : Math.round(Number(val)) || 0);
+                          }}
+                          className="h-10 pl-9 text-sm font-mono font-bold rounded-xl border-border/70 focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
+                        />
+                      </div>
+                      <Button
+                        type="button"
+                        size="sm"
+                        className="h-10 px-4 shrink-0 gap-1.5 bg-orange-600 hover:bg-orange-500 text-white font-bold rounded-xl shadow-xs"
+                        onClick={() => {
+                          const amt = Math.round(waiterGivenAmount > 0 ? waiterGivenAmount : waiterTotalDue);
+                          if (amt <= 0) { toast.error("Enter a valid payment amount"); return; }
+                          const nextTotal = waiterEntriesTotal + amt;
+                          setWaiterPaymentEntries(prev => [...prev, { id: `pay-${Date.now()}`, method: settlePaymentMethod, amount: amt }]);
+                          setWaiterGivenAmount(Math.max(0, Math.round(netAmountDue - nextTotal)));
+                        }}
+                      >
+                        <Plus className="h-4 w-4" />Add
+                      </Button>
+                    </div>
+
+                    {/* Added Payment Entries List */}
+                    {waiterPaymentEntries.length > 0 && (
+                      <div className="space-y-1.5 pt-0.5">
+                        {waiterPaymentEntries.map(e => (
+                          <div key={e.id} className="flex items-center justify-between text-xs bg-muted/40 border border-border/40 rounded-xl px-3 py-2">
+                            <span className="font-semibold text-foreground">{e.method}</span>
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono font-bold text-emerald-500 tabular-nums">{currency} {e.amount.toLocaleString()}</span>
+                              <button
+                                onClick={() => {
+                                  setWaiterPaymentEntries(prev => {
+                                    const updated = prev.filter(x => x.id !== e.id);
+                                    const newTotal = updated.reduce((s, x) => s + x.amount, 0);
+                                    setWaiterGivenAmount(Math.max(0, Math.round(netAmountDue - newTotal)));
+                                    return updated;
+                                  });
+                                }}
+                                className="text-destructive/70 hover:text-destructive transition-colors cursor-pointer"
+                              >
+                                <X className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+
+                        <div className="flex justify-between items-center pt-2 border-t border-border/40 text-xs">
+                          <span className="text-muted-foreground font-medium">Total Settled:</span>
+                          <span className={cn("font-mono font-bold tabular-nums", waiterTotalPaid >= netAmountDue ? "text-emerald-500" : "text-amber-500")}>
+                            {currency} {waiterTotalPaid.toLocaleString()} / {currency} {netAmountDue.toLocaleString()}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Change Return Banner when customer overpays */}
+                    {waiterTotalPaid > netAmountDue && (
+                      <div className="flex items-center justify-between p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-xs font-bold transition-all animate-in fade-in">
+                        <span className="flex items-center gap-1.5">
+                          <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                          <span>Change Return:</span>
+                        </span>
+                        <span className="font-mono text-sm tabular-nums">{currency} {(waiterTotalPaid - netAmountDue).toLocaleString()}</span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* Primary Action Button */}
+              {(() => {
+                const totalSum = Math.round(activeTableOrders.reduce((s, o) => s + Number(o.total), 0));
+                const netAmountDue = Math.max(0, totalSum - Math.round(currentAdvancePayment));
+                const waiterEntriesTotal = Math.round(waiterPaymentEntries.reduce((s, e) => s + e.amount, 0));
+                const isReady = !settlingBillingState && waiterPaymentEntries.length > 0 && waiterEntriesTotal >= netAmountDue;
+
+                return (
+                  <div className="pt-1">
                     <Button
-                      type="button"
-                      size="sm"
-                      className="h-10 px-4 shrink-0 gap-1.5 bg-orange-600 hover:bg-orange-500 text-white font-bold rounded-xl shadow-sm"
+                      className={cn(
+                        "w-full h-11 text-xs font-bold rounded-xl gap-2 transition-all active:scale-[0.99] shadow-md",
+                        isReady && !settlingBillingState
+                          ? "bg-orange-600 hover:bg-orange-500 text-white font-bold shadow-orange-500/20"
+                          : "bg-muted text-muted-foreground opacity-50 cursor-not-allowed"
+                      )}
                       onClick={() => {
-                        const amt = waiterGivenAmount > 0 ? waiterGivenAmount : waiterTotalDue;
-                        if (amt <= 0) { toast.error("Enter a valid payment amount"); return; }
-                        const nextTotal = waiterEntriesTotal + amt;
-                        setWaiterPaymentEntries(prev => [...prev, { id: `pay-${Date.now()}`, method: settlePaymentMethod, amount: amt }]);
-                        setWaiterGivenAmount(Math.max(0, netAmountDue - nextTotal));
+                        const finalPaymentMethod = waiterPaymentEntries.length > 0
+                          ? waiterPaymentEntries.map(e => `${e.method}: Rs.${e.amount}`).join(", ")
+                          : settlePaymentMethod;
+                        settleBilling(finalPaymentMethod);
                       }}
+                      disabled={!isReady || settlingBillingState}
                     >
-                      <Plus className="h-4 w-4" />Add
+                      {settlingBillingState ? (
+                        <><Loader2 className="h-4 w-4 animate-spin" />Processing Settlement...</>
+                      ) : (
+                        <><Check className="h-4 w-4" />Confirm Pay</>
+                      )}
                     </Button>
                   </div>
-
-                  {/* Added Payment Entries List */}
-                  {waiterPaymentEntries.length > 0 && (
-                    <div className="space-y-1.5 pt-0.5">
-                      {waiterPaymentEntries.map(e => (
-                        <div key={e.id} className="flex items-center justify-between text-xs bg-muted/40 border border-border/40 rounded-xl px-3 py-2">
-                          <span className="font-semibold text-foreground">{e.method}</span>
-                          <div className="flex items-center gap-2">
-                            <span className="font-mono font-bold text-emerald-500 tabular-nums">Rs. {e.amount.toLocaleString()}</span>
-                            <button
-                              onClick={() => {
-                                setWaiterPaymentEntries(prev => {
-                                  const updated = prev.filter(x => x.id !== e.id);
-                                  const newTotal = updated.reduce((s, x) => s + x.amount, 0);
-                                  setWaiterGivenAmount(Math.max(0, netAmountDue - newTotal));
-                                  return updated;
-                                });
-                              }}
-                              className="text-destructive/70 hover:text-destructive transition-colors"
-                            >
-                              <X className="h-3.5 w-3.5" />
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-
-                      <div className="flex justify-between items-center pt-2 border-t border-border/40 text-xs">
-                        <span className="text-muted-foreground font-medium">Total Settled:</span>
-                        <span className={cn("font-mono font-bold tabular-nums", waiterTotalPaid >= netAmountDue ? "text-emerald-500" : "text-amber-500")}>
-                          Rs. {waiterTotalPaid.toLocaleString()} / Rs. {netAmountDue.toLocaleString()}
-                        </span>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Change Return Banner when customer overpays */}
-                  {waiterTotalPaid > netAmountDue && (
-                    <div className="flex items-center justify-between p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-xs font-bold transition-all animate-in fade-in">
-                      <span className="flex items-center gap-1.5">
-                        <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-                        <span>Change Return:</span>
-                      </span>
-                      <span className="font-mono text-sm tabular-nums">Rs. {(waiterTotalPaid - netAmountDue).toLocaleString()}</span>
-                    </div>
-                  )}
-                </div>
-              );
-            })()}
-
-            {/* 3. Primary Action Button */}
-            {(() => {
-              const totalSum = activeTableOrders.reduce((s, o) => s + Number(o.total), 0);
-              const netAmountDue = Math.max(0, totalSum - currentAdvancePayment);
-              const waiterEntriesTotal = waiterPaymentEntries.reduce((s, e) => s + e.amount, 0);
-              const isReady = !settlingBillingState && waiterPaymentEntries.length > 0 && waiterEntriesTotal >= netAmountDue;
-
-              return (
-                <div className="pt-1.5">
-                  <Button
-                    className={cn(
-                      "w-full h-12 text-sm font-bold rounded-2xl gap-2 transition-all active:scale-[0.99]",
-                      isReady && !settlingBillingState
-                        ? "bg-orange-600 hover:bg-orange-500 text-white font-bold shadow-sm"
-                        : "bg-muted text-muted-foreground opacity-50 cursor-not-allowed"
-                    )}
-                    onClick={() => {
-                      const finalPaymentMethod = waiterPaymentEntries.length > 0
-                        ? waiterPaymentEntries.map(e => `${e.method}: Rs.${e.amount}`).join(", ")
-                        : settlePaymentMethod;
-                      settleBilling(finalPaymentMethod);
-                    }}
-                    disabled={!isReady || settlingBillingState}
-                  >
-                    {settlingBillingState ? (
-                      <><Loader2 className="h-4 w-4 animate-spin" />Processing Settlement...</>
-                    ) : (
-                      <><Check className="h-4 w-4" />Confirm Pay</>
-                    )}
-                  </Button>
-                </div>
-              );
-            })()}
+                );
+              })()}
+            </div>
 
           </div>
         </DialogContent>

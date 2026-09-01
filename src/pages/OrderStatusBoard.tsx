@@ -1,10 +1,10 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, Fragment } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   ArrowLeft, RefreshCw, Bell, Clock, BarChart3, TrendingUp, ShoppingBag,
   AlertCircle, ChefHat, CheckCircle2, Timer, UtensilsCrossed,
   ShoppingCart, Truck, CreditCard, Banknote, Receipt, Check, Loader2,
-  Columns, LayoutGrid, Sparkles, User, Flame, Printer
+  Columns, LayoutGrid, Sparkles, User, Flame, Printer, Gift,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -425,12 +425,135 @@ const OrderStatusBoard = () => {
     }
   };
 
+  type BoardDisplayRow =
+    | {
+        kind: "deal";
+        dealKey: string;
+        dealName: string;
+        items: any[];
+        gross: number;
+        discount: number;
+        netTotal: number;
+        status: "pending" | "preparing" | "ready";
+        cookInfo: {
+          cookTime: number;
+          elapsedMin: number;
+          remainingMin: number;
+          isOverdue: boolean;
+          overdueMin: number;
+        };
+      }
+    | {
+        kind: "plain";
+        item: any;
+        status: "pending" | "preparing" | "ready";
+        cookInfo: {
+          cookTime: number;
+          elapsedMin: number;
+          remainingMin: number;
+          isOverdue: boolean;
+          overdueMin: number;
+        };
+      };
+
+  const groupOrderItemsForStatusBoard = useCallback((order: any): BoardDisplayRow[] => {
+    const rawItems = order.items || [];
+    const rows: BoardDisplayRow[] = [];
+    const dealGroups: Record<string, { dealName: string; items: any[] }> = {};
+
+    for (const item of rawItems) {
+      let dealKey: string | null = null;
+      let dealName: string | null = null;
+
+      if (item.dealLineId) {
+        dealKey = item.dealLineId;
+        dealName = item.dealName || "Deal";
+      } else if (item.dealName) {
+        dealKey = `deal-${item.dealName}`;
+        dealName = item.dealName;
+      } else if (
+        item.name &&
+        item.name.includes(":") &&
+        (item.name.includes("(Free)") ||
+          item.name.includes("(Discounted)") ||
+          item.name.toLowerCase().includes("deal") ||
+          item.name.toLowerCase().includes("offer") ||
+          item.name.toLowerCase().includes("combo") ||
+          item.name.toLowerCase().includes("feast") ||
+          (item.discount && item.discount > 0))
+      ) {
+        const parts = item.name.split(":");
+        dealName = parts[0].trim();
+        dealKey = `deal-prefix-${dealName}`;
+      }
+
+      if (dealKey && dealName) {
+        if (!dealGroups[dealKey]) {
+          dealGroups[dealKey] = { dealName, items: [] };
+        }
+        const cleanName =
+          item.name && item.name.startsWith(`${dealName}:`)
+            ? item.name.replace(`${dealName}:`, "").trim()
+            : item.name;
+        dealGroups[dealKey].items.push({ ...item, name: cleanName });
+      } else {
+        const status = getItemKitchenStatus(item, order);
+        const cookInfo = getItemCookingInfo(item, order);
+        rows.push({ kind: "plain", item, status, cookInfo });
+      }
+    }
+
+    const dealRows: BoardDisplayRow[] = Object.entries(dealGroups).map(([key, group]) => {
+      const gross = group.items.reduce((s, i) => s + Number(i.price || 0) * Number(i.qty || 1), 0);
+      const discount = group.items.reduce((s, i) => s + Number(i.discount || 0), 0);
+      const netTotal = Math.max(0, gross - discount);
+
+      // Compute overall deal status
+      const subStatuses = group.items.map((i) => getItemKitchenStatus(i, order));
+      const status: "pending" | "preparing" | "ready" =
+        subStatuses.every((s) => s === "ready")
+          ? "ready"
+          : subStatuses.some((s) => s === "preparing")
+          ? "preparing"
+          : "pending";
+
+      // Compute maximum cooking time info for the deal
+      const cookInfos = group.items.map((i) => getItemCookingInfo(i, order));
+      const maxCookTime = Math.max(...cookInfos.map((c) => c.cookTime), 0);
+      const maxElapsed = Math.max(...cookInfos.map((c) => c.elapsedMin), 0);
+      const minRemaining = Math.max(0, maxCookTime - maxElapsed);
+      const isOverdue = cookInfos.some((c) => c.isOverdue);
+      const overdueMin = Math.max(...cookInfos.map((c) => c.overdueMin), 0);
+
+      return {
+        kind: "deal",
+        dealKey: key,
+        dealName: group.dealName,
+        items: group.items,
+        gross,
+        discount,
+        netTotal,
+        status,
+        cookInfo: {
+          cookTime: maxCookTime,
+          elapsedMin: maxElapsed,
+          remainingMin: minRemaining,
+          isOverdue,
+          overdueMin,
+        },
+      };
+    });
+
+    return [...dealRows, ...rows];
+  }, [getItemKitchenStatus, getItemCookingInfo]);
+
   // ── Render Individual Order Card ──
   const renderOrderCard = (order: any) => {
     const cfg = statusConfig[order.status as FilterStatus] ?? statusConfig.pending;
     const elapsed = getElapsed(order);
     const paid = isPaid(order);
     const cookInfo = getCookingInfo(order);
+    const displayRows = groupOrderItemsForStatusBoard(order);
 
     return (
       <Card
@@ -491,11 +614,111 @@ const OrderStatusBoard = () => {
               )}
             </div>
 
-            {/* Items List Snippet — High Contrast & Ultra-Readable */}
-            <div className="bg-background/80 dark:bg-muted/20 rounded-xl p-2 space-y-1.5 border border-border/60 shadow-xs">
-              {order.items.slice(0, 3).map((item: any, i: number) => {
-                const itemStatus = getItemKitchenStatus(item, order);
-                const itemCook = getItemCookingInfo(item, order);
+            {/* Items List — High Contrast, Ultra-Readable with Full Item Breakdown & Deal Grouping */}
+            <div className="bg-background/80 dark:bg-muted/20 rounded-xl p-2 space-y-2 border border-border/60 shadow-xs max-h-72 overflow-y-auto scrollbar-thin">
+              {displayRows.map((row, i) => {
+                if (row.kind === "deal") {
+                  return (
+                    <div
+                      key={row.dealKey || i}
+                      className="rounded-xl bg-card border border-primary/30 p-2.5 space-y-2 shadow-2xs hover:border-primary/50 transition-all"
+                    >
+                      {/* Deal Header: Deal Tag + Deal Name */}
+                      <div className="flex items-center justify-between text-xs gap-2 pb-1 border-b border-primary/20">
+                        <div className="flex items-center gap-1.5 truncate min-w-0">
+                          <Badge
+                            variant="outline"
+                            className="text-[9px] font-extrabold text-primary border-primary/30 bg-primary/10 px-1.5 py-0 h-4 uppercase tracking-wider shrink-0 gap-0.5"
+                          >
+                            <Gift className="h-2.5 w-2.5" /> Deal
+                          </Badge>
+                          <span className="font-extrabold text-xs text-foreground truncate">{row.dealName}</span>
+                        </div>
+                        <span className="text-[10px] font-mono text-muted-foreground shrink-0">
+                          {row.items.length} items
+                        </span>
+                      </div>
+
+                      {/* Deal Sub-Items List — Individual Kitchen Status & Timer for each item! */}
+                      <div className="space-y-1.5">
+                        {row.items.map((subItem: any, subIdx: number) => {
+                          const subStatus = getItemKitchenStatus(subItem, order);
+                          const subCook = getItemCookingInfo(subItem, order);
+
+                          return (
+                            <div
+                              key={subIdx}
+                              className="flex items-center justify-between text-xs gap-2 p-1.5 rounded-lg bg-background/60 dark:bg-muted/30 border border-border/40 hover:border-primary/30 transition-all"
+                            >
+                              {/* Left: Sub-item Status Badge + Qty + Name */}
+                              <div className="flex items-center gap-1.5 truncate min-w-0">
+                                {subStatus === "ready" ? (
+                                  <span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider bg-emerald-500/25 text-emerald-400 dark:text-emerald-300 border border-emerald-500/40 shrink-0 flex items-center gap-1">
+                                    <CheckCircle2 className="h-3 w-3 text-emerald-400" /> Ready
+                                  </span>
+                                ) : subStatus === "preparing" ? (
+                                  <span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider bg-sky-500/25 text-sky-300 dark:text-sky-200 border border-sky-500/40 shrink-0 flex items-center gap-1">
+                                    <ChefHat className="h-3 w-3 animate-pulse text-sky-300" /> Prep
+                                  </span>
+                                ) : (
+                                  <span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider bg-amber-500/25 text-amber-300 dark:text-amber-200 border border-amber-500/40 shrink-0 flex items-center gap-1">
+                                    <AlertCircle className="h-3 w-3 text-amber-400" /> Pend
+                                  </span>
+                                )}
+                                <span className="font-black text-xs text-foreground shrink-0">{subItem.qty}×</span>
+                                <span className="truncate font-semibold text-foreground text-xs">{subItem.name}</span>
+                              </div>
+
+                              {/* Right side: Individual Countdown Timer Pill for this deal dish */}
+                              <div className="shrink-0">
+                                {subStatus === "ready" ? (
+                                  <span className="font-mono text-[11px] font-black text-emerald-400 dark:text-emerald-300 bg-emerald-500/20 px-1.5 py-0.5 rounded-md border border-emerald-500/40 flex items-center gap-1 shadow-xs">
+                                    <Check className="h-3 w-3 stroke-[3]" /> Done
+                                  </span>
+                                ) : subStatus === "preparing" ? (
+                                  <span
+                                    className={cn(
+                                      "font-mono text-[11px] font-black px-1.5 py-0.5 rounded-md border flex items-center gap-1 shadow-xs",
+                                      subCook.isOverdue
+                                        ? "text-white bg-destructive border-destructive shadow-md animate-pulse"
+                                        : "text-sky-300 dark:text-sky-200 bg-sky-500/25 border-sky-400/60"
+                                    )}
+                                  >
+                                    {subCook.isOverdue ? (
+                                      <>
+                                        <AlertCircle className="h-3 w-3 text-white" />
+                                        +{subCook.overdueMin}m
+                                      </>
+                                    ) : subCook.cookTime > 0 ? (
+                                      <>
+                                        <Clock className="h-3 w-3 animate-pulse" />
+                                        {subCook.remainingMin}m
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Clock className="h-3 w-3" />
+                                        {subCook.elapsedMin}m
+                                      </>
+                                    )}
+                                  </span>
+                                ) : (
+                                  <span className="font-mono text-[11px] font-black text-amber-300 dark:text-amber-200 bg-amber-500/25 px-1.5 py-0.5 rounded-md border border-amber-400/60 flex items-center gap-1 shadow-xs">
+                                    <Timer className="h-3 w-3" />
+                                    {subCook.cookTime > 0 ? `${subCook.cookTime}m est` : "In Queue"}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                }
+
+                const item = row.item;
+                const itemStatus = row.status;
+                const itemCook = row.cookInfo;
 
                 return (
                   <div key={i} className="flex items-center justify-between text-xs gap-2 p-1.5 rounded-lg bg-card border border-border/40 hover:border-primary/30 transition-all">
@@ -518,7 +741,7 @@ const OrderStatusBoard = () => {
                       <span className="truncate font-extrabold text-foreground text-xs">{item.name}</span>
                     </div>
 
-                    {/* Right side: High Contrast Countdown Timer Pill */}
+                    {/* Right side: Countdown Timer */}
                     <div className="shrink-0">
                       {itemStatus === "ready" ? (
                         <span className="font-mono text-xs font-black text-emerald-400 dark:text-emerald-300 bg-emerald-500/20 px-2 py-0.5 rounded-md border border-emerald-500/40 flex items-center gap-1 shadow-xs">
@@ -558,9 +781,6 @@ const OrderStatusBoard = () => {
                   </div>
                 );
               })}
-              {order.items.length > 3 && (
-                <p className="text-[10px] text-primary font-black pt-0.5 text-right uppercase tracking-wider">+{order.items.length - 3} more items</p>
-              )}
             </div>
 
             {/* Cooking Progress Bar for Preparing Orders */}
@@ -935,10 +1155,64 @@ const OrderStatusBoard = () => {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {selectedOrder.items.map((item: any, i: number) => {
-                          const itemStatus = getItemKitchenStatus(item, selectedOrder);
+                        {groupOrderItemsForStatusBoard(selectedOrder).map((row, i) => {
+                          if (row.kind === "deal") {
+                            return (
+                              <Fragment key={row.dealKey || i}>
+                                <TableRow className="bg-primary/[0.04] hover:bg-primary/[0.07] font-bold border-b border-border/60">
+                                  <TableCell className="text-xs py-2">
+                                    <div className="flex items-center gap-1.5">
+                                      <Badge variant="outline" className="text-[9px] font-extrabold text-primary border-primary/30 bg-primary/10 px-1.5 py-0 h-4 uppercase tracking-wider shrink-0 gap-0.5">
+                                        <Gift className="h-2.5 w-2.5" /> Deal
+                                      </Badge>
+                                      <span className="font-extrabold text-foreground">{row.dealName}</span>
+                                    </div>
+                                  </TableCell>
+                                  <TableCell className="text-xs text-center py-2">
+                                    {row.status === "ready" ? (
+                                      <Badge className="text-[10px] bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 px-1.5 py-0 font-bold">Ready</Badge>
+                                    ) : row.status === "preparing" ? (
+                                      <Badge variant="outline" className="text-[10px] text-sky-500 border-sky-500/30 bg-sky-500/10 px-1.5 py-0 font-bold">Preparing</Badge>
+                                    ) : (
+                                      <Badge variant="outline" className="text-[10px] text-amber-500 border-amber-500/30 bg-amber-500/10 px-1.5 py-0 font-bold">Pending</Badge>
+                                    )}
+                                  </TableCell>
+                                  <TableCell className="text-xs font-bold text-center py-2">1</TableCell>
+                                  <TableCell className="text-xs font-mono text-right py-2">Rs. {Math.round(row.gross).toLocaleString()}</TableCell>
+                                  <TableCell className="text-xs font-mono font-bold text-right py-2">Rs. {Math.round(row.netTotal).toLocaleString()}</TableCell>
+                                </TableRow>
+                                {row.items.map((sub, subIdx) => {
+                                  const subStatus = getItemKitchenStatus(sub, selectedOrder);
+                                  return (
+                                    <TableRow key={subIdx} className="bg-muted/10 hover:bg-muted/20 border-b border-border/30 text-muted-foreground">
+                                      <TableCell className="text-xs py-1.5 pl-6">
+                                        <div className="flex items-center gap-1.5">
+                                          <span className="text-primary font-mono text-[10px]">•</span>
+                                          <span className="text-foreground/90 font-medium">{sub.name}</span>
+                                        </div>
+                                      </TableCell>
+                                      <TableCell className="text-xs text-center py-1.5">
+                                        <span className={cn(
+                                          "text-[9px] font-bold px-1.5 py-0.5 rounded uppercase",
+                                          subStatus === "ready" ? "text-emerald-500" : subStatus === "preparing" ? "text-sky-500" : "text-amber-500"
+                                        )}>
+                                          {subStatus}
+                                        </span>
+                                      </TableCell>
+                                      <TableCell className="text-xs font-medium text-center py-1.5">{sub.qty}</TableCell>
+                                      <TableCell className="text-xs font-mono text-right py-1.5 text-muted-foreground/60">—</TableCell>
+                                      <TableCell className="text-xs font-mono text-right py-1.5 text-muted-foreground/60">—</TableCell>
+                                    </TableRow>
+                                  );
+                                })}
+                              </Fragment>
+                            );
+                          }
+
+                          const item = row.item;
+                          const itemStatus = row.status;
                           return (
-                            <TableRow key={i} className="hover:bg-muted/30">
+                            <TableRow key={item.id || i} className="hover:bg-muted/30">
                               <TableCell className="text-xs font-semibold py-2">
                                 <div className="flex items-center gap-1.5">
                                   {itemStatus === "ready" ? (
@@ -961,8 +1235,8 @@ const OrderStatusBoard = () => {
                                 )}
                               </TableCell>
                               <TableCell className="text-xs font-bold text-center py-2">{item.qty}</TableCell>
-                              <TableCell className="text-xs font-mono text-right py-2">Rs. {item.price.toLocaleString()}</TableCell>
-                              <TableCell className="text-xs font-mono font-bold text-right py-2">Rs. {((item.price * item.qty) - (item.discount || 0)).toLocaleString()}</TableCell>
+                              <TableCell className="text-xs font-mono text-right py-2">Rs. {Math.round(item.price).toLocaleString()}</TableCell>
+                              <TableCell className="text-xs font-mono font-bold text-right py-2">Rs. {Math.round((item.price * item.qty) - (item.discount || 0)).toLocaleString()}</TableCell>
                             </TableRow>
                           );
                         })}

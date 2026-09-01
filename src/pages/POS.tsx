@@ -1995,12 +1995,12 @@ const POS = () => {
     return rows;
   }, [cart]);
 
-  const itemsSubtotal = cart.reduce((s, c) => s + (c.price * c.qty) - c.discount, 0);
-  const dealDiscount = dealPreview?.amount ?? 0;
-  const subtotal = itemsSubtotal - orderDiscount - dealDiscount;
+  const itemsSubtotal = Math.round(cart.reduce((s, c) => s + (c.price * c.qty) - (c.discount || 0), 0));
+  const dealDiscount = Math.round(dealPreview?.amount ?? 0);
+  const subtotal = Math.max(0, Math.round(itemsSubtotal - orderDiscount - dealDiscount));
   const tax = Math.round(subtotal * taxRate);
-  const total = subtotal + tax;
-  const netPayable = Math.max(0, total - loadedAdvancePayment);
+  const total = Math.round(subtotal + tax);
+  const netPayable = Math.max(0, Math.round(total - loadedAdvancePayment));
 
   /** One string capturing everything an "Update Order" would actually send.
    *  Compared against the snapshot taken when a running order was loaded, so
@@ -2065,18 +2065,18 @@ const POS = () => {
     return () => { cancelled = true; clearTimeout(timer); };
   }, [itemsSubtotal, orderType]);
 
-  const entriesTotal = paymentEntries.reduce((s, e) => s + e.amount, 0);
+  const entriesTotal = Math.round(paymentEntries.reduce((s, e) => s + e.amount, 0));
   const totalPaid = entriesTotal;
-  const totalDue = Math.max(0, netPayable - entriesTotal);
-  const finalizeChange = entriesTotal > netPayable ? (entriesTotal - netPayable) : 0;
+  const totalDue = Math.max(0, Math.round(netPayable - entriesTotal));
+  const finalizeChange = entriesTotal > netPayable ? Math.round(entriesTotal - netPayable) : 0;
 
   const isPaymentSufficient = (totalPaid + loadedAdvancePayment) >= total;
 
   const isDeliveryCOD     = orderType === "Delivery" && deliveryPayMode === "cod"     && !loadedAdvancePayment;
   const isDeliveryAdvance = orderType === "Delivery" && deliveryPayMode === "advance" && !loadedAdvancePayment;
   const isDeliveryPrepaid = orderType === "Delivery" && deliveryPayMode === "prepaid" && !loadedAdvancePayment;
-  const advanceTotal      = advanceEntries.reduce((s, e) => s + e.amount, 0);
-  const deliveryBalance   = Math.max(0, total - advanceTotal);
+  const advanceTotal      = Math.round(advanceEntries.reduce((s, e) => s + e.amount, 0));
+  const deliveryBalance   = Math.max(0, Math.round(total - advanceTotal));
   const isAdvanceSufficient = isDeliveryAdvance
     ? advanceEntries.length > 0 && advanceTotal > 0 && advanceTotal < total
     : true;
@@ -2218,7 +2218,7 @@ const POS = () => {
     if (!validateOrder()) return;
     // Go directly to payment — pre-fill exact amount for fastest checkout
     setFinalizeMethod("Cash");
-    setGivenAmount(netPayable);
+    setGivenAmount(Math.round(netPayable));
     setPaymentEntries([]);
     setIsSplitMode(false);
     setSplitMethod("Cash");
@@ -2234,7 +2234,7 @@ const POS = () => {
   const confirmPlaceOrder = () => {
     setShowConfirmOrder(false);
     setFinalizeMethod("Cash");
-    setGivenAmount(netPayable);
+    setGivenAmount(Math.round(netPayable));
     setPaymentEntries([]);
     setIsSplitMode(false);
     setSplitMethod("Cash");
@@ -2248,18 +2248,18 @@ const POS = () => {
   };
 
   const addPaymentEntry = () => {
-    const amt = givenAmount > 0 ? givenAmount : totalDue;
+    const amt = Math.round(givenAmount > 0 ? givenAmount : totalDue);
     if (amt <= 0) { toast.error("Enter a valid payment amount"); return; }
     const nextTotal = entriesTotal + amt;
     setPaymentEntries(prev => [...prev, { id: `pay-${Date.now()}`, method: finalizeMethod, amount: amt }]);
-    setGivenAmount(Math.max(0, netPayable - nextTotal));
+    setGivenAmount(Math.max(0, Math.round(netPayable - nextTotal)));
   };
 
   const removePaymentEntry = (id: string) => {
     setPaymentEntries(prev => {
       const updated = prev.filter(e => e.id !== id);
       const newTotal = updated.reduce((s, e) => s + e.amount, 0);
-      setGivenAmount(Math.max(0, netPayable - newTotal));
+      setGivenAmount(Math.max(0, Math.round(netPayable - newTotal)));
       return updated;
     });
   };
@@ -3054,100 +3054,199 @@ const POS = () => {
           )}
 
           {/* Cart Items */}
-          <div className="flex-1 overflow-y-auto p-2 sm:p-3">
+          <div className="flex-1 overflow-y-auto p-2 sm:p-2.5">
             {cart.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full py-12 text-center text-muted-foreground">
-                <div className="h-20 w-20 rounded-3xl bg-primary/10 border border-primary/20 flex items-center justify-center mb-3 shadow-inner">
-                  <ShoppingCart className="h-9 w-9 text-primary/40" />
+              <div className="flex flex-col items-center justify-center h-full py-12 text-center text-muted-foreground select-none">
+                <div className="h-16 w-16 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center mb-3 shadow-inner text-primary/60">
+                  <ShoppingCart className="h-8 w-8" />
                 </div>
-                <p className="text-sm font-bold text-foreground">No items added yet</p>
-                <p className="text-xs text-muted-foreground mt-1 max-w-[200px]">Click items from the menu on the right to start building the order</p>
+                <p className="text-xs font-bold text-foreground">Your cart is empty</p>
+                <p className="text-[11px] text-muted-foreground mt-1 max-w-[200px] leading-relaxed">
+                  Select items or combo deals from the menu to build the order
+                </p>
               </div>
             ) : (
-              // table-fixed is load-bearing: without it the browser sizes the
-              // Item column from whatever is left after the five fixed ones
-              // (was 336px of them), which on a narrow till panel collapsed it
-              // below the width of a single word — "Family Mega Deal" rendered
-              // one word per line, straight down. Fixed layout gives Item the
-              // remainder and lets it wrap normally.
-              <table className="w-full table-fixed text-sm border-collapse">
-                <thead>
-                  <tr className="border-b border-border/80 text-muted-foreground text-[11px] uppercase tracking-wider font-semibold">
-                    <th className="text-left py-2 font-semibold">Item</th>
-                    <th className="text-center py-2 font-semibold w-14">Price</th>
-                    <th className="text-center py-2 font-semibold w-[76px]">Qty</th>
-                    <th className="text-center py-2 font-semibold w-16 print:hidden">Disc.</th>
-                    <th className="text-right py-2 font-semibold w-[68px]">Total</th>
-                    <th className="w-7 print:hidden"></th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border/40">
-                  {cartDisplayRows.map((row) => {
-                    if (row.kind === "deal") {
-                      const gross = row.items.reduce((s, i) => s + i.price * i.qty, 0);
-                      const discount = row.items.reduce((s, i) => s + i.discount, 0);
-                      return (
-                        <tr key={row.dealLineId} className="hover:bg-muted/30 transition-colors group bg-primary/[0.03]">
-                          <td className="py-2.5 pr-2 align-top">
-                            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-primary uppercase tracking-wide">
-                              <Gift className="h-3 w-3 shrink-0" /> Deal
-                            </span>
-                            <p className="font-semibold text-foreground text-xs break-words">{row.dealName}</p>
-                            {/* The component list can run long ("1x Family Mega
-                                Deal: BBQ Chicken Pizza (Large (14")), 1x …") —
-                                clamp it so one deal can't push the row taller
-                                than the rest of the cart put together. */}
-                            <p className="text-[10px] text-muted-foreground/90 break-words line-clamp-2">
-                              {row.items.map((i) => `${i.qty}x ${i.name}`).join(", ")}
-                            </p>
-                          </td>
-                          <td className="text-center py-2.5 text-xs font-medium text-muted-foreground">—</td>
-                          <td className="text-center py-2.5 text-xs font-medium text-muted-foreground">—</td>
-                          <td className="text-center py-2.5 text-xs font-medium text-muted-foreground print:hidden">
-                            {discount > 0 ? `-Rs. ${discount.toLocaleString()}` : "—"}
-                          </td>
-                          <td className="text-right py-2.5 font-bold text-xs text-foreground">Rs. {(gross - discount).toLocaleString()}</td>
-                          <td className="py-2.5 text-right print:hidden">
-                            <button onClick={() => removeDealGroup(row.dealLineId)} className="text-muted-foreground hover:text-destructive p-1 rounded-md transition-colors"><X className="h-3.5 w-3.5" /></button>
-                          </td>
-                        </tr>
-                      );
-                    }
-                    const item = row.item;
+              <div className="space-y-2 pb-1">
+                {cartDisplayRows.map((row) => {
+                  if (row.kind === "deal") {
+                    const gross = row.items.reduce((s, i) => s + i.price * i.qty, 0);
+                    const discount = row.items.reduce((s, i) => s + i.discount, 0);
+                    const netTotal = gross - discount;
+
                     return (
-                      <tr key={item.id} className="hover:bg-muted/30 transition-colors group">
-                        <td className="py-2.5 pr-2">
-                          <span className="font-semibold text-foreground text-xs break-words">{item.name}</span>
+                      <div
+                        key={row.dealLineId}
+                        className="rounded-xl border border-primary/25 bg-primary/[0.04] p-2.5 sm:p-3 space-y-2 hover:border-primary/40 transition-all shadow-2xs group relative"
+                      >
+                        {/* Header: Deal Badge + Deal Name + Price + Delete */}
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="space-y-0.5 min-w-0 flex-1">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <Badge
+                                variant="outline"
+                                className="text-[10px] font-extrabold text-primary border-primary/30 bg-primary/10 px-1.5 py-0 h-4 uppercase tracking-wider gap-1 shrink-0"
+                              >
+                                <Gift className="h-2.5 w-2.5" /> Deal
+                              </Badge>
+                              {discount > 0 && (
+                                <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-1.5 py-0 rounded border border-emerald-500/20">
+                                  Save Rs. {discount.toLocaleString()}
+                                </span>
+                              )}
+                            </div>
+                            <h4 className="font-bold text-xs text-foreground break-words leading-snug pt-0.5">
+                              {row.dealName}
+                            </h4>
+                          </div>
+
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <div className="text-right">
+                              <span className="font-bold text-xs text-foreground font-mono">
+                                Rs. {netTotal.toLocaleString()}
+                              </span>
+                              {gross > netTotal && (
+                                <span className="block text-[10px] text-muted-foreground line-through font-mono">
+                                  Rs. {gross.toLocaleString()}
+                                </span>
+                              )}
+                            </div>
+                            <button
+                              onClick={() => removeDealGroup(row.dealLineId)}
+                              className="text-muted-foreground/60 hover:text-destructive hover:bg-destructive/10 p-1 rounded-md transition-colors print:hidden"
+                              title="Remove Deal"
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Included Items Details */}
+                        <div className="bg-background/80 dark:bg-background/50 rounded-lg p-2 border border-border/50 space-y-1">
+                          <div className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider">
+                            Included Items ({row.items.reduce((s, i) => s + i.qty, 0)})
+                          </div>
+                          <ul className="space-y-0.5 text-[11px] text-foreground/90 font-medium">
+                            {row.items.map((i, itemIdx) => (
+                              <li key={itemIdx} className="flex items-start gap-1.5 leading-tight">
+                                <span className="text-primary font-bold font-mono text-[10px] shrink-0 mt-0.5">
+                                  {i.qty}x
+                                </span>
+                                <span className="break-words min-w-0 flex-1">{i.name}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  const item = row.item;
+                  const lineGross = item.price * item.qty;
+                  const lineNet = lineGross - item.discount;
+
+                  return (
+                    <div
+                      key={item.id}
+                      className="rounded-xl border border-border/70 bg-card p-2.5 sm:p-3 space-y-2 hover:border-border transition-all shadow-2xs group"
+                    >
+                      {/* Top Row: Name + Line Total + Remove */}
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="space-y-0.5 min-w-0 flex-1">
+                          <h4 className="font-semibold text-xs text-foreground break-words leading-snug">
+                            {item.name}
+                          </h4>
                           {item.modifiers && item.modifiers.length > 0 && (
-                            <p className="text-[10px] text-muted-foreground/90 font-medium break-words line-clamp-2">{item.modifiers.join(", ")}</p>
+                            <p className="text-[10px] text-muted-foreground/90 font-medium break-words leading-tight">
+                              {item.modifiers.join(" • ")}
+                            </p>
                           )}
                           {item.notes && (
-                            <p className="text-[10px] text-warning font-medium italic truncate max-w-[140px] mt-0.5">{item.notes}</p>
+                            <div className="inline-flex items-center gap-1 text-[10px] text-amber-600 dark:text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20 font-medium italic mt-0.5">
+                              <StickyNote className="h-2.5 w-2.5 shrink-0" />
+                              <span className="truncate max-w-[170px]">{item.notes}</span>
+                            </div>
                           )}
-                          <button onClick={() => { setEditingNotesId(item.id); setTempNotes(item.notes || ""); }} className="text-[10px] text-muted-foreground hover:text-primary mt-1 flex items-center gap-1 font-medium transition-colors">
-                            <StickyNote className="h-2.5 w-2.5" />{item.notes ? "Edit note" : "+ Note"}
-                          </button>
-                        </td>
-                        <td className="text-center py-2.5 text-xs font-medium text-muted-foreground">Rs.{item.price}</td>
-                        <td className="py-2.5">
-                          <div className="flex items-center justify-center gap-1 bg-muted/30 p-0.5 rounded-lg border border-border/40 w-max mx-auto">
-                            <Button variant="ghost" size="icon" className="h-5 w-5 rounded-md print:hidden hover:bg-background shadow-xs" onClick={() => updateQty(item.id, -1)}><Minus className="h-2.5 w-2.5" /></Button>
-                            <span className="w-5 text-center font-bold text-xs text-foreground">{item.qty}</span>
-                            <Button variant="ghost" size="icon" className="h-5 w-5 rounded-md print:hidden hover:bg-background shadow-xs" onClick={() => updateQty(item.id, 1)}><Plus className="h-2.5 w-2.5" /></Button>
+                        </div>
+
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <div className="text-right">
+                            <span className="font-bold text-xs text-foreground font-mono">
+                              Rs. {lineNet.toLocaleString()}
+                            </span>
+                            {item.discount > 0 && (
+                              <span className="block text-[10px] text-destructive font-mono">
+                                -Rs. {item.discount.toLocaleString()}
+                              </span>
+                            )}
                           </div>
-                        </td>
-                        <td className="py-2.5 print:hidden">
-                          <Input type="number" value={item.discount || ""} onChange={(e) => updateItemDiscount(item.id, Number(e.target.value))} className="h-6 w-14 text-xs text-center mx-auto rounded-md bg-background border-border/60" placeholder="0" />
-                        </td>
-                        <td className="text-right py-2.5 font-bold text-xs text-foreground">Rs. {((item.price * item.qty) - item.discount).toLocaleString()}</td>
-                        <td className="py-2.5 text-right print:hidden">
-                          <button onClick={() => removeItem(item.id)} className="text-muted-foreground hover:text-destructive p-1 rounded-md transition-colors"><X className="h-3.5 w-3.5" /></button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                          <button
+                            onClick={() => removeItem(item.id)}
+                            className="text-muted-foreground/60 hover:text-destructive hover:bg-destructive/10 p-1 rounded-md transition-colors print:hidden"
+                            title="Remove Item"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Bottom Controls Bar: Qty Stepper, Unit Price, Notes & Discount */}
+                      <div className="flex items-center justify-between gap-2 pt-1 border-t border-border/40 text-xs">
+                        {/* Quantity Stepper */}
+                        <div className="flex items-center gap-1 bg-muted/40 p-0.5 rounded-lg border border-border/50 shrink-0">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 rounded-md hover:bg-background shadow-xs text-foreground"
+                            onClick={() => updateQty(item.id, -1)}
+                            title="Decrease quantity"
+                          >
+                            <Minus className="h-2.5 w-2.5" />
+                          </Button>
+                          <span className="w-6 text-center font-bold text-xs text-foreground font-mono">
+                            {item.qty}
+                          </span>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 rounded-md hover:bg-background shadow-xs text-foreground"
+                            onClick={() => updateQty(item.id, 1)}
+                            title="Increase quantity"
+                          >
+                            <Plus className="h-2.5 w-2.5" />
+                          </Button>
+                        </div>
+
+                        {/* Unit price & Note trigger */}
+                        <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground min-w-0">
+                          <span className="font-mono whitespace-nowrap">Rs.{item.price} ea</span>
+                          <button
+                            onClick={() => {
+                              setEditingNotesId(item.id);
+                              setTempNotes(item.notes || "");
+                            }}
+                            className="text-[10px] text-muted-foreground hover:text-primary flex items-center gap-0.5 font-medium transition-colors whitespace-nowrap"
+                          >
+                            <StickyNote className="h-2.5 w-2.5" />
+                            {item.notes ? "Edit" : "+ Note"}
+                          </button>
+                        </div>
+
+                        {/* Item discount input */}
+                        <div className="flex items-center gap-1 shrink-0 print:hidden">
+                          <span className="text-[10px] text-muted-foreground font-medium">Disc:</span>
+                          <Input
+                            type="number"
+                            value={item.discount || ""}
+                            onChange={(e) => updateItemDiscount(item.id, Number(e.target.value))}
+                            className="h-6 w-12 text-[11px] text-center rounded-md bg-background border-border/60 p-0 font-mono"
+                            placeholder="0"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             )}
           </div>
 
@@ -3777,12 +3876,19 @@ const POS = () => {
                         const isChecked = selected.includes(key);
                         const optionOutOfStock = isMenuItemOutOfStock(o.menuItemId, o.variantId);
                         return (
-                          <button
+                          <div
                             key={key}
-                            disabled={optionOutOfStock}
-                            onClick={() => toggleDealOption(g.id, key, g.maxSelections)}
+                            role="button"
+                            tabIndex={optionOutOfStock ? -1 : 0}
+                            onClick={() => !optionOutOfStock && toggleDealOption(g.id, key, g.maxSelections)}
+                            onKeyDown={(e) => {
+                              if ((e.key === " " || e.key === "Enter") && !optionOutOfStock) {
+                                e.preventDefault();
+                                toggleDealOption(g.id, key, g.maxSelections);
+                              }
+                            }}
                             className={cn(
-                              "w-full flex items-start gap-3 p-3 rounded-xl border text-left text-sm transition-colors",
+                              "w-full flex items-start gap-3 p-3 rounded-xl border text-left text-sm transition-colors cursor-pointer select-none",
                               optionOutOfStock
                                 ? "opacity-50 cursor-not-allowed border-border bg-muted/30"
                                 : isChecked ? "border-primary bg-primary/5" : "border-border hover:border-primary/40 hover:bg-muted/30"
@@ -3797,7 +3903,7 @@ const POS = () => {
                                 <span className="inline-block text-[10px] font-semibold text-destructive bg-destructive/10 px-1.5 py-0.5 rounded">Out of Stock</span>
                               )}
                             </div>
-                          </button>
+                          </div>
                         );
                       })}
                     </div>
@@ -3887,7 +3993,10 @@ const POS = () => {
       {/* Add Customer Dialog */}
       <Dialog open={showCustomerAdd} onOpenChange={setShowCustomerAdd}>
         <DialogContent className="max-w-xs">
-          <DialogHeader><DialogTitle>Quick Add Customer</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle>Quick Add Customer</DialogTitle>
+            <DialogDescription className="sr-only">Quickly register a new customer</DialogDescription>
+          </DialogHeader>
           <div className="space-y-3">
             <Input value={newCustomer.name} onChange={(e) => setNewCustomer((p) => ({ ...p, name: e.target.value }))} placeholder="Customer name *" />
             <Input value={newCustomer.phone} maxLength={12} onChange={(e) => setNewCustomer((p) => ({ ...p, phone: formatPakistaniPhone(e.target.value) }))} placeholder="Phone number (11 Digits) *" />
@@ -3968,72 +4077,124 @@ const POS = () => {
 
       {/* Finalize Sale Dialog — High-craft unified checkout */}
       <Dialog open={showFinalizeSale} onOpenChange={setShowFinalizeSale}>
-        <DialogContent className="max-w-[95vw] sm:max-w-[490px] p-5 gap-0 overflow-hidden rounded-3xl bg-card/95 backdrop-blur-xl border border-border/80 shadow-2xl shadow-black/40">
+        <DialogContent className="max-w-[95vw] md:max-w-4xl lg:max-w-5xl p-4 sm:p-6 gap-0 overflow-hidden rounded-3xl bg-card/95 backdrop-blur-xl border border-border/80 shadow-2xl shadow-black/40">
 
           {/* Modal Header with Icon Badge */}
           <div className="flex items-center justify-between pb-3 border-b border-border/40">
             <div className="flex items-center gap-2.5">
-              <div className="h-9 w-9 rounded-xl bg-orange-500/10 border border-orange-500/20 flex items-center justify-center text-orange-500 shadow-inner">
+              <div className="h-9 w-9 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary shadow-inner">
                 <Receipt className="h-4 w-4" />
               </div>
               <div>
                 <DialogTitle className="text-base font-bold text-foreground tracking-tight">Payment Checkout</DialogTitle>
-                <p className="text-[11px] text-muted-foreground">Select method &amp; confirm settlement</p>
+                <DialogDescription className="text-[11px] text-muted-foreground">Select method &amp; confirm settlement</DialogDescription>
               </div>
             </div>
-            <Badge variant="outline" className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 border-orange-500/40 text-orange-500 bg-orange-500/10 rounded-full">
+            <Badge variant="outline" className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 border-primary/40 text-primary bg-primary/10 rounded-full">
               {orderType}{tableNumber ? ` · Table ${tableNumber}` : ""}
             </Badge>
           </div>
 
-          <div className="pt-3.5 space-y-3 max-h-[82vh] overflow-y-auto pr-0.5">
-
-            {/* 1. Order Summary Card */}
-            <div className="bg-muted/20 hover:bg-muted/30 transition-colors p-3.5 rounded-2xl border border-border/50 space-y-2.5">
-              {/* Customer Row */}
-              <div className="flex items-center justify-between text-xs">
-                <div className="flex items-center gap-1.5 font-medium text-foreground">
-                  <User className="h-3.5 w-3.5 text-muted-foreground" />
-                  <span className="font-semibold">{selectedCustomerData?.name || "Walk-in Customer"}</span>
-                  {(selectedCustomerData as any)?.phone && (
-                    <span className="text-[11px] text-muted-foreground font-mono">({(selectedCustomerData as any).phone})</span>
-                  )}
-                </div>
-                <span className="text-[11px] text-muted-foreground">{cart.length} {cart.length === 1 ? "item" : "items"}</span>
-              </div>
-
-              {/* Items List snippet */}
-              <div className="bg-background/70 rounded-xl p-2.5 border border-border/40 space-y-1.5 text-xs max-h-24 overflow-y-auto">
-                {cart.map((item, idx) => (
-                  <div key={item.id || idx} className="flex justify-between items-center text-xs">
-                    <span className="truncate pr-2 text-muted-foreground">
-                      <span className="inline-flex items-center justify-center h-4 px-1.5 rounded-md bg-muted/60 text-foreground font-mono font-semibold text-[10px] mr-1.5">
-                        {item.qty}x
-                      </span>
-                      {item.name}
-                    </span>
-                    <span className="font-mono font-semibold text-foreground shrink-0 tabular-nums">
-                      Rs. {((item.price * item.qty) - (item.discount || 0)).toLocaleString()}
+          <div className="pt-4 max-h-[82vh] overflow-y-auto pr-0.5 grid grid-cols-1 md:grid-cols-2 gap-4 lg:gap-6 items-start">
+            {/* LEFT COLUMN: Order Details & Digital Receipt Card */}
+            <div className="bg-muted/30 p-3.5 sm:p-4 rounded-2xl border border-border/60 space-y-3 h-full flex flex-col justify-between">
+              <div className="space-y-3">
+                {/* Header: Customer & Channel / Table */}
+                <div className="flex justify-between items-center text-xs pb-2 border-b border-border/50">
+                  <div className="flex items-center gap-1.5 font-bold text-foreground">
+                    <User className="h-3.5 w-3.5 text-primary" />
+                    <span className="truncate max-w-[200px]">
+                      {selectedCustomerData?.name || "Walk-in Customer"}
                     </span>
                   </div>
-                ))}
+                  <div className="flex items-center gap-1.5">
+                    <Badge variant="outline" className="text-[10px] font-bold px-2 py-0.5 bg-background border-border/70">
+                      {orderType}
+                    </Badge>
+                    <span className="text-[11px] text-muted-foreground font-mono font-medium">
+                      {cart.reduce((s, c) => s + c.qty, 0)} {cart.reduce((s, c) => s + c.qty, 0) === 1 ? "item" : "items"}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Items List - Grouped with Deals & Combos support */}
+                <div className="bg-background/80 dark:bg-background/50 rounded-xl p-3 border border-border/50 space-y-2.5 max-h-56 md:max-h-[300px] overflow-y-auto scrollbar-thin">
+                  {cartDisplayRows.map((row) => {
+                    if (row.kind === "deal") {
+                      const gross = row.items.reduce((s, i) => s + i.price * i.qty, 0);
+                      const discount = row.items.reduce((s, i) => s + i.discount, 0);
+                      const netTotal = gross - discount;
+
+                      return (
+                        <div key={row.dealLineId} className="space-y-1 pb-2 border-b border-border/30 last:border-0 last:pb-0">
+                          <div className="flex justify-between items-center text-xs">
+                            <div className="flex items-center gap-1.5 min-w-0 pr-2">
+                              <Badge variant="outline" className="text-[9px] font-extrabold text-primary border-primary/30 bg-primary/10 px-1.5 py-0 h-4 uppercase tracking-wider shrink-0 gap-0.5">
+                                <Gift className="h-2.5 w-2.5" /> Deal
+                              </Badge>
+                              <span className="font-bold text-foreground truncate">{row.dealName}</span>
+                            </div>
+                            <span className="font-mono font-bold text-foreground shrink-0 tabular-nums text-xs">
+                              Rs. {netTotal.toLocaleString()}
+                            </span>
+                          </div>
+                          <ul className="space-y-0.5 pl-3 border-l-2 border-primary/20 text-[10px] text-muted-foreground font-medium">
+                            {row.items.map((i, itemIdx) => (
+                              <li key={itemIdx} className="flex items-center justify-between">
+                                <span className="truncate pr-1">• {i.qty}x {i.name}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      );
+                    }
+
+                    const item = row.item;
+                    const lineGross = item.price * item.qty;
+                    const lineNet = lineGross - item.discount;
+
+                    return (
+                      <div key={item.id} className="space-y-0.5 pb-1.5 border-b border-border/30 last:border-0 last:pb-0">
+                        <div className="flex justify-between items-center text-xs">
+                          <div className="flex items-center gap-1.5 min-w-0 pr-2">
+                            <span className="inline-flex items-center justify-center h-4 px-1 rounded bg-muted text-foreground font-mono font-bold text-[10px]">
+                              {item.qty}x
+                            </span>
+                            <span className="font-semibold text-foreground truncate">{item.name}</span>
+                          </div>
+                          <span className="font-mono font-bold text-foreground shrink-0 tabular-nums text-xs">
+                            Rs. {lineNet.toLocaleString()}
+                          </span>
+                        </div>
+                        {item.modifiers && item.modifiers.length > 0 && (
+                          <p className="text-[10px] text-muted-foreground/80 pl-6 truncate">
+                            {item.modifiers.join(", ")}
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
 
               {/* Financial Calculation Breakdown */}
-              <div className="space-y-1 pt-1 text-xs border-t border-border/40">
+              <div className="space-y-1.5 pt-2 text-xs border-t border-border/50">
                 <div className="flex justify-between text-muted-foreground text-[11px]">
                   <span>Subtotal</span>
                   <span className="font-mono tabular-nums">Rs. {itemsSubtotal.toLocaleString()}</span>
                 </div>
                 {orderDiscount > 0 && (
                   <div className="flex justify-between text-destructive text-[11px]">
-                    <span>Discount</span>
+                    <span>Order Discount</span>
                     <span className="font-mono tabular-nums">-Rs. {orderDiscount.toLocaleString()}</span>
                   </div>
                 )}
                 {dealDiscount > 0 && dealPreview && (
-                  <div className="flex justify-between text-emerald-500 text-[11px]">
-                    <span>{dealPreview.dealName}</span>
+                  <div className="flex justify-between text-emerald-600 dark:text-emerald-400 font-medium text-[11px]">
+                    <span className="flex items-center gap-1">
+                      <Tag className="h-3 w-3" />
+                      {dealPreview.dealName}
+                    </span>
                     <span className="font-mono tabular-nums">-Rs. {dealDiscount.toLocaleString()}</span>
                   </div>
                 )}
@@ -4042,262 +4203,272 @@ const POS = () => {
                   <span className="font-mono tabular-nums">Rs. {tax.toLocaleString()}</span>
                 </div>
                 {loadedAdvancePayment > 0 && (
-                  <div className="flex justify-between text-emerald-500 font-semibold text-[11px]">
+                  <div className="flex justify-between text-emerald-600 dark:text-emerald-400 font-semibold text-[11px]">
                     <span>Advance Deposit Paid ({loadedAdvanceMethod})</span>
                     <span className="font-mono tabular-nums">-Rs. {loadedAdvancePayment.toLocaleString()}</span>
                   </div>
                 )}
-                <div className="flex justify-between items-center pt-1.5 border-t border-border/40 font-bold">
-                  <span className="uppercase tracking-wider text-[11px] text-muted-foreground">Order Total</span>
-                  <span className="text-2xl font-black text-amber-500 dark:text-amber-400 font-mono tracking-tight tabular-nums">
+                <div className="flex justify-between items-center pt-2.5 border-t border-border/60">
+                  <span className="uppercase tracking-wider text-xs font-bold text-muted-foreground">Order Total</span>
+                  <span className="text-2xl lg:text-3xl font-black text-primary font-mono tracking-tight tabular-nums">
                     {effectiveSettings.currency} {netPayable.toLocaleString()}
                   </span>
                 </div>
               </div>
             </div>
 
-            {/* 2. Delivery Payment Mode Selector (Only when Delivery & No advance pre-loaded) */}
-            {orderType === "Delivery" && !loadedAdvancePayment && (
-              <div className="bg-muted/20 p-3 rounded-2xl border border-border/50 space-y-2">
-                <div className="flex justify-between items-center text-xs font-semibold">
-                  <span className="uppercase tracking-wider text-muted-foreground text-[10px]">Delivery Mode</span>
-                </div>
-                <div className="grid grid-cols-3 gap-2">
-                  {(["cod", "advance", "prepaid"] as const).map(mode => (
-                    <button
-                      key={mode}
-                      type="button"
-                      onClick={() => { setDeliveryPayMode(mode); setAdvanceEntries([]); setAdvanceAmount(0); }}
-                      className={cn(
-                        "flex flex-col items-center justify-center gap-1 h-12 rounded-xl border text-[11px] font-semibold transition-all",
-                        deliveryPayMode === mode
-                          ? "border-2 border-orange-500 bg-orange-500/10 text-orange-500 font-bold shadow-sm shadow-orange-500/10"
-                          : "border-border/60 text-muted-foreground hover:text-foreground hover:bg-muted/40"
-                      )}
-                    >
-                      {mode === "cod"     && <><Truck className="h-4 w-4" /><span>COD</span></>}
-                      {mode === "advance" && <><Wallet className="h-4 w-4" /><span>Advance</span></>}
-                      {mode === "prepaid" && <><CheckCircle2 className="h-4 w-4" /><span>Prepaid</span></>}
-                    </button>
-                  ))}
-                </div>
-                {deliveryPayMode === "cod" && (
-                  <p className="text-[11px] text-amber-500 mt-1 flex items-center gap-1.5 bg-amber-500/10 border border-amber-500/20 rounded-xl p-2 font-medium">
-                    <Truck className="h-4 w-4 shrink-0" />Rider will collect <strong>Rs. {total.toLocaleString()}</strong> at doorstep
-                  </p>
-                )}
-              </div>
-            )}
-
-            {/* 3. Delivery Advance Setup */}
-            {orderType === "Delivery" && deliveryPayMode === "advance" && !loadedAdvancePayment && (
-              <div className="bg-muted/20 p-3.5 rounded-2xl border border-border/50 space-y-2.5">
-                <div className="flex justify-between items-center text-xs">
-                  <span className="font-semibold text-muted-foreground text-[11px]">Select Advance Method &amp; Amount</span>
-                  <span className="text-muted-foreground font-mono text-[11px]">Total: Rs. {total.toLocaleString()}</span>
-                </div>
-                <div className="grid grid-cols-2 gap-1.5">
-                  {(effectiveSettings?.paymentMethods ?? ["Cash", "JazzCash", "EasyPaisa"]).map(pm => {
-                    const IconComponent = getPaymentIcon(pm);
-                    return (
+            {/* RIGHT COLUMN: Payment Methods, Delivery Modes, Settlement & Action Button */}
+            <div className="space-y-3">
+              {/* Delivery Payment Mode Selector */}
+              {orderType === "Delivery" && !loadedAdvancePayment && (
+                <div className="bg-muted/20 p-3 rounded-2xl border border-border/50 space-y-2">
+                  <div className="flex justify-between items-center text-xs font-semibold">
+                    <span className="uppercase tracking-wider text-muted-foreground text-[10px]">Delivery Mode</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    {(["cod", "advance", "prepaid"] as const).map(mode => (
                       <button
-                        key={pm}
+                        key={mode}
                         type="button"
-                        onClick={() => setAdvanceMethod(pm)}
+                        onClick={() => { setDeliveryPayMode(mode); setAdvanceEntries([]); setAdvanceAmount(0); }}
                         className={cn(
-                          "flex items-center justify-center gap-2 h-9 rounded-xl border text-xs font-semibold transition-all",
-                          advanceMethod === pm
-                            ? "border-2 border-orange-500 bg-orange-500/10 text-orange-500 font-bold shadow-sm shadow-orange-500/10"
-                            : "border-border/60 text-muted-foreground hover:bg-muted/50"
+                          "flex flex-col items-center justify-center gap-1 h-12 rounded-xl border text-[11px] font-semibold transition-all",
+                          deliveryPayMode === mode
+                            ? "border-2 border-primary bg-primary/10 text-primary font-bold shadow-xs"
+                            : "border-border/60 text-muted-foreground hover:text-foreground hover:bg-muted/40"
                         )}
                       >
-                        <IconComponent className="h-3.5 w-3.5" />{pm}
+                        {mode === "cod"     && <><Truck className="h-4 w-4" /><span>COD</span></>}
+                        {mode === "advance" && <><Wallet className="h-4 w-4" /><span>Advance</span></>}
+                        {mode === "prepaid" && <><CheckCircle2 className="h-4 w-4" /><span>Prepaid</span></>}
                       </button>
-                    );
-                  })}
-                </div>
-                <div className="flex gap-2">
-                  <div className="relative flex-1">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-mono font-bold text-muted-foreground">Rs.</span>
-                    <Input
-                      type="number"
-                      placeholder="Advance amount"
-                      value={advanceAmount || ""}
-                      onChange={e => setAdvanceAmount(Number(e.target.value))}
-                      className="h-10 pl-9 text-sm font-mono font-bold rounded-xl"
-                    />
-                  </div>
-                  <Button
-                    size="sm"
-                    className="h-10 px-4 shrink-0 gap-1.5 bg-orange-600 hover:bg-orange-500 text-white font-bold rounded-xl shadow-sm"
-                    onClick={() => {
-                      if (advanceAmount <= 0) { toast.error("Enter advance amount"); return; }
-                      if (advanceAmount >= total) {
-                        toast.info("Converted to Full Prepaid");
-                        setDeliveryPayMode("prepaid");
-                        setFinalizeMethod(advanceMethod);
-                        setGivenAmount(total);
-                        setAdvanceAmount(0);
-                        return;
-                      }
-                      setAdvanceEntries(prev => [...prev, { id: `adv-${Date.now()}`, method: advanceMethod, amount: advanceAmount }]);
-                      setAdvanceAmount(0);
-                    }}
-                  >
-                    <Plus className="h-4 w-4" />Add
-                  </Button>
-                </div>
-                {advanceEntries.map(e => (
-                  <div key={e.id} className="flex items-center justify-between text-xs bg-muted/40 border border-border/40 rounded-xl px-3 py-2">
-                    <span className="font-semibold text-foreground">{e.method}</span>
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono font-bold text-emerald-500 tabular-nums">Rs. {e.amount.toLocaleString()}</span>
-                      <button onClick={() => setAdvanceEntries(prev => prev.filter(x => x.id !== e.id))} className="text-destructive/70 hover:text-destructive transition-colors">
-                        <X className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-                {advanceEntries.length > 0 && (
-                  <div className="text-xs bg-amber-500/10 border border-amber-500/20 rounded-xl px-3 py-2 flex justify-between font-bold text-amber-500">
-                    <span>Rider Collects at Doorstep:</span>
-                    <span className="font-mono tabular-nums">Rs. {deliveryBalance.toLocaleString()}</span>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* 4. Unified Settlement Card */}
-            {(orderType !== "Delivery" || deliveryPayMode === "prepaid" || loadedAdvancePayment > 0) && (
-              <div className="bg-muted/20 p-3.5 rounded-2xl border border-border/50 space-y-3">
-                <div className="flex justify-between items-center text-xs">
-                  <span className="font-semibold text-muted-foreground text-[11px] uppercase tracking-wider">Payment Method &amp; Amount</span>
-                  <span className="font-mono text-muted-foreground text-[11px]">
-                    {paymentEntries.length > 0 ? (
-                      totalPaid > netPayable ? (
-                        <span className="text-emerald-500 font-bold">Change: Rs. {(totalPaid - netPayable).toLocaleString()}</span>
-                      ) : (
-                        <>Remaining: <strong className={cn(totalDue > 0 ? "text-amber-500 font-bold" : "text-emerald-500 font-bold")}>Rs. {totalDue.toLocaleString()}</strong></>
-                      )
-                    ) : (
-                      <>Due: <strong className="text-foreground font-bold">Rs. {netPayable.toLocaleString()}</strong></>
-                    )}
-                  </span>
-                </div>
-
-                {/* Method Chips */}
-                <div className="grid grid-cols-2 gap-2">
-                  {(effectiveSettings?.paymentMethods ?? ["Cash", "JazzCash", "EasyPaisa", "Credit Card"]).map(pm => {
-                    const IconComponent = getPaymentIcon(pm);
-                    const isSelected = finalizeMethod === pm;
-                    return (
-                      <button
-                        key={pm}
-                        type="button"
-                        onClick={() => {
-                          setFinalizeMethod(pm);
-                        }}
-                        className={cn(
-                          "flex items-center justify-center gap-2 h-10 rounded-xl border text-xs font-semibold transition-all",
-                          isSelected
-                            ? "border-2 border-orange-500 bg-orange-500/10 text-orange-500 font-bold shadow-sm shadow-orange-500/10"
-                            : "border-border/60 text-muted-foreground hover:text-foreground hover:bg-muted/50"
-                        )}
-                      >
-                        <IconComponent className="h-4 w-4 shrink-0" />
-                        <span>{pm}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-
-                {/* Amount Input with Add Split Button */}
-                <div className="flex gap-2">
-                  <div className="relative flex-1">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-mono font-bold text-muted-foreground">Rs.</span>
-                    <Input
-                      type="number"
-                      placeholder={`Amount (Due: ${paymentEntries.length > 0 ? totalDue : netPayable})`}
-                      value={givenAmount === 0 ? "" : givenAmount}
-                      onChange={(e) => setGivenAmount(Number(e.target.value))}
-                      className="h-10 pl-9 text-sm font-mono font-bold rounded-xl border-border/70 focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
-                    />
-                  </div>
-                  <Button
-                    type="button"
-                    size="sm"
-                    className="h-10 px-4 shrink-0 gap-1.5 bg-orange-600 hover:bg-orange-500 text-white font-bold rounded-xl shadow-sm"
-                    onClick={addPaymentEntry}
-                  >
-                    <Plus className="h-4 w-4" />Add
-                  </Button>
-                </div>
-
-                {/* Added Payment Entries List */}
-                {paymentEntries.length > 0 && (
-                  <div className="space-y-1.5 pt-0.5">
-                    {paymentEntries.map(e => (
-                      <div key={e.id} className="flex items-center justify-between text-xs bg-muted/40 border border-border/40 rounded-xl px-3 py-2">
-                        <span className="font-semibold text-foreground">{e.method}</span>
-                        <div className="flex items-center gap-2">
-                          <span className="font-mono font-bold text-emerald-500 tabular-nums">Rs. {e.amount.toLocaleString()}</span>
-                          <button onClick={() => removePaymentEntry(e.id)} className="text-destructive/70 hover:text-destructive transition-colors">
-                            <X className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
-                      </div>
                     ))}
-
-                    <div className="flex justify-between items-center pt-2 border-t border-border/40 text-xs">
-                      <span className="text-muted-foreground font-medium">Total Settled:</span>
-                      <span className={cn("font-mono font-bold tabular-nums", totalPaid >= netPayable ? "text-emerald-500" : "text-amber-500")}>
-                        Rs. {totalPaid.toLocaleString()} / Rs. {netPayable.toLocaleString()}
-                      </span>
-                    </div>
                   </div>
-                )}
-
-                {/* Change Return Banner when customer overpays */}
-                {totalPaid > netPayable && (
-                  <div className="flex items-center justify-between p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-xs font-bold transition-all animate-in fade-in">
-                    <span className="flex items-center gap-1.5">
-                      <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-                      <span>Change Return:</span>
-                    </span>
-                    <span className="font-mono text-sm tabular-nums">Rs. {(totalPaid - netPayable).toLocaleString()}</span>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* 5. Primary Action Button */}
-            {(() => {
-              const isReady = !isSubmitting && (
-                (orderType === "Delivery" && deliveryPayMode === "cod" && !loadedAdvancePayment) ||
-                (isDeliveryAdvance && isAdvanceSufficient) ||
-                (paymentEntries.length > 0 && totalPaid >= netPayable)
-              );
-
-              return (
-                <div className="pt-1.5">
-                  <Button
-                    className={cn(
-                      "w-full h-12 text-sm font-bold rounded-2xl gap-2 transition-all active:scale-[0.99]",
-                      isReady && !isSubmitting
-                        ? "bg-orange-600 hover:bg-orange-500 text-white font-bold shadow-sm"
-                        : "bg-muted text-muted-foreground opacity-50 cursor-not-allowed"
-                    )}
-                    onClick={handleFinalizeSubmit}
-                    disabled={!isReady || isSubmitting}
-                  >
-                    {isSubmitting
-                      ? <><Loader2 className="h-4 w-4 animate-spin" />Processing Order...</>
-                      : <><Check className="h-4 w-4" />Confirm &amp; Place Order</>}
-                  </Button>
+                  {deliveryPayMode === "cod" && (
+                    <p className="text-[11px] text-amber-500 mt-1 flex items-center gap-1.5 bg-amber-500/10 border border-amber-500/20 rounded-xl p-2 font-medium">
+                      <Truck className="h-4 w-4 shrink-0" />Rider will collect <strong>Rs. {total.toLocaleString()}</strong> at doorstep
+                    </p>
+                  )}
                 </div>
-              );
-            })()}
+              )}
 
+              {/* Delivery Advance Setup */}
+              {orderType === "Delivery" && deliveryPayMode === "advance" && !loadedAdvancePayment && (
+                <div className="bg-muted/20 p-3.5 rounded-2xl border border-border/50 space-y-2.5">
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="font-semibold text-muted-foreground text-[11px]">Select Advance Method &amp; Amount</span>
+                    <span className="text-muted-foreground font-mono text-[11px]">Total: Rs. {total.toLocaleString()}</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {(effectiveSettings?.paymentMethods ?? ["Cash", "JazzCash", "EasyPaisa"]).map(pm => {
+                      const IconComponent = getPaymentIcon(pm);
+                      return (
+                        <button
+                          key={pm}
+                          type="button"
+                          onClick={() => setAdvanceMethod(pm)}
+                          className={cn(
+                            "flex items-center justify-center gap-2 h-9 rounded-xl border text-xs font-semibold transition-all",
+                            advanceMethod === pm
+                              ? "border-2 border-primary bg-primary/10 text-primary font-bold shadow-xs"
+                              : "border-border/60 text-muted-foreground hover:bg-muted/50"
+                          )}
+                        >
+                          <IconComponent className="h-3.5 w-3.5" />{pm}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="flex gap-2">
+                    <div className="relative flex-1">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-mono font-bold text-muted-foreground">Rs.</span>
+                      <Input
+                        type="number"
+                        step="1"
+                        placeholder="Advance amount"
+                        value={advanceAmount ? Math.round(advanceAmount) : ""}
+                        onChange={e => {
+                          const val = e.target.value;
+                          setAdvanceAmount(val === "" ? 0 : Math.round(Number(val)) || 0);
+                        }}
+                        className="h-10 pl-9 text-sm font-mono font-bold rounded-xl"
+                      />
+                    </div>
+                    <Button
+                      size="sm"
+                      className="h-10 px-4 shrink-0 gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground font-bold rounded-xl shadow-xs"
+                      onClick={() => {
+                        if (advanceAmount <= 0) { toast.error("Enter advance amount"); return; }
+                        if (advanceAmount >= total) {
+                          toast.info("Converted to Full Prepaid");
+                          setDeliveryPayMode("prepaid");
+                          setFinalizeMethod(advanceMethod);
+                          setGivenAmount(total);
+                          setAdvanceAmount(0);
+                          return;
+                        }
+                        setAdvanceEntries(prev => [...prev, { id: `adv-${Date.now()}`, method: advanceMethod, amount: advanceAmount }]);
+                        setAdvanceAmount(0);
+                      }}
+                    >
+                      <Plus className="h-4 w-4" />Add
+                    </Button>
+                  </div>
+                  {advanceEntries.map(e => (
+                    <div key={e.id} className="flex items-center justify-between text-xs bg-muted/40 border border-border/40 rounded-xl px-3 py-2">
+                      <span className="font-semibold text-foreground">{e.method}</span>
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono font-bold text-emerald-500 tabular-nums">Rs. {e.amount.toLocaleString()}</span>
+                        <button onClick={() => setAdvanceEntries(prev => prev.filter(x => x.id !== e.id))} className="text-destructive/70 hover:text-destructive transition-colors">
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                  {advanceEntries.length > 0 && (
+                    <div className="text-xs bg-amber-500/10 border border-amber-500/20 rounded-xl px-3 py-2 flex justify-between font-bold text-amber-500">
+                      <span>Rider Collects at Doorstep:</span>
+                      <span className="font-mono tabular-nums">Rs. {deliveryBalance.toLocaleString()}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Unified Settlement Card */}
+              {(orderType !== "Delivery" || deliveryPayMode === "prepaid" || loadedAdvancePayment > 0) && (
+                <div className="bg-muted/20 p-3.5 rounded-2xl border border-border/50 space-y-3">
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="font-semibold text-muted-foreground text-[11px] uppercase tracking-wider">Payment Method &amp; Amount</span>
+                    <span className="font-mono text-muted-foreground text-[11px]">
+                      {paymentEntries.length > 0 ? (
+                        totalPaid > netPayable ? (
+                          <span className="text-emerald-500 font-bold">Change: Rs. {(totalPaid - netPayable).toLocaleString()}</span>
+                        ) : (
+                          <>Remaining: <strong className={cn(totalDue > 0 ? "text-amber-500 font-bold" : "text-emerald-500 font-bold")}>Rs. {totalDue.toLocaleString()}</strong></>
+                        )
+                      ) : (
+                        <>Due: <strong className="text-foreground font-bold">Rs. {netPayable.toLocaleString()}</strong></>
+                      )}
+                    </span>
+                  </div>
+
+                  {/* Method Chips */}
+                  <div className="grid grid-cols-2 gap-2">
+                    {(effectiveSettings?.paymentMethods ?? ["Cash", "JazzCash", "EasyPaisa", "Credit Card"]).map(pm => {
+                      const IconComponent = getPaymentIcon(pm);
+                      const isSelected = finalizeMethod === pm;
+                      return (
+                        <button
+                          key={pm}
+                          type="button"
+                          onClick={() => {
+                            setFinalizeMethod(pm);
+                          }}
+                          className={cn(
+                            "flex items-center justify-center gap-2 h-10 rounded-xl border text-xs font-semibold transition-all",
+                            isSelected
+                              ? "border-2 border-primary bg-primary/10 text-primary font-bold shadow-xs"
+                              : "border-border/60 text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                          )}
+                        >
+                          <IconComponent className="h-4 w-4 shrink-0" />
+                          <span>{pm}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Amount Input with Add Split Button */}
+                  <div className="flex gap-2">
+                    <div className="relative flex-1">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-mono font-bold text-muted-foreground">Rs.</span>
+                      <Input
+                        type="number"
+                        step="1"
+                        placeholder={`Amount (Due: ${paymentEntries.length > 0 ? Math.round(totalDue) : Math.round(netPayable)})`}
+                        value={givenAmount === 0 ? "" : Math.round(givenAmount)}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setGivenAmount(val === "" ? 0 : Math.round(Number(val)) || 0);
+                        }}
+                        className="h-10 pl-9 text-sm font-mono font-bold rounded-xl border-border/70 focus:border-primary focus:ring-1 focus:ring-primary"
+                      />
+                    </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="h-10 px-4 shrink-0 gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground font-bold rounded-xl shadow-xs"
+                      onClick={addPaymentEntry}
+                    >
+                      <Plus className="h-4 w-4" />Add
+                    </Button>
+                  </div>
+
+                  {/* Added Payment Entries List */}
+                  {paymentEntries.length > 0 && (
+                    <div className="space-y-1.5 pt-0.5">
+                      {paymentEntries.map(e => (
+                        <div key={e.id} className="flex items-center justify-between text-xs bg-muted/40 border border-border/40 rounded-xl px-3 py-2">
+                          <span className="font-semibold text-foreground">{e.method}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono font-bold text-emerald-500 tabular-nums">Rs. {e.amount.toLocaleString()}</span>
+                            <button onClick={() => removePaymentEntry(e.id)} className="text-destructive/70 hover:text-destructive transition-colors">
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+
+                      <div className="flex justify-between items-center pt-2 border-t border-border/40 text-xs">
+                        <span className="text-muted-foreground font-medium">Total Settled:</span>
+                        <span className={cn("font-mono font-bold tabular-nums", totalPaid >= netPayable ? "text-emerald-500" : "text-amber-500")}>
+                          Rs. {totalPaid.toLocaleString()} / Rs. {netPayable.toLocaleString()}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Change Return Banner when customer overpays */}
+                  {totalPaid > netPayable && (
+                    <div className="flex items-center justify-between p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-xs font-bold transition-all animate-in fade-in">
+                      <span className="flex items-center gap-1.5">
+                        <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                        <span>Change Return:</span>
+                      </span>
+                      <span className="font-mono text-sm tabular-nums">Rs. {(totalPaid - netPayable).toLocaleString()}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Primary Action Button */}
+              {(() => {
+                const isReady = !isSubmitting && (
+                  (orderType === "Delivery" && deliveryPayMode === "cod" && !loadedAdvancePayment) ||
+                  (isDeliveryAdvance && isAdvanceSufficient) ||
+                  (paymentEntries.length > 0 && totalPaid >= netPayable)
+                );
+
+                return (
+                  <div className="pt-1">
+                    <Button
+                      className={cn(
+                        "w-full h-12 text-sm font-bold rounded-2xl gap-2 transition-all active:scale-[0.99] shadow-md",
+                        isReady && !isSubmitting
+                          ? "bg-primary hover:bg-primary/90 text-primary-foreground font-extrabold shadow-primary/20"
+                          : "bg-muted text-muted-foreground opacity-50 cursor-not-allowed"
+                      )}
+                      onClick={handleFinalizeSubmit}
+                      disabled={!isReady || isSubmitting}
+                    >
+                      {isSubmitting
+                        ? <><Loader2 className="h-4 w-4 animate-spin" />Processing Order...</>
+                        : <><Check className="h-4 w-4" />Confirm &amp; Place Order</>}
+                    </Button>
+                  </div>
+                );
+              })()}
+            </div>
           </div>
         </DialogContent>
       </Dialog>
@@ -4305,7 +4476,10 @@ const POS = () => {
       {/* Invoice Preview Dialog */}
       <Dialog open={showInvoice} onOpenChange={setShowInvoice}>
         <DialogContent className="max-w-md">
-          <DialogHeader><DialogTitle>Invoice Preview</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle>Invoice Preview</DialogTitle>
+            <DialogDescription className="sr-only">Print or preview invoice</DialogDescription>
+          </DialogHeader>
           <div className="space-y-3 text-sm">
             <div className="text-center space-y-1">
               <Flame className="h-6 w-6 mx-auto text-primary" />
