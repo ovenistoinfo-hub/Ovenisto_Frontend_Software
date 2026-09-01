@@ -3109,7 +3109,7 @@ const WaiterPanel = () => {
                               disabled={outOfStock}
                               onClick={() => addDealToCart(deal)}
                               className={cn(
-                                "bg-white dark:bg-card rounded-2xl border border-zinc-200 dark:border-zinc-800/80 overflow-hidden hover:shadow-xl hover:border-primary/40 transition-all duration-200 text-left group relative flex flex-col hover:-translate-y-0.5 shadow-xs",
+                                "bg-white dark:bg-card rounded-2xl border border-zinc-200 dark:border-zinc-800/80 overflow-hidden hover:shadow-xl hover:border-primary/40 transition-all duration-200 text-left group relative flex flex-col justify-between hover:-translate-y-0.5 shadow-xs min-h-[290px]",
                                 outOfStock && "opacity-60 hover:shadow-none hover:border-zinc-200 dark:hover:border-zinc-800 hover:translate-y-0 cursor-not-allowed"
                               )}
                             >
@@ -3117,8 +3117,13 @@ const WaiterPanel = () => {
                                 {deal.image ? (
                                   <img src={deal.image} alt={deal.name} className={cn("w-full h-full object-cover group-hover:scale-105 transition-transform duration-300", outOfStock && "grayscale")} />
                                 ) : (
-                                  <div className="w-full h-full bg-gradient-to-br from-card via-muted/60 to-primary/10 flex items-center justify-center">
-                                    <Gift className="h-8 w-8 text-primary/25 group-hover:text-primary/40 group-hover:scale-110 transition-all duration-300" />
+                                  <div className="w-full h-full bg-gradient-to-br from-amber-500/10 via-primary/10 to-orange-500/20 flex flex-col items-center justify-center relative overflow-hidden group-hover:from-amber-500/20 group-hover:to-orange-500/30 transition-all duration-300">
+                                    <div className="p-2.5 rounded-full bg-primary/10 border border-primary/20 shadow-inner group-hover:scale-110 group-hover:bg-primary/20 transition-all duration-300">
+                                      <Gift className="h-6 w-6 text-primary group-hover:text-primary transition-colors" />
+                                    </div>
+                                    <span className="absolute bottom-1.5 right-1.5 text-[9px] font-extrabold tracking-wider bg-background/85 text-primary px-1.5 py-0.5 rounded-md border border-primary/25 backdrop-blur-xs shadow-xs uppercase">
+                                      {deal.name.slice(0, 3)}
+                                    </span>
                                   </div>
                                 )}
                                 <div className="absolute top-1.5 left-1.5 flex items-center gap-1 text-[9px] font-bold text-primary-foreground bg-primary/90 backdrop-blur-xs px-1.5 py-0.5 rounded-md shadow-xs">
@@ -3132,29 +3137,31 @@ const WaiterPanel = () => {
                                 )}
                               </div>
 
-                              <div className="p-2.5 flex flex-col gap-1.5 flex-1">
-                                <p className="text-xs font-bold text-foreground group-hover:text-primary transition-colors">{deal.name}</p>
-                                {deal.description && (
-                                  <p className="text-[10px] text-muted-foreground line-clamp-2">{deal.description}</p>
-                                )}
-                                {pricing.lines.length > 0 && (
-                                  <div className="bg-muted/40 border border-zinc-200 dark:border-zinc-800/60 rounded-lg px-2 py-1.5 space-y-0.5">
-                                    {pricing.lines.map((line, i) => (
-                                      <p key={i} className="text-[10px] text-foreground/80 font-medium">• {line}</p>
-                                    ))}
-                                  </div>
-                                )}
-                                <div className="mt-auto pt-1 flex items-end justify-between gap-1">
+                              <div className="p-2.5 flex flex-col gap-1.5 flex-1 justify-between">
+                                <div className="space-y-1">
+                                  <p className="text-xs font-bold text-foreground group-hover:text-primary transition-colors line-clamp-1">{deal.name}</p>
+                                  {deal.description && (
+                                    <p className="text-[10px] text-muted-foreground line-clamp-1">{deal.description}</p>
+                                  )}
+                                  {pricing.lines.length > 0 && (
+                                    <div className="bg-muted/50 border border-zinc-200 dark:border-zinc-800/60 rounded-lg px-2 py-1.5 space-y-0.5 max-h-24 overflow-y-auto scrollbar-none">
+                                      {pricing.lines.map((line, i) => (
+                                        <p key={i} className="text-[10px] text-foreground/95 font-medium truncate">• {line}</p>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="mt-auto pt-2 border-t border-zinc-200 dark:border-zinc-800/40 flex items-end justify-between gap-1.5">
                                   <div>
                                     {pricing.regularLabel && (
                                       <span className={cn("text-[9px] text-muted-foreground font-mono block", pricing.regularStrike && "line-through")}>
                                         {pricing.regularStrike ? pricing.regularLabel : `was ${pricing.regularLabel}`}
                                       </span>
                                     )}
-                                    <span className="font-mono font-extrabold text-sm text-primary">{pricing.priceLabel}</span>
+                                    <span className="font-mono font-extrabold text-xs sm:text-sm text-primary">{pricing.priceLabel}</span>
                                   </div>
                                   {pricing.savingsPercent > 0 && (
-                                    <span className="text-[9px] font-bold text-primary bg-primary/10 border border-primary/30 px-1.5 py-0.5 rounded shrink-0">
+                                    <span className="text-[9px] font-extrabold text-emerald-500 bg-emerald-500/10 border border-emerald-500/30 px-1.5 py-0.5 rounded shrink-0 shadow-2xs">
                                       SAVE {pricing.savingsPercent}%
                                     </span>
                                   )}
