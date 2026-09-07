@@ -441,17 +441,37 @@ plus a body explaining _why_ the change was made when that is not obvious.
   tile's destination `<ProtectedRoute>` requires in `App.tsx`** — a mismatch either hides a tile a
   viewer could use or shows one that bounces off `ProtectedRoute`'s redirect; verify both whenever
   adding a tile. Not every card on the page is a tile: only ones that gate/navigate on a specific
-  permission go in `DASHBOARD_TILES` (currently just Top 10 Items → `reports`, Payment Methods →
-  `cash-hub`) — the always-on KPI cards (day-wise chart, channel cards, Financial Overview) stay as
-  plain JSX, individually wrapped in the page's local `ClickableCard` component and gated only on
-  `hasPermission("sales")` for the click affordance, never hidden outright (see the plan doc's
-  Section-B resolution). `ClickableCard` (page-local, not extracted — only this page uses it so far)
+  permission go in `DASHBOARD_TILES` (Top 10 Items → `reports`, Payment Methods → `cash-hub`,
+  Top 10 Customers → `customers`) — the always-on KPI cards (day-wise chart, channel cards,
+  Financial Overview, and Phase 3's Customer Intelligence charts) stay as plain JSX, individually
+  wrapped in the page's local `ClickableCard` component and gated only on `hasPermission("sales")`
+  (or, for the Customer Intelligence zone, a direct `hasPermission("customers")` check — the zone
+  has no single click destination, so it doesn't fit the `DashboardTile` shape at all, unlike its
+  one real tile, Top 10 Customers, whose rows individually navigate to `/customers/:id`) for the
+  click affordance, never hidden outright (see the plan doc's Section-B resolution).
+  `ClickableCard` (page-local, not extracted — only this page uses it so far)
   reuses POS.tsx's menu-card hover/press classes (`hover:shadow-xl hover:border-primary/40
   hover:-translate-y-0.5 active:scale-[0.99]`) and renders a muted `ChevronRight` only when
   `interactive` — a non-interactive card gets no chevron and no hover lift. **Super Admin's
   `cash-hub` entry in `AuthContext.tsx`'s `superAdminExcluded` list means the Payment Methods tile
   (and any future `cash-hub`-gated tile) is invisible to Super Admin** — not a bug, the same
   branch-vs-HQ exclusion that already hides the Cash Hub nav item in `AppSidebar.tsx`.
+- **This app's theme (`src/index.css`) only has TWO CSS-variable hues safe for a categorical
+  chart series** (found running the `dataviz` skill's palette validator while building
+  Dashboard's Customer Intelligence charts, 2026-09) — `--primary` (12°) and `--info` (217°)
+  pass every check cleanly; `--accent` sits only 6° from `--primary` and fails the
+  normal-vision-floor check outright; `--success`/`--warning`/`--destructive`/`--gold` are
+  reserved status colors (reusing one for "series 4" makes an unrelated chart series read as
+  an error/warning) and `--gold` additionally fails the lightness-band/contrast checks even
+  considered alone. Concretely: a multi-series categorical chart in this app caps at 2 named
+  series before hues start colliding — cut to top-N + "Other," or facet, rather than reaching
+  for a 3rd hue. `Dashboard.tsx`'s Order Type Trend chart hit this directly: the natural
+  per-channel-type breakdown (6 types) collapsed to Online (`--info`) vs Offline (`--success`)
+  instead — reusing the exact pairing `Today's Sales by Channel`'s cards already use for the
+  same meaning, which is why that chart's `success` reuse is fine despite the status-color
+  rule above (an established page-local *domain* meaning, not a random 3rd categorical slot).
+  Adding real brand hues to the theme is the actual fix if a future chart genuinely needs 3+
+  distinguishable series — don't just eyeball a 3rd token and skip re-running the validator.
 
 <!-- code-review-graph MCP tools -->
 ## MCP Tools: code-review-graph
