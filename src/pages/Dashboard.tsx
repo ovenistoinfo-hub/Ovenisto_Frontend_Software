@@ -1,11 +1,12 @@
-import { LayoutDashboard, TrendingUp, DollarSign, Wallet, ReceiptText, Flame, ArrowUpCircle, ArrowDownCircle, BarChart3, ShoppingBag, Clock } from "lucide-react";
+import { LayoutDashboard, TrendingUp, DollarSign, Wallet, ReceiptText, Flame, ArrowUpCircle, ArrowDownCircle, BarChart3, ShoppingBag, Clock, ChevronRight, Trophy } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { PageHeader } from "@/components/ui/page-header";
 import { XAxis, YAxis, Tooltip, ResponsiveContainer, BarChart, Bar } from "recharts";
 import { useQuery } from "@tanstack/react-query";
-import { useState, useEffect } from "react";
+import { useState, useEffect, type ReactNode } from "react";
+import { useNavigate } from "react-router-dom";
 import { reportService } from "@/services/report.service";
 import { stockService } from "@/services/stock.service";
 import { useOutletFilter } from "@/hooks/useOutletFilter";
@@ -13,14 +14,57 @@ import { OutletFilterSelect } from "@/components/OutletFilterSelect";
 import { useVisiblePolling } from "@/hooks/use-visible-polling";
 import { Button } from "@/components/ui/button";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { useAuth } from "@/contexts/AuthContext";
+import { cn } from "@/lib/utils";
+import { DASHBOARD_TILES } from "@/lib/dashboardTiles";
+
+/**
+ * Whole-Card tap target, mirroring POS.tsx's menu-card hover/press classes so it feels
+ * right on mouse and the POS tablet. `interactive` false renders a plain, static Card —
+ * no chevron, no hover lift (a viewer who can't reach the destination just sees the data).
+ */
+function ClickableCard({ interactive, onClick, className, children }: { interactive: boolean; onClick?: () => void; className?: string; children: ReactNode }) {
+  return (
+    <Card
+      className={cn(
+        "shadow-sm relative transition-all duration-200",
+        interactive && "cursor-pointer hover:shadow-xl hover:border-primary/40 hover:-translate-y-0.5 active:scale-[0.99]",
+        className
+      )}
+      onClick={interactive ? onClick : undefined}
+      role={interactive ? "button" : undefined}
+      tabIndex={interactive ? 0 : undefined}
+      onKeyDown={interactive ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick?.(); } } : undefined}
+    >
+      {children}
+      {interactive && <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/40 absolute top-2 right-2" />}
+    </Card>
+  );
+}
 
 const Dashboard = () => {
   const { outletId, setOutletId, outlets, isSuperAdmin } = useOutletFilter();
+  const navigate = useNavigate();
+  const { user, hasPermission } = useAuth();
   const { data: d, isLoading: loading } = useQuery({
     queryKey: ["dashboard", outletId],
     queryFn: () => reportService.getDashboard({ outletId }),
   });
   const currency = "Rs.";
+
+  // Sales & Finance zone tiles this viewer can actually reach — filtered once, same idiom
+  // AppSidebar.tsx uses for navSections. The always-on KPI cards below (day-wise chart,
+  // channel cards, financial overview) aren't tiles; they're gated separately on "sales".
+  const salesTiles = DASHBOARD_TILES.filter((t) => t.zone === "sales" && hasPermission(t.module));
+  const tileVisible = (id: string) => salesTiles.some((t) => t.id === id);
+  const goToTile = (id: string) => {
+    const tile = salesTiles.find((t) => t.id === id);
+    if (!tile) return;
+    if (tile.superAdminRoute && user?.role === "Super Admin") navigate(tile.superAdminRoute.route);
+    else navigate(tile.route);
+  };
+  const salesDrillEnabled = hasPermission("sales");
+  const goToSales = () => navigate("/sales");
 
   const { data: doughBatches = [], refetch: refetchDough } = useQuery({
     queryKey: ["dough-batches", outletId],
@@ -59,7 +103,7 @@ const Dashboard = () => {
           />
           <OutletFilterSelect outletId={outletId} setOutletId={setOutletId} outlets={outlets} isSuperAdmin={isSuperAdmin} />
         </div>
-        <Card className="shadow-sm">
+        <ClickableCard interactive={salesDrillEnabled} onClick={goToSales}>
           <CardHeader className="pb-2">
             <CardTitle className="text-base">Day-wise Sales (This Week)</CardTitle>
           </CardHeader>
@@ -75,7 +119,7 @@ const Dashboard = () => {
               </ResponsiveContainer>
             </div>
           </CardContent>
-        </Card>
+        </ClickableCard>
       </div>
 
       {/* Today's Sales by Channel */}
@@ -86,7 +130,7 @@ const Dashboard = () => {
         </h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {/* Total Offline */}
-          <Card className="shadow-sm border-success/20">
+          <ClickableCard interactive={salesDrillEnabled} onClick={goToSales} className="border-success/20">
             <CardContent className="p-5">
               <div className="flex items-center justify-between">
                 <div>
@@ -99,10 +143,10 @@ const Dashboard = () => {
                 </div>
               </div>
             </CardContent>
-          </Card>
+          </ClickableCard>
 
           {/* Dine In */}
-          <Card className="shadow-sm">
+          <ClickableCard interactive={salesDrillEnabled} onClick={goToSales}>
             <CardContent className="p-5">
               <div>
                 <p className="text-xs text-muted-foreground font-medium">Dine In</p>
@@ -110,10 +154,10 @@ const Dashboard = () => {
                 <span className="text-xs text-muted-foreground">{ch("Dine In").orders} orders</span>
               </div>
             </CardContent>
-          </Card>
+          </ClickableCard>
 
           {/* Pick Up / Take Away */}
-          <Card className="shadow-sm">
+          <ClickableCard interactive={salesDrillEnabled} onClick={goToSales}>
             <CardContent className="p-5">
               <div>
                 <p className="text-xs text-muted-foreground font-medium">PickUp</p>
@@ -121,10 +165,10 @@ const Dashboard = () => {
                 <span className="text-xs text-muted-foreground">{ch("Take Away").orders} orders</span>
               </div>
             </CardContent>
-          </Card>
+          </ClickableCard>
 
           {/* Delivery */}
-          <Card className="shadow-sm">
+          <ClickableCard interactive={salesDrillEnabled} onClick={goToSales}>
             <CardContent className="p-5">
               <div>
                 <p className="text-xs text-muted-foreground font-medium">Delivery</p>
@@ -132,10 +176,10 @@ const Dashboard = () => {
                 <span className="text-xs text-muted-foreground">{ch("Delivery").orders} orders</span>
               </div>
             </CardContent>
-          </Card>
+          </ClickableCard>
 
           {/* Total Online */}
-          <Card className="shadow-sm border-info/20">
+          <ClickableCard interactive={salesDrillEnabled} onClick={goToSales} className="border-info/20">
             <CardContent className="p-5">
               <div className="flex items-center justify-between">
                 <div>
@@ -148,10 +192,10 @@ const Dashboard = () => {
                 </div>
               </div>
             </CardContent>
-          </Card>
+          </ClickableCard>
 
           {/* Foodpanda */}
-          <Card className="shadow-sm">
+          <ClickableCard interactive={salesDrillEnabled} onClick={goToSales}>
             <CardContent className="p-5">
               <div>
                 <p className="text-xs text-muted-foreground font-medium">Foodpanda</p>
@@ -159,10 +203,10 @@ const Dashboard = () => {
                 <span className="text-xs text-muted-foreground">{ch("Foodpanda").orders} orders</span>
               </div>
             </CardContent>
-          </Card>
+          </ClickableCard>
 
           {/* Self Order */}
-          <Card className="shadow-sm">
+          <ClickableCard interactive={salesDrillEnabled} onClick={goToSales}>
             <CardContent className="p-5">
               <div>
                 <p className="text-xs text-muted-foreground font-medium">Self Order</p>
@@ -170,10 +214,10 @@ const Dashboard = () => {
                 <span className="text-xs text-muted-foreground">{ch("Self Order").orders} orders</span>
               </div>
             </CardContent>
-          </Card>
+          </ClickableCard>
 
           {/* Online */}
-          <Card className="shadow-sm">
+          <ClickableCard interactive={salesDrillEnabled} onClick={goToSales}>
             <CardContent className="p-5">
               <div>
                 <p className="text-xs text-muted-foreground font-medium">Online</p>
@@ -181,7 +225,7 @@ const Dashboard = () => {
                 <span className="text-xs text-muted-foreground">{ch("Online").orders} orders</span>
               </div>
             </CardContent>
-          </Card>
+          </ClickableCard>
         </div>
       </div>
 
@@ -237,34 +281,72 @@ const Dashboard = () => {
       </div>
 
       {/* Payment Methods (This Month) */}
-      <div>
-        <h3 className="text-sm font-semibold text-muted-foreground mb-3 flex items-center gap-2">
-          <Wallet className="h-4 w-4" />
-          Payment Methods (This Month)
-        </h3>
-        <Card className="shadow-sm">
-          <CardContent className="p-5">
-            {pays.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No payments this month</p>
-            ) : (
-              <div className="space-y-3">
-                {pays.map(p => (
-                  <div key={p.method} className="flex items-center gap-3">
-                    <span className="text-xs font-medium w-24 shrink-0">{p.method}</span>
-                    <div className="flex-1 bg-muted rounded h-2">
-                      <div
-                        className="h-2 rounded bg-primary"
-                        style={{ width: `${(p.amount / maxPay) * 100}%` }}
-                      />
+      {tileVisible("payment-methods") && (
+        <div>
+          <h3 className="text-sm font-semibold text-muted-foreground mb-3 flex items-center gap-2">
+            <Wallet className="h-4 w-4" />
+            Payment Methods (This Month)
+          </h3>
+          <ClickableCard interactive onClick={() => goToTile("payment-methods")}>
+            <CardContent className="p-5">
+              {pays.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No payments this month</p>
+              ) : (
+                <div className="space-y-3">
+                  {pays.map(p => (
+                    <div key={p.method} className="flex items-center gap-3">
+                      <span className="text-xs font-medium w-24 shrink-0">{p.method}</span>
+                      <div className="flex-1 bg-muted rounded h-2">
+                        <div
+                          className="h-2 rounded bg-primary"
+                          style={{ width: `${(p.amount / maxPay) * 100}%` }}
+                        />
+                      </div>
+                      <span className="text-xs font-semibold w-28 text-right">{currency} {p.amount.toLocaleString()}</span>
                     </div>
-                    <span className="text-xs font-semibold w-28 text-right">{currency} {p.amount.toLocaleString()}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </ClickableCard>
+        </div>
+      )}
+
+      {/* Top 10 Items (This Month) */}
+      {tileVisible("top-items") && (
+        <div>
+          <h3 className="text-sm font-semibold text-muted-foreground mb-3 flex items-center gap-2">
+            <Trophy className="h-4 w-4" />
+            Top 10 Items
+          </h3>
+          <ClickableCard interactive onClick={() => goToTile("top-items")}>
+            <CardContent className="p-5">
+              {(d?.topItems ?? []).length === 0 ? (
+                <p className="text-sm text-muted-foreground py-4 text-center">No item sales this month</p>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Item</TableHead>
+                      <TableHead className="text-right">Qty</TableHead>
+                      <TableHead className="text-right">Revenue</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {(d?.topItems ?? []).slice(0, 10).map((item) => (
+                      <TableRow key={item.name}>
+                        <TableCell className="font-medium">{item.name}</TableCell>
+                        <TableCell className="text-right">{item.qty}</TableCell>
+                        <TableCell className="text-right">{currency} {item.revenue.toLocaleString()}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </ClickableCard>
+        </div>
+      )}
 
       {/* Growth vs Last Month */}
       <div>
@@ -307,7 +389,7 @@ const Dashboard = () => {
           Financial Overview (This Month)
         </h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card className="shadow-sm">
+          <ClickableCard interactive={salesDrillEnabled} onClick={goToSales}>
             <CardContent className="p-5">
               <div className="flex items-center justify-between">
                 <div>
@@ -320,9 +402,9 @@ const Dashboard = () => {
                 </div>
               </div>
             </CardContent>
-          </Card>
+          </ClickableCard>
 
-          <Card className="shadow-sm">
+          <ClickableCard interactive={salesDrillEnabled} onClick={goToSales}>
             <CardContent className="p-5">
               <div className="flex items-center justify-between">
                 <div>
@@ -335,9 +417,9 @@ const Dashboard = () => {
                 </div>
               </div>
             </CardContent>
-          </Card>
+          </ClickableCard>
 
-          <Card className="shadow-sm border-destructive/20">
+          <ClickableCard interactive={salesDrillEnabled} onClick={goToSales} className="border-destructive/20">
             <CardContent className="p-5">
               <div className="flex items-center justify-between">
                 <div>
@@ -350,9 +432,9 @@ const Dashboard = () => {
                 </div>
               </div>
             </CardContent>
-          </Card>
+          </ClickableCard>
 
-          <Card className="shadow-sm">
+          <ClickableCard interactive={salesDrillEnabled} onClick={goToSales}>
             <CardContent className="p-5">
               <div className="flex items-center justify-between">
                 <div>
@@ -367,7 +449,7 @@ const Dashboard = () => {
                 </div>
               </div>
             </CardContent>
-          </Card>
+          </ClickableCard>
         </div>
       </div>
     </div>
