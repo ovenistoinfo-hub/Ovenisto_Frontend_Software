@@ -434,6 +434,24 @@ plus a body explaining _why_ the change was made when that is not obvious.
   That broke reloading a running order for edit — `menuItemId`/`variantId` went out as `null` on
   `updateOrder`, and a deal redemption lost its grouping. Fixed 2026-08-27; keep the spread-first
   shape if this mapper changes again.
+- **`Dashboard.tsx`'s role-filtered tiles are `src/lib/dashboardTiles.ts`'s `DASHBOARD_TILES`**
+  (Phase 2 of the Dashboard/Analytics merge, 2026-09-07) — `{id, zone, module, title, icon, route,
+  superAdminRoute?}`, filtered with `DASHBOARD_TILES.filter(t => hasPermission(t.module))`, the
+  same idiom `AppSidebar.tsx` uses for `navSections`. **`module` must equal the `module` string the
+  tile's destination `<ProtectedRoute>` requires in `App.tsx`** — a mismatch either hides a tile a
+  viewer could use or shows one that bounces off `ProtectedRoute`'s redirect; verify both whenever
+  adding a tile. Not every card on the page is a tile: only ones that gate/navigate on a specific
+  permission go in `DASHBOARD_TILES` (currently just Top 10 Items → `reports`, Payment Methods →
+  `cash-hub`) — the always-on KPI cards (day-wise chart, channel cards, Financial Overview) stay as
+  plain JSX, individually wrapped in the page's local `ClickableCard` component and gated only on
+  `hasPermission("sales")` for the click affordance, never hidden outright (see the plan doc's
+  Section-B resolution). `ClickableCard` (page-local, not extracted — only this page uses it so far)
+  reuses POS.tsx's menu-card hover/press classes (`hover:shadow-xl hover:border-primary/40
+  hover:-translate-y-0.5 active:scale-[0.99]`) and renders a muted `ChevronRight` only when
+  `interactive` — a non-interactive card gets no chevron and no hover lift. **Super Admin's
+  `cash-hub` entry in `AuthContext.tsx`'s `superAdminExcluded` list means the Payment Methods tile
+  (and any future `cash-hub`-gated tile) is invisible to Super Admin** — not a bug, the same
+  branch-vs-HQ exclusion that already hides the Cash Hub nav item in `AppSidebar.tsx`.
 
 <!-- code-review-graph MCP tools -->
 ## MCP Tools: code-review-graph
