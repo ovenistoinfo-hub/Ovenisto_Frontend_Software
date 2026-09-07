@@ -18,7 +18,6 @@ import Login from "./pages/Login";
 // All other pages are code-split (React.lazy) so the initial bundle is small and
 // each page's JS downloads only when its route is first visited.
 const Dashboard = lazy(() => import("./pages/Dashboard"));
-const Analytics = lazy(() => import("./pages/Analytics"));
 const POS = lazy(() => import("./pages/POS"));
 const Kitchens = lazy(() => import("./pages/Kitchens"));
 const KitchenPanel = lazy(() => import("./pages/KitchenPanel"));
@@ -136,7 +135,6 @@ function AppRoutes() {
       {/* AppLayout routes */}
       <Route path="/" element={<ProtectedRoute module="dashboard"><AppLayout><Dashboard /></AppLayout></ProtectedRoute>} />
       <Route path="/warehouse-dashboard" element={<ProtectedRoute module="warehouse-dashboard"><AppLayout><WarehouseDashboard /></AppLayout></ProtectedRoute>} />
-      <Route path="/analytics" element={<ProtectedRoute module="analytics"><AppLayout><Analytics /></AppLayout></ProtectedRoute>} />
       <Route path="/kitchens" element={<ProtectedRoute module="kitchens"><AppLayout><Kitchens /></AppLayout></ProtectedRoute>} />
       <Route path="/waiter" element={<ProtectedRoute module="waiter"><AppLayout><WaiterPanel /></AppLayout></ProtectedRoute>} />
       <Route path="/table-layout" element={<ProtectedRoute module="table-layout"><AppLayout><TableLayout /></AppLayout></ProtectedRoute>} />
@@ -192,7 +190,7 @@ const App = () => (
     persistOptions={{
       persister,
       maxAge: 1000 * 60 * 60 * 24, // discard persisted cache older than 24h
-      buster: "v1", // bump this string to force-drop the persisted cache after a breaking change
+      buster: "v2", // bumped 2026-09 — DashboardReport grew Phase 1/3's new fields (breaking shape)
     }}
   >
     <AuthProvider>

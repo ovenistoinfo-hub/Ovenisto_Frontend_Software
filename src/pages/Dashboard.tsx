@@ -1,9 +1,9 @@
-import { LayoutDashboard, TrendingUp, DollarSign, Wallet, ReceiptText, Flame, ArrowUpCircle, ArrowDownCircle, BarChart3, ShoppingBag, Clock, ChevronRight, Trophy } from "lucide-react";
+import { LayoutDashboard, TrendingUp, DollarSign, Wallet, ReceiptText, Flame, ArrowUpCircle, ArrowDownCircle, BarChart3, ShoppingBag, Clock, ChevronRight, Trophy, Users } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { PageHeader } from "@/components/ui/page-header";
-import { XAxis, YAxis, Tooltip, ResponsiveContainer, BarChart, Bar } from "recharts";
+import { XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, BarChart, Bar } from "recharts";
 import { useQuery } from "@tanstack/react-query";
 import { useState, useEffect, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
@@ -52,19 +52,22 @@ const Dashboard = () => {
   });
   const currency = "Rs.";
 
-  // Sales & Finance zone tiles this viewer can actually reach — filtered once, same idiom
-  // AppSidebar.tsx uses for navSections. The always-on KPI cards below (day-wise chart,
-  // channel cards, financial overview) aren't tiles; they're gated separately on "sales".
-  const salesTiles = DASHBOARD_TILES.filter((t) => t.zone === "sales" && hasPermission(t.module));
-  const tileVisible = (id: string) => salesTiles.some((t) => t.id === id);
+  // All tiles this viewer can actually reach — filtered once, same idiom AppSidebar.tsx
+  // uses for navSections. The always-on cards below (day-wise chart, channel cards,
+  // financial overview, Customer Intelligence's charts) aren't tiles; they're gated
+  // separately by their own permission check (salesDrillEnabled / customerIntelVisible).
+  const visibleTiles = DASHBOARD_TILES.filter((t) => hasPermission(t.module));
+  const tileVisible = (id: string) => visibleTiles.some((t) => t.id === id);
   const goToTile = (id: string) => {
-    const tile = salesTiles.find((t) => t.id === id);
+    const tile = visibleTiles.find((t) => t.id === id);
     if (!tile) return;
     if (tile.superAdminRoute && user?.role === "Super Admin") navigate(tile.superAdminRoute.route);
     else navigate(tile.route);
   };
   const salesDrillEnabled = hasPermission("sales");
   const goToSales = () => navigate("/sales");
+  const customerIntelVisible = hasPermission("customers");
+  const reportsLinkVisible = hasPermission("reports");
 
   const { data: doughBatches = [], refetch: refetchDough } = useQuery({
     queryKey: ["dough-batches", outletId],
@@ -90,6 +93,29 @@ const Dashboard = () => {
 
   const pays = d?.month.paymentBreakdown ?? [];
   const maxPay = Math.max(1, ...pays.map(p => p.amount));
+
+  // --- Customer Intelligence chart transforms — all derived from DashboardReport fields
+  // already fetched above, never a client-side raw-order pull. ---
+  const peakHoursChart = (d?.peakHours ?? []).map(p => ({ hour: `${p.hour}:00`, orders: p.orders, revenue: p.revenue }));
+  const customerActivityChart = d?.customerActivity ?? [];
+  const dayPerformanceChart = d?.dayOfWeekPerformance ?? [];
+  // Mirrors reports.helpers.ts's ONLINE_TYPES on the backend — the two repos share no code,
+  // so this short list is kept in sync by hand, same as this file's own channel handling.
+  const ONLINE_TYPES = ["Foodpanda", "Online", "Self Order"];
+  const weekdayLabels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+  const orderTypeTrendChart = (() => {
+    const byDay = new Map(weekdayLabels.map(l => [l, { day: l, online: 0, offline: 0 }]));
+    for (const row of d?.orderTypeTrend ?? []) {
+      const bucket = byDay.get(row.day);
+      if (!bucket) continue;
+      if (ONLINE_TYPES.includes(row.type)) bucket.online += row.count; else bucket.offline += row.count;
+    }
+    return [...byDay.values()];
+  })();
+  // Exact count, not an estimate: customerActivity's newCustomers is 1 exactly once per
+  // customer (their first day in the week), so summing it across all 7 days gives the
+  // week's unique-customer total with zero extra queries.
+  const uniqueCustomersThisWeek = (d?.customerActivity ?? []).reduce((s, day) => s + day.newCustomers, 0);
 
   return (
     <div className="space-y-6">
@@ -452,6 +478,165 @@ const Dashboard = () => {
           </ClickableCard>
         </div>
       </div>
+
+      {/* Customer Intelligence */}
+      {customerIntelVisible && (
+        <div>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-semibold text-muted-foreground flex items-center gap-2">
+              <Users className="h-4 w-4" />
+              Customer Intelligence
+            </h3>
+            {reportsLinkVisible && (
+              <Button variant="ghost" size="sm" className="h-7 text-xs gap-1 text-muted-foreground" onClick={() => navigate("/reports")}>
+                View full reports <ChevronRight className="h-3 w-3" />
+              </Button>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
+            <Card className="shadow-sm">
+              <CardContent className="p-5">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs text-muted-foreground font-medium">Unique Customers (This Week)</p>
+                    <p className="text-2xl font-bold mt-1">{uniqueCustomersThisWeek}</p>
+                  </div>
+                  <div className="h-10 w-10 rounded-lg flex items-center justify-center bg-primary/10">
+                    <Users className="h-5 w-5 text-primary" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {tileVisible("top-customers") && (
+            <Card className="shadow-sm mb-4">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Top 10 Customers</CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                {(d?.topCustomers ?? []).length === 0 ? (
+                  <p className="text-sm text-muted-foreground py-4 text-center">No customer history available yet</p>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Customer</TableHead>
+                        <TableHead className="text-right">Orders</TableHead>
+                        <TableHead className="text-right">Spent</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {(d?.topCustomers ?? []).map((c, idx) => (
+                        <TableRow
+                          key={c.customerId ?? `${c.name}-${idx}`}
+                          className={cn(c.customerId && "cursor-pointer hover:bg-muted/30")}
+                          onClick={c.customerId ? () => navigate(`/customers/${c.customerId}`) : undefined}
+                        >
+                          <TableCell className="font-medium">{c.name}</TableCell>
+                          <TableCell className="text-right">{c.totalOrders}</TableCell>
+                          <TableCell className="text-right">{currency} {c.totalSpent.toLocaleString()}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <Card className="shadow-sm">
+              <CardHeader className="pb-2"><CardTitle className="text-base">Peak Hours (This Week)</CardTitle></CardHeader>
+              <CardContent>
+                <div className="h-[220px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={peakHoursChart}>
+                      <XAxis dataKey="hour" tick={{ fontSize: 9 }} interval={1} stroke="hsl(var(--muted-foreground))" />
+                      <YAxis tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
+                      <Tooltip content={({ active, payload, label }) => {
+                        if (!active || !payload?.length) return null;
+                        const row = payload[0].payload as { orders: number; revenue: number };
+                        return (
+                          <div className="rounded-md border bg-popover px-3 py-2 text-xs shadow-sm">
+                            <p className="font-medium mb-1">{label}</p>
+                            <p className="text-muted-foreground">{row.orders} orders</p>
+                            <p className="text-muted-foreground">{currency} {row.revenue.toLocaleString()} revenue</p>
+                          </div>
+                        );
+                      }} />
+                      <Bar dataKey="orders" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="shadow-sm">
+              <CardHeader className="pb-2"><CardTitle className="text-base">Customer Activity (This Week)</CardTitle></CardHeader>
+              <CardContent>
+                <div className="h-[220px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={customerActivityChart}>
+                      <XAxis dataKey="day" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
+                      <YAxis tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
+                      <Tooltip />
+                      <Legend wrapperStyle={{ fontSize: 11 }} />
+                      <Bar dataKey="newCustomers" stackId="c" name="New" fill="hsl(var(--primary))" />
+                      <Bar dataKey="returningCustomers" stackId="c" name="Returning" fill="hsl(var(--info))" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="shadow-sm">
+              <CardHeader className="pb-2"><CardTitle className="text-base">Order Type Trend (This Week)</CardTitle></CardHeader>
+              <CardContent>
+                <div className="h-[220px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={orderTypeTrendChart}>
+                      <XAxis dataKey="day" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
+                      <YAxis tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
+                      <Tooltip />
+                      <Legend wrapperStyle={{ fontSize: 11 }} />
+                      <Bar dataKey="offline" stackId="t" name="Offline" fill="hsl(var(--success))" />
+                      <Bar dataKey="online" stackId="t" name="Online" fill="hsl(var(--info))" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="shadow-sm">
+              <CardHeader className="pb-2"><CardTitle className="text-base">Day-of-Week Performance (60 Days)</CardTitle></CardHeader>
+              <CardContent>
+                <div className="h-[220px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={dayPerformanceChart}>
+                      <XAxis dataKey="label" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
+                      <YAxis tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
+                      <Tooltip content={({ active, payload, label }) => {
+                        if (!active || !payload?.length) return null;
+                        const row = payload[0].payload as { orderCount: number; avgSales: number };
+                        return (
+                          <div className="rounded-md border bg-popover px-3 py-2 text-xs shadow-sm">
+                            <p className="font-medium mb-1">{label}</p>
+                            <p className="text-muted-foreground">Avg order: {currency} {row.avgSales.toLocaleString()}</p>
+                            <p className="text-muted-foreground">{row.orderCount} orders</p>
+                          </div>
+                        );
+                      }} />
+                      <Bar dataKey="avgSales" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

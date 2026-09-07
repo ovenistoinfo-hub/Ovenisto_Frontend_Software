@@ -27,7 +27,6 @@ const CANCELLATION_REQUEST_EVENTS = ["cancellationRequest:created", "cancellatio
 const navSections = [
   { label: "Common", items: [
     { title: "Dashboard", url: "/", icon: Home, module: "dashboard" },
-    { title: "Analytics", url: "/analytics", icon: BarChart3, module: "analytics" },
     { title: "Warehouse Dashboard", url: "/warehouse-dashboard", icon: Package, module: "warehouse-dashboard" },
   ]},
   { label: "Panel", items: [

@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import { Trophy, Wallet } from "lucide-react";
+import { Trophy, Wallet, Users } from "lucide-react";
 
 /**
  * Data-driven config for Dashboard.tsx's role-filtered tiles (Phase 2 of the
@@ -20,8 +20,12 @@ export interface DashboardTile {
   superAdminRoute?: { module: string; route: string };
 }
 
-// Only the Sales & Finance zone is populated this phase — later phases add the rest.
+// Sales & Finance (Phase 2) + Customer Intelligence (Phase 3) are populated; the
+// operational zones are still Phase 4.
 export const DASHBOARD_TILES: DashboardTile[] = [
   { id: "top-items", zone: "sales", module: "reports", title: "Top 10 Items", icon: Trophy, route: "/reports" },
   { id: "payment-methods", zone: "sales", module: "cash-hub", title: "Payment Methods", icon: Wallet, route: "/cash-hub" },
+  // Route is a sensible default ("view all customers"); the table's own rows navigate to
+  // /customers/:id individually instead of the whole card sharing one destination.
+  { id: "top-customers", zone: "intelligence", module: "customers", title: "Top 10 Customers", icon: Users, route: "/customers" },
 ];

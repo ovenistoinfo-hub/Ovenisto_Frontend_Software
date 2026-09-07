@@ -13,7 +13,7 @@ const rolePermissions: Record<string, string[]> = {
   "Super Admin": ["*"],
   "Admin": ["*"],
   "Manager": [
-    "dashboard", "analytics", "pos", "kitchens", "waiter", "order-status",
+    "dashboard", "pos", "kitchens", "waiter", "order-status",
     "customer-display", "outlets", "items", "production", "stock", "warehouses",
     "warehouse-dashboard",
     "sales", "customers", "purchases", "purchase-requests", "suppliers", "supplier-dues",
