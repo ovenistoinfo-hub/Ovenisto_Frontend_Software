@@ -1,4 +1,8 @@
-import { LayoutDashboard, TrendingUp, DollarSign, Wallet, ReceiptText, Flame, ArrowUpCircle, ArrowDownCircle, BarChart3, ShoppingBag, Clock, ChevronRight, Trophy, Users } from "lucide-react";
+import {
+  LayoutDashboard, TrendingUp, DollarSign, Wallet, ReceiptText, Flame, ArrowUpCircle, ArrowDownCircle,
+  BarChart3, ShoppingBag, Clock, ChevronRight, Trophy, Users, ChefHat, LayoutGrid, Ban, Package,
+  ClipboardList, ArrowLeftRight, UserCheck, CalendarOff, Bike, CalendarCheck, Coins,
+} from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
@@ -6,6 +10,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, BarChart, Bar } from "recharts";
 import { useQuery } from "@tanstack/react-query";
 import { useState, useEffect, type ReactNode } from "react";
+import type { LucideIcon } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { reportService } from "@/services/report.service";
 import { stockService } from "@/services/stock.service";
@@ -42,6 +47,44 @@ function ClickableCard({ interactive, onClick, className, children }: { interact
   );
 }
 
+/**
+ * One operational-zone stat card (Phase 4). `visible` is the tile's own permission check —
+ * returning null here (rather than the caller skipping the JSX) keeps every zone's tile
+ * list declarative and uniform. Icon box always stays neutral (`bg-muted`) — only
+ * `valueClassName` may color the number itself, for the handful of tiles that represent an
+ * actual problem count (non-zero low stock / pending approvals).
+ */
+function StatTile({
+  visible, interactive, onClick, icon: Icon, title, value, valueClassName, sub,
+}: {
+  visible: boolean;
+  interactive: boolean;
+  onClick?: () => void;
+  icon: LucideIcon;
+  title: string;
+  value: ReactNode;
+  valueClassName?: string;
+  sub?: ReactNode;
+}) {
+  if (!visible) return null;
+  return (
+    <ClickableCard interactive={interactive} onClick={onClick}>
+      <CardContent className="p-5">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-xs text-muted-foreground font-medium">{title}</p>
+            <p className={cn("text-2xl font-bold mt-1", valueClassName)}>{value}</p>
+            {sub && <p className="text-xs text-muted-foreground mt-1">{sub}</p>}
+          </div>
+          <div className="h-10 w-10 rounded-lg flex items-center justify-center bg-muted shrink-0">
+            <Icon className="h-5 w-5 text-muted-foreground" />
+          </div>
+        </div>
+      </CardContent>
+    </ClickableCard>
+  );
+}
+
 const Dashboard = () => {
   const { outletId, setOutletId, outlets, isSuperAdmin } = useOutletFilter();
   const navigate = useNavigate();
@@ -58,6 +101,11 @@ const Dashboard = () => {
   // separately by their own permission check (salesDrillEnabled / customerIntelVisible).
   const visibleTiles = DASHBOARD_TILES.filter((t) => hasPermission(t.module));
   const tileVisible = (id: string) => visibleTiles.some((t) => t.id === id);
+  // Today's Operations / Inventory / People / Delivery / Reservations / Cash Hub are 100%
+  // tile-driven (unlike Sales & Finance / Customer Intelligence, which mix tiles with
+  // always-on charts) — a zone header renders only if at least one of its tiles is visible,
+  // the same skip-empty-group idiom AppSidebar.tsx uses for navSections.
+  const zoneVisible = (zone: string) => visibleTiles.some((t) => t.zone === zone);
   const goToTile = (id: string) => {
     const tile = visibleTiles.find((t) => t.id === id);
     if (!tile) return;
@@ -634,6 +682,148 @@ const Dashboard = () => {
                 </div>
               </CardContent>
             </Card>
+          </div>
+        </div>
+      )}
+
+      {/* Today's Operations */}
+      {zoneVisible("operations") && (
+        <div>
+          <h3 className="text-sm font-semibold text-muted-foreground mb-3 flex items-center gap-2">
+            <BarChart3 className="h-4 w-4" />
+            Today's Operations
+          </h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <StatTile
+              visible={tileVisible("live-orders")} interactive onClick={() => goToTile("live-orders")}
+              icon={BarChart3} title="Live Orders"
+              value={(d?.today.liveStatus.pending ?? 0) + (d?.today.liveStatus.preparing ?? 0) + (d?.today.liveStatus.ready ?? 0)}
+              sub={`Pending ${d?.today.liveStatus.pending ?? 0} · Preparing ${d?.today.liveStatus.preparing ?? 0} · Ready ${d?.today.liveStatus.ready ?? 0}`}
+            />
+            <StatTile
+              visible={tileVisible("kitchens-preparing")} interactive onClick={() => goToTile("kitchens-preparing")}
+              icon={ChefHat} title="Kitchens"
+              value={d?.today.liveStatus.preparing ?? 0}
+              sub="Orders in preparation"
+            />
+            <StatTile
+              visible={tileVisible("tables")} interactive onClick={() => goToTile("tables")}
+              icon={LayoutGrid} title="Tables"
+              value={d?.tables.occupied ?? 0}
+              sub={`${d?.tables.available ?? 0} available`}
+            />
+            <StatTile
+              visible={tileVisible("cancellation-requests")} interactive onClick={() => goToTile("cancellation-requests")}
+              icon={Ban} title="Cancellation Requests"
+              value={<span className="text-sm font-normal text-muted-foreground">Review requests</span>}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Inventory & Procurement */}
+      {zoneVisible("inventory") && (
+        <div>
+          <h3 className="text-sm font-semibold text-muted-foreground mb-3 flex items-center gap-2">
+            <Package className="h-4 w-4" />
+            Inventory & Procurement
+          </h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <StatTile
+              visible={tileVisible("low-stock")} interactive onClick={() => goToTile("low-stock")}
+              icon={Package} title="Low Stock Alert"
+              value={d?.lowStockCount ?? 0}
+              valueClassName={(d?.lowStockCount ?? 0) > 0 ? "text-destructive" : undefined}
+              sub="At or below threshold"
+            />
+            <StatTile
+              visible={tileVisible("pending-purchase-requests")} interactive onClick={() => goToTile("pending-purchase-requests")}
+              icon={ClipboardList} title="Pending Purchase Requests"
+              value={d?.pendingPurchaseRequests ?? 0}
+              valueClassName={(d?.pendingPurchaseRequests ?? 0) > 0 ? "text-warning" : undefined}
+            />
+            <StatTile
+              visible={tileVisible("pending-demands")} interactive onClick={() => goToTile("pending-demands")}
+              icon={ArrowLeftRight} title="Pending Demands"
+              value={d?.pendingDemands ?? 0}
+              valueClassName={(d?.pendingDemands ?? 0) > 0 ? "text-warning" : undefined}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* People */}
+      {zoneVisible("people") && (
+        <div>
+          <h3 className="text-sm font-semibold text-muted-foreground mb-3 flex items-center gap-2">
+            <UserCheck className="h-4 w-4" />
+            People
+          </h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <StatTile
+              visible={tileVisible("attendance-today")} interactive onClick={() => goToTile("attendance-today")}
+              icon={UserCheck} title="Today's Attendance"
+              value={d?.attendanceToday.present ?? 0}
+              sub={`Late ${d?.attendanceToday.late ?? 0} · Absent ${d?.attendanceToday.absent ?? 0}`}
+            />
+            <StatTile
+              visible={tileVisible("pending-leave")} interactive onClick={() => goToTile("pending-leave")}
+              icon={CalendarOff} title="Pending Leave Requests"
+              value={d?.pendingLeaveRequests ?? 0}
+              valueClassName={(d?.pendingLeaveRequests ?? 0) > 0 ? "text-warning" : undefined}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Delivery */}
+      {zoneVisible("delivery") && (
+        <div>
+          <h3 className="text-sm font-semibold text-muted-foreground mb-3 flex items-center gap-2">
+            <Bike className="h-4 w-4" />
+            Delivery
+          </h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <StatTile
+              visible={tileVisible("active-deliveries")} interactive onClick={() => goToTile("active-deliveries")}
+              icon={Bike} title="Active Deliveries"
+              value={d?.deliveryActive ?? 0}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Reservations */}
+      {zoneVisible("reservations") && (
+        <div>
+          <h3 className="text-sm font-semibold text-muted-foreground mb-3 flex items-center gap-2">
+            <CalendarCheck className="h-4 w-4" />
+            Reservations
+          </h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <StatTile
+              visible={tileVisible("reservations-today")} interactive onClick={() => goToTile("reservations-today")}
+              icon={CalendarCheck} title="Today's Reservations"
+              value={d?.reservationsToday ?? 0}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Cash Hub */}
+      {zoneVisible("cashHub") && (
+        <div>
+          <h3 className="text-sm font-semibold text-muted-foreground mb-3 flex items-center gap-2">
+            <Coins className="h-4 w-4" />
+            Cash Hub
+          </h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <StatTile
+              visible={tileVisible("unsettled-cash")} interactive onClick={() => goToTile("unsettled-cash")}
+              icon={Coins} title="Unsettled Cash"
+              value={`${currency} ${(d?.cashHub.totalUnsettled ?? 0).toLocaleString()}`}
+              sub={`${d?.cashHub.staffCount ?? 0} staff`}
+            />
           </div>
         </div>
       )}

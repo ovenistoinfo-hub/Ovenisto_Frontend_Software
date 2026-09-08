@@ -1,5 +1,8 @@
 import type { LucideIcon } from "lucide-react";
-import { Trophy, Wallet, Users } from "lucide-react";
+import {
+  Trophy, Wallet, Users, BarChart3, ChefHat, LayoutGrid, Ban, Package,
+  ClipboardList, ArrowLeftRight, UserCheck, CalendarOff, Bike, CalendarCheck, Coins,
+} from "lucide-react";
 
 /**
  * Data-driven config for Dashboard.tsx's role-filtered tiles (Phase 2 of the
@@ -20,12 +23,39 @@ export interface DashboardTile {
   superAdminRoute?: { module: string; route: string };
 }
 
-// Sales & Finance (Phase 2) + Customer Intelligence (Phase 3) are populated; the
-// operational zones are still Phase 4.
+// All zones populated as of Phase 4 — Sales & Finance (Phase 2), Customer Intelligence
+// (Phase 3), and the six operational zones below.
 export const DASHBOARD_TILES: DashboardTile[] = [
   { id: "top-items", zone: "sales", module: "reports", title: "Top 10 Items", icon: Trophy, route: "/reports" },
   { id: "payment-methods", zone: "sales", module: "cash-hub", title: "Payment Methods", icon: Wallet, route: "/cash-hub" },
   // Route is a sensible default ("view all customers"); the table's own rows navigate to
   // /customers/:id individually instead of the whole card sharing one destination.
   { id: "top-customers", zone: "intelligence", module: "customers", title: "Top 10 Customers", icon: Users, route: "/customers" },
+
+  // Today's Operations
+  { id: "live-orders", zone: "operations", module: "order-status", title: "Live Orders", icon: BarChart3, route: "/order-status" },
+  { id: "kitchens-preparing", zone: "operations", module: "kitchens", title: "Kitchens", icon: ChefHat, route: "/kitchens" },
+  { id: "tables", zone: "operations", module: "table-layout", title: "Tables", icon: LayoutGrid, route: "/table-layout" },
+  { id: "cancellation-requests", zone: "operations", module: "cancellation-requests", title: "Cancellation Requests", icon: Ban, route: "/cancellation-requests" },
+
+  // Inventory & Procurement
+  // App.tsx gates /warehouses on "warehouses" for everyone, Super Admin included (not in
+  // superAdminExcluded) — they see this tile too, just routed to the chain-wide dashboard.
+  { id: "low-stock", zone: "inventory", module: "warehouses", title: "Low Stock Alert", icon: Package, route: "/warehouses", superAdminRoute: { module: "warehouse-dashboard", route: "/warehouse-dashboard" } },
+  { id: "pending-purchase-requests", zone: "inventory", module: "purchase-requests", title: "Pending Purchase Requests", icon: ClipboardList, route: "/purchase-requests" },
+  { id: "pending-demands", zone: "inventory", module: "demands", title: "Pending Demands", icon: ArrowLeftRight, route: "/demands" },
+
+  // People
+  { id: "attendance-today", zone: "people", module: "attendance", title: "Today's Attendance", icon: UserCheck, route: "/attendance" },
+  { id: "pending-leave", zone: "people", module: "attendance", title: "Pending Leave Requests", icon: CalendarOff, route: "/attendance" },
+
+  // Delivery — /delivery's <ProtectedRoute> gates on "sales", not "delivery" (no Dashboard
+  // role holds a literal "delivery" permission); module here must match that route exactly.
+  { id: "active-deliveries", zone: "delivery", module: "sales", title: "Active Deliveries", icon: Bike, route: "/delivery" },
+
+  // Reservations
+  { id: "reservations-today", zone: "reservations", module: "customers", title: "Today's Reservations", icon: CalendarCheck, route: "/reservations" },
+
+  // Cash Hub
+  { id: "unsettled-cash", zone: "cashHub", module: "cash-hub", title: "Unsettled Cash", icon: Coins, route: "/cash-hub" },
 ];
