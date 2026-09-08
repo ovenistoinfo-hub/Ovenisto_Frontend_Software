@@ -52,8 +52,8 @@ export const DASHBOARD_TILES: DashboardTile[] = [
   // so navigation never bounces.
   { id: "active-deliveries", zone: "delivery", module: "delivery", title: "Active Deliveries", route: "/delivery" },
 
-  // Reservations — gated on "reservations" (Floor Manager holds it; Cashier does not), not
-  // on /reservations's route module "customers". Floor Manager also holds "customers", so
+  // Reservations — gated on "reservations" (Floor Manager and Manager hold it; Cashier does
+  // not), not on /reservations's route module "customers". Both also hold "customers", so
   // the click-through doesn't bounce.
   { id: "reservations-today", zone: "reservations", module: "reservations", title: "Today's Reservations", route: "/reservations" },
 
