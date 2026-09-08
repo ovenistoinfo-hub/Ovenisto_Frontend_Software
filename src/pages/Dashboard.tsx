@@ -1,7 +1,7 @@
 import {
   LayoutDashboard, TrendingUp, DollarSign, Wallet, ReceiptText, Flame, ArrowUpCircle, ArrowDownCircle,
   BarChart3, ShoppingBag, Clock, ChevronRight, Trophy, Users, ChefHat, LayoutGrid, Ban, Package,
-  ClipboardList, ArrowLeftRight, UserCheck, CalendarOff, Bike, CalendarCheck, Coins,
+  ClipboardList, ArrowLeftRight, UserCheck, CalendarOff, Bike, CalendarCheck, Coins, Calendar as CalendarIcon,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -12,6 +12,9 @@ import { useQuery } from "@tanstack/react-query";
 import { useState, useEffect, type ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar as CalendarUI } from "@/components/ui/calendar";
+import { format } from "date-fns";
 import { reportService } from "@/services/report.service";
 import { stockService } from "@/services/stock.service";
 import { useOutletFilter } from "@/hooks/useOutletFilter";
@@ -144,6 +147,54 @@ const Dashboard = () => {
   // Cashier never had the Analytics page, so they don't get this zone.
   const customerIntelVisible = hasPermission("reports");
 
+  // Sales By Channel (Date & optional Time filtered, gated on "reports" permission)
+  const salesByChannelVisible = hasPermission("reports");
+  const [channelPreset, setChannelPreset] = useState<string>("Today");
+  const [channelDateFrom, setChannelDateFrom] = useState<Date | undefined>(new Date());
+  const [channelDateTo, setChannelDateTo] = useState<Date | undefined>(new Date());
+  const [channelTimeFrom, setChannelTimeFrom] = useState<string>("");
+  const [channelTimeTo, setChannelTimeTo] = useState<string>("");
+
+  const setPreset = (preset: string) => {
+    setChannelPreset(preset);
+    const now = new Date();
+    if (preset === "Today") {
+      setChannelDateFrom(now);
+      setChannelDateTo(now);
+    } else if (preset === "This Week") {
+      const d = new Date(now);
+      d.setDate(d.getDate() - 7);
+      setChannelDateFrom(d);
+      setChannelDateTo(now);
+    } else if (preset === "This Month") {
+      setChannelDateFrom(new Date(now.getFullYear(), now.getMonth(), 1));
+      setChannelDateTo(now);
+    }
+  };
+
+  const channelFromStr = (channelDateFrom ?? new Date()).toISOString().slice(0, 10);
+  const channelToStr = (channelDateTo ?? new Date()).toISOString().slice(0, 10);
+
+  const { data: channelData, isLoading: channelLoading } = useQuery({
+    queryKey: [
+      "sales-by-channel",
+      outletId,
+      channelFromStr,
+      channelToStr,
+      channelTimeFrom,
+      channelTimeTo,
+    ],
+    queryFn: () =>
+      reportService.getSalesByChannel({
+        outletId,
+        from: channelFromStr,
+        to: channelToStr,
+        fromTime: channelTimeFrom || undefined,
+        toTime: channelTimeTo || undefined,
+      }),
+    enabled: salesByChannelVisible,
+  });
+
   const { data: doughBatches = [], refetch: refetchDough } = useQuery({
     queryKey: ["dough-batches", outletId],
     queryFn: () => stockService.getDoughBatches({ outletId }),
@@ -194,6 +245,260 @@ const Dashboard = () => {
 
   return (
     <div className="space-y-6">
+      {/* Sales By Channel (gated on "reports" permission) */}
+      {salesByChannelVisible && (
+        <div className="space-y-4">
+          {/* Header & Filter Bar */}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 flex-wrap">
+            <h3 className="text-sm font-semibold text-muted-foreground flex items-center gap-2">
+              <TrendingUp className="h-4 w-4" />
+              Sales By Channel
+            </h3>
+
+            {/* Date & Time Filter Bar */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" size="sm" className="text-xs">
+                    <CalendarIcon className="h-3 w-3 mr-1" />
+                    {channelDateFrom ? format(channelDateFrom, "MMM d") : "From"}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <CalendarUI
+                    mode="single"
+                    selected={channelDateFrom}
+                    onSelect={(d) => {
+                      setChannelDateFrom(d);
+                      setChannelPreset("Custom");
+                    }}
+                    className="p-3 pointer-events-auto"
+                  />
+                </PopoverContent>
+              </Popover>
+
+              <span className="text-xs text-muted-foreground">to</span>
+
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" size="sm" className="text-xs">
+                    <CalendarIcon className="h-3 w-3 mr-1" />
+                    {channelDateTo ? format(channelDateTo, "MMM d") : "To"}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <CalendarUI
+                    mode="single"
+                    selected={channelDateTo}
+                    onSelect={(d) => {
+                      setChannelDateTo(d);
+                      setChannelPreset("Custom");
+                    }}
+                    className="p-3 pointer-events-auto"
+                  />
+                </PopoverContent>
+              </Popover>
+
+              {["Today", "This Week", "This Month"].map((p) => (
+                <Button
+                  key={p}
+                  variant={channelPreset === p ? "secondary" : "outline"}
+                  size="sm"
+                  className="text-xs"
+                  onClick={() => setPreset(p)}
+                >
+                  {p}
+                </Button>
+              ))}
+
+              {/* Optional Time Filters */}
+              <div className="flex items-center gap-1.5 ml-0 sm:ml-2 pl-0 sm:pl-2 sm:border-l border-border text-xs">
+                <span className="text-muted-foreground text-[11px] font-medium flex items-center gap-1">
+                  <Clock className="h-3 w-3" /> Time (optional):
+                </span>
+                <div className="flex items-center gap-1">
+                  <span className="text-[11px] text-muted-foreground">From</span>
+                  <input
+                    type="time"
+                    value={channelTimeFrom}
+                    onChange={(e) => setChannelTimeFrom(e.target.value)}
+                    className="h-8 rounded-md border border-input bg-background px-2 py-1 text-xs [color-scheme:dark] text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  />
+                </div>
+                <div className="flex items-center gap-1">
+                  <span className="text-[11px] text-muted-foreground">To</span>
+                  <input
+                    type="time"
+                    value={channelTimeTo}
+                    onChange={(e) => setChannelTimeTo(e.target.value)}
+                    className="h-8 rounded-md border border-input bg-background px-2 py-1 text-xs [color-scheme:dark] text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  />
+                </div>
+                {(channelTimeFrom || channelTimeTo) && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground"
+                    onClick={() => {
+                      setChannelTimeFrom("");
+                      setChannelTimeTo("");
+                    }}
+                  >
+                    Clear
+                  </Button>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* 4 Cards Grid */}
+          {channelLoading ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <Card key={i} className="shadow-sm">
+                  <CardContent className="p-5 space-y-3">
+                    <Skeleton className="h-5 w-24" />
+                    <div className="space-y-2 pt-1">
+                      <Skeleton className="h-4 w-full" />
+                      <Skeleton className="h-4 w-full" />
+                      <Skeleton className="h-4 w-full" />
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {/* Dine In */}
+              <Card className="shadow-sm">
+                <CardHeader className="pb-2">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-base font-semibold">Dine In</CardTitle>
+                    <span className="text-xs text-muted-foreground">
+                      {channelData?.channels.dineIn.orders ?? 0} orders
+                    </span>
+                  </div>
+                </CardHeader>
+                <CardContent className="pt-2">
+                  <div className="space-y-2 text-sm">
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">Sale</span>
+                      <span className="font-semibold">{currency} {(channelData?.channels.dineIn.sale ?? 0).toLocaleString()}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">Cost</span>
+                      <span className="font-medium text-muted-foreground">{currency} {(channelData?.channels.dineIn.cost ?? 0).toLocaleString()}</span>
+                    </div>
+                    <div className="flex items-center justify-between pt-1 border-t">
+                      <span className="text-muted-foreground font-medium">Profit</span>
+                      <span className={`font-bold ${(channelData?.channels.dineIn.profit ?? 0) >= 0 ? "text-success" : "text-destructive"}`}>
+                        {currency} {(channelData?.channels.dineIn.profit ?? 0).toLocaleString()}
+                      </span>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Take Away */}
+              <Card className="shadow-sm">
+                <CardHeader className="pb-2">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-base font-semibold">Take Away</CardTitle>
+                    <span className="text-xs text-muted-foreground">
+                      {channelData?.channels.takeaway.orders ?? 0} orders
+                    </span>
+                  </div>
+                </CardHeader>
+                <CardContent className="pt-2">
+                  <div className="space-y-2 text-sm">
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">Sale</span>
+                      <span className="font-semibold">{currency} {(channelData?.channels.takeaway.sale ?? 0).toLocaleString()}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">Cost</span>
+                      <span className="font-medium text-muted-foreground">{currency} {(channelData?.channels.takeaway.cost ?? 0).toLocaleString()}</span>
+                    </div>
+                    <div className="flex items-center justify-between pt-1 border-t">
+                      <span className="text-muted-foreground font-medium">Profit</span>
+                      <span className={`font-bold ${(channelData?.channels.takeaway.profit ?? 0) >= 0 ? "text-success" : "text-destructive"}`}>
+                        {currency} {(channelData?.channels.takeaway.profit ?? 0).toLocaleString()}
+                      </span>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Delivery */}
+              <Card className="shadow-sm">
+                <CardHeader className="pb-2">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-base font-semibold">Delivery</CardTitle>
+                    <span className="text-xs text-muted-foreground">
+                      {channelData?.channels.delivery.orders ?? 0} orders
+                    </span>
+                  </div>
+                </CardHeader>
+                <CardContent className="pt-2">
+                  <div className="space-y-2 text-sm">
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">Sale</span>
+                      <span className="font-semibold">{currency} {(channelData?.channels.delivery.sale ?? 0).toLocaleString()}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">Cost</span>
+                      <span className="font-medium text-muted-foreground">{currency} {(channelData?.channels.delivery.cost ?? 0).toLocaleString()}</span>
+                    </div>
+                    <div className="flex items-center justify-between pt-1 border-t">
+                      <span className="text-muted-foreground font-medium">Profit</span>
+                      <span className={`font-bold ${(channelData?.channels.delivery.profit ?? 0) >= 0 ? "text-success" : "text-destructive"}`}>
+                        {currency} {(channelData?.channels.delivery.profit ?? 0).toLocaleString()}
+                      </span>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Combined */}
+              <Card className="shadow-sm border-primary/20 bg-primary/[0.02]">
+                <CardHeader className="pb-2">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-base font-semibold">Combined</CardTitle>
+                    <span className="text-xs text-muted-foreground">
+                      {channelData?.combined.orders ?? 0} orders
+                    </span>
+                  </div>
+                </CardHeader>
+                <CardContent className="pt-2">
+                  <div className="space-y-2 text-sm">
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">Sale</span>
+                      <span className="font-semibold">{currency} {(channelData?.combined.sale ?? 0).toLocaleString()}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">Cost</span>
+                      <span className="font-medium text-muted-foreground">{currency} {(channelData?.combined.cost ?? 0).toLocaleString()}</span>
+                    </div>
+                    <div className="flex items-center justify-between pt-1 border-t">
+                      <span className="text-muted-foreground font-medium">Profit</span>
+                      <span className={`font-bold ${(channelData?.combined.profit ?? 0) >= 0 ? "text-success" : "text-destructive"}`}>
+                        {currency} {(channelData?.combined.profit ?? 0).toLocaleString()}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between pt-1 border-t">
+                      <span className="text-muted-foreground font-medium">Margin</span>
+                      <span className={`font-bold ${(channelData?.combined.marginPct ?? 0) >= 0 ? "text-success" : "text-destructive"}`}>
+                        {channelData?.combined.marginPct ?? 0}%
+                      </span>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Header + Day-wise Sales */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
         <div className="lg:col-span-2 flex items-start justify-between gap-3 flex-wrap">

@@ -28,6 +28,30 @@ export interface StockReport {
   stockByCategory: { name: string; value: number }[];
 }
 
+export interface SalesByChannelRow {
+  sale: number;
+  cost: number;
+  profit: number;
+  orders: number;
+}
+
+export interface SalesByChannelCombinedRow extends SalesByChannelRow {
+  marginPct: number;
+}
+
+export interface SalesByChannelReport {
+  from: string;
+  to: string;
+  fromTime: string | null;
+  toTime: string | null;
+  channels: {
+    dineIn: SalesByChannelRow;
+    takeaway: SalesByChannelRow;
+    delivery: SalesByChannelRow;
+  };
+  combined: SalesByChannelCombinedRow;
+}
+
 export interface ReportParams {
   from: string; // YYYY-MM-DD
   to: string;   // YYYY-MM-DD
@@ -110,6 +134,21 @@ export const reportService = {
   },
   async getStock(params: ReportParams): Promise<StockReport> {
     const res = await api.get<{ success: boolean; data: StockReport }>(`/reports/stock?${qs(params)}`);
+    return res.data;
+  },
+  async getSalesByChannel(params: {
+    outletId?: string;
+    from: string;
+    to: string;
+    fromTime?: string;
+    toTime?: string;
+  }): Promise<SalesByChannelReport> {
+    const q = new URLSearchParams({ from: params.from, to: params.to });
+    if (params.outletId && params.outletId !== 'all') q.set('outletId', params.outletId);
+    else q.set('outletId', 'all');
+    if (params.fromTime) q.set('fromTime', params.fromTime);
+    if (params.toTime) q.set('toTime', params.toTime);
+    const res = await api.get<{ success: boolean; data: SalesByChannelReport }>(`/reports/sales-by-channel?${q.toString()}`);
     return res.data;
   },
 };
