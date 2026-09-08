@@ -74,6 +74,8 @@ export interface DashboardReport {
   pendingLeaveRequests: number;
   reservationsToday: number;
   deliveryActive: number;
+  /** Pending order-cancellation requests in scope (branch, or chain-wide for Super Admin). */
+  pendingCancellations: number;
   cashHub: { totalUnsettled: number; staffCount: number };
   // --- Customer Intelligence (Phase 3) ---
   /** Order count/revenue by hour of day (0-23), current week. */

@@ -476,11 +476,15 @@ plus a body explaining _why_ the change was made when that is not obvious.
   (App.tsx, verified 2026-09) — no Dashboard role (Super Admin/Admin/Manager/
   Floor Manager/Cashier) holds a literal `"delivery"` string in `AuthContext.tsx`'s
   `rolePermissions`; only the separate `"Delivery Manager"` role does, and that role never
-  sees the Dashboard. The Phase 4 plan draft's own tile table got this wrong (said
-  `module: "delivery"`), which would have made the Active Deliveries tile permanently dead
-  for every real Dashboard viewer except the two wildcard roles — caught only by literally
-  grepping `App.tsx` per-route rather than trusting the plan. Any future tile/nav entry
-  targeting `/delivery` needs `module: "sales"`, not the route's own name.
+  sees the Dashboard. So a link/tile whose intent is "visible to everyone who can reach
+  `/delivery`" must use `module: "sales"` — grep `App.tsx` per-route rather than trusting a
+  route's own name. **The Dashboard's Delivery *zone* deliberately does the opposite**
+  (`dashboardTiles.ts`, `active-deliveries` tile → `module: "delivery"`, a review follow-up
+  2026-09-08): it's a chain-oversight zone, so gating it on `"delivery"` keeps it
+  Admin/Super-Admin-only and off a branch Cashier's/Manager's dashboard. That's safe
+  because every `"delivery"` holder who can reach the Dashboard also has `"sales"` (or
+  `"*"`), so the click-through never bounces — a zone gated *narrower* than its route is
+  fine; *wider* is what breaks.
 - **Not every "pending count" badge is a react-query cache you can casually reuse.**
   `AppSidebar.tsx`'s cancellation-requests badge (`pendingCancelCount`) is plain
   `useState` + a manual `cancellationRequestService.list(...).then(...)` call, refreshed by
@@ -488,9 +492,12 @@ plus a body explaining _why_ the change was made when that is not obvious.
   `useQuery` and no shared cache key behind it, despite reading like one at a glance. A
   second component wanting that same count either duplicates the network call outright or
   needs `AppSidebar`'s fetch lifted into a shared hook/context first; neither is free.
-  `Dashboard.tsx`'s Cancellation Requests tile (Phase 4, 2026-09) ships without a live count
-  for exactly this reason — the honest fix is a `pendingCancellations` field on the backend's
-  `getDashboard` response, not a workaround on the frontend.
+  `Dashboard.tsx`'s Cancellation Requests tile (Phase 4, 2026-09) shipped without a live count
+  for exactly this reason — the fix landed as a review follow-up (2026-09-08): a
+  `pendingCancellations` count on `getDashboard`'s response (`OrderCancellationRequest.count`
+  where `status: 'pending'`, outlet-scoped), NOT a second frontend fetch. Same rule holds for
+  any other sidebar badge: add it to the backend aggregate, don't reach for the `AppSidebar`
+  `useState`.
 
 <!-- code-review-graph MCP tools -->
 ## MCP Tools: code-review-graph

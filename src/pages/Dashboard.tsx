@@ -85,6 +85,30 @@ function StatTile({
   );
 }
 
+/**
+ * Themed Recharts tooltip — matches the app's popover surface. Lists every series in the
+ * hovered point (`name: value`). Peak Hours / Day-of-Week keep their own bespoke tooltips
+ * because they surface a field that isn't a rendered bar; the stacked charts use this.
+ */
+function ChartTooltip({ active, payload, label }: {
+  active?: boolean;
+  payload?: { name?: string; value?: number | string; color?: string }[];
+  label?: string | number;
+}) {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="rounded-md border bg-popover px-3 py-2 text-xs shadow-sm">
+      <p className="font-medium mb-1">{label}</p>
+      {payload.map((p) => (
+        <p key={p.name} className="text-muted-foreground flex items-center gap-1.5">
+          {p.color && <span className="h-2 w-2 rounded-sm shrink-0" style={{ background: p.color }} />}
+          {p.name}: {typeof p.value === "number" ? p.value.toLocaleString() : p.value}
+        </p>
+      ))}
+    </div>
+  );
+}
+
 const Dashboard = () => {
   const { outletId, setOutletId, outlets, isSuperAdmin } = useOutletFilter();
   const navigate = useNavigate();
@@ -114,8 +138,11 @@ const Dashboard = () => {
   };
   const salesDrillEnabled = hasPermission("sales");
   const goToSales = () => navigate("/sales");
-  const customerIntelVisible = hasPermission("customers");
-  const reportsLinkVisible = hasPermission("reports");
+  // Customer Intelligence is the merged-in Analytics page — keep its pre-merge audience
+  // (Analytics was gated on "analytics", held only by Manager + the wildcard roles).
+  // "reports" is the natural successor and maps to the exact same set; Floor Manager /
+  // Cashier never had the Analytics page, so they don't get this zone.
+  const customerIntelVisible = hasPermission("reports");
 
   const { data: doughBatches = [], refetch: refetchDough } = useQuery({
     queryKey: ["dough-batches", outletId],
@@ -535,11 +562,10 @@ const Dashboard = () => {
               <Users className="h-4 w-4" />
               Customer Intelligence
             </h3>
-            {reportsLinkVisible && (
-              <Button variant="ghost" size="sm" className="h-7 text-xs gap-1 text-muted-foreground" onClick={() => navigate("/reports")}>
-                View full reports <ChevronRight className="h-3 w-3" />
-              </Button>
-            )}
+            {/* The zone itself is gated on hasPermission("reports"), so this link is always reachable here. */}
+            <Button variant="ghost" size="sm" className="h-7 text-xs gap-1 text-muted-foreground" onClick={() => navigate("/reports")}>
+              View full reports <ChevronRight className="h-3 w-3" />
+            </Button>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
@@ -629,7 +655,7 @@ const Dashboard = () => {
                     <BarChart data={customerActivityChart}>
                       <XAxis dataKey="day" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
                       <YAxis tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
-                      <Tooltip />
+                      <Tooltip content={<ChartTooltip />} />
                       <Legend wrapperStyle={{ fontSize: 11 }} />
                       <Bar dataKey="newCustomers" stackId="c" name="New" fill="hsl(var(--primary))" />
                       <Bar dataKey="returningCustomers" stackId="c" name="Returning" fill="hsl(var(--info))" radius={[4, 4, 0, 0]} />
@@ -647,7 +673,7 @@ const Dashboard = () => {
                     <BarChart data={orderTypeTrendChart}>
                       <XAxis dataKey="day" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
                       <YAxis tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
-                      <Tooltip />
+                      <Tooltip content={<ChartTooltip />} />
                       <Legend wrapperStyle={{ fontSize: 11 }} />
                       <Bar dataKey="offline" stackId="t" name="Offline" fill="hsl(var(--success))" />
                       <Bar dataKey="online" stackId="t" name="Online" fill="hsl(var(--info))" radius={[4, 4, 0, 0]} />
@@ -715,7 +741,9 @@ const Dashboard = () => {
             <StatTile
               visible={tileVisible("cancellation-requests")} interactive onClick={() => goToTile("cancellation-requests")}
               icon={Ban} title="Cancellation Requests"
-              value={<span className="text-sm font-normal text-muted-foreground">Review requests</span>}
+              value={d?.pendingCancellations ?? 0}
+              valueClassName={(d?.pendingCancellations ?? 0) > 0 ? "text-warning" : undefined}
+              sub="Awaiting approval"
             />
           </div>
         </div>
