@@ -2,6 +2,7 @@ import {
   LayoutDashboard, TrendingUp, DollarSign, Wallet, ReceiptText, Flame, ArrowUpCircle, ArrowDownCircle,
   BarChart3, ShoppingBag, Clock, ChevronRight, Trophy, Users, ChefHat, LayoutGrid, Ban, Package,
   ClipboardList, ArrowLeftRight, UserCheck, CalendarOff, Bike, CalendarCheck, Coins, Calendar as CalendarIcon,
+  UtensilsCrossed,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -251,7 +252,7 @@ const Dashboard = () => {
           {/* Header & Filter Bar */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 flex-wrap">
             <h3 className="text-sm font-semibold text-muted-foreground flex items-center gap-2">
-              <TrendingUp className="h-4 w-4" />
+              <DollarSign className="h-4 w-4" />
               Sales By Channel
             </h3>
 
@@ -356,12 +357,18 @@ const Dashboard = () => {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               {Array.from({ length: 4 }).map((_, i) => (
                 <Card key={i} className="shadow-sm">
-                  <CardContent className="p-5 space-y-3">
-                    <Skeleton className="h-5 w-24" />
-                    <div className="space-y-2 pt-1">
-                      <Skeleton className="h-4 w-full" />
-                      <Skeleton className="h-4 w-full" />
-                      <Skeleton className="h-4 w-full" />
+                  <CardContent className="p-5">
+                    <div className="flex items-start justify-between">
+                      <div className="space-y-2">
+                        <Skeleton className="h-3.5 w-20" />
+                        <Skeleton className="h-7 w-28" />
+                        <Skeleton className="h-3 w-16" />
+                      </div>
+                      <Skeleton className="h-10 w-10 rounded-lg shrink-0" />
+                    </div>
+                    <div className="mt-3.5 pt-3 border-t border-border/50 flex justify-between">
+                      <Skeleton className="h-3.5 w-20" />
+                      <Skeleton className="h-3.5 w-20" />
                     </div>
                   </CardContent>
                 </Card>
@@ -371,27 +378,31 @@ const Dashboard = () => {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               {/* Dine In */}
               <Card className="shadow-sm">
-                <CardHeader className="pb-2">
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-base font-semibold">Dine In</CardTitle>
-                    <span className="text-xs text-muted-foreground">
-                      {channelData?.channels.dineIn.orders ?? 0} orders
-                    </span>
+                <CardContent className="p-5">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <p className="text-xs text-muted-foreground font-medium">Dine In</p>
+                      <p className="text-2xl font-bold mt-1">
+                        {currency} {(channelData?.channels.dineIn.sale ?? 0).toLocaleString()}
+                      </p>
+                      <span className="text-xs text-muted-foreground">
+                        {channelData?.channels.dineIn.orders ?? 0} orders
+                      </span>
+                    </div>
+                    <div className="h-10 w-10 rounded-lg flex items-center justify-center bg-muted shrink-0">
+                      <UtensilsCrossed className="h-5 w-5 text-muted-foreground" />
+                    </div>
                   </div>
-                </CardHeader>
-                <CardContent className="pt-2">
-                  <div className="space-y-2 text-sm">
-                    <div className="flex items-center justify-between">
-                      <span className="text-muted-foreground">Sale</span>
-                      <span className="font-semibold">{currency} {(channelData?.channels.dineIn.sale ?? 0).toLocaleString()}</span>
+                  <div className="mt-3.5 pt-3 border-t border-border/50 flex items-center justify-between text-xs">
+                    <div>
+                      <span className="text-muted-foreground">Cost: </span>
+                      <span className="font-semibold text-foreground">
+                        {currency} {(channelData?.channels.dineIn.cost ?? 0).toLocaleString()}
+                      </span>
                     </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-muted-foreground">Cost</span>
-                      <span className="font-medium text-muted-foreground">{currency} {(channelData?.channels.dineIn.cost ?? 0).toLocaleString()}</span>
-                    </div>
-                    <div className="flex items-center justify-between pt-1 border-t">
-                      <span className="text-muted-foreground font-medium">Profit</span>
-                      <span className={`font-bold ${(channelData?.channels.dineIn.profit ?? 0) >= 0 ? "text-success" : "text-destructive"}`}>
+                    <div>
+                      <span className="text-muted-foreground">Profit: </span>
+                      <span className={cn("font-semibold", (channelData?.channels.dineIn.profit ?? 0) >= 0 ? "text-success" : "text-destructive")}>
                         {currency} {(channelData?.channels.dineIn.profit ?? 0).toLocaleString()}
                       </span>
                     </div>
@@ -401,27 +412,31 @@ const Dashboard = () => {
 
               {/* Take Away */}
               <Card className="shadow-sm">
-                <CardHeader className="pb-2">
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-base font-semibold">Take Away</CardTitle>
-                    <span className="text-xs text-muted-foreground">
-                      {channelData?.channels.takeaway.orders ?? 0} orders
-                    </span>
+                <CardContent className="p-5">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <p className="text-xs text-muted-foreground font-medium">Take Away</p>
+                      <p className="text-2xl font-bold mt-1">
+                        {currency} {(channelData?.channels.takeaway.sale ?? 0).toLocaleString()}
+                      </p>
+                      <span className="text-xs text-muted-foreground">
+                        {channelData?.channels.takeaway.orders ?? 0} orders
+                      </span>
+                    </div>
+                    <div className="h-10 w-10 rounded-lg flex items-center justify-center bg-muted shrink-0">
+                      <ShoppingBag className="h-5 w-5 text-muted-foreground" />
+                    </div>
                   </div>
-                </CardHeader>
-                <CardContent className="pt-2">
-                  <div className="space-y-2 text-sm">
-                    <div className="flex items-center justify-between">
-                      <span className="text-muted-foreground">Sale</span>
-                      <span className="font-semibold">{currency} {(channelData?.channels.takeaway.sale ?? 0).toLocaleString()}</span>
+                  <div className="mt-3.5 pt-3 border-t border-border/50 flex items-center justify-between text-xs">
+                    <div>
+                      <span className="text-muted-foreground">Cost: </span>
+                      <span className="font-semibold text-foreground">
+                        {currency} {(channelData?.channels.takeaway.cost ?? 0).toLocaleString()}
+                      </span>
                     </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-muted-foreground">Cost</span>
-                      <span className="font-medium text-muted-foreground">{currency} {(channelData?.channels.takeaway.cost ?? 0).toLocaleString()}</span>
-                    </div>
-                    <div className="flex items-center justify-between pt-1 border-t">
-                      <span className="text-muted-foreground font-medium">Profit</span>
-                      <span className={`font-bold ${(channelData?.channels.takeaway.profit ?? 0) >= 0 ? "text-success" : "text-destructive"}`}>
+                    <div>
+                      <span className="text-muted-foreground">Profit: </span>
+                      <span className={cn("font-semibold", (channelData?.channels.takeaway.profit ?? 0) >= 0 ? "text-success" : "text-destructive")}>
                         {currency} {(channelData?.channels.takeaway.profit ?? 0).toLocaleString()}
                       </span>
                     </div>
@@ -431,27 +446,31 @@ const Dashboard = () => {
 
               {/* Delivery */}
               <Card className="shadow-sm">
-                <CardHeader className="pb-2">
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-base font-semibold">Delivery</CardTitle>
-                    <span className="text-xs text-muted-foreground">
-                      {channelData?.channels.delivery.orders ?? 0} orders
-                    </span>
+                <CardContent className="p-5">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <p className="text-xs text-muted-foreground font-medium">Delivery</p>
+                      <p className="text-2xl font-bold mt-1">
+                        {currency} {(channelData?.channels.delivery.sale ?? 0).toLocaleString()}
+                      </p>
+                      <span className="text-xs text-muted-foreground">
+                        {channelData?.channels.delivery.orders ?? 0} orders
+                      </span>
+                    </div>
+                    <div className="h-10 w-10 rounded-lg flex items-center justify-center bg-muted shrink-0">
+                      <Bike className="h-5 w-5 text-muted-foreground" />
+                    </div>
                   </div>
-                </CardHeader>
-                <CardContent className="pt-2">
-                  <div className="space-y-2 text-sm">
-                    <div className="flex items-center justify-between">
-                      <span className="text-muted-foreground">Sale</span>
-                      <span className="font-semibold">{currency} {(channelData?.channels.delivery.sale ?? 0).toLocaleString()}</span>
+                  <div className="mt-3.5 pt-3 border-t border-border/50 flex items-center justify-between text-xs">
+                    <div>
+                      <span className="text-muted-foreground">Cost: </span>
+                      <span className="font-semibold text-foreground">
+                        {currency} {(channelData?.channels.delivery.cost ?? 0).toLocaleString()}
+                      </span>
                     </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-muted-foreground">Cost</span>
-                      <span className="font-medium text-muted-foreground">{currency} {(channelData?.channels.delivery.cost ?? 0).toLocaleString()}</span>
-                    </div>
-                    <div className="flex items-center justify-between pt-1 border-t">
-                      <span className="text-muted-foreground font-medium">Profit</span>
-                      <span className={`font-bold ${(channelData?.channels.delivery.profit ?? 0) >= 0 ? "text-success" : "text-destructive"}`}>
+                    <div>
+                      <span className="text-muted-foreground">Profit: </span>
+                      <span className={cn("font-semibold", (channelData?.channels.delivery.profit ?? 0) >= 0 ? "text-success" : "text-destructive")}>
                         {currency} {(channelData?.channels.delivery.profit ?? 0).toLocaleString()}
                       </span>
                     </div>
@@ -460,35 +479,38 @@ const Dashboard = () => {
               </Card>
 
               {/* Combined */}
-              <Card className="shadow-sm border-primary/20 bg-primary/[0.02]">
-                <CardHeader className="pb-2">
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-base font-semibold">Combined</CardTitle>
-                    <span className="text-xs text-muted-foreground">
-                      {channelData?.combined.orders ?? 0} orders
-                    </span>
+              <Card className="shadow-sm border-success/20">
+                <CardContent className="p-5">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <p className="text-xs text-muted-foreground font-medium">Combined</p>
+                      <p className="text-2xl font-bold mt-1">
+                        {currency} {(channelData?.combined.sale ?? 0).toLocaleString()}
+                      </p>
+                      <span className="text-xs text-muted-foreground">
+                        {channelData?.combined.orders ?? 0} orders
+                      </span>
+                    </div>
+                    <div className="h-10 w-10 rounded-lg flex items-center justify-center bg-success/10 shrink-0">
+                      <TrendingUp className="h-5 w-5 text-success" />
+                    </div>
                   </div>
-                </CardHeader>
-                <CardContent className="pt-2">
-                  <div className="space-y-2 text-sm">
-                    <div className="flex items-center justify-between">
-                      <span className="text-muted-foreground">Sale</span>
-                      <span className="font-semibold">{currency} {(channelData?.combined.sale ?? 0).toLocaleString()}</span>
+                  <div className="mt-3.5 pt-3 border-t border-border/50 flex items-center justify-between text-xs">
+                    <div>
+                      <span className="text-muted-foreground">Cost: </span>
+                      <span className="font-semibold text-foreground">
+                        {currency} {(channelData?.combined.cost ?? 0).toLocaleString()}
+                      </span>
                     </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-muted-foreground">Cost</span>
-                      <span className="font-medium text-muted-foreground">{currency} {(channelData?.combined.cost ?? 0).toLocaleString()}</span>
-                    </div>
-                    <div className="flex items-center justify-between pt-1 border-t">
-                      <span className="text-muted-foreground font-medium">Profit</span>
-                      <span className={`font-bold ${(channelData?.combined.profit ?? 0) >= 0 ? "text-success" : "text-destructive"}`}>
+                    <div>
+                      <span className="text-muted-foreground">Profit: </span>
+                      <span className={cn("font-semibold", (channelData?.combined.profit ?? 0) >= 0 ? "text-success" : "text-destructive")}>
                         {currency} {(channelData?.combined.profit ?? 0).toLocaleString()}
                       </span>
                     </div>
-                    <div className="flex items-center justify-between pt-1 border-t">
-                      <span className="text-muted-foreground font-medium">Margin</span>
-                      <span className={`font-bold ${(channelData?.combined.marginPct ?? 0) >= 0 ? "text-success" : "text-destructive"}`}>
-                        {channelData?.combined.marginPct ?? 0}%
+                    <div className="pl-2 border-l border-border/50">
+                      <span className={cn("font-bold px-1.5 py-0.5 rounded text-[11px]", (channelData?.combined.marginPct ?? 0) >= 0 ? "bg-success/10 text-success" : "bg-destructive/10 text-destructive")}>
+                        {(channelData?.combined.marginPct ?? 0)}% margin
                       </span>
                     </div>
                   </div>
