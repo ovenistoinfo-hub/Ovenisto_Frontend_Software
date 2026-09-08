@@ -472,6 +472,25 @@ plus a body explaining _why_ the change was made when that is not obvious.
   rule above (an established page-local *domain* meaning, not a random 3rd categorical slot).
   Adding real brand hues to the theme is the actual fix if a future chart genuinely needs 3+
   distinguishable series — don't just eyeball a 3rd token and skip re-running the validator.
+- **`/delivery`'s `<ProtectedRoute>` gates on `module="sales"`, not `"delivery"`**
+  (App.tsx, verified 2026-09) — no Dashboard role (Super Admin/Admin/Manager/
+  Floor Manager/Cashier) holds a literal `"delivery"` string in `AuthContext.tsx`'s
+  `rolePermissions`; only the separate `"Delivery Manager"` role does, and that role never
+  sees the Dashboard. The Phase 4 plan draft's own tile table got this wrong (said
+  `module: "delivery"`), which would have made the Active Deliveries tile permanently dead
+  for every real Dashboard viewer except the two wildcard roles — caught only by literally
+  grepping `App.tsx` per-route rather than trusting the plan. Any future tile/nav entry
+  targeting `/delivery` needs `module: "sales"`, not the route's own name.
+- **Not every "pending count" badge is a react-query cache you can casually reuse.**
+  `AppSidebar.tsx`'s cancellation-requests badge (`pendingCancelCount`) is plain
+  `useState` + a manual `cancellationRequestService.list(...).then(...)` call, refreshed by
+  `useModuleEvents` (socket) and a 120s `useVisiblePolling` fallback — there is no
+  `useQuery` and no shared cache key behind it, despite reading like one at a glance. A
+  second component wanting that same count either duplicates the network call outright or
+  needs `AppSidebar`'s fetch lifted into a shared hook/context first; neither is free.
+  `Dashboard.tsx`'s Cancellation Requests tile (Phase 4, 2026-09) ships without a live count
+  for exactly this reason — the honest fix is a `pendingCancellations` field on the backend's
+  `getDashboard` response, not a workaround on the frontend.
 
 <!-- code-review-graph MCP tools -->
 ## MCP Tools: code-review-graph
