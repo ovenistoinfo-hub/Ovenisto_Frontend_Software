@@ -612,10 +612,10 @@ const Dashboard = () => {
                       <div
                         key={row.title}
                         className={cn(
-                          "rounded-xl border p-4 transition-all space-y-3 hover:shadow-md hover:-translate-y-0.5",
+                          "group/card rounded-xl border p-4 transition-all duration-200 space-y-3",
                           row.isCombined
-                            ? "bg-emerald-500/[0.04] border-emerald-500/30 shadow-xs hover:border-emerald-500/50"
-                            : "bg-card/60 border-border/60 hover:border-primary/40"
+                            ? "bg-emerald-500/[0.03] border-emerald-500/30 shadow-xs hover:border-emerald-500/50 hover:bg-emerald-500/[0.05]"
+                            : "bg-card/60 border-border/60 hover:border-border/90 hover:bg-card/80"
                         )}
                       >
                         {/* Channel Title + Orders Row */}
@@ -623,7 +623,7 @@ const Dashboard = () => {
                           <div className="flex items-center gap-2.5">
                             <div
                               className={cn(
-                                "h-7 w-7 rounded-md flex items-center justify-center shrink-0 border shadow-2xs",
+                                "h-7 w-7 rounded-md flex items-center justify-center shrink-0 border shadow-2xs transition-transform duration-200 group-hover/card:scale-105",
                                 row.color
                               )}
                             >
@@ -643,12 +643,14 @@ const Dashboard = () => {
                               {row.orders} {row.orders === 1 ? "order" : "orders"}
                             </span>
                             <Button
+                              type="button"
                               variant="ghost"
                               size="sm"
                               onClick={() => goToChannelSales(row.salesTypeParam)}
-                              className="h-7 px-2 text-xs gap-1 text-muted-foreground hover:text-primary"
+                              className="h-7 px-2.5 text-xs font-medium gap-1 text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors rounded-lg"
                             >
-                              View Details <ChevronRight className="h-3 w-3" />
+                              <span>View Details</span>
+                              <ChevronRight className="h-3 w-3 transition-transform duration-200 group-hover/card:translate-x-0.5" />
                             </Button>
                           </div>
                         </div>
@@ -734,7 +736,7 @@ const Dashboard = () => {
                             <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
                             <XAxis dataKey="name" tick={{ fontSize: 12 }} axisLine={{ stroke: "hsl(var(--border))" }} tickLine={false} />
                             <YAxis tick={{ fontSize: 12 }} axisLine={false} tickLine={false} tickFormatter={(v) => `${currency}${(v / 1000).toFixed(0)}k`} />
-                            <Tooltip content={<ChartTooltip />} />
+                            <Tooltip content={<ChartTooltip />} cursor={{ fill: "hsl(var(--muted) / 0.15)", radius: 4 }} />
                             <Legend wrapperStyle={{ fontSize: 12 }} />
                             <Bar
                               dataKey="sale" name="Sale" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} maxBarSize={40}
@@ -765,7 +767,7 @@ const Dashboard = () => {
                             <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
                             <XAxis dataKey="name" tick={{ fontSize: 12 }} axisLine={{ stroke: "hsl(var(--border))" }} tickLine={false} />
                             <YAxis tick={{ fontSize: 12 }} axisLine={false} tickLine={false} tickFormatter={(v) => `${currency}${(v / 1000).toFixed(0)}k`} />
-                            <Tooltip content={<ChartTooltip />} />
+                            <Tooltip content={<ChartTooltip />} cursor={{ fill: "hsl(var(--muted) / 0.15)", radius: 4 }} />
                             <Bar
                               dataKey="profit" name="Profit" radius={[4, 4, 0, 0]} maxBarSize={48}
                               cursor="pointer"
@@ -859,7 +861,7 @@ const Dashboard = () => {
                   <BarChart data={d?.daywiseSales ?? []} margin={{ top: 8, right: 8, left: 0, bottom: 4 }}>
                     <XAxis dataKey="label" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
                     <YAxis tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
-                    <Tooltip formatter={(v: number) => [`${currency} ${v.toLocaleString()}`, "Sales"]} />
+                    <Tooltip content={<ChartTooltip />} cursor={{ fill: "hsl(var(--muted) / 0.15)", radius: 4 }} />
                     <Bar dataKey="sales" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
@@ -1117,17 +1119,20 @@ const Dashboard = () => {
                     <BarChart data={peakHoursChart}>
                       <XAxis dataKey="hour" tick={{ fontSize: 9 }} interval={1} stroke="hsl(var(--muted-foreground))" />
                       <YAxis tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
-                      <Tooltip content={({ active, payload, label }) => {
-                        if (!active || !payload?.length) return null;
-                        const row = payload[0].payload as { orders: number; revenue: number };
-                        return (
-                          <div className="rounded-md border bg-popover px-3 py-2 text-xs shadow-sm">
-                            <p className="font-medium mb-1">{label}</p>
-                            <p className="text-muted-foreground">{row.orders} orders</p>
-                            <p className="text-muted-foreground">{currency} {row.revenue.toLocaleString()} revenue</p>
-                          </div>
-                        );
-                      }} />
+                      <Tooltip
+                        content={({ active, payload, label }) => {
+                          if (!active || !payload?.length) return null;
+                          const row = payload[0].payload as { orders: number; revenue: number };
+                          return (
+                            <div className="rounded-md border bg-popover px-3 py-2 text-xs shadow-sm">
+                              <p className="font-medium mb-1">{label}</p>
+                              <p className="text-muted-foreground">{row.orders} orders</p>
+                              <p className="text-muted-foreground">{currency} {row.revenue.toLocaleString()} revenue</p>
+                            </div>
+                          );
+                        }}
+                        cursor={{ fill: "hsl(var(--muted) / 0.15)", radius: 4 }}
+                      />
                       <Bar dataKey="orders" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
@@ -1143,7 +1148,7 @@ const Dashboard = () => {
                     <BarChart data={customerActivityChart}>
                       <XAxis dataKey="day" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
                       <YAxis tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
-                      <Tooltip content={<ChartTooltip />} />
+                      <Tooltip content={<ChartTooltip />} cursor={{ fill: "hsl(var(--muted) / 0.15)", radius: 4 }} />
                       <Legend wrapperStyle={{ fontSize: 11 }} />
                       <Bar dataKey="newCustomers" stackId="c" name="New" fill="hsl(var(--primary))" />
                       <Bar dataKey="returningCustomers" stackId="c" name="Returning" fill="hsl(var(--info))" radius={[4, 4, 0, 0]} />
@@ -1161,7 +1166,7 @@ const Dashboard = () => {
                     <BarChart data={orderTypeTrendChart}>
                       <XAxis dataKey="day" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
                       <YAxis tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
-                      <Tooltip content={<ChartTooltip />} />
+                      <Tooltip content={<ChartTooltip />} cursor={{ fill: "hsl(var(--muted) / 0.15)", radius: 4 }} />
                       <Legend wrapperStyle={{ fontSize: 11 }} />
                       <Bar dataKey="offline" stackId="t" name="Offline" fill="hsl(var(--success))" />
                       <Bar dataKey="online" stackId="t" name="Online" fill="hsl(var(--info))" radius={[4, 4, 0, 0]} />
@@ -1179,17 +1184,20 @@ const Dashboard = () => {
                     <BarChart data={dayPerformanceChart}>
                       <XAxis dataKey="label" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
                       <YAxis tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
-                      <Tooltip content={({ active, payload, label }) => {
-                        if (!active || !payload?.length) return null;
-                        const row = payload[0].payload as { orderCount: number; avgSales: number };
-                        return (
-                          <div className="rounded-md border bg-popover px-3 py-2 text-xs shadow-sm">
-                            <p className="font-medium mb-1">{label}</p>
-                            <p className="text-muted-foreground">Avg order: {currency} {row.avgSales.toLocaleString()}</p>
-                            <p className="text-muted-foreground">{row.orderCount} orders</p>
-                          </div>
-                        );
-                      }} />
+                      <Tooltip
+                        content={({ active, payload, label }) => {
+                          if (!active || !payload?.length) return null;
+                          const row = payload[0].payload as { orderCount: number; avgSales: number };
+                          return (
+                            <div className="rounded-md border bg-popover px-3 py-2 text-xs shadow-sm">
+                              <p className="font-medium mb-1">{label}</p>
+                              <p className="text-muted-foreground">Avg order: {currency} {row.avgSales.toLocaleString()}</p>
+                              <p className="text-muted-foreground">{row.orderCount} orders</p>
+                            </div>
+                          );
+                        }}
+                        cursor={{ fill: "hsl(var(--muted) / 0.15)", radius: 4 }}
+                      />
                       <Bar dataKey="avgSales" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
