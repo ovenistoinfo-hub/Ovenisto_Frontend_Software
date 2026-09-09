@@ -320,9 +320,12 @@ const Dashboard = () => {
 
       {/* Sales By Channel (gated on "reports" permission) */}
       {salesByChannelVisible && (
-        <div className="space-y-6">
-          {/* Header & Filter Controls Container */}
-          <div className="rounded-xl border border-border/70 bg-card/60 p-4 sm:p-5 shadow-sm backdrop-blur-sm space-y-4">
+        <section
+          aria-label="Sales By Channel"
+          className="rounded-2xl border border-border/80 bg-card/40 backdrop-blur-md shadow-sm overflow-hidden transition-all"
+        >
+          {/* Section Header & Filter Controls Container */}
+          <div className={cn("p-4 sm:p-5 space-y-4 bg-card/70", !channelSectionCollapsed && "border-b border-border/50")}>
             {/* Top row: Title + Collapse Arrow + Super Admin OutletFilter */}
             <div className="flex items-center justify-between gap-3">
               <div
@@ -538,166 +541,139 @@ const Dashboard = () => {
             )}
           </div>
 
-          {/* 4 Channel Rows (Dine In, Take Away, Delivery, Combined) - hidden when collapsed */}
+          {/* Section Body: 4 Channel Rows nested inside this container */}
           {!channelSectionCollapsed && (
-            channelLoading ? (
-              <div className="space-y-6">
-                {Array.from({ length: 4 }).map((_, r) => (
-                  <div key={r} className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Skeleton className="h-7 w-7 rounded-md" />
-                        <Skeleton className="h-5 w-28" />
-                      </div>
-                      <Skeleton className="h-5 w-20 rounded-full" />
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                      {Array.from({ length: 4 }).map((_, c) => (
-                        <Card key={c} className="shadow-sm border-border/60">
-                          <CardContent className="p-4 sm:p-5">
-                            <div className="flex items-center justify-between">
-                              <div className="space-y-2">
-                                <Skeleton className="h-3 w-20" />
-                                <Skeleton className="h-7 w-28" />
-                              </div>
-                              <Skeleton className="h-9 w-9 rounded-lg shrink-0" />
-                            </div>
-                          </CardContent>
-                        </Card>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="space-y-6">
-                {channelRows.map((row) => {
-                  const ChannelIcon = row.icon;
-                  return (
-                    <div key={row.title} className="space-y-3">
+            <div className="p-4 sm:p-5 space-y-4 bg-background/25">
+              {channelLoading ? (
+                <div className="space-y-4">
+                  {Array.from({ length: 4 }).map((_, r) => (
+                    <div key={r} className="rounded-xl border border-border/50 bg-card/40 p-4 space-y-3">
                       <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2.5">
-                          <div
-                            className={cn(
-                              "h-7 w-7 rounded-md flex items-center justify-center shrink-0 border shadow-sm",
-                              row.color
-                            )}
-                          >
-                            <ChannelIcon className="h-3.5 w-3.5" />
-                          </div>
-                          <h4 className="text-sm font-semibold text-foreground tracking-tight">{row.title}</h4>
+                        <div className="flex items-center gap-2">
+                          <Skeleton className="h-7 w-7 rounded-md" />
+                          <Skeleton className="h-5 w-28" />
                         </div>
-                        <span className="text-xs text-muted-foreground font-medium bg-muted/60 px-2.5 py-0.5 rounded-full border border-border/50">
-                          {row.orders} {row.orders === 1 ? "order" : "orders"}
-                        </span>
+                        <Skeleton className="h-5 w-20 rounded-full" />
                       </div>
-
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                        {/* Card 1: Total Sales */}
-                        <Card
-                          className={cn(
-                            "shadow-sm transition-all border-border/70 hover:border-border",
-                            row.isCombined ? "bg-emerald-500/[0.02] border-emerald-500/30" : "bg-card/70"
-                          )}
-                        >
-                          <CardContent className="p-4 sm:p-5">
-                            <div className="flex items-center justify-between">
-                              <div>
-                                <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Total Sales</p>
-                                <p className="text-2xl font-bold tracking-tight text-foreground mt-1">
-                                  {currency} {row.sale.toLocaleString()}
-                                </p>
-                              </div>
-                              <div className="h-9 w-9 rounded-lg flex items-center justify-center bg-primary/10 text-primary border border-primary/20 shrink-0">
-                                <DollarSign className="h-4 w-4" />
-                              </div>
-                            </div>
-                          </CardContent>
-                        </Card>
-
-                        {/* Card 2: Total Cost */}
-                        <Card
-                          className={cn(
-                            "shadow-sm transition-all border-border/70 hover:border-border",
-                            row.isCombined ? "bg-emerald-500/[0.02] border-emerald-500/30" : "bg-card/70"
-                          )}
-                        >
-                          <CardContent className="p-4 sm:p-5">
-                            <div className="flex items-center justify-between">
-                              <div>
-                                <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Total Cost</p>
-                                <p className="text-2xl font-bold tracking-tight text-foreground mt-1">
-                                  {currency} {row.cost.toLocaleString()}
-                                </p>
-                              </div>
-                              <div className="h-9 w-9 rounded-lg flex items-center justify-center bg-muted/80 text-muted-foreground border border-border/50 shrink-0">
-                                <Wallet className="h-4 w-4" />
-                              </div>
-                            </div>
-                          </CardContent>
-                        </Card>
-
-                        {/* Card 3: Total Profit */}
-                        <Card
-                          className={cn(
-                            "shadow-sm transition-all border-border/70 hover:border-border",
-                            row.isCombined ? "bg-emerald-500/[0.02] border-emerald-500/30" : "bg-card/70"
-                          )}
-                        >
-                          <CardContent className="p-4 sm:p-5">
-                            <div className="flex items-center justify-between">
-                              <div>
-                                <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Total Profit</p>
-                                <p className={cn("text-2xl font-bold tracking-tight mt-1", row.profit >= 0 ? "text-emerald-500" : "text-destructive")}>
-                                  {currency} {row.profit.toLocaleString()}
-                                </p>
-                              </div>
-                              <div
-                                className={cn(
-                                  "h-9 w-9 rounded-lg flex items-center justify-center shrink-0 border",
-                                  row.profit >= 0 ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" : "bg-destructive/10 text-destructive border-destructive/20"
-                                )}
-                              >
-                                <Coins className="h-4 w-4" />
-                              </div>
-                            </div>
-                          </CardContent>
-                        </Card>
-
-                        {/* Card 4: Profit Margin */}
-                        <Card
-                          className={cn(
-                            "shadow-sm transition-all border-border/70 hover:border-border",
-                            row.isCombined ? "bg-emerald-500/[0.02] border-emerald-500/30" : "bg-card/70"
-                          )}
-                        >
-                          <CardContent className="p-4 sm:p-5">
-                            <div className="flex items-center justify-between">
-                              <div>
-                                <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Profit Margin</p>
-                                <p className={cn("text-2xl font-bold tracking-tight mt-1", row.marginPct >= 0 ? "text-emerald-500" : "text-destructive")}>
-                                  {row.marginPct}%
-                                </p>
-                              </div>
-                              <div
-                                className={cn(
-                                  "h-9 w-9 rounded-lg flex items-center justify-center shrink-0 border",
-                                  row.marginPct >= 0 ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" : "bg-destructive/10 text-destructive border-destructive/20"
-                                )}
-                              >
-                                <Percent className="h-4 w-4" />
-                              </div>
-                            </div>
-                          </CardContent>
-                        </Card>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                        {Array.from({ length: 4 }).map((_, c) => (
+                          <Skeleton key={c} className="h-20 rounded-lg" />
+                        ))}
                       </div>
                     </div>
-                  );
-                })}
-              </div>
-            )
+                  ))}
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {channelRows.map((row) => {
+                    const ChannelIcon = row.icon;
+                    return (
+                      <div
+                        key={row.title}
+                        className={cn(
+                          "rounded-xl border p-4 transition-all space-y-3",
+                          row.isCombined
+                            ? "bg-emerald-500/[0.04] border-emerald-500/30 shadow-xs"
+                            : "bg-card/60 border-border/60 hover:border-border/90"
+                        )}
+                      >
+                        {/* Channel Title + Orders Row */}
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2.5">
+                            <div
+                              className={cn(
+                                "h-7 w-7 rounded-md flex items-center justify-center shrink-0 border shadow-2xs",
+                                row.color
+                              )}
+                            >
+                              <ChannelIcon className="h-3.5 w-3.5" />
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <h4 className="text-sm font-semibold text-foreground tracking-tight">{row.title}</h4>
+                              {row.isCombined && (
+                                <span className="text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
+                                  Summary Total
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <span className="text-xs text-muted-foreground font-medium bg-muted/60 px-2.5 py-0.5 rounded-full border border-border/50">
+                            {row.orders} {row.orders === 1 ? "order" : "orders"}
+                          </span>
+                        </div>
+
+                        {/* 4 Metrics in Grid */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                          {/* Metric 1: Total Sales */}
+                          <div className="rounded-lg bg-background/70 border border-border/50 p-3.5 flex items-center justify-between">
+                            <div>
+                              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Total Sales</p>
+                              <p className="text-xl font-bold tracking-tight text-foreground mt-0.5">
+                                {currency} {row.sale.toLocaleString()}
+                              </p>
+                            </div>
+                            <div className="h-8 w-8 rounded-lg flex items-center justify-center bg-primary/10 text-primary border border-primary/20 shrink-0">
+                              <DollarSign className="h-4 w-4" />
+                            </div>
+                          </div>
+
+                          {/* Metric 2: Total Cost */}
+                          <div className="rounded-lg bg-background/70 border border-border/50 p-3.5 flex items-center justify-between">
+                            <div>
+                              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Total Cost</p>
+                              <p className="text-xl font-bold tracking-tight text-foreground mt-0.5">
+                                {currency} {row.cost.toLocaleString()}
+                              </p>
+                            </div>
+                            <div className="h-8 w-8 rounded-lg flex items-center justify-center bg-muted/80 text-muted-foreground border border-border/50 shrink-0">
+                              <Wallet className="h-4 w-4" />
+                            </div>
+                          </div>
+
+                          {/* Metric 3: Total Profit */}
+                          <div className="rounded-lg bg-background/70 border border-border/50 p-3.5 flex items-center justify-between">
+                            <div>
+                              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Total Profit</p>
+                              <p className={cn("text-xl font-bold tracking-tight mt-0.5", row.profit >= 0 ? "text-emerald-500" : "text-destructive")}>
+                                {currency} {row.profit.toLocaleString()}
+                              </p>
+                            </div>
+                            <div
+                              className={cn(
+                                "h-8 w-8 rounded-lg flex items-center justify-center shrink-0 border",
+                                row.profit >= 0 ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" : "bg-destructive/10 text-destructive border-destructive/20"
+                              )}
+                            >
+                              <Coins className="h-4 w-4" />
+                            </div>
+                          </div>
+
+                          {/* Metric 4: Profit Margin */}
+                          <div className="rounded-lg bg-background/70 border border-border/50 p-3.5 flex items-center justify-between">
+                            <div>
+                              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Profit Margin</p>
+                              <p className={cn("text-xl font-bold tracking-tight mt-0.5", row.marginPct >= 0 ? "text-emerald-500" : "text-destructive")}>
+                                {row.marginPct}%
+                              </p>
+                            </div>
+                            <div
+                              className={cn(
+                                "h-8 w-8 rounded-lg flex items-center justify-center shrink-0 border",
+                                row.marginPct >= 0 ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" : "bg-destructive/10 text-destructive border-destructive/20"
+                              )}
+                            >
+                              <Percent className="h-4 w-4" />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           )}
-        </div>
+        </section>
       )}
 
       {/* Dough / Short-Life Batches */}
