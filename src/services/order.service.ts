@@ -157,7 +157,14 @@ export const orderService = {
     search?: string;
     status?: string;
     type?: string;
+    /** Single-day filter, kept for backward compatibility — prefer from/to. */
     date?: string;
+    /** Date range (YYYY-MM-DD), inclusive both ends. */
+    from?: string;
+    to?: string;
+    /** Optional time-of-day narrowing (24h "HH:mm"), applied within the date range. */
+    fromTime?: string;
+    toTime?: string;
     page?: number;
     limit?: number;
     outletId?: string;
@@ -167,6 +174,10 @@ export const orderService = {
     if (params?.status) q.set('status', params.status);
     if (params?.type) q.set('type', params.type);
     if (params?.date) q.set('date', params.date);
+    if (params?.from) q.set('from', params.from);
+    if (params?.to) q.set('to', params.to);
+    if (params?.fromTime) q.set('fromTime', params.fromTime);
+    if (params?.toTime) q.set('toTime', params.toTime);
     if (params?.page) q.set('page', String(params.page));
     if (params?.limit) q.set('limit', String(params.limit));
     // Super Admin branch filter (?outletId=) — read by the backend's resolveOutletScope

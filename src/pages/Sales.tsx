@@ -5,21 +5,48 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Separator } from "@/components/ui/separator";
-import { Search, Eye, Printer, Download, Flame, Receipt, FileX, Loader2, RefreshCw } from "lucide-react";
+import { Search, Receipt, Download, FileX, Loader2, RefreshCw, Clock, X } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { DatePicker } from "@/components/ui/date-picker";
-import { generateInvoicePDF } from "@/lib/generate-invoice-pdf";
+import { TimePicker } from "@/components/ui/time-picker";
 import { TablePagination } from "@/components/TablePagination";
 import { ORDER_STATUS_COLORS, ORDER_TYPE_COLORS } from "@/lib/constants";
 import { orderService, type OrderRecord } from "@/services/order.service";
 import { useData } from "@/contexts/DataContext";
+import { useOrderEvents } from "@/hooks/use-order-events";
+import { useVisiblePolling } from "@/hooks/use-visible-polling";
+import { OrderPlacedPrintModal, type PlacedOrderSlipData } from "@/components/pos/OrderPlacedPrintModal";
 
 const statusColor = ORDER_STATUS_COLORS;
 const typeColor = ORDER_TYPE_COLORS;
 
 const PAGE_SIZE = 20;
+
+/** "YYYY-MM-DD" from local Y/M/D parts — never `.toISOString()`, which reads a Date as UTC and
+ *  lands a day early in Pakistan (same reasoning as DatePicker's own toYmd). */
+function toYmd(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+/** A self-order redemption is table-based dine-in ordering by nature — this page displays and
+ *  filters it as one channel with Dine In rather than a separate, unstyled "Self Order" type.
+ *  Display-only: OrderRecord/other pages' type rendering is untouched. */
+function displayOrderType(type: string): string {
+  return type === "Self Order" ? "Dine In" : type;
+}
+
+/** Normalizes the Payment column/receipt to one consistent word for "nothing collected yet" —
+ *  this page previously mixed a bare "—" and a literal "Pending" string for what is the same
+ *  underlying state. Any real payment string is shown as-is (it already comes from Settings'
+ *  configured payment method names, written server-side at order/payment time). */
+function formatPaymentMethod(method: string | null): { label: string; muted: boolean } {
+  const trimmed = (method ?? "").trim();
+  if (!trimmed || trimmed.toLowerCase() === "pending") {
+    return { label: "Unpaid", muted: true };
+  }
+  return { label: trimmed, muted: false };
+}
 
 const Sales = () => {
   const { settings } = useData();
@@ -29,32 +56,72 @@ const Sales = () => {
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("All");
   const [statusFilter, setStatusFilter] = useState("All");
-  const [dateFilter, setDateFilter] = useState("");
   const [page, setPage] = useState(1);
 
-  const [selectedOrder, setSelectedOrder] = useState<OrderRecord | null>(null);
+  // Date range — presets set dateFrom/dateTo directly; picking either DatePicker by hand is
+  // implicitly "Custom" (no separate Custom button needed, matches Reports.tsx's own filter bar).
+  const [activePreset, setActivePreset] = useState<string | null>(null);
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+
+  // Time-of-day is a separate, optional narrowing — off by default (whole day).
+  const [timeFilterOn, setTimeFilterOn] = useState(false);
+  const [timeFrom, setTimeFrom] = useState("00:00");
+  const [timeTo, setTimeTo] = useState("23:59");
+
+  const [receiptSlip, setReceiptSlip] = useState<PlacedOrderSlipData | null>(null);
+  const [showReceipt, setShowReceipt] = useState(false);
+
+  // "All" on this page means "all finished orders" (completed + cancelled) — this is order
+  // history, not the live kitchen/board view, so it never asks the backend for
+  // pending/preparing/ready orders in the first place (fixes a stale client-side post-filter
+  // that also corrupted the pagination total — see the removed `orders.filter(...)` below).
+  const statusParam = statusFilter === "All" ? "completed,cancelled" : statusFilter;
 
   const { data: resp, isLoading: loading } = useQuery({
-    queryKey: ["orders", { search, typeFilter, statusFilter, dateFilter, page }],
+    queryKey: ["orders", { search, typeFilter, statusParam, dateFrom, dateTo, timeFilterOn, timeFrom, timeTo, page }],
     queryFn: () => orderService.getOrders({
       search: search || undefined,
-      status: statusFilter !== "All" ? statusFilter : undefined,
+      status: statusParam,
       type: typeFilter !== "All" ? typeFilter : undefined,
-      date: dateFilter || undefined,
+      from: dateFrom || undefined,
+      to: dateTo || undefined,
+      fromTime: timeFilterOn ? timeFrom : undefined,
+      toTime: timeFilterOn ? timeTo : undefined,
       page,
       limit: PAGE_SIZE,
     }),
   });
-  const allOrders = resp?.data ?? [];
-  const orders = allOrders.filter(o => o.status !== "preparing" && o.status !== "pending");
-  const total = orders.length;
-  const refetchOrders = () => queryClient.invalidateQueries({ queryKey: ["orders"] });
+  const orders = resp?.data ?? [];
+  const total = resp?.meta?.total ?? orders.length;
+
+  // Push-first real-time: order:created/updated/deleted invalidate immediately; the 180s poll
+  // (this app's standard interval for socket-backed page data) is a safety net only, and stops
+  // entirely while the tab is hidden.
+  useOrderEvents(() => queryClient.invalidateQueries({ queryKey: ["orders"] }));
+  useVisiblePolling(() => queryClient.invalidateQueries({ queryKey: ["orders"] }), 180_000);
 
   // Reset to page 1 when filters change
   const handleSearch = (v: string) => { setSearch(v); setPage(1); };
   const handleType = (v: string) => { setTypeFilter(v); setPage(1); };
   const handleStatus = (v: string) => { setStatusFilter(v); setPage(1); };
-  const handleDate = (v: string) => { setDateFilter(v); setPage(1); };
+
+  const applyPreset = (preset: "Today" | "This Week" | "This Month") => {
+    const now = new Date();
+    if (preset === "Today") {
+      setDateFrom(toYmd(now)); setDateTo(toYmd(now));
+    } else if (preset === "This Week") {
+      const from = new Date(now); from.setDate(from.getDate() - 7);
+      setDateFrom(toYmd(from)); setDateTo(toYmd(now));
+    } else {
+      setDateFrom(toYmd(new Date(now.getFullYear(), now.getMonth(), 1))); setDateTo(toYmd(now));
+    }
+    setActivePreset(preset);
+    setPage(1);
+  };
+  const handleDateFrom = (v: string) => { setDateFrom(v); setActivePreset(null); setPage(1); };
+  const handleDateTo = (v: string) => { setDateTo(v); setActivePreset(null); setPage(1); };
+  const clearDates = () => { setDateFrom(""); setDateTo(""); setActivePreset(null); setPage(1); };
 
   const handleExport = () => {
     const headers = ["Order #", "Date", "Time", "Customer", "Type", "Items", "Total", "Status", "Payment Method"];
@@ -63,6 +130,8 @@ const Sales = () => {
       o.date ? new Date(o.date).toLocaleDateString() : "",
       o.time || "",
       o.customerName || "Walk-in",
+      // Export keeps the raw underlying type (e.g. "Self Order") for accounting accuracy,
+      // deliberately unlike the on-screen badge below, which shows "Dine In".
       o.type,
       String(o.items.length),
       String(o.total),
@@ -78,6 +147,45 @@ const Sales = () => {
 
   const formatDate = (d: string | null) => d ? new Date(d).toLocaleDateString() : "—";
 
+  // Same receipt component Order Monitor uses for a settled order (OrderStatusBoard.tsx's
+  // handleOpenPrintModal) — this is the one "View Receipt" action for both pages, not a third
+  // bespoke implementation. Mirrors its exact field mapping.
+  const handleViewReceipt = (order: OrderRecord) => {
+    setReceiptSlip({
+      orderNumber: order.orderNumber,
+      orderType: displayOrderType(order.type),
+      tableNumber: order.tableNumber,
+      customerName: order.customerName || "Walk-in",
+      customerPhone: order.phone || undefined,
+      customerAddress: order.deliveryAddress || undefined,
+      staffName: order.staffName || order.acceptedByName || undefined,
+      items: order.items.map((i) => ({
+        id: i.id,
+        name: i.name,
+        qty: Number(i.qty) || 1,
+        price: Number(i.price) || 0,
+        discount: Number(i.discount) || 0,
+        modifiers: i.modifiers || [],
+        notes: i.notes || null,
+        dealName: i.dealName || null,
+      })),
+      subtotal: Number(order.subtotal) || 0,
+      discount: Number(order.discount) || 0,
+      tax: Number(order.tax) || 0,
+      total: Number(order.total) || 0,
+      advancePayment: order.advancePayment ? Number(order.advancePayment) : undefined,
+      netPayable: Number(order.total) - Number(order.advancePayment || 0),
+      paymentMethod: formatPaymentMethod(order.paymentMethod).label,
+      dateStr: formatDate(order.date),
+      timeStr: order.time || undefined,
+      restaurantName: settings.restaurantName,
+      restaurantAddress: settings.address,
+      restaurantPhone: settings.phone,
+      currency,
+    });
+    setShowReceipt(true);
+  };
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -86,7 +194,7 @@ const Sales = () => {
         subtitle="View all orders and history"
         actions={
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={refetchOrders}><RefreshCw className="h-4 w-4 mr-2" />Refresh</Button>
+            <Button variant="outline" size="sm" onClick={() => queryClient.invalidateQueries({ queryKey: ["orders"] })}><RefreshCw className="h-4 w-4 mr-2" />Refresh</Button>
             <Button variant="outline" onClick={handleExport}><Download className="h-4 w-4 mr-2" />Export</Button>
           </div>
         }
@@ -113,14 +221,42 @@ const Sales = () => {
                     className={`capitalize ${statusFilter === s ? "gradient-primary text-primary-foreground" : ""}`}>{s}</Button>
                 ))}
               </div>
-              <DatePicker
-                value={dateFilter}
-                onChange={handleDate}
-                placeholder="Any date"
-                className="h-8 w-40 text-sm"
-              />
-              {dateFilter && (
-                <Button variant="ghost" size="sm" className="h-8 px-2 text-muted-foreground" onClick={() => handleDate("")}>Clear date</Button>
+            </div>
+            {/* Date range: preset chips + always-visible From/To pickers (picking either counts as Custom) */}
+            <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-border/50">
+              {(["Today", "This Week", "This Month"] as const).map((p) => (
+                <Button key={p} variant={activePreset === p ? "default" : "outline"} size="sm"
+                  onClick={() => applyPreset(p)}
+                  className={activePreset === p ? "gradient-primary text-primary-foreground" : ""}>{p}</Button>
+              ))}
+              <span className="text-xs text-muted-foreground mx-1">or custom:</span>
+              <DatePicker value={dateFrom} onChange={handleDateFrom} placeholder="From date" className="h-8 w-36 text-xs" />
+              <span className="text-xs text-muted-foreground">to</span>
+              <DatePicker value={dateTo} onChange={handleDateTo} placeholder="To date" min={dateFrom || undefined} className="h-8 w-36 text-xs" />
+              {(dateFrom || dateTo) && (
+                <Button variant="ghost" size="sm" className="h-8 px-2 text-muted-foreground" onClick={clearDates}>Clear</Button>
+              )}
+            </div>
+            {/* Time-of-day: optional, independent of the date range/preset above */}
+            <div className="flex flex-wrap items-center gap-1.5">
+              <Button
+                variant={timeFilterOn ? "default" : "outline"}
+                size="sm"
+                onClick={() => { setTimeFilterOn((v) => !v); setPage(1); }}
+                className={timeFilterOn ? "gradient-primary text-primary-foreground" : ""}
+              >
+                <Clock className="h-3.5 w-3.5 mr-1.5" />
+                {timeFilterOn ? "Time filter on" : "Filter by time"}
+              </Button>
+              {timeFilterOn && (
+                <>
+                  <TimePicker value={timeFrom} onChange={(v) => { setTimeFrom(v); setPage(1); }} className="h-8 w-32 text-xs" />
+                  <span className="text-xs text-muted-foreground">to</span>
+                  <TimePicker value={timeTo} onChange={(v) => { setTimeTo(v); setPage(1); }} className="h-8 w-32 text-xs" />
+                  <Button variant="ghost" size="sm" className="h-8 px-2 text-muted-foreground" onClick={() => setTimeFilterOn(false)}>
+                    <X className="h-3.5 w-3.5" />
+                  </Button>
+                </>
               )}
             </div>
           </div>
@@ -145,24 +281,27 @@ const Sales = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {orders.map((o) => (
-                    <TableRow key={o.id} className="hover:bg-muted/30 transition-colors">
-                      <TableCell className="font-medium">{o.orderNumber}</TableCell>
-                      <TableCell className="text-xs">{formatDate(o.date)} {o.time}</TableCell>
-                      <TableCell>{o.customerName || "Walk-in"}</TableCell>
-                      <TableCell><Badge variant="secondary" className={(typeColor as any)[o.type] ?? ""}>{o.type}</Badge></TableCell>
-                      <TableCell>{o.items.length} items</TableCell>
-                      <TableCell className="font-medium">{currency} {Number(o.total).toLocaleString()}</TableCell>
-                      <TableCell>{o.paymentMethod || "—"}</TableCell>
-                      <TableCell><Badge variant="secondary" className={(statusColor as any)[o.status] ?? ""}>{o.status}</Badge></TableCell>
-                      <TableCell>
-                        <div className="flex gap-1">
-                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setSelectedOrder(o)}><Eye className="h-3 w-3" /></Button>
-                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => window.print()}><Printer className="h-3 w-3" /></Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {orders.map((o) => {
+                    const payment = formatPaymentMethod(o.paymentMethod);
+                    const displayType = displayOrderType(o.type);
+                    return (
+                      <TableRow key={o.id} className="hover:bg-muted/30 transition-colors">
+                        <TableCell className="font-medium">{o.orderNumber}</TableCell>
+                        <TableCell className="text-xs">{formatDate(o.date)} {o.time}</TableCell>
+                        <TableCell>{o.customerName || "Walk-in"}</TableCell>
+                        <TableCell><Badge variant="secondary" className={(typeColor as any)[displayType] ?? ""}>{displayType}</Badge></TableCell>
+                        <TableCell>{o.items.length} items</TableCell>
+                        <TableCell className="font-medium">{currency} {Number(o.total).toLocaleString()}</TableCell>
+                        <TableCell className={payment.muted ? "text-muted-foreground italic" : ""}>{payment.label}</TableCell>
+                        <TableCell><Badge variant="secondary" className={(statusColor as any)[o.status] ?? ""}>{o.status}</Badge></TableCell>
+                        <TableCell>
+                          <Button variant="ghost" size="sm" className="h-7 gap-1.5 text-xs px-2" onClick={() => handleViewReceipt(o)}>
+                            <Receipt className="h-3.5 w-3.5" />View Receipt
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                   {orders.length === 0 && (
                     <TableRow>
                       <TableCell colSpan={9} className="h-32">
@@ -182,94 +321,11 @@ const Sales = () => {
         </CardContent>
       </Card>
 
-      {/* Order Detail Dialog */}
-      <Dialog open={!!selectedOrder} onOpenChange={() => setSelectedOrder(null)}>
-        <DialogContent className="max-w-lg w-[95vw] max-h-[90vh] overflow-y-auto p-4 sm:p-6">
-          <DialogHeader><DialogTitle className="text-base sm:text-lg">Order Details — {selectedOrder?.orderNumber}</DialogTitle></DialogHeader>
-          {selectedOrder && (
-            <div className="space-y-4">
-              <div className="text-center space-y-1">
-                <div className="flex items-center justify-center gap-2">
-                  <Flame className="h-5 w-5 text-primary" />
-                  <span className="font-bold text-base sm:text-lg text-primary">{settings.restaurantName}</span>
-                </div>
-                <p className="text-xs text-muted-foreground">{settings.address}</p>
-                <p className="text-xs text-muted-foreground">Phone: {settings.phone}</p>
-              </div>
-              <Separator />
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
-                <div><span className="text-muted-foreground">Order #:</span> <strong>{selectedOrder.orderNumber}</strong></div>
-                <div><span className="text-muted-foreground">Date:</span> {formatDate(selectedOrder.date)} {selectedOrder.time}</div>
-                <div><span className="text-muted-foreground">Customer:</span> {selectedOrder.customerName || "Walk-in"}</div>
-                <div><span className="text-muted-foreground">Phone:</span> {selectedOrder.phone || "—"}</div>
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <span className="text-muted-foreground">Type:</span>
-                  <Badge variant="secondary" className={(typeColor as any)[selectedOrder.type] ?? ""}>{selectedOrder.type}</Badge>
-                </div>
-                <div><span className="text-muted-foreground">Staff:</span> {selectedOrder.acceptedByName || selectedOrder.staffName || "—"}</div>
-                {selectedOrder.tableNumber && <div><span className="text-muted-foreground">Table:</span> #{selectedOrder.tableNumber}</div>}
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <span className="text-muted-foreground">Status:</span>
-                  <Badge variant="secondary" className={(statusColor as any)[selectedOrder.status] ?? ""}>{selectedOrder.status}</Badge>
-                </div>
-              </div>
-              <Separator />
-              <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="min-w-[120px]">Item</TableHead>
-                      <TableHead className="text-center">Qty</TableHead>
-                      <TableHead className="text-right">Price</TableHead>
-                      <TableHead className="text-right">Total</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {selectedOrder.items.map((item, idx) => (
-                      <TableRow key={idx}>
-                        <TableCell className="font-medium text-sm">{item.name}</TableCell>
-                        <TableCell className="text-center">{item.qty}</TableCell>
-                        <TableCell className="text-right whitespace-nowrap">{currency} {Number(item.price).toLocaleString()}</TableCell>
-                        <TableCell className="text-right whitespace-nowrap">{currency} {(Number(item.price) * item.qty).toLocaleString()}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-              <Separator />
-              <div className="text-sm space-y-1">
-                <div className="flex justify-between"><span className="text-muted-foreground">Subtotal</span><span>{currency} {Number(selectedOrder.subtotal).toLocaleString()}</span></div>
-                {Number(selectedOrder.discount) > 0 && <div className="flex justify-between"><span className="text-muted-foreground">Discount</span><span className="text-destructive">-{currency} {Number(selectedOrder.discount).toLocaleString()}</span></div>}
-                <div className="flex justify-between"><span className="text-muted-foreground">{settings.taxName} ({settings.taxRate}%)</span><span>{currency} {Number(selectedOrder.tax).toLocaleString()}</span></div>
-                <Separator />
-                <div className="flex justify-between font-bold text-base pt-1"><span>Grand Total</span><span className="text-primary">{currency} {Number(selectedOrder.total).toLocaleString()}</span></div>
-              </div>
-              <div className="text-sm"><span className="text-muted-foreground">Payment Method:</span> <strong>{selectedOrder.paymentMethod || "—"}</strong></div>
-              <p className="text-center text-xs text-muted-foreground italic">{settings.receiptHeader}</p>
-            </div>
-          )}
-          <DialogFooter className="flex-col sm:flex-row gap-2">
-            <Button variant="outline" className="w-full sm:w-auto" onClick={() => setSelectedOrder(null)}>Close</Button>
-            <Button variant="outline" className="w-full sm:w-auto" onClick={() => selectedOrder && generateInvoicePDF({
-              orderNumber: selectedOrder.orderNumber,
-              date: selectedOrder.date ? new Date(selectedOrder.date).toLocaleDateString() : "",
-              time: selectedOrder.time || "",
-              orderType: selectedOrder.type,
-              tableNumber: selectedOrder.tableNumber ?? undefined,
-              customer: selectedOrder.customerName || "Walk-in",
-              phone: selectedOrder.phone || "",
-              staff: selectedOrder.staffName || "",
-              paymentMethod: selectedOrder.paymentMethod || "",
-              items: selectedOrder.items.map(i => ({ name: i.name, qty: i.qty, price: Number(i.price), discount: Number(i.discount) })),
-              subtotal: Number(selectedOrder.subtotal),
-              discount: Number(selectedOrder.discount),
-              tax: Number(selectedOrder.tax),
-              total: Number(selectedOrder.total),
-            })}><Download className="h-4 w-4 mr-1" />PDF</Button>
-            <Button className="gradient-primary text-primary-foreground w-full sm:w-auto" onClick={() => window.print()}><Printer className="h-4 w-4 mr-2" />Print Invoice</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <OrderPlacedPrintModal
+        open={showReceipt}
+        onOpenChange={setShowReceipt}
+        slipData={receiptSlip}
+      />
     </div>
   );
 };
