@@ -10,7 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, BarChart, Bar } from "recharts";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, useEffect, type ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
 import { useNavigate } from "react-router-dom";
@@ -21,6 +21,7 @@ import { stockService } from "@/services/stock.service";
 import { useOutletFilter } from "@/hooks/useOutletFilter";
 import { OutletFilterSelect } from "@/components/OutletFilterSelect";
 import { useVisiblePolling } from "@/hooks/use-visible-polling";
+import { useOrderEvents } from "@/hooks/use-order-events";
 import { Button } from "@/components/ui/button";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { useAuth } from "@/contexts/AuthContext";
@@ -117,6 +118,7 @@ const Dashboard = () => {
   const { outletId, setOutletId, outlets, isSuperAdmin } = useOutletFilter();
   const navigate = useNavigate();
   const { user, hasPermission } = useAuth();
+  const queryClient = useQueryClient();
   const { data: d, isLoading: loading } = useQuery({
     queryKey: ["dashboard", outletId],
     queryFn: () => reportService.getDashboard({ outletId }),
@@ -198,6 +200,18 @@ const Dashboard = () => {
       }),
     enabled: salesByChannelVisible,
   });
+
+  // Push-first real-time for this section only — invalidating just "sales-by-channel" (not the
+  // whole ["dashboard", outletId] query) avoids re-running the other 11 dashboard aggregates on
+  // every order event, matching how Sales.tsx keeps its own order-list query independent. The
+  // 180s poll (this app's standard interval for socket-backed page data) is a safety net only.
+  useOrderEvents(() => {
+    if (salesByChannelVisible) queryClient.invalidateQueries({ queryKey: ["sales-by-channel"] });
+  });
+  useVisiblePolling(
+    () => { if (salesByChannelVisible) queryClient.invalidateQueries({ queryKey: ["sales-by-channel"] }); },
+    180_000
+  );
 
   const { data: doughBatches = [], refetch: refetchDough } = useQuery({
     queryKey: ["dough-batches", outletId],
