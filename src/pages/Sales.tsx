@@ -21,13 +21,16 @@ import {
   UtensilsCrossed,
   ShoppingBag,
   Bike,
+  Tags,
 } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { DatePicker } from "@/components/ui/date-picker";
 import { TimePicker, formatTimeLabel } from "@/components/ui/time-picker";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { TablePagination } from "@/components/TablePagination";
 import { orderService, type OrderRecord } from "@/services/order.service";
+import { menuService } from "@/services/menu.service";
 import { useData } from "@/contexts/DataContext";
 import { useOrderEvents } from "@/hooks/use-order-events";
 import { useVisiblePolling } from "@/hooks/use-visible-polling";
@@ -110,6 +113,12 @@ const Sales = () => {
   const [timeFrom, setTimeFrom] = useState(() => searchParams.get("fromTime") || "");
   const [timeTo, setTimeTo] = useState(() => searchParams.get("toTime") || "");
 
+  // Food-category filter — "" means no filter. Arriving from the Dashboard "Sales by Category"
+  // drill-down pre-selects one via ?category=. When set, the backend narrows every order's
+  // Sale/Cost/Profit (and the 4 summary cards) to just that category's slice of each order.
+  const [categoryFilter, setCategoryFilter] = useState(() => searchParams.get("category") || "");
+  const catActive = Boolean(categoryFilter);
+
   const [receiptSlip, setReceiptSlip] = useState<PlacedOrderSlipData | null>(null);
   const [showReceipt, setShowReceipt] = useState(false);
 
@@ -120,7 +129,7 @@ const Sales = () => {
     : "completed";
 
   const { data: resp, isLoading: loading } = useQuery({
-    queryKey: ["orders", { search, typeFilter, statusParam, dateFrom, dateTo, timeFrom, timeTo, page }],
+    queryKey: ["orders", { search, typeFilter, statusParam, dateFrom, dateTo, timeFrom, timeTo, categoryFilter, page }],
     queryFn: () => orderService.getOrders({
       search: search || undefined,
       status: statusParam,
@@ -129,6 +138,7 @@ const Sales = () => {
       to: dateTo || undefined,
       fromTime: timeFrom || undefined,
       toTime: timeTo || undefined,
+      category: categoryFilter || undefined,
       // This is order HISTORY -- a completed-but-unpaid order isn't a settled sale yet, so it
       // never belongs here (unlike Kitchen Panel/Order Monitor/Waiter Panel, which still need
       // to see it to actually collect payment).
@@ -140,11 +150,18 @@ const Sales = () => {
   const orders = resp?.data ?? [];
   const total = resp?.meta?.total ?? orders.length;
 
+  // Active food categories for the filter dropdown.
+  const { data: categories = [] } = useQuery({
+    queryKey: ["menu-categories-active"],
+    queryFn: () => menuService.getCategories("active"),
+    staleTime: 5 * 60_000,
+  });
+
   // Sale/Cost/Profit/Margin totalled across every order the current filters match (not just
   // this page) -- the 4 summary cards below. Independent of `page` on purpose: changing pages
   // must not refetch it, and it must not force the table to re-fetch either.
   const { data: summary } = useQuery({
-    queryKey: ["orders-summary", { search, typeFilter, statusParam, dateFrom, dateTo, timeFrom, timeTo }],
+    queryKey: ["orders-summary", { search, typeFilter, statusParam, dateFrom, dateTo, timeFrom, timeTo, categoryFilter }],
     queryFn: () => orderService.getOrdersSummary({
       search: search || undefined,
       status: statusParam,
@@ -153,6 +170,7 @@ const Sales = () => {
       to: dateTo || undefined,
       fromTime: timeFrom || undefined,
       toTime: timeTo || undefined,
+      category: categoryFilter || undefined,
       excludeUnpaid: true,
     }),
   });
@@ -170,6 +188,14 @@ const Sales = () => {
   // Reset to page 1 when filters change
   const handleSearch = (v: string) => { setSearch(v); setPage(1); };
   const handleType = (v: string) => { setTypeFilter(v); setPage(1); };
+  const handleCategory = (v: string) => { setCategoryFilter(v === "all" ? "" : v); setPage(1); };
+
+  // When a category filter is active the backend attaches each order's category-scoped slice;
+  // the Total/Cost/Profit columns (and export) show that instead of the whole-order figure so
+  // they reconcile with the Dashboard "Sales by Category" card the user drilled in from.
+  const rowSale = (o: OrderRecord) => (catActive ? Number(o.categorySale ?? 0) : Number(o.total));
+  const rowCost = (o: OrderRecord) => (catActive ? Number(o.categoryCost ?? 0) : Number(o.cost ?? 0));
+  const rowProfit = (o: OrderRecord) => (catActive ? Number(o.categoryProfit ?? 0) : Number(o.profit ?? 0));
 
   const applyPreset = (preset: "Today" | "This Week" | "This Month") => {
     const now = new Date();
@@ -203,13 +229,17 @@ const Sales = () => {
         to: dateTo || undefined,
         fromTime: timeFrom || undefined,
         toTime: timeTo || undefined,
+        category: categoryFilter || undefined,
         excludeUnpaid: true,
         page: 1,
         limit: 10000,
       });
       const exportOrders = res.data?.length ? res.data : orders;
 
-      const headers = ["Order #", "Date", "Time", "Customer", "Type", "Items", "Total", "Cost", "Profit", "Payment Method"];
+      const saleHead = catActive ? `Sale (${categoryFilter})` : "Total";
+      const costHead = catActive ? `Cost (${categoryFilter})` : "Cost";
+      const profitHead = catActive ? `Profit (${categoryFilter})` : "Profit";
+      const headers = ["Order #", "Date", "Time", "Customer", "Type", "Items", saleHead, costHead, profitHead, "Payment Method"];
       const rows = exportOrders.map((o) => [
         o.orderNumber,
         o.date ? new Date(o.date).toLocaleDateString() : "",
@@ -217,9 +247,9 @@ const Sales = () => {
         o.customerName || "Walk-in",
         displayOrderType(o.type),
         String(o.items.length),
-        String(o.total),
-        String(o.cost ?? 0),
-        String(o.profit ?? 0),
+        String(rowSale(o)),
+        String(rowCost(o)),
+        String(rowProfit(o)),
         formatPaymentMethod(o.paymentMethod).label,
       ]);
       const csvContent = [headers.join(","), ...rows.map((r) => r.map((v) => `"${v}"`).join(","))].join("\n");
@@ -560,6 +590,43 @@ const Sales = () => {
                 </Button>
               )}
             </div>
+
+            {/* Food-category filter */}
+            <div className="inline-flex items-center gap-1">
+              <Select value={categoryFilter || "all"} onValueChange={handleCategory}>
+                <SelectTrigger
+                  className={cn(
+                    "h-8 text-xs gap-1.5 border shadow-sm min-w-[9rem] transition-all",
+                    catActive
+                      ? "border-border/80 bg-background text-foreground font-semibold shadow-sm"
+                      : "border-border/70 bg-background text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  <Tags className={cn("h-3.5 w-3.5 shrink-0", catActive ? "text-foreground" : "text-muted-foreground")} />
+                  <SelectValue placeholder="All Categories" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Categories</SelectItem>
+                  {catActive && !categories.some((c) => c.name === categoryFilter) && (
+                    <SelectItem value={categoryFilter}>{categoryFilter}</SelectItem>
+                  )}
+                  {categories.map((c) => (
+                    <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {catActive && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handleCategory("all")}
+                  className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-md"
+                  title="Clear category filter"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </Button>
+              )}
+            </div>
           </div>
         </CardHeader>
         <CardContent>
@@ -575,9 +642,9 @@ const Sales = () => {
                     <TableHead>Customer</TableHead>
                     <TableHead>Type</TableHead>
                     <TableHead>Items</TableHead>
-                    <TableHead>Total</TableHead>
-                    <TableHead>Cost</TableHead>
-                    <TableHead>Profit</TableHead>
+                    <TableHead>{catActive ? `Sale · ${categoryFilter}` : "Total"}</TableHead>
+                    <TableHead>{catActive ? `Cost · ${categoryFilter}` : "Cost"}</TableHead>
+                    <TableHead>{catActive ? `Profit · ${categoryFilter}` : "Profit"}</TableHead>
                     <TableHead>Payment</TableHead>
                     <TableHead>Actions</TableHead>
                   </TableRow>
@@ -599,9 +666,9 @@ const Sales = () => {
                         <TableCell>{o.customerName || "Walk-in"}</TableCell>
                         <TableCell className="text-sm font-medium">{displayType}</TableCell>
                         <TableCell>{o.items.length} items</TableCell>
-                        <TableCell className="font-medium">{currency} {Number(o.total).toLocaleString()}</TableCell>
-                        <TableCell>{currency} {Number(o.cost ?? 0).toLocaleString()}</TableCell>
-                        <TableCell className={Number(o.profit ?? 0) >= 0 ? "text-success" : "text-destructive"}>{currency} {Number(o.profit ?? 0).toLocaleString()}</TableCell>
+                        <TableCell className="font-medium">{currency} {rowSale(o).toLocaleString()}</TableCell>
+                        <TableCell>{currency} {rowCost(o).toLocaleString()}</TableCell>
+                        <TableCell className={rowProfit(o) >= 0 ? "text-success" : "text-destructive"}>{currency} {rowProfit(o).toLocaleString()}</TableCell>
                         <TableCell className={payment.muted ? "text-muted-foreground italic" : ""}>{payment.label}</TableCell>
                         <TableCell>
                           <Button variant="ghost" size="sm" className="h-7 gap-1.5 text-xs px-2" onClick={() => handleViewReceipt(o)}>
