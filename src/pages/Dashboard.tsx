@@ -273,6 +273,7 @@ const Dashboard = () => {
           ? Math.round(((channelData?.channels.dineIn.profit ?? 0) / (channelData?.channels.dineIn.sale ?? 1)) * 100)
           : 0,
       isCombined: false,
+      salesTypeParam: "Dine In",
     },
     {
       title: "Take Away",
@@ -287,6 +288,7 @@ const Dashboard = () => {
           ? Math.round(((channelData?.channels.takeaway.profit ?? 0) / (channelData?.channels.takeaway.sale ?? 1)) * 100)
           : 0,
       isCombined: false,
+      salesTypeParam: "Take Away",
     },
     {
       title: "Delivery",
@@ -301,6 +303,7 @@ const Dashboard = () => {
           ? Math.round(((channelData?.channels.delivery.profit ?? 0) / (channelData?.channels.delivery.sale ?? 1)) * 100)
           : 0,
       isCombined: false,
+      salesTypeParam: "Delivery",
     },
     {
       title: "Total (All Channels)",
@@ -312,6 +315,9 @@ const Dashboard = () => {
       profit: channelData?.combined.profit ?? 0,
       marginPct: channelData?.combined.marginPct ?? 0,
       isCombined: true,
+      // The 3 real channels this section sums, not "every type" -- Sales & Orders' own "All"
+      // would also pull in Online/Foodpanda, which Sales By Channel deliberately excludes.
+      salesTypeParam: "Dine In,Take Away,Delivery",
     },
   ];
   // Chart data: the 3 real channels only -- the combined row is a summary total, not a
@@ -319,6 +325,22 @@ const Dashboard = () => {
   const channelChartData = channelRows.filter((r) => !r.isCombined).map((r) => ({
     name: r.title, sale: r.sale, cost: r.cost, profit: r.profit,
   }));
+  const salesTypeParamByChannel = new Map(channelRows.map((r) => [r.title, r.salesTypeParam]));
+
+  // "View Details" on any channel row/chart bar -- lands on Sales & Orders pre-filtered to
+  // exactly what that row totalled: the same date/time window this section has active, status
+  // narrowed to completed only (this section's own aggregate never counts cancelled orders,
+  // unlike Sales & Orders' default "All"), and the given type(s).
+  const goToChannelSales = (salesTypeParam: string) => {
+    const params = new URLSearchParams();
+    params.set("status", "completed");
+    params.set("type", salesTypeParam);
+    if (channelFromStr) params.set("from", channelFromStr);
+    if (channelToStr) params.set("to", channelToStr);
+    if (channelTimeFrom) params.set("fromTime", channelTimeFrom);
+    if (channelTimeTo) params.set("toTime", channelTimeTo);
+    navigate(`/sales?${params.toString()}`);
+  };
 
   return (
     <div className="space-y-6">
@@ -590,10 +612,10 @@ const Dashboard = () => {
                       <div
                         key={row.title}
                         className={cn(
-                          "rounded-xl border p-4 transition-all space-y-3",
+                          "rounded-xl border p-4 transition-all space-y-3 hover:shadow-md hover:-translate-y-0.5",
                           row.isCombined
-                            ? "bg-emerald-500/[0.04] border-emerald-500/30 shadow-xs"
-                            : "bg-card/60 border-border/60 hover:border-border/90"
+                            ? "bg-emerald-500/[0.04] border-emerald-500/30 shadow-xs hover:border-emerald-500/50"
+                            : "bg-card/60 border-border/60 hover:border-primary/40"
                         )}
                       >
                         {/* Channel Title + Orders Row */}
@@ -616,9 +638,19 @@ const Dashboard = () => {
                               )}
                             </div>
                           </div>
-                          <span className="text-xs text-muted-foreground font-medium bg-muted/60 px-2.5 py-0.5 rounded-full border border-border/50">
-                            {row.orders} {row.orders === 1 ? "order" : "orders"}
-                          </span>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <span className="text-xs text-muted-foreground font-medium bg-muted/60 px-2.5 py-0.5 rounded-full border border-border/50">
+                              {row.orders} {row.orders === 1 ? "order" : "orders"}
+                            </span>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => goToChannelSales(row.salesTypeParam)}
+                              className="h-7 px-2 text-xs gap-1 text-muted-foreground hover:text-primary"
+                            >
+                              View Details <ChevronRight className="h-3 w-3" />
+                            </Button>
+                          </div>
                         </div>
 
                         {/* 4 Metrics in Grid */}
@@ -704,8 +736,16 @@ const Dashboard = () => {
                             <YAxis tick={{ fontSize: 12 }} axisLine={false} tickLine={false} tickFormatter={(v) => `${currency}${(v / 1000).toFixed(0)}k`} />
                             <Tooltip content={<ChartTooltip />} />
                             <Legend wrapperStyle={{ fontSize: 12 }} />
-                            <Bar dataKey="sale" name="Sale" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} maxBarSize={40} />
-                            <Bar dataKey="cost" name="Cost" fill="hsl(var(--info))" radius={[4, 4, 0, 0]} maxBarSize={40} />
+                            <Bar
+                              dataKey="sale" name="Sale" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} maxBarSize={40}
+                              cursor="pointer"
+                              onClick={(data: any) => { const p = salesTypeParamByChannel.get(data?.name); if (p) goToChannelSales(p); }}
+                            />
+                            <Bar
+                              dataKey="cost" name="Cost" fill="hsl(var(--info))" radius={[4, 4, 0, 0]} maxBarSize={40}
+                              cursor="pointer"
+                              onClick={(data: any) => { const p = salesTypeParamByChannel.get(data?.name); if (p) goToChannelSales(p); }}
+                            />
                           </BarChart>
                         </ResponsiveContainer>
                       </div>
@@ -726,7 +766,11 @@ const Dashboard = () => {
                             <XAxis dataKey="name" tick={{ fontSize: 12 }} axisLine={{ stroke: "hsl(var(--border))" }} tickLine={false} />
                             <YAxis tick={{ fontSize: 12 }} axisLine={false} tickLine={false} tickFormatter={(v) => `${currency}${(v / 1000).toFixed(0)}k`} />
                             <Tooltip content={<ChartTooltip />} />
-                            <Bar dataKey="profit" name="Profit" radius={[4, 4, 0, 0]} maxBarSize={48}>
+                            <Bar
+                              dataKey="profit" name="Profit" radius={[4, 4, 0, 0]} maxBarSize={48}
+                              cursor="pointer"
+                              onClick={(data: any) => { const p = salesTypeParamByChannel.get(data?.name); if (p) goToChannelSales(p); }}
+                            >
                               {channelChartData.map((entry) => (
                                 <Cell key={entry.name} fill={entry.profit >= 0 ? "hsl(var(--success))" : "hsl(var(--destructive))"} />
                               ))}

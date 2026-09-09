@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -58,21 +59,26 @@ const Sales = () => {
   const currency = settings.currency || "Rs.";
   const queryClient = useQueryClient();
 
+  // Arriving from the Dashboard's Sales By Channel "View Details" pre-fills every filter
+  // below from the URL (?type=&status=&from=&to=&fromTime=&toTime=) so the drill-down shows
+  // exactly what that card/chart totalled — read once on mount, not kept in sync afterwards
+  // (the user is free to change filters here without it fighting back).
+  const [searchParams] = useSearchParams();
   const [search, setSearch] = useState("");
-  const [typeFilter, setTypeFilter] = useState("All");
-  const [statusFilter, setStatusFilter] = useState("All");
+  const [typeFilter, setTypeFilter] = useState(() => searchParams.get("type") || "All");
+  const [statusFilter, setStatusFilter] = useState(() => searchParams.get("status") || "All");
   const [page, setPage] = useState(1);
 
   // Date range — presets set dateFrom/dateTo directly; picking either DatePicker by hand is
   // implicitly "Custom" (no separate Custom button needed, matches Reports.tsx's own filter bar).
   const [activePreset, setActivePreset] = useState<string | null>(null);
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
+  const [dateFrom, setDateFrom] = useState(() => searchParams.get("from") || "");
+  const [dateTo, setDateTo] = useState(() => searchParams.get("to") || "");
 
   // Time-of-day is a separate, optional narrowing — off by default (whole day).
-  const [timeFilterOn, setTimeFilterOn] = useState(false);
-  const [timeFrom, setTimeFrom] = useState("00:00");
-  const [timeTo, setTimeTo] = useState("23:59");
+  const [timeFilterOn, setTimeFilterOn] = useState(() => Boolean(searchParams.get("fromTime") || searchParams.get("toTime")));
+  const [timeFrom, setTimeFrom] = useState(() => searchParams.get("fromTime") || "00:00");
+  const [timeTo, setTimeTo] = useState(() => searchParams.get("toTime") || "23:59");
 
   const [receiptSlip, setReceiptSlip] = useState<PlacedOrderSlipData | null>(null);
   const [showReceipt, setShowReceipt] = useState(false);
