@@ -10,14 +10,13 @@ import { PageHeader } from "@/components/ui/page-header";
 import { DatePicker } from "@/components/ui/date-picker";
 import { TimePicker } from "@/components/ui/time-picker";
 import { TablePagination } from "@/components/TablePagination";
-import { ORDER_STATUS_COLORS, ORDER_TYPE_COLORS } from "@/lib/constants";
+import { ORDER_TYPE_COLORS } from "@/lib/constants";
 import { orderService, type OrderRecord } from "@/services/order.service";
 import { useData } from "@/contexts/DataContext";
 import { useOrderEvents } from "@/hooks/use-order-events";
 import { useVisiblePolling } from "@/hooks/use-visible-polling";
 import { OrderPlacedPrintModal, type PlacedOrderSlipData } from "@/components/pos/OrderPlacedPrintModal";
 
-const statusColor = ORDER_STATUS_COLORS;
 const typeColor = ORDER_TYPE_COLORS;
 
 const PAGE_SIZE = 20;
@@ -101,11 +100,31 @@ const Sales = () => {
   const orders = resp?.data ?? [];
   const total = resp?.meta?.total ?? orders.length;
 
+  // Sale/Cost/Profit/Margin totalled across every order the current filters match (not just
+  // this page) -- the 4 summary cards below. Independent of `page` on purpose: changing pages
+  // must not refetch it, and it must not force the table to re-fetch either.
+  const { data: summary } = useQuery({
+    queryKey: ["orders-summary", { search, typeFilter, statusParam, dateFrom, dateTo, timeFilterOn, timeFrom, timeTo }],
+    queryFn: () => orderService.getOrdersSummary({
+      search: search || undefined,
+      status: statusParam,
+      type: typeFilter !== "All" ? typeFilter : undefined,
+      from: dateFrom || undefined,
+      to: dateTo || undefined,
+      fromTime: timeFilterOn ? timeFrom : undefined,
+      toTime: timeFilterOn ? timeTo : undefined,
+    }),
+  });
+
   // Push-first real-time: order:created/updated/deleted invalidate immediately; the 180s poll
   // (this app's standard interval for socket-backed page data) is a safety net only, and stops
   // entirely while the tab is hidden.
-  useOrderEvents(() => queryClient.invalidateQueries({ queryKey: ["orders"] }));
-  useVisiblePolling(() => queryClient.invalidateQueries({ queryKey: ["orders"] }), 180_000);
+  const refreshOrders = () => {
+    queryClient.invalidateQueries({ queryKey: ["orders"] });
+    queryClient.invalidateQueries({ queryKey: ["orders-summary"] });
+  };
+  useOrderEvents(refreshOrders);
+  useVisiblePolling(refreshOrders, 180_000);
 
   // Reset to page 1 when filters change
   const handleSearch = (v: string) => { setSearch(v); setPage(1); };
@@ -200,11 +219,20 @@ const Sales = () => {
         subtitle="View all orders and history"
         actions={
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={() => queryClient.invalidateQueries({ queryKey: ["orders"] })}><RefreshCw className="h-4 w-4 mr-2" />Refresh</Button>
+            <Button variant="outline" size="sm" onClick={refreshOrders}><RefreshCw className="h-4 w-4 mr-2" />Refresh</Button>
             <Button variant="outline" onClick={handleExport}><Download className="h-4 w-4 mr-2" />Export</Button>
           </div>
         }
       />
+
+      {/* Totals for whichever filters are currently active above -- not just the visible page */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <Card className="shadow-sm"><CardContent className="p-4"><p className="text-xs text-muted-foreground font-medium">Total Sales</p><p className="text-xl font-bold mt-1">{currency} {(summary?.sale ?? 0).toLocaleString()}</p></CardContent></Card>
+        <Card className="shadow-sm"><CardContent className="p-4"><p className="text-xs text-muted-foreground font-medium">Total Cost</p><p className="text-xl font-bold mt-1">{currency} {(summary?.cost ?? 0).toLocaleString()}</p></CardContent></Card>
+        <Card className="shadow-sm"><CardContent className="p-4"><p className="text-xs text-muted-foreground font-medium">Total Profit</p><p className={`text-xl font-bold mt-1 ${(summary?.profit ?? 0) >= 0 ? "text-success" : "text-destructive"}`}>{currency} {(summary?.profit ?? 0).toLocaleString()}</p></CardContent></Card>
+        <Card className="shadow-sm"><CardContent className="p-4"><p className="text-xs text-muted-foreground font-medium">Total Margin</p><p className={`text-xl font-bold mt-1 ${(summary?.marginPct ?? 0) >= 0 ? "text-success" : "text-destructive"}`}>{summary?.marginPct ?? 0}%</p></CardContent></Card>
+      </div>
+
       <Card className="shadow-sm">
         <CardHeader className="pb-3">
           <div className="flex flex-col gap-3">
@@ -281,8 +309,9 @@ const Sales = () => {
                     <TableHead>Type</TableHead>
                     <TableHead>Items</TableHead>
                     <TableHead>Total</TableHead>
+                    <TableHead>Cost</TableHead>
+                    <TableHead>Profit</TableHead>
                     <TableHead>Payment</TableHead>
-                    <TableHead>Status</TableHead>
                     <TableHead>Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -298,8 +327,9 @@ const Sales = () => {
                         <TableCell><Badge variant="secondary" className={(typeColor as any)[displayType] ?? ""}>{displayType}</Badge></TableCell>
                         <TableCell>{o.items.length} items</TableCell>
                         <TableCell className="font-medium">{currency} {Number(o.total).toLocaleString()}</TableCell>
+                        <TableCell>{currency} {Number(o.cost ?? 0).toLocaleString()}</TableCell>
+                        <TableCell className={Number(o.profit ?? 0) >= 0 ? "text-success" : "text-destructive"}>{currency} {Number(o.profit ?? 0).toLocaleString()}</TableCell>
                         <TableCell className={payment.muted ? "text-muted-foreground italic" : ""}>{payment.label}</TableCell>
-                        <TableCell><Badge variant="secondary" className={(statusColor as any)[o.status] ?? ""}>{o.status}</Badge></TableCell>
                         <TableCell>
                           <Button variant="ghost" size="sm" className="h-7 gap-1.5 text-xs px-2" onClick={() => handleViewReceipt(o)}>
                             <Receipt className="h-3.5 w-3.5" />View Receipt
@@ -310,7 +340,7 @@ const Sales = () => {
                   })}
                   {orders.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={9} className="h-32">
+                      <TableCell colSpan={10} className="h-32">
                         <div className="flex flex-col items-center justify-center text-muted-foreground py-8">
                           <FileX className="h-10 w-10 text-muted-foreground/30 mb-2" />
                           <p className="text-sm font-medium">No orders found</p>

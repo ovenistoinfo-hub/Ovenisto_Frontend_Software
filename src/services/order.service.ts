@@ -85,6 +85,11 @@ export interface OrderRecord {
   } | null;
   createdAt: string;
   updatedAt?: string;
+  /** Recipe-based COGS for this order, computed server-side. Only present on GET /orders
+   *  (the Sales & Orders list) -- not on other endpoints that reuse OrderRecord's shape. */
+  cost?: number;
+  /** total - cost. Same availability caveat as cost. */
+  profit?: number;
   items: OrderItemRecord[];
   /** Legacy shared per-kitchen ticket — only orders whose items predate
    *  per-dish keys still use it (see kitchenDealProgress). */
@@ -185,6 +190,31 @@ export const orderService = {
     if (params?.outletId && params.outletId !== 'all') q.set('outletId', params.outletId);
     const res = await api.get<{ success: boolean; data: OrderRecord[]; meta: any }>(`/orders?${q.toString()}`);
     return { data: res.data, meta: (res as any).meta };
+  },
+
+  /** Sale/Cost/Profit/Margin totalled across every order matching these filters (not just one
+   *  page) -- backs the Sales & Orders page's 4 summary cards. Same filter params as getOrders. */
+  async getOrdersSummary(params?: {
+    search?: string;
+    status?: string;
+    type?: string;
+    from?: string;
+    to?: string;
+    fromTime?: string;
+    toTime?: string;
+    outletId?: string;
+  }): Promise<{ sale: number; cost: number; profit: number; orders: number; marginPct: number }> {
+    const q = new URLSearchParams();
+    if (params?.search) q.set('search', params.search);
+    if (params?.status) q.set('status', params.status);
+    if (params?.type) q.set('type', params.type);
+    if (params?.from) q.set('from', params.from);
+    if (params?.to) q.set('to', params.to);
+    if (params?.fromTime) q.set('fromTime', params.fromTime);
+    if (params?.toTime) q.set('toTime', params.toTime);
+    if (params?.outletId && params.outletId !== 'all') q.set('outletId', params.outletId);
+    const res = await api.get<{ success: boolean; data: { sale: number; cost: number; profit: number; orders: number; marginPct: number } }>(`/orders/summary?${q.toString()}`);
+    return res.data;
   },
 
   async getOrder(id: string): Promise<OrderRecord> {
