@@ -90,6 +90,12 @@ export interface OrderRecord {
   cost?: number;
   /** total - cost. Same availability caveat as cost. */
   profit?: number;
+  /** This order's slice for the requested `category` filter only: revenue prorated across
+   *  lines by gross-value, cost = real per-line COGS. Present only on GET /orders when a
+   *  `category` param was sent (Dashboard "Sales by Category" drill-down). */
+  categorySale?: number;
+  categoryCost?: number;
+  categoryProfit?: number;
   items: OrderItemRecord[];
   /** Legacy shared per-kitchen ticket — only orders whose items predate
    *  per-dish keys still use it (see kitchenDealProgress). */
@@ -172,6 +178,12 @@ export const orderService = {
     toTime?: string;
     /** Hide orders with no real payment recorded (null/empty/"Pending") -- Sales & Orders only. */
     excludeUnpaid?: boolean;
+    /** Keep only orders with an active line in this food category, and attach each order's
+     *  category-scoped Sale/Cost/Profit (categorySale/categoryCost/categoryProfit). */
+    category?: string;
+    /** Keep only orders that used this payment method (split-aware: a split order matches every
+     *  method it used). Amounts stay whole-order — no per-method slice. */
+    paymentMethod?: string;
     page?: number;
     limit?: number;
     outletId?: string;
@@ -186,6 +198,8 @@ export const orderService = {
     if (params?.fromTime) q.set('fromTime', params.fromTime);
     if (params?.toTime) q.set('toTime', params.toTime);
     if (params?.excludeUnpaid) q.set('excludeUnpaid', 'true');
+    if (params?.category) q.set('category', params.category);
+    if (params?.paymentMethod) q.set('paymentMethod', params.paymentMethod);
     if (params?.page) q.set('page', String(params.page));
     if (params?.limit) q.set('limit', String(params.limit));
     // Super Admin branch filter (?outletId=) — read by the backend's resolveOutletScope
@@ -206,6 +220,10 @@ export const orderService = {
     fromTime?: string;
     toTime?: string;
     excludeUnpaid?: boolean;
+    /** Same as getOrders: totals become that category's slice across the whole filtered set. */
+    category?: string;
+    /** Same as getOrders: restrict to orders that used this payment method (whole-order totals). */
+    paymentMethod?: string;
     outletId?: string;
   }): Promise<{ sale: number; cost: number; profit: number; orders: number; marginPct: number }> {
     const q = new URLSearchParams();
@@ -217,6 +235,8 @@ export const orderService = {
     if (params?.fromTime) q.set('fromTime', params.fromTime);
     if (params?.toTime) q.set('toTime', params.toTime);
     if (params?.excludeUnpaid) q.set('excludeUnpaid', 'true');
+    if (params?.category) q.set('category', params.category);
+    if (params?.paymentMethod) q.set('paymentMethod', params.paymentMethod);
     if (params?.outletId && params.outletId !== 'all') q.set('outletId', params.outletId);
     const res = await api.get<{ success: boolean; data: { sale: number; cost: number; profit: number; orders: number; marginPct: number } }>(`/orders/summary?${q.toString()}`);
     return res.data;

@@ -52,6 +52,83 @@ export interface SalesByChannelReport {
   combined: SalesByChannelCombinedRow;
 }
 
+export interface SalesByCategoryRow {
+  /** Food category name; the pseudo-name "Uncategorised" collects lines whose menu item
+   *  has no category (or a deleted one). */
+  name: string;
+  sale: number;
+  cost: number;
+  profit: number;
+  /** Distinct orders that had at least one line in this category (an order spanning 3
+   *  categories counts once in each — so these do NOT sum to `combined.orders`). */
+  orders: number;
+  marginPct: number;
+}
+
+export interface SalesByCategoryReport {
+  from: string;
+  to: string;
+  fromTime: string | null;
+  toTime: string | null;
+  /** Sorted by `sale` descending. */
+  categories: SalesByCategoryRow[];
+  /** All categories combined = every completed + cash-approved order in range, ALL channels
+   *  (unlike SalesByChannelReport.combined, which is only Dine In / Take Away / Delivery). */
+  combined: SalesByCategoryRow;
+}
+
+export interface SalesByPaymentMethodRow {
+  method: string;
+  amount: number;
+  /** Orders that contributed a positive amount to this method. A split-payment order counts
+   *  toward every method it used, so these do NOT sum to `combined.orders`. */
+  orders: number;
+  sharePct: number;
+}
+
+export interface SalesByPaymentMethodReport {
+  from: string;
+  to: string;
+  fromTime: string | null;
+  toTime: string | null;
+  /** Sorted by `amount` descending. Amounts only — Cost/Profit is meaningless per method. */
+  methods: SalesByPaymentMethodRow[];
+  combined: {
+    amount: number;
+    /** Distinct completed + cash-approved orders in range (all channels). */
+    orders: number;
+    /** The "Cash" bucket. */
+    cashAmount: number;
+    /** Everything that isn't Cash (wallets, cards, on-account, bank…). */
+    digitalAmount: number;
+    cashSharePct: number;
+  };
+}
+
+export interface TopItemRow {
+  menuItemId: string;
+  name: string;
+  /** Units sold (all sizes/variants of this item merged). */
+  qty: number;
+  sale: number;
+  cost: number;
+  profit: number;
+  marginPct: number;
+}
+
+export interface TopItemsReport {
+  from: string;
+  to: string;
+  fromTime: string | null;
+  toTime: string | null;
+  /** Top 10 by profit, descending. */
+  topItems: TopItemRow[];
+  /** Bottom 10 by profit, ascending (loss-makers first). Overlaps topItems when totalItems ≤ 10. */
+  bottomItems: TopItemRow[];
+  /** Distinct menu items with at least one sale in the window. */
+  totalItems: number;
+}
+
 export interface ReportParams {
   from: string; // YYYY-MM-DD
   to: string;   // YYYY-MM-DD
@@ -149,6 +226,51 @@ export const reportService = {
     if (params.fromTime) q.set('fromTime', params.fromTime);
     if (params.toTime) q.set('toTime', params.toTime);
     const res = await api.get<{ success: boolean; data: SalesByChannelReport }>(`/reports/sales-by-channel?${q.toString()}`);
+    return res.data;
+  },
+  async getSalesByCategory(params: {
+    outletId?: string;
+    from: string;
+    to: string;
+    fromTime?: string;
+    toTime?: string;
+  }): Promise<SalesByCategoryReport> {
+    const q = new URLSearchParams({ from: params.from, to: params.to });
+    if (params.outletId && params.outletId !== 'all') q.set('outletId', params.outletId);
+    else q.set('outletId', 'all');
+    if (params.fromTime) q.set('fromTime', params.fromTime);
+    if (params.toTime) q.set('toTime', params.toTime);
+    const res = await api.get<{ success: boolean; data: SalesByCategoryReport }>(`/reports/sales-by-category?${q.toString()}`);
+    return res.data;
+  },
+  async getSalesByPaymentMethod(params: {
+    outletId?: string;
+    from: string;
+    to: string;
+    fromTime?: string;
+    toTime?: string;
+  }): Promise<SalesByPaymentMethodReport> {
+    const q = new URLSearchParams({ from: params.from, to: params.to });
+    if (params.outletId && params.outletId !== 'all') q.set('outletId', params.outletId);
+    else q.set('outletId', 'all');
+    if (params.fromTime) q.set('fromTime', params.fromTime);
+    if (params.toTime) q.set('toTime', params.toTime);
+    const res = await api.get<{ success: boolean; data: SalesByPaymentMethodReport }>(`/reports/sales-by-payment-method?${q.toString()}`);
+    return res.data;
+  },
+  async getTopItems(params: {
+    outletId?: string;
+    from: string;
+    to: string;
+    fromTime?: string;
+    toTime?: string;
+  }): Promise<TopItemsReport> {
+    const q = new URLSearchParams({ from: params.from, to: params.to });
+    if (params.outletId && params.outletId !== 'all') q.set('outletId', params.outletId);
+    else q.set('outletId', 'all');
+    if (params.fromTime) q.set('fromTime', params.fromTime);
+    if (params.toTime) q.set('toTime', params.toTime);
+    const res = await api.get<{ success: boolean; data: TopItemsReport }>(`/reports/top-items?${q.toString()}`);
     return res.data;
   },
 };

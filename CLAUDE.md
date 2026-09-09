@@ -530,6 +530,61 @@ plus a body explaining _why_ the change was made when that is not obvious.
   hex values — Sale/Cost uses the one validated categorical pair (`--primary`/`--info`); Profit
   is colored by sign (a status signal), which WARNed, mitigated with always-visible direct value
   labels + a Profit/Loss legend key rather than color alone.
+- **Dashboard "Sales by Category" section (`Dashboard.tsx`, 2026-09-09)** — a sibling of Sales By
+  Channel directly below it: its **own** date+time filter state (`catFromStr`/`catToStr`/
+  `catTimeFrom`/`catTimeTo`/`catPreset`, `setCatRange`), `reportService.getSalesByCategory`, the
+  `["sales-by-category"]` key, and — refactored — a shared `refreshSalesSections` callback now
+  drives BOTH sections' `useOrderEvents` + 180s `useVisiblePolling` refresh. Body is a compact
+  `<Table>` (Category · Orders · Sale · Cost · Profit · Margin) sorted by Sale desc + an emerald
+  Total row, then two charts over the **top 8 categories + an "Other" bucket** ("Sale vs Cost by
+  Category"; "Profit by Category") — same validated palette as Sales By Channel (`--primary`/
+  `--info` categorical pair; Profit colored by sign with value labels + a legend key). Every row
+  and every real-category bar is a "View Details" target →
+  `/sales?status=completed&category=<name>&from=…&to=…&fromTime=…&toTime=…`; the Total row omits
+  `category` (all channels, all categories); the "Other" bar isn't a drill target (no single
+  category).
+- **`Sales.tsx` category filter (2026-09-09)** — a `<Select>` of active `FoodCategory` names
+  (`menuService.getCategories("active")`), `categoryFilter` seeded from `?category=` on mount
+  (same one-shot URL hydration as its other filters). Threaded into `getOrders` /
+  `getOrdersSummary` + their query keys + the CSV export. When a category is active,
+  `rowSale`/`rowCost`/`rowProfit` read the backend's per-order `categorySale`/`categoryCost`/
+  `categoryProfit` slice instead of the whole-order figure, the Total/Cost/Profit headers gain a
+  `· <category>` suffix, and a hint line explains the columns + summary cards now show only that
+  category's part of each order. `order.service.ts`: `getOrders`/`getOrdersSummary` gained
+  `category?`; `OrderRecord` gained `categorySale?`/`categoryCost?`/`categoryProfit?`.
+  `report.service.ts`: `getSalesByCategory` + `SalesByCategoryReport`/`SalesByCategoryRow`.
+- **Dashboard "Sales by Payment Method" section (`Dashboard.tsx`, 2026-09-09)** — the **third**
+  filterable sales section: own `pay*` filter state, `reportService.getSalesByPaymentMethod`,
+  `["sales-by-payment-method"]` added to the shared `refreshSalesSections` callback (so one
+  `useOrderEvents` + 180s poll now feeds all three sections). Body: two Cash/Digital stat tiles,
+  a compact table (Method · Orders · Amount · % of Total + emerald Total row), and ONE bar chart
+  "Amount by Payment Method" — per-bar `<Cell>` colored Cash=`--primary` / Digital=`--info` (the
+  already-validated pair as a 2-class encoding) + a Cash/Digital legend + value labels. No
+  Cost/Profit anywhere (meaningless per method). Rows + bars → `/sales?status=completed&paymentMethod=<name>&from=…`; Total row omits `paymentMethod`.
+- **`Sales.tsx` payment-method filter (2026-09-09)** — a `<Select>` of `settings.paymentMethods`
+  (DataContext mirror; falls back to a fixed list), `paymentMethodFilter` seeded from
+  `?paymentMethod=` on mount. Threaded into `getOrders`/`getOrdersSummary` + keys + export.
+  **Columns stay whole-order** — unlike the `category` filter there is NO per-order slice (split
+  orders match every method they used). The CardContent hint banner is now shared: it renders
+  when `catActive || payActive` and shows the relevant sentence(s). `order.service.ts`:
+  `getOrders`/`getOrdersSummary` gained `paymentMethod?`. `report.service.ts`:
+  `getSalesByPaymentMethod` + `SalesByPaymentMethodReport`/`SalesByPaymentMethodRow`.
+- **Zero rows in both Category & Payment Method tables (2026-09-09)** — the backend now zero-fills
+  (every active category / configured method, incl. those with no sales). The table renders a
+  zero row muted (`opacity-55`) with a "no sales" tag and `—` for Margin / % of Total;
+  `categoryWithSales` / `payChartData.filter(m => m.amount > 0)` keep the **charts** to
+  positive-value rows only, and each chart block is wrapped in `{catChartData.length > 0 && …}` /
+  `{payChartData.length > 0 && …}` so a dead period hides the chart. `payHasActivity` gates the
+  Cash/Digital tile percentages (→ `—` at zero). The collapsed-section badge counts
+  `categoryWithSales`, not every row.
+- **Dashboard "Top & Bottom Items" section (`Dashboard.tsx`, 2026-09-09)** — the **fourth**
+  filterable sales section: own `items*` filter state, `reportService.getTopItems`, `["top-items"]`
+  in the shared `refreshSalesSections`. Two stacked full-width `<Table>`s (`Top Performers` /
+  `Underperformers`) built from a shared `itemTableHead` JSX const + a `renderItemRows(rows)`
+  helper. `showBottomItems = totalItemsSold > topItems.length` — when ≤ 10 distinct items sold
+  the two lists just mirror each other, so the Underperformers table is replaced by a one-line
+  note. No chart, no drill-down (items are the leaf). `report.service.ts`: `getTopItems` +
+  `TopItemsReport`/`TopItemRow`.
 
 <!-- code-review-graph MCP tools -->
 ## MCP Tools: code-review-graph

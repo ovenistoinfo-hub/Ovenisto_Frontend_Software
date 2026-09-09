@@ -2,7 +2,7 @@ import {
   TrendingUp, DollarSign, Wallet, ReceiptText, Flame, ArrowUpCircle, ArrowDownCircle,
   BarChart3, ShoppingBag, Clock, ChevronRight, ChevronDown, Trophy, Users, ChefHat, LayoutGrid, Ban, Package,
   ClipboardList, ArrowLeftRight, UserCheck, CalendarOff, Bike, CalendarCheck, Coins, Calendar as CalendarIcon,
-  UtensilsCrossed, Percent, X, Layers, CreditCard, Banknote, Smartphone,
+  UtensilsCrossed, Percent, X, Layers, CreditCard, Banknote, Smartphone, TrendingDown,
 } from "lucide-react";
 import { DatePicker } from "@/components/ui/date-picker";
 import { TimePicker, formatTimeLabel } from "@/components/ui/time-picker";
@@ -181,6 +181,14 @@ const Dashboard = () => {
   const [payTimeFrom, setPayTimeFrom] = useState<string>("");
   const [payTimeTo, setPayTimeTo] = useState<string>("");
 
+  // Top & Bottom Items — same filter model, its own state.
+  const [itemsSectionCollapsed, setItemsSectionCollapsed] = useState<boolean>(false);
+  const [itemsPreset, setItemsPreset] = useState<string>("Today");
+  const [itemsFromStr, setItemsFromStr] = useState<string>(toYmd(new Date()));
+  const [itemsToStr, setItemsToStr] = useState<string>(toYmd(new Date()));
+  const [itemsTimeFrom, setItemsTimeFrom] = useState<string>("");
+  const [itemsTimeTo, setItemsTimeTo] = useState<string>("");
+
   const setPreset = (preset: string) => {
     setChannelPreset(preset);
     const now = new Date();
@@ -232,6 +240,23 @@ const Dashboard = () => {
     }
   };
 
+  const setItemsRange = (preset: string) => {
+    setItemsPreset(preset);
+    const now = new Date();
+    if (preset === "Today") {
+      setItemsFromStr(toYmd(now));
+      setItemsToStr(toYmd(now));
+    } else if (preset === "This Week") {
+      const d = new Date(now);
+      d.setDate(d.getDate() - 7);
+      setItemsFromStr(toYmd(d));
+      setItemsToStr(toYmd(now));
+    } else if (preset === "This Month") {
+      setItemsFromStr(toYmd(new Date(now.getFullYear(), now.getMonth(), 1)));
+      setItemsToStr(toYmd(now));
+    }
+  };
+
   const { data: channelData, isLoading: channelLoading } = useQuery({
     queryKey: [
       "sales-by-channel",
@@ -278,7 +303,20 @@ const Dashboard = () => {
     enabled: salesByChannelVisible,
   });
 
-  // Push-first real-time for the three filtered sales sections — invalidating just their own
+  const { data: itemsData, isLoading: itemsLoading } = useQuery({
+    queryKey: ["top-items", outletId, itemsFromStr, itemsToStr, itemsTimeFrom, itemsTimeTo],
+    queryFn: () =>
+      reportService.getTopItems({
+        outletId,
+        from: itemsFromStr,
+        to: itemsToStr,
+        fromTime: itemsTimeFrom || undefined,
+        toTime: itemsTimeTo || undefined,
+      }),
+    enabled: salesByChannelVisible,
+  });
+
+  // Push-first real-time for the four filtered sales sections — invalidating just their own
   // query keys (not the whole ["dashboard", outletId] query) avoids re-running the other 11
   // dashboard aggregates on every order event, matching how Sales.tsx keeps its order-list query
   // independent. The 180s poll (this app's standard interval for socket-backed page data) is a
@@ -288,6 +326,7 @@ const Dashboard = () => {
     queryClient.invalidateQueries({ queryKey: ["sales-by-channel"] });
     queryClient.invalidateQueries({ queryKey: ["sales-by-category"] });
     queryClient.invalidateQueries({ queryKey: ["sales-by-payment-method"] });
+    queryClient.invalidateQueries({ queryKey: ["top-items"] });
   };
   useOrderEvents(refreshSalesSections);
   useVisiblePolling(refreshSalesSections, 180_000);
@@ -480,6 +519,44 @@ const Dashboard = () => {
     if (payTimeTo) params.set("toTime", payTimeTo);
     navigate(`/sales?${params.toString()}`);
   };
+
+  // ── Top & Bottom Items derivations ──────────────────────────────────────
+  const topItems = itemsData?.topItems ?? [];
+  const bottomItems = itemsData?.bottomItems ?? [];
+  const totalItemsSold = itemsData?.totalItems ?? 0;
+  // With ≤ 10 distinct items sold, top and bottom are the same list in opposite order —
+  // showing both is just noise, so the Underperformers table is hidden below that.
+  const showBottomItems = totalItemsSold > topItems.length;
+
+  const itemTableHead = (
+    <TableHeader>
+      <TableRow className="bg-muted/50 hover:bg-muted/50">
+        <TableHead className="w-8">#</TableHead>
+        <TableHead>Item</TableHead>
+        <TableHead className="text-right">Qty</TableHead>
+        <TableHead className="text-right">Sale</TableHead>
+        <TableHead className="text-right">Cost</TableHead>
+        <TableHead className="text-right">Profit</TableHead>
+        <TableHead className="text-right">Margin</TableHead>
+      </TableRow>
+    </TableHeader>
+  );
+  const renderItemRows = (rows: typeof topItems) =>
+    rows.map((it, idx) => (
+      <TableRow key={it.menuItemId} className="hover:bg-muted/30">
+        <TableCell className="text-muted-foreground text-xs w-8">{idx + 1}</TableCell>
+        <TableCell className="font-medium">{it.name}</TableCell>
+        <TableCell className="text-right text-muted-foreground">{it.qty}</TableCell>
+        <TableCell className="text-right">{currency} {it.sale.toLocaleString()}</TableCell>
+        <TableCell className="text-right">{currency} {it.cost.toLocaleString()}</TableCell>
+        <TableCell className={cn("text-right font-medium", it.profit >= 0 ? "text-emerald-500" : "text-destructive")}>
+          {currency} {it.profit.toLocaleString()}
+        </TableCell>
+        <TableCell className={cn("text-right", it.marginPct >= 0 ? "text-emerald-500" : "text-destructive")}>
+          {it.marginPct}%
+        </TableCell>
+      </TableRow>
+    ));
 
   return (
     <div className="space-y-6">
@@ -1608,6 +1685,255 @@ const Dashboard = () => {
                       </ResponsiveContainer>
                     </div>
                   </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* Top & Bottom Items (same "reports" permission gate) */}
+      {salesByChannelVisible && (
+        <section
+          aria-label="Top and Bottom Items"
+          className="rounded-2xl border border-border/80 bg-card/40 backdrop-blur-md shadow-sm overflow-hidden transition-all"
+        >
+          <div className={cn("p-4 sm:p-5 space-y-4 bg-card/70", !itemsSectionCollapsed && "border-b border-border/50")}>
+            <div className="flex items-center justify-between gap-3">
+              <div
+                className="flex items-center gap-3 cursor-pointer select-none group"
+                onClick={() => setItemsSectionCollapsed((prev) => !prev)}
+              >
+                <div className="h-9 w-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center border border-primary/20 shrink-0 shadow-sm group-hover:bg-primary/20 transition-colors">
+                  <Trophy className="h-4 w-4" />
+                </div>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-lg sm:text-xl font-bold tracking-tight text-foreground group-hover:text-primary transition-colors">
+                    Top &amp; Bottom Items
+                  </h2>
+                  {itemsSectionCollapsed && topItems[0] && (
+                    <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
+                      {topItems[0].name} leads • {totalItemsSold} {totalItemsSold === 1 ? "item" : "items"} sold
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setItemsSectionCollapsed((prev) => !prev)}
+                  className="h-8 px-2.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/70 gap-1.5 rounded-lg border border-border/50"
+                  title={itemsSectionCollapsed ? "Expand Top & Bottom Items" : "Collapse Top & Bottom Items"}
+                  aria-label={itemsSectionCollapsed ? "Expand Top & Bottom Items" : "Collapse Top & Bottom Items"}
+                >
+                  <span className="text-xs font-medium hidden sm:inline">
+                    {itemsSectionCollapsed ? "Show" : "Hide"}
+                  </span>
+                  <ChevronDown
+                    className={cn(
+                      "h-4 w-4 transition-transform duration-200",
+                      itemsSectionCollapsed ? "-rotate-90" : "rotate-0"
+                    )}
+                  />
+                </Button>
+              </div>
+            </div>
+
+            {!itemsSectionCollapsed && (
+              <div className="flex items-center gap-2.5 flex-wrap pt-3 border-t border-border/40">
+                <div className="inline-flex items-center p-0.5 rounded-lg bg-muted/60 border border-border/60 shadow-sm">
+                  {(["Today", "This Week", "This Month"] as const).map((p) => (
+                    <button
+                      key={p}
+                      type="button"
+                      onClick={() => setItemsRange(p)}
+                      className={cn(
+                        "px-3 py-1.5 text-xs font-medium rounded-md transition-all",
+                        itemsPreset === p
+                          ? "bg-background text-foreground shadow-sm font-semibold"
+                          : "text-muted-foreground hover:text-foreground"
+                      )}
+                    >
+                      {p}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="inline-flex items-center gap-1.5">
+                  <div className="w-36">
+                    <DatePicker
+                      value={itemsFromStr}
+                      onChange={(val) => { setItemsFromStr(val); setItemsPreset("Custom"); }}
+                      placeholder="Start date"
+                      className="h-8 text-xs bg-background"
+                    />
+                  </div>
+                  <span className="text-xs text-muted-foreground/60 font-medium px-0.5">to</span>
+                  <div className="w-36">
+                    <DatePicker
+                      value={itemsToStr}
+                      onChange={(val) => { setItemsToStr(val); setItemsPreset("Custom"); }}
+                      min={itemsFromStr}
+                      placeholder="End date"
+                      className="h-8 text-xs bg-background"
+                    />
+                  </div>
+                </div>
+
+                <div className="inline-flex items-center gap-1">
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className={cn(
+                          "h-8 px-2.5 text-xs font-medium gap-1.5 border shadow-sm transition-all",
+                          itemsTimeFrom || itemsTimeTo
+                            ? "border-primary/50 bg-primary/10 text-primary hover:bg-primary/15"
+                            : "border-border/70 bg-background text-muted-foreground hover:text-foreground hover:bg-muted"
+                        )}
+                      >
+                        <Clock className={cn("h-3.5 w-3.5 shrink-0", (itemsTimeFrom || itemsTimeTo) && "text-primary")} />
+                        <span>
+                          {itemsTimeFrom || itemsTimeTo
+                            ? `${itemsTimeFrom ? formatTimeLabel(itemsTimeFrom) : "12:00 AM"} – ${itemsTimeTo ? formatTimeLabel(itemsTimeTo) : "11:59 PM"}`
+                            : "All Day (Time)"}
+                        </span>
+                        <ChevronDown className="h-3 w-3 opacity-60 ml-0.5" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-80 p-3 space-y-3" align="start">
+                      <div className="flex items-center justify-between border-b border-border/40 pb-2">
+                        <div className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
+                          <Clock className="h-3.5 w-3.5 text-primary" />
+                          <span>Filter By Operating Hours</span>
+                        </div>
+                        {(itemsTimeFrom || itemsTimeTo) && (
+                          <button
+                            type="button"
+                            onClick={() => { setItemsTimeFrom(""); setItemsTimeTo(""); }}
+                            className="text-[11px] text-destructive hover:underline font-medium"
+                          >
+                            Reset
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <p className="text-[11px] font-medium text-muted-foreground">Quick Shift Presets</p>
+                        <div className="grid grid-cols-2 gap-1.5">
+                          {[
+                            { label: "Lunch Shift", from: "11:00", to: "17:00" },
+                            { label: "Dinner Peak", from: "17:00", to: "23:59" },
+                            { label: "Late Night", from: "23:00", to: "04:00" },
+                            { label: "Full Operating Day", from: "11:00", to: "23:59" },
+                          ].map((shift) => (
+                            <Button
+                              key={shift.label}
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => { setItemsTimeFrom(shift.from); setItemsTimeTo(shift.to); }}
+                              className={cn(
+                                "h-7 text-[11px] justify-start px-2 font-normal border-border/60",
+                                itemsTimeFrom === shift.from && itemsTimeTo === shift.to
+                                  ? "border-primary bg-primary/10 text-primary font-medium"
+                                  : "hover:bg-muted"
+                              )}
+                            >
+                              {shift.label}
+                            </Button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="space-y-2 pt-2 border-t border-border/40">
+                        <p className="text-[11px] font-medium text-muted-foreground">Custom Time Range</p>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="text-[10px] text-muted-foreground font-medium block mb-1">Start Time</label>
+                            <TimePicker
+                              value={itemsTimeFrom || "11:00"}
+                              onChange={setItemsTimeFrom}
+                              className="h-8 text-xs bg-background"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] text-muted-foreground font-medium block mb-1">End Time</label>
+                            <TimePicker
+                              value={itemsTimeTo || "23:59"}
+                              onChange={setItemsTimeTo}
+                              className="h-8 text-xs bg-background"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+
+                  {(itemsTimeFrom || itemsTimeTo) && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => { setItemsTimeFrom(""); setItemsTimeTo(""); }}
+                      className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-md"
+                      title="Clear time filter"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </Button>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {!itemsSectionCollapsed && (
+            <div className="p-4 sm:p-5">
+              {itemsLoading ? (
+                <div className="space-y-2">
+                  {Array.from({ length: 8 }).map((_, i) => (
+                    <Skeleton key={i} className="h-9 rounded-lg" />
+                  ))}
+                </div>
+              ) : topItems.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-8 text-center">No items sold in this period.</p>
+              ) : (
+                <div className="grid grid-cols-1 gap-4">
+                  <div className="rounded-xl border border-border/50 bg-card/40 overflow-hidden">
+                    <div className="px-4 py-2.5 bg-emerald-500/[0.06] border-b border-emerald-500/20 flex items-center gap-1.5">
+                      <TrendingUp className="h-3.5 w-3.5 text-emerald-500" />
+                      <p className="text-sm font-semibold text-foreground">Top Performers</p>
+                      <span className="text-[11px] text-muted-foreground">highest profit</span>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <Table>
+                        {itemTableHead}
+                        <TableBody>{renderItemRows(topItems)}</TableBody>
+                      </Table>
+                    </div>
+                  </div>
+
+                  {showBottomItems ? (
+                    <div className="rounded-xl border border-border/50 bg-card/40 overflow-hidden">
+                      <div className="px-4 py-2.5 bg-destructive/[0.05] border-b border-destructive/20 flex items-center gap-1.5">
+                        <TrendingDown className="h-3.5 w-3.5 text-destructive" />
+                        <p className="text-sm font-semibold text-foreground">Underperformers</p>
+                        <span className="text-[11px] text-muted-foreground">lowest profit first</span>
+                      </div>
+                      <div className="overflow-x-auto">
+                        <Table>
+                          {itemTableHead}
+                          <TableBody>{renderItemRows(bottomItems)}</TableBody>
+                        </Table>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground text-center py-1">
+                      Only {totalItemsSold} {totalItemsSold === 1 ? "item" : "items"} sold this period — the list above is the full ranking.
+                    </p>
                   )}
                 </div>
               )}

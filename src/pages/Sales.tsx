@@ -119,6 +119,12 @@ const Sales = () => {
   const [categoryFilter, setCategoryFilter] = useState(() => searchParams.get("category") || "");
   const catActive = Boolean(categoryFilter);
 
+  // Payment-method filter — "" means no filter. Arriving from the Dashboard "Sales by Payment
+  // Method" drill-down pre-selects one via ?paymentMethod=. Split-aware on the backend: an order
+  // paid "Cash: Rs.900, JazzCash: Rs.779" matches BOTH methods; amounts stay whole-order.
+  const [paymentMethodFilter, setPaymentMethodFilter] = useState(() => searchParams.get("paymentMethod") || "");
+  const payActive = Boolean(paymentMethodFilter);
+
   const [receiptSlip, setReceiptSlip] = useState<PlacedOrderSlipData | null>(null);
   const [showReceipt, setShowReceipt] = useState(false);
 
@@ -129,7 +135,7 @@ const Sales = () => {
     : "completed";
 
   const { data: resp, isLoading: loading } = useQuery({
-    queryKey: ["orders", { search, typeFilter, statusParam, dateFrom, dateTo, timeFrom, timeTo, categoryFilter, page }],
+    queryKey: ["orders", { search, typeFilter, statusParam, dateFrom, dateTo, timeFrom, timeTo, categoryFilter, paymentMethodFilter, page }],
     queryFn: () => orderService.getOrders({
       search: search || undefined,
       status: statusParam,
@@ -139,6 +145,7 @@ const Sales = () => {
       fromTime: timeFrom || undefined,
       toTime: timeTo || undefined,
       category: categoryFilter || undefined,
+      paymentMethod: paymentMethodFilter || undefined,
       // This is order HISTORY -- a completed-but-unpaid order isn't a settled sale yet, so it
       // never belongs here (unlike Kitchen Panel/Order Monitor/Waiter Panel, which still need
       // to see it to actually collect payment).
@@ -161,7 +168,7 @@ const Sales = () => {
   // this page) -- the 4 summary cards below. Independent of `page` on purpose: changing pages
   // must not refetch it, and it must not force the table to re-fetch either.
   const { data: summary } = useQuery({
-    queryKey: ["orders-summary", { search, typeFilter, statusParam, dateFrom, dateTo, timeFrom, timeTo, categoryFilter }],
+    queryKey: ["orders-summary", { search, typeFilter, statusParam, dateFrom, dateTo, timeFrom, timeTo, categoryFilter, paymentMethodFilter }],
     queryFn: () => orderService.getOrdersSummary({
       search: search || undefined,
       status: statusParam,
@@ -171,6 +178,7 @@ const Sales = () => {
       fromTime: timeFrom || undefined,
       toTime: timeTo || undefined,
       category: categoryFilter || undefined,
+      paymentMethod: paymentMethodFilter || undefined,
       excludeUnpaid: true,
     }),
   });
@@ -189,6 +197,13 @@ const Sales = () => {
   const handleSearch = (v: string) => { setSearch(v); setPage(1); };
   const handleType = (v: string) => { setTypeFilter(v); setPage(1); };
   const handleCategory = (v: string) => { setCategoryFilter(v === "all" ? "" : v); setPage(1); };
+  const handlePaymentMethod = (v: string) => { setPaymentMethodFilter(v === "all" ? "" : v); setPage(1); };
+
+  // Payment methods for the dropdown — the restaurant's configured list (DataContext mirrors
+  // Settings), with a fallback so it's never empty.
+  const paymentMethodOptions = (settings.paymentMethods && settings.paymentMethods.length > 0)
+    ? settings.paymentMethods
+    : ["Cash", "JazzCash", "EasyPaisa", "Credit Card", "Account"];
 
   // When a category filter is active the backend attaches each order's category-scoped slice;
   // the Total/Cost/Profit columns (and export) show that instead of the whole-order figure so
@@ -230,6 +245,7 @@ const Sales = () => {
         fromTime: timeFrom || undefined,
         toTime: timeTo || undefined,
         category: categoryFilter || undefined,
+        paymentMethod: paymentMethodFilter || undefined,
         excludeUnpaid: true,
         page: 1,
         limit: 10000,
@@ -627,9 +643,59 @@ const Sales = () => {
                 </Button>
               )}
             </div>
+
+            {/* Payment-method filter */}
+            <div className="inline-flex items-center gap-1">
+              <Select value={paymentMethodFilter || "all"} onValueChange={handlePaymentMethod}>
+                <SelectTrigger
+                  className={cn(
+                    "h-8 text-xs gap-1.5 border shadow-sm min-w-[9rem] transition-all",
+                    payActive
+                      ? "border-border/80 bg-background text-foreground font-semibold"
+                      : "border-border/70 bg-background text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  <Wallet className={cn("h-3.5 w-3.5 shrink-0", payActive ? "text-foreground" : "text-muted-foreground")} />
+                  <SelectValue placeholder="All Payments" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Payments</SelectItem>
+                  {payActive && !paymentMethodOptions.some((m) => m === paymentMethodFilter) && (
+                    <SelectItem value={paymentMethodFilter}>{paymentMethodFilter}</SelectItem>
+                  )}
+                  {paymentMethodOptions.map((m) => (
+                    <SelectItem key={m} value={m}>{m}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {payActive && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handlePaymentMethod("all")}
+                  className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-md"
+                  title="Clear payment filter"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </Button>
+              )}
+            </div>
           </div>
         </CardHeader>
         <CardContent>
+          {(catActive || payActive) && (
+            <div className="mb-3 flex items-start gap-2 rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-xs text-muted-foreground">
+              <Tags className="h-3.5 w-3.5 text-primary shrink-0 mt-0.5" />
+              <span>
+                {catActive && (
+                  <>Showing the <span className="font-semibold text-foreground">{categoryFilter}</span> portion of each order — Sale / Cost / Profit and the totals above cover only this category's items, not the whole order. </>
+                )}
+                {payActive && (
+                  <>Filtered to orders that used <span className="font-semibold text-foreground">{paymentMethodFilter}</span> — a split-payment order also appears under its other methods, and the amounts shown are full order totals.</>
+                )}
+              </span>
+            </div>
+          )}
           {loading ? (
             <div className="flex justify-center items-center h-40"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
           ) : (
