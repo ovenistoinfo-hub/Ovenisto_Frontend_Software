@@ -2,7 +2,7 @@ import {
   TrendingUp, DollarSign, Wallet, ReceiptText, Flame, ArrowUpCircle, ArrowDownCircle,
   BarChart3, ShoppingBag, Clock, ChevronRight, ChevronDown, Trophy, Users, ChefHat, LayoutGrid, Ban, Package,
   ClipboardList, ArrowLeftRight, UserCheck, CalendarOff, Bike, CalendarCheck, Coins, Calendar as CalendarIcon,
-  UtensilsCrossed, Percent, X,
+  UtensilsCrossed, Percent, X, Layers, CreditCard, Banknote, Smartphone,
 } from "lucide-react";
 import { DatePicker } from "@/components/ui/date-picker";
 import { TimePicker, formatTimeLabel } from "@/components/ui/time-picker";
@@ -164,6 +164,23 @@ const Dashboard = () => {
   const [channelTimeFrom, setChannelTimeFrom] = useState<string>("");
   const [channelTimeTo, setChannelTimeTo] = useState<string>("");
 
+  // Sales by Category — same filter model as Sales By Channel, its own independent state
+  // (both sections are separately collapsible; a user may want a different window in each).
+  const [catSectionCollapsed, setCatSectionCollapsed] = useState<boolean>(false);
+  const [catPreset, setCatPreset] = useState<string>("Today");
+  const [catFromStr, setCatFromStr] = useState<string>(toYmd(new Date()));
+  const [catToStr, setCatToStr] = useState<string>(toYmd(new Date()));
+  const [catTimeFrom, setCatTimeFrom] = useState<string>("");
+  const [catTimeTo, setCatTimeTo] = useState<string>("");
+
+  // Sales by Payment Method — same filter model again, its own state.
+  const [paySectionCollapsed, setPaySectionCollapsed] = useState<boolean>(false);
+  const [payPreset, setPayPreset] = useState<string>("Today");
+  const [payFromStr, setPayFromStr] = useState<string>(toYmd(new Date()));
+  const [payToStr, setPayToStr] = useState<string>(toYmd(new Date()));
+  const [payTimeFrom, setPayTimeFrom] = useState<string>("");
+  const [payTimeTo, setPayTimeTo] = useState<string>("");
+
   const setPreset = (preset: string) => {
     setChannelPreset(preset);
     const now = new Date();
@@ -178,6 +195,40 @@ const Dashboard = () => {
     } else if (preset === "This Month") {
       setChannelFromStr(toYmd(new Date(now.getFullYear(), now.getMonth(), 1)));
       setChannelToStr(toYmd(now));
+    }
+  };
+
+  const setCatRange = (preset: string) => {
+    setCatPreset(preset);
+    const now = new Date();
+    if (preset === "Today") {
+      setCatFromStr(toYmd(now));
+      setCatToStr(toYmd(now));
+    } else if (preset === "This Week") {
+      const d = new Date(now);
+      d.setDate(d.getDate() - 7);
+      setCatFromStr(toYmd(d));
+      setCatToStr(toYmd(now));
+    } else if (preset === "This Month") {
+      setCatFromStr(toYmd(new Date(now.getFullYear(), now.getMonth(), 1)));
+      setCatToStr(toYmd(now));
+    }
+  };
+
+  const setPayRange = (preset: string) => {
+    setPayPreset(preset);
+    const now = new Date();
+    if (preset === "Today") {
+      setPayFromStr(toYmd(now));
+      setPayToStr(toYmd(now));
+    } else if (preset === "This Week") {
+      const d = new Date(now);
+      d.setDate(d.getDate() - 7);
+      setPayFromStr(toYmd(d));
+      setPayToStr(toYmd(now));
+    } else if (preset === "This Month") {
+      setPayFromStr(toYmd(new Date(now.getFullYear(), now.getMonth(), 1)));
+      setPayToStr(toYmd(now));
     }
   };
 
@@ -201,17 +252,45 @@ const Dashboard = () => {
     enabled: salesByChannelVisible,
   });
 
-  // Push-first real-time for this section only — invalidating just "sales-by-channel" (not the
-  // whole ["dashboard", outletId] query) avoids re-running the other 11 dashboard aggregates on
-  // every order event, matching how Sales.tsx keeps its own order-list query independent. The
-  // 180s poll (this app's standard interval for socket-backed page data) is a safety net only.
-  useOrderEvents(() => {
-    if (salesByChannelVisible) queryClient.invalidateQueries({ queryKey: ["sales-by-channel"] });
+  const { data: categoryData, isLoading: categoryLoading } = useQuery({
+    queryKey: ["sales-by-category", outletId, catFromStr, catToStr, catTimeFrom, catTimeTo],
+    queryFn: () =>
+      reportService.getSalesByCategory({
+        outletId,
+        from: catFromStr,
+        to: catToStr,
+        fromTime: catTimeFrom || undefined,
+        toTime: catTimeTo || undefined,
+      }),
+    enabled: salesByChannelVisible,
   });
-  useVisiblePolling(
-    () => { if (salesByChannelVisible) queryClient.invalidateQueries({ queryKey: ["sales-by-channel"] }); },
-    180_000
-  );
+
+  const { data: payData, isLoading: payLoading } = useQuery({
+    queryKey: ["sales-by-payment-method", outletId, payFromStr, payToStr, payTimeFrom, payTimeTo],
+    queryFn: () =>
+      reportService.getSalesByPaymentMethod({
+        outletId,
+        from: payFromStr,
+        to: payToStr,
+        fromTime: payTimeFrom || undefined,
+        toTime: payTimeTo || undefined,
+      }),
+    enabled: salesByChannelVisible,
+  });
+
+  // Push-first real-time for the three filtered sales sections — invalidating just their own
+  // query keys (not the whole ["dashboard", outletId] query) avoids re-running the other 11
+  // dashboard aggregates on every order event, matching how Sales.tsx keeps its order-list query
+  // independent. The 180s poll (this app's standard interval for socket-backed page data) is a
+  // safety net only.
+  const refreshSalesSections = () => {
+    if (!salesByChannelVisible) return;
+    queryClient.invalidateQueries({ queryKey: ["sales-by-channel"] });
+    queryClient.invalidateQueries({ queryKey: ["sales-by-category"] });
+    queryClient.invalidateQueries({ queryKey: ["sales-by-payment-method"] });
+  };
+  useOrderEvents(refreshSalesSections);
+  useVisiblePolling(refreshSalesSections, 180_000);
 
   const { data: doughBatches = [], refetch: refetchDough } = useQuery({
     queryKey: ["dough-batches", outletId],
@@ -339,6 +418,66 @@ const Dashboard = () => {
     if (channelToStr) params.set("to", channelToStr);
     if (channelTimeFrom) params.set("fromTime", channelTimeFrom);
     if (channelTimeTo) params.set("toTime", channelTimeTo);
+    navigate(`/sales?${params.toString()}`);
+  };
+
+  // ── Sales by Category derivations ────────────────────────────────────────
+  const categoryList = categoryData?.categories ?? [];
+  const categoryCombined = categoryData?.combined;
+  // The table shows every active category (incl. zero-sales ones, muted); the chart plots only
+  // categories that actually sold — a wall of Rs. 0 bars is noise.
+  const categoryWithSales = categoryList.filter((c) => c.sale > 0);
+  // A 15-category bar chart is unreadable — plot the top 8 by Sale and fold the rest into
+  // one "Other" bar (kept out of the drill-down: "Other" has no single category param).
+  const CATEGORY_CHART_TOP_N = 8;
+  const catChartData = (() => {
+    const top = categoryWithSales
+      .slice(0, CATEGORY_CHART_TOP_N)
+      .map((c) => ({ name: c.name, sale: c.sale, cost: c.cost, profit: c.profit }));
+    const rest = categoryWithSales.slice(CATEGORY_CHART_TOP_N);
+    if (rest.length > 0) {
+      top.push({
+        name: "Other",
+        sale: rest.reduce((s, c) => s + c.sale, 0),
+        cost: rest.reduce((s, c) => s + c.cost, 0),
+        profit: rest.reduce((s, c) => s + c.profit, 0),
+      });
+    }
+    return top;
+  })();
+
+  // "View Details" → Sales & Orders pre-filtered to this category (same date/time window,
+  // status=completed). A null name (the Total row) drops the category param → every completed
+  // sale in the window, all channels — matching the combined row's scope. Sales.tsx reads
+  // these params once on mount, then leaves the address bar alone.
+  const goToCategorySales = (categoryName: string | null) => {
+    const params = new URLSearchParams();
+    params.set("status", "completed");
+    if (categoryName) params.set("category", categoryName);
+    if (catFromStr) params.set("from", catFromStr);
+    if (catToStr) params.set("to", catToStr);
+    if (catTimeFrom) params.set("fromTime", catTimeFrom);
+    if (catTimeTo) params.set("toTime", catTimeTo);
+    navigate(`/sales?${params.toString()}`);
+  };
+
+  // ── Sales by Payment Method derivations ──────────────────────────────────
+  const payMethods = payData?.methods ?? [];
+  const payCombined = payData?.combined;
+  // Table shows every configured method (incl. zero, muted); chart plots only methods that
+  // actually collected something.
+  const payChartData = payMethods.filter((m) => m.amount > 0).map((m) => ({ name: m.method, amount: m.amount }));
+  const payHasActivity = (payCombined?.amount ?? 0) > 0;
+  // "View Details" → Sales & Orders filtered to orders that used this method (whole-order
+  // amounts; a split order also shows under its other methods). Total row → no method param.
+  const goToPaymentSales = (method: string | null) => {
+    const params = new URLSearchParams();
+    params.set("status", "completed");
+    if (method) params.set("paymentMethod", method);
+    if (payFromStr) params.set("from", payFromStr);
+    if (payToStr) params.set("to", payToStr);
+    if (payTimeFrom) params.set("fromTime", payTimeFrom);
+    if (payTimeTo) params.set("toTime", payTimeTo);
     navigate(`/sales?${params.toString()}`);
   };
 
@@ -781,6 +920,695 @@ const Dashboard = () => {
                       </div>
                     </div>
                   </div>
+                </div>
+              )}
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* Sales by Category (same "reports" permission gate as Sales By Channel) */}
+      {salesByChannelVisible && (
+        <section
+          aria-label="Sales by Category"
+          className="rounded-2xl border border-border/80 bg-card/40 backdrop-blur-md shadow-sm overflow-hidden transition-all"
+        >
+          <div className={cn("p-4 sm:p-5 space-y-4 bg-card/70", !catSectionCollapsed && "border-b border-border/50")}>
+            <div className="flex items-center justify-between gap-3">
+              <div
+                className="flex items-center gap-3 cursor-pointer select-none group"
+                onClick={() => setCatSectionCollapsed((prev) => !prev)}
+              >
+                <div className="h-9 w-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center border border-primary/20 shrink-0 shadow-sm group-hover:bg-primary/20 transition-colors">
+                  <Layers className="h-4 w-4" />
+                </div>
+                <h2 className="text-lg sm:text-xl font-bold tracking-tight text-foreground group-hover:text-primary transition-colors whitespace-nowrap">
+                  Sales by Category
+                </h2>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setCatSectionCollapsed((prev) => !prev)}
+                  className="h-8 px-2.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/70 gap-1.5 rounded-lg border border-border/50"
+                  title={catSectionCollapsed ? "Expand Sales by Category" : "Collapse Sales by Category"}
+                  aria-label={catSectionCollapsed ? "Expand Sales by Category" : "Collapse Sales by Category"}
+                >
+                  <span className="text-xs font-medium hidden sm:inline">
+                    {catSectionCollapsed ? "Show" : "Hide"}
+                  </span>
+                  <ChevronDown
+                    className={cn(
+                      "h-4 w-4 transition-transform duration-200",
+                      catSectionCollapsed ? "-rotate-90" : "rotate-0"
+                    )}
+                  />
+                </Button>
+              </div>
+            </div>
+
+            {!catSectionCollapsed && (
+              <div className="flex items-center gap-2.5 flex-wrap pt-3 border-t border-border/40">
+                <div className="inline-flex items-center p-0.5 rounded-lg bg-muted/60 border border-border/60 shadow-sm">
+                  {(["Today", "This Week", "This Month"] as const).map((p) => (
+                    <button
+                      key={p}
+                      type="button"
+                      onClick={() => setCatRange(p)}
+                      className={cn(
+                        "px-3 py-1.5 text-xs font-medium rounded-md transition-all",
+                        catPreset === p
+                          ? "bg-background text-foreground shadow-sm font-semibold"
+                          : "text-muted-foreground hover:text-foreground"
+                      )}
+                    >
+                      {p}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="inline-flex items-center gap-1.5">
+                  <div className="w-36">
+                    <DatePicker
+                      value={catFromStr}
+                      onChange={(val) => { setCatFromStr(val); setCatPreset("Custom"); }}
+                      placeholder="Start date"
+                      className="h-8 text-xs bg-background"
+                    />
+                  </div>
+                  <span className="text-xs text-muted-foreground/60 font-medium px-0.5">to</span>
+                  <div className="w-36">
+                    <DatePicker
+                      value={catToStr}
+                      onChange={(val) => { setCatToStr(val); setCatPreset("Custom"); }}
+                      min={catFromStr}
+                      placeholder="End date"
+                      className="h-8 text-xs bg-background"
+                    />
+                  </div>
+                </div>
+
+                <div className="inline-flex items-center gap-1">
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className={cn(
+                          "h-8 px-2.5 text-xs font-medium gap-1.5 border shadow-sm transition-all",
+                          catTimeFrom || catTimeTo
+                            ? "border-primary/50 bg-primary/10 text-primary hover:bg-primary/15"
+                            : "border-border/70 bg-background text-muted-foreground hover:text-foreground hover:bg-muted"
+                        )}
+                      >
+                        <Clock className={cn("h-3.5 w-3.5 shrink-0", (catTimeFrom || catTimeTo) && "text-primary")} />
+                        <span>
+                          {catTimeFrom || catTimeTo
+                            ? `${catTimeFrom ? formatTimeLabel(catTimeFrom) : "12:00 AM"} – ${catTimeTo ? formatTimeLabel(catTimeTo) : "11:59 PM"}`
+                            : "All Day (Time)"}
+                        </span>
+                        <ChevronDown className="h-3 w-3 opacity-60 ml-0.5" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-80 p-3 space-y-3" align="start">
+                      <div className="flex items-center justify-between border-b border-border/40 pb-2">
+                        <div className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
+                          <Clock className="h-3.5 w-3.5 text-primary" />
+                          <span>Filter By Operating Hours</span>
+                        </div>
+                        {(catTimeFrom || catTimeTo) && (
+                          <button
+                            type="button"
+                            onClick={() => { setCatTimeFrom(""); setCatTimeTo(""); }}
+                            className="text-[11px] text-destructive hover:underline font-medium"
+                          >
+                            Reset
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <p className="text-[11px] font-medium text-muted-foreground">Quick Shift Presets</p>
+                        <div className="grid grid-cols-2 gap-1.5">
+                          {[
+                            { label: "Lunch Shift", from: "11:00", to: "17:00" },
+                            { label: "Dinner Peak", from: "17:00", to: "23:59" },
+                            { label: "Late Night", from: "23:00", to: "04:00" },
+                            { label: "Full Operating Day", from: "11:00", to: "23:59" },
+                          ].map((shift) => (
+                            <Button
+                              key={shift.label}
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => { setCatTimeFrom(shift.from); setCatTimeTo(shift.to); }}
+                              className={cn(
+                                "h-7 text-[11px] justify-start px-2 font-normal border-border/60",
+                                catTimeFrom === shift.from && catTimeTo === shift.to
+                                  ? "border-primary bg-primary/10 text-primary font-medium"
+                                  : "hover:bg-muted"
+                              )}
+                            >
+                              {shift.label}
+                            </Button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="space-y-2 pt-2 border-t border-border/40">
+                        <p className="text-[11px] font-medium text-muted-foreground">Custom Time Range</p>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="text-[10px] text-muted-foreground font-medium block mb-1">Start Time</label>
+                            <TimePicker
+                              value={catTimeFrom || "11:00"}
+                              onChange={setCatTimeFrom}
+                              className="h-8 text-xs bg-background"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] text-muted-foreground font-medium block mb-1">End Time</label>
+                            <TimePicker
+                              value={catTimeTo || "23:59"}
+                              onChange={setCatTimeTo}
+                              className="h-8 text-xs bg-background"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+
+                  {(catTimeFrom || catTimeTo) && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => { setCatTimeFrom(""); setCatTimeTo(""); }}
+                      className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-md"
+                      title="Clear time filter"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </Button>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {!catSectionCollapsed && (
+            <div className="p-4 sm:p-5">
+              {categoryLoading ? (
+                <div className="space-y-2">
+                  {Array.from({ length: 5 }).map((_, i) => (
+                    <Skeleton key={i} className="h-10 rounded-lg" />
+                  ))}
+                </div>
+              ) : categoryList.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-8 text-center">No sales in this period.</p>
+              ) : (
+                <div className="space-y-4">
+                  <div className="overflow-x-auto -mx-1 px-1">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="bg-muted/50 hover:bg-muted/50">
+                          <TableHead>Category</TableHead>
+                          <TableHead className="text-right">Orders</TableHead>
+                          <TableHead className="text-right">Sale</TableHead>
+                          <TableHead className="text-right">Cost</TableHead>
+                          <TableHead className="text-right">Profit</TableHead>
+                          <TableHead className="text-right">Margin</TableHead>
+                          <TableHead className="w-8" />
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {categoryList.map((c) => {
+                          const empty = c.orders === 0 && c.sale === 0;
+                          return (
+                          <TableRow
+                            key={c.name}
+                            className={cn(
+                              "cursor-pointer transition-colors group/row",
+                              empty ? "opacity-55 hover:opacity-100 hover:bg-muted/40" : "hover:bg-primary/5"
+                            )}
+                            onClick={() => goToCategorySales(c.name)}
+                          >
+                            <TableCell className="font-medium">
+                              {c.name}
+                              {empty && <span className="ml-2 text-[10px] font-medium uppercase tracking-wide text-muted-foreground/70">no sales</span>}
+                            </TableCell>
+                            <TableCell className="text-right text-muted-foreground">{c.orders}</TableCell>
+                            <TableCell className="text-right font-medium">{currency} {c.sale.toLocaleString()}</TableCell>
+                            <TableCell className="text-right">{currency} {c.cost.toLocaleString()}</TableCell>
+                            <TableCell className={cn("text-right font-medium", empty ? "text-muted-foreground" : c.profit >= 0 ? "text-emerald-500" : "text-destructive")}>
+                              {currency} {c.profit.toLocaleString()}
+                            </TableCell>
+                            <TableCell className={cn("text-right", empty ? "text-muted-foreground" : c.marginPct >= 0 ? "text-emerald-500" : "text-destructive")}>
+                              {empty ? "—" : `${c.marginPct}%`}
+                            </TableCell>
+                            <TableCell className="w-8">
+                              <ChevronRight className="h-4 w-4 text-muted-foreground/40 transition-all group-hover/row:text-primary group-hover/row:translate-x-0.5" />
+                            </TableCell>
+                          </TableRow>
+                          );
+                        })}
+                        {categoryCombined && (
+                          <TableRow
+                            className="cursor-pointer border-t-2 border-emerald-500/30 bg-emerald-500/[0.04] hover:bg-emerald-500/[0.08] font-semibold group/row"
+                            onClick={() => goToCategorySales(null)}
+                          >
+                            <TableCell className="font-bold">
+                              Total
+                              <span className="text-[10px] font-semibold uppercase tracking-wider text-emerald-500 ml-1.5">All Categories</span>
+                            </TableCell>
+                            <TableCell className="text-right">{categoryCombined.orders}</TableCell>
+                            <TableCell className="text-right">{currency} {categoryCombined.sale.toLocaleString()}</TableCell>
+                            <TableCell className="text-right">{currency} {categoryCombined.cost.toLocaleString()}</TableCell>
+                            <TableCell className={cn("text-right", categoryCombined.profit >= 0 ? "text-emerald-500" : "text-destructive")}>
+                              {currency} {categoryCombined.profit.toLocaleString()}
+                            </TableCell>
+                            <TableCell className={cn("text-right", categoryCombined.marginPct >= 0 ? "text-emerald-500" : "text-destructive")}>
+                              {categoryCombined.marginPct}%
+                            </TableCell>
+                            <TableCell className="w-8">
+                              <ChevronRight className="h-4 w-4 text-emerald-500/50 transition-transform group-hover/row:translate-x-0.5" />
+                            </TableCell>
+                          </TableRow>
+                        )}
+                      </TableBody>
+                    </Table>
+                  </div>
+
+                  {/* Charts: top 8 categories that actually sold + "Other". Sale/Cost use this
+                      app's one validated categorical pair (--primary / --info); Profit is
+                      colored by sign (a status signal, not identity) and reinforced with direct
+                      value labels + a legend key rather than color alone — same treatment as
+                      Sales By Channel. Hidden entirely when nothing sold this period. */}
+                  {catChartData.length > 0 && (
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    <div className="rounded-xl border border-border/50 bg-card/40 p-4">
+                      <p className="text-sm font-semibold text-foreground mb-3">Sale vs Cost by Category</p>
+                      <div className="h-64">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart data={catChartData} barGap={4} barCategoryGap="24%">
+                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                            <XAxis dataKey="name" tick={{ fontSize: 11 }} axisLine={{ stroke: "hsl(var(--border))" }} tickLine={false} interval={0} angle={-20} textAnchor="end" height={54} />
+                            <YAxis tick={{ fontSize: 12 }} axisLine={false} tickLine={false} tickFormatter={(v) => `${currency}${(v / 1000).toFixed(0)}k`} />
+                            <Tooltip content={<ChartTooltip />} cursor={{ fill: "hsl(var(--muted) / 0.15)", radius: 4 }} />
+                            <Legend wrapperStyle={{ fontSize: 12 }} />
+                            <Bar
+                              dataKey="sale" name="Sale" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} maxBarSize={36}
+                              cursor="pointer"
+                              onClick={(data: any) => { if (data?.name && data.name !== "Other") goToCategorySales(data.name); }}
+                            />
+                            <Bar
+                              dataKey="cost" name="Cost" fill="hsl(var(--info))" radius={[4, 4, 0, 0]} maxBarSize={36}
+                              cursor="pointer"
+                              onClick={(data: any) => { if (data?.name && data.name !== "Other") goToCategorySales(data.name); }}
+                            />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
+
+                    <div className="rounded-xl border border-border/50 bg-card/40 p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <p className="text-sm font-semibold text-foreground">Profit by Category</p>
+                        <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
+                          <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-emerald-500" />Profit</span>
+                          <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-destructive" />Loss</span>
+                        </div>
+                      </div>
+                      <div className="h-64">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart data={catChartData} barCategoryGap="30%" margin={{ top: 20 }}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                            <XAxis dataKey="name" tick={{ fontSize: 11 }} axisLine={{ stroke: "hsl(var(--border))" }} tickLine={false} interval={0} angle={-20} textAnchor="end" height={54} />
+                            <YAxis tick={{ fontSize: 12 }} axisLine={false} tickLine={false} tickFormatter={(v) => `${currency}${(v / 1000).toFixed(0)}k`} />
+                            <Tooltip content={<ChartTooltip />} cursor={{ fill: "hsl(var(--muted) / 0.15)", radius: 4 }} />
+                            <Bar
+                              dataKey="profit" name="Profit" radius={[4, 4, 0, 0]} maxBarSize={44}
+                              cursor="pointer"
+                              onClick={(data: any) => { if (data?.name && data.name !== "Other") goToCategorySales(data.name); }}
+                            >
+                              {catChartData.map((entry) => (
+                                <Cell key={entry.name} fill={entry.profit >= 0 ? "hsl(var(--success))" : "hsl(var(--destructive))"} />
+                              ))}
+                              <LabelList
+                                dataKey="profit"
+                                position="top"
+                                formatter={(v: number) => `${currency} ${v.toLocaleString()}`}
+                                style={{ fontSize: 10, fill: "hsl(var(--foreground))" }}
+                              />
+                            </Bar>
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
+                  </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* Sales by Payment Method (same "reports" permission gate) */}
+      {salesByChannelVisible && (
+        <section
+          aria-label="Sales by Payment Method"
+          className="rounded-2xl border border-border/80 bg-card/40 backdrop-blur-md shadow-sm overflow-hidden transition-all"
+        >
+          <div className={cn("p-4 sm:p-5 space-y-4 bg-card/70", !paySectionCollapsed && "border-b border-border/50")}>
+            <div className="flex items-center justify-between gap-3">
+              <div
+                className="flex items-center gap-3 cursor-pointer select-none group"
+                onClick={() => setPaySectionCollapsed((prev) => !prev)}
+              >
+                <div className="h-9 w-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center border border-primary/20 shrink-0 shadow-sm group-hover:bg-primary/20 transition-colors">
+                  <CreditCard className="h-4 w-4" />
+                </div>
+                <h2 className="text-lg sm:text-xl font-bold tracking-tight text-foreground group-hover:text-primary transition-colors whitespace-nowrap">
+                  Sales by Payment Method
+                </h2>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setPaySectionCollapsed((prev) => !prev)}
+                  className="h-8 px-2.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/70 gap-1.5 rounded-lg border border-border/50"
+                  title={paySectionCollapsed ? "Expand Sales by Payment Method" : "Collapse Sales by Payment Method"}
+                  aria-label={paySectionCollapsed ? "Expand Sales by Payment Method" : "Collapse Sales by Payment Method"}
+                >
+                  <span className="text-xs font-medium hidden sm:inline">
+                    {paySectionCollapsed ? "Show" : "Hide"}
+                  </span>
+                  <ChevronDown
+                    className={cn(
+                      "h-4 w-4 transition-transform duration-200",
+                      paySectionCollapsed ? "-rotate-90" : "rotate-0"
+                    )}
+                  />
+                </Button>
+              </div>
+            </div>
+
+            {!paySectionCollapsed && (
+              <div className="flex items-center gap-2.5 flex-wrap pt-3 border-t border-border/40">
+                <div className="inline-flex items-center p-0.5 rounded-lg bg-muted/60 border border-border/60 shadow-sm">
+                  {(["Today", "This Week", "This Month"] as const).map((p) => (
+                    <button
+                      key={p}
+                      type="button"
+                      onClick={() => setPayRange(p)}
+                      className={cn(
+                        "px-3 py-1.5 text-xs font-medium rounded-md transition-all",
+                        payPreset === p
+                          ? "bg-background text-foreground shadow-sm font-semibold"
+                          : "text-muted-foreground hover:text-foreground"
+                      )}
+                    >
+                      {p}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="inline-flex items-center gap-1.5">
+                  <div className="w-36">
+                    <DatePicker
+                      value={payFromStr}
+                      onChange={(val) => { setPayFromStr(val); setPayPreset("Custom"); }}
+                      placeholder="Start date"
+                      className="h-8 text-xs bg-background"
+                    />
+                  </div>
+                  <span className="text-xs text-muted-foreground/60 font-medium px-0.5">to</span>
+                  <div className="w-36">
+                    <DatePicker
+                      value={payToStr}
+                      onChange={(val) => { setPayToStr(val); setPayPreset("Custom"); }}
+                      min={payFromStr}
+                      placeholder="End date"
+                      className="h-8 text-xs bg-background"
+                    />
+                  </div>
+                </div>
+
+                <div className="inline-flex items-center gap-1">
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className={cn(
+                          "h-8 px-2.5 text-xs font-medium gap-1.5 border shadow-sm transition-all",
+                          payTimeFrom || payTimeTo
+                            ? "border-primary/50 bg-primary/10 text-primary hover:bg-primary/15"
+                            : "border-border/70 bg-background text-muted-foreground hover:text-foreground hover:bg-muted"
+                        )}
+                      >
+                        <Clock className={cn("h-3.5 w-3.5 shrink-0", (payTimeFrom || payTimeTo) && "text-primary")} />
+                        <span>
+                          {payTimeFrom || payTimeTo
+                            ? `${payTimeFrom ? formatTimeLabel(payTimeFrom) : "12:00 AM"} – ${payTimeTo ? formatTimeLabel(payTimeTo) : "11:59 PM"}`
+                            : "All Day (Time)"}
+                        </span>
+                        <ChevronDown className="h-3 w-3 opacity-60 ml-0.5" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-80 p-3 space-y-3" align="start">
+                      <div className="flex items-center justify-between border-b border-border/40 pb-2">
+                        <div className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
+                          <Clock className="h-3.5 w-3.5 text-primary" />
+                          <span>Filter By Operating Hours</span>
+                        </div>
+                        {(payTimeFrom || payTimeTo) && (
+                          <button
+                            type="button"
+                            onClick={() => { setPayTimeFrom(""); setPayTimeTo(""); }}
+                            className="text-[11px] text-destructive hover:underline font-medium"
+                          >
+                            Reset
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <p className="text-[11px] font-medium text-muted-foreground">Quick Shift Presets</p>
+                        <div className="grid grid-cols-2 gap-1.5">
+                          {[
+                            { label: "Lunch Shift", from: "11:00", to: "17:00" },
+                            { label: "Dinner Peak", from: "17:00", to: "23:59" },
+                            { label: "Late Night", from: "23:00", to: "04:00" },
+                            { label: "Full Operating Day", from: "11:00", to: "23:59" },
+                          ].map((shift) => (
+                            <Button
+                              key={shift.label}
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => { setPayTimeFrom(shift.from); setPayTimeTo(shift.to); }}
+                              className={cn(
+                                "h-7 text-[11px] justify-start px-2 font-normal border-border/60",
+                                payTimeFrom === shift.from && payTimeTo === shift.to
+                                  ? "border-primary bg-primary/10 text-primary font-medium"
+                                  : "hover:bg-muted"
+                              )}
+                            >
+                              {shift.label}
+                            </Button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="space-y-2 pt-2 border-t border-border/40">
+                        <p className="text-[11px] font-medium text-muted-foreground">Custom Time Range</p>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="text-[10px] text-muted-foreground font-medium block mb-1">Start Time</label>
+                            <TimePicker
+                              value={payTimeFrom || "11:00"}
+                              onChange={setPayTimeFrom}
+                              className="h-8 text-xs bg-background"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] text-muted-foreground font-medium block mb-1">End Time</label>
+                            <TimePicker
+                              value={payTimeTo || "23:59"}
+                              onChange={setPayTimeTo}
+                              className="h-8 text-xs bg-background"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+
+                  {(payTimeFrom || payTimeTo) && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => { setPayTimeFrom(""); setPayTimeTo(""); }}
+                      className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-md"
+                      title="Clear time filter"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </Button>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {!paySectionCollapsed && (
+            <div className="p-4 sm:p-5">
+              {payLoading ? (
+                <div className="space-y-2">
+                  {Array.from({ length: 5 }).map((_, i) => (
+                    <Skeleton key={i} className="h-10 rounded-lg" />
+                  ))}
+                </div>
+              ) : payMethods.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-8 text-center">No settled sales in this period.</p>
+              ) : (
+                <div className="space-y-4">
+                  {/* Cash vs Digital tiles */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="rounded-xl bg-primary/[0.04] border border-primary/25 p-4 flex items-center justify-between">
+                      <div>
+                        <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Cash Collected</p>
+                        <p className="text-xl font-bold tracking-tight text-foreground mt-0.5">
+                          {currency} {(payCombined?.cashAmount ?? 0).toLocaleString()}
+                        </p>
+                        <p className="text-[11px] text-muted-foreground mt-0.5">{payHasActivity ? `${payCombined?.cashSharePct ?? 0}% of collected` : "—"}</p>
+                      </div>
+                      <div className="h-9 w-9 rounded-lg flex items-center justify-center bg-primary/10 text-primary border border-primary/20 shrink-0">
+                        <Banknote className="h-4 w-4" />
+                      </div>
+                    </div>
+                    <div className="rounded-xl bg-info/[0.04] border border-info/25 p-4 flex items-center justify-between">
+                      <div>
+                        <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Digital Collected</p>
+                        <p className="text-xl font-bold tracking-tight text-foreground mt-0.5">
+                          {currency} {(payCombined?.digitalAmount ?? 0).toLocaleString()}
+                        </p>
+                        <p className="text-[11px] text-muted-foreground mt-0.5">{payHasActivity ? `${100 - (payCombined?.cashSharePct ?? 0)}% of collected` : "—"}</p>
+                      </div>
+                      <div className="h-9 w-9 rounded-lg flex items-center justify-center bg-info/10 text-info border border-info/20 shrink-0">
+                        <Smartphone className="h-4 w-4" />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="overflow-x-auto -mx-1 px-1">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="bg-muted/50 hover:bg-muted/50">
+                          <TableHead>Method</TableHead>
+                          <TableHead className="text-right">Orders</TableHead>
+                          <TableHead className="text-right">Amount</TableHead>
+                          <TableHead className="text-right">% of Total</TableHead>
+                          <TableHead className="w-8" />
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {payMethods.map((m) => {
+                          const empty = m.amount === 0 && m.orders === 0;
+                          return (
+                          <TableRow
+                            key={m.method}
+                            className={cn(
+                              "cursor-pointer transition-colors group/row",
+                              empty ? "opacity-55 hover:opacity-100 hover:bg-muted/40" : "hover:bg-primary/5"
+                            )}
+                            onClick={() => goToPaymentSales(m.method)}
+                          >
+                            <TableCell className="font-medium">
+                              <span className="inline-flex items-center gap-2">
+                                <span
+                                  className={cn(
+                                    "h-2 w-2 rounded-sm shrink-0",
+                                    m.method.toLowerCase() === "cash" ? "bg-primary" : "bg-info"
+                                  )}
+                                />
+                                {m.method}
+                                {empty && <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground/70">no sales</span>}
+                              </span>
+                            </TableCell>
+                            <TableCell className="text-right text-muted-foreground">{m.orders}</TableCell>
+                            <TableCell className="text-right font-medium">{currency} {m.amount.toLocaleString()}</TableCell>
+                            <TableCell className="text-right text-muted-foreground">{empty ? "—" : `${m.sharePct}%`}</TableCell>
+                            <TableCell className="w-8">
+                              <ChevronRight className="h-4 w-4 text-muted-foreground/40 transition-all group-hover/row:text-primary group-hover/row:translate-x-0.5" />
+                            </TableCell>
+                          </TableRow>
+                          );
+                        })}
+                        {payCombined && (
+                          <TableRow
+                            className="cursor-pointer border-t-2 border-emerald-500/30 bg-emerald-500/[0.04] hover:bg-emerald-500/[0.08] font-semibold group/row"
+                            onClick={() => goToPaymentSales(null)}
+                          >
+                            <TableCell className="font-bold">
+                              Total
+                              <span className="text-[10px] font-semibold uppercase tracking-wider text-emerald-500 ml-1.5">All Methods</span>
+                            </TableCell>
+                            <TableCell className="text-right">{payCombined.orders}</TableCell>
+                            <TableCell className="text-right">{currency} {payCombined.amount.toLocaleString()}</TableCell>
+                            <TableCell className="text-right">100%</TableCell>
+                            <TableCell className="w-8">
+                              <ChevronRight className="h-4 w-4 text-emerald-500/50 transition-transform group-hover/row:translate-x-0.5" />
+                            </TableCell>
+                          </TableRow>
+                        )}
+                      </TableBody>
+                    </Table>
+                  </div>
+
+                  {/* Amount by method — bars colored Cash (--primary) vs Digital (--info), the
+                      validated categorical pair used here as a real 2-class encoding, with a
+                      legend key + direct value labels. Hidden when nothing collected. */}
+                  {payChartData.length > 0 && (
+                  <div className="rounded-xl border border-border/50 bg-card/40 p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <p className="text-sm font-semibold text-foreground">Amount by Payment Method</p>
+                      <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
+                        <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-primary" />Cash</span>
+                        <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-info" />Digital</span>
+                      </div>
+                    </div>
+                    <div className="h-64">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={payChartData} barCategoryGap="28%" margin={{ top: 20 }}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                          <XAxis dataKey="name" tick={{ fontSize: 11 }} axisLine={{ stroke: "hsl(var(--border))" }} tickLine={false} interval={0} angle={-20} textAnchor="end" height={54} />
+                          <YAxis tick={{ fontSize: 12 }} axisLine={false} tickLine={false} tickFormatter={(v) => `${currency}${(v / 1000).toFixed(0)}k`} />
+                          <Tooltip content={<ChartTooltip />} cursor={{ fill: "hsl(var(--muted) / 0.15)", radius: 4 }} />
+                          <Bar
+                            dataKey="amount" name="Amount" radius={[4, 4, 0, 0]} maxBarSize={44}
+                            cursor="pointer"
+                            onClick={(data: any) => { if (data?.name) goToPaymentSales(data.name); }}
+                          >
+                            {payChartData.map((entry) => (
+                              <Cell key={entry.name} fill={entry.name.toLowerCase() === "cash" ? "hsl(var(--primary))" : "hsl(var(--info))"} />
+                            ))}
+                            <LabelList
+                              dataKey="amount"
+                              position="top"
+                              formatter={(v: number) => `${currency} ${v.toLocaleString()}`}
+                              style={{ fontSize: 10, fill: "hsl(var(--foreground))" }}
+                            />
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+                  )}
                 </div>
               )}
             </div>
