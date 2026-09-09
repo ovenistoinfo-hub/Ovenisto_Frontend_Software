@@ -9,7 +9,7 @@ import { TimePicker, formatTimeLabel } from "@/components/ui/time-picker";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
-import { XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, BarChart, Bar } from "recharts";
+import { XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, Cell, LabelList, CartesianGrid } from "recharts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, useEffect, type ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
@@ -314,6 +314,11 @@ const Dashboard = () => {
       isCombined: true,
     },
   ];
+  // Chart data: the 3 real channels only -- the combined row is a summary total, not a
+  // fourth channel, and would double-count if plotted alongside them.
+  const channelChartData = channelRows.filter((r) => !r.isCombined).map((r) => ({
+    name: r.title, sale: r.sale, cost: r.cost, profit: r.profit,
+  }));
 
   return (
     <div className="space-y-6">
@@ -683,6 +688,60 @@ const Dashboard = () => {
                       </div>
                     );
                   })}
+
+                  {/* Charts: Sale vs Cost (2 series, validated categorical pair) and Profit
+                      (1 series, colored by sign -- a status signal, not identity, so it's
+                      reinforced with direct value labels + a legend key rather than color
+                      alone). Same 3 channels as the cards above, same date/time filters. */}
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    <div className="rounded-xl border border-border/50 bg-card/40 p-4">
+                      <p className="text-sm font-semibold text-foreground mb-3">Sale vs Cost by Channel</p>
+                      <div className="h-64">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart data={channelChartData} barGap={4} barCategoryGap="24%">
+                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                            <XAxis dataKey="name" tick={{ fontSize: 12 }} axisLine={{ stroke: "hsl(var(--border))" }} tickLine={false} />
+                            <YAxis tick={{ fontSize: 12 }} axisLine={false} tickLine={false} tickFormatter={(v) => `${currency}${(v / 1000).toFixed(0)}k`} />
+                            <Tooltip content={<ChartTooltip />} />
+                            <Legend wrapperStyle={{ fontSize: 12 }} />
+                            <Bar dataKey="sale" name="Sale" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} maxBarSize={40} />
+                            <Bar dataKey="cost" name="Cost" fill="hsl(var(--info))" radius={[4, 4, 0, 0]} maxBarSize={40} />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
+
+                    <div className="rounded-xl border border-border/50 bg-card/40 p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <p className="text-sm font-semibold text-foreground">Profit by Channel</p>
+                        <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
+                          <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-emerald-500" />Profit</span>
+                          <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-destructive" />Loss</span>
+                        </div>
+                      </div>
+                      <div className="h-64">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart data={channelChartData} barCategoryGap="30%" margin={{ top: 20 }}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                            <XAxis dataKey="name" tick={{ fontSize: 12 }} axisLine={{ stroke: "hsl(var(--border))" }} tickLine={false} />
+                            <YAxis tick={{ fontSize: 12 }} axisLine={false} tickLine={false} tickFormatter={(v) => `${currency}${(v / 1000).toFixed(0)}k`} />
+                            <Tooltip content={<ChartTooltip />} />
+                            <Bar dataKey="profit" name="Profit" radius={[4, 4, 0, 0]} maxBarSize={48}>
+                              {channelChartData.map((entry) => (
+                                <Cell key={entry.name} fill={entry.profit >= 0 ? "hsl(var(--success))" : "hsl(var(--destructive))"} />
+                              ))}
+                              <LabelList
+                                dataKey="profit"
+                                position="top"
+                                formatter={(v: number) => `${currency} ${v.toLocaleString()}`}
+                                style={{ fontSize: 11, fill: "hsl(var(--foreground))" }}
+                              />
+                            </Bar>
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
