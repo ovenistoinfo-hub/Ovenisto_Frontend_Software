@@ -2,7 +2,7 @@ import {
   LayoutDashboard, TrendingUp, DollarSign, Wallet, ReceiptText, Flame, ArrowUpCircle, ArrowDownCircle,
   BarChart3, ShoppingBag, Clock, ChevronRight, Trophy, Users, ChefHat, LayoutGrid, Ban, Package,
   ClipboardList, ArrowLeftRight, UserCheck, CalendarOff, Bike, CalendarCheck, Coins, Calendar as CalendarIcon,
-  UtensilsCrossed,
+  UtensilsCrossed, Percent,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -216,8 +216,6 @@ const Dashboard = () => {
     </div>
   );
 
-  const ch = (t: string) => d?.today.channels.find(c => c.type === t) ?? { sales: 0, orders: 0 };
-
   const pays = d?.month.paymentBreakdown ?? [];
   const maxPay = Math.max(1, ...pays.map(p => p.amount));
 
@@ -244,11 +242,92 @@ const Dashboard = () => {
   // week's unique-customer total with zero extra queries.
   const uniqueCustomersThisWeek = (d?.customerActivity ?? []).reduce((s, day) => s + day.newCustomers, 0);
 
+  const channelRows = [
+    {
+      title: "Dine In",
+      icon: UtensilsCrossed,
+      orders: channelData?.channels.dineIn.orders ?? 0,
+      sale: channelData?.channels.dineIn.sale ?? 0,
+      cost: channelData?.channels.dineIn.cost ?? 0,
+      profit: channelData?.channels.dineIn.profit ?? 0,
+      marginPct:
+        (channelData?.channels.dineIn.sale ?? 0) > 0
+          ? Math.round(((channelData?.channels.dineIn.profit ?? 0) / (channelData?.channels.dineIn.sale ?? 1)) * 100)
+          : 0,
+      isCombined: false,
+    },
+    {
+      title: "Take Away",
+      icon: ShoppingBag,
+      orders: channelData?.channels.takeaway.orders ?? 0,
+      sale: channelData?.channels.takeaway.sale ?? 0,
+      cost: channelData?.channels.takeaway.cost ?? 0,
+      profit: channelData?.channels.takeaway.profit ?? 0,
+      marginPct:
+        (channelData?.channels.takeaway.sale ?? 0) > 0
+          ? Math.round(((channelData?.channels.takeaway.profit ?? 0) / (channelData?.channels.takeaway.sale ?? 1)) * 100)
+          : 0,
+      isCombined: false,
+    },
+    {
+      title: "Delivery",
+      icon: Bike,
+      orders: channelData?.channels.delivery.orders ?? 0,
+      sale: channelData?.channels.delivery.sale ?? 0,
+      cost: channelData?.channels.delivery.cost ?? 0,
+      profit: channelData?.channels.delivery.profit ?? 0,
+      marginPct:
+        (channelData?.channels.delivery.sale ?? 0) > 0
+          ? Math.round(((channelData?.channels.delivery.profit ?? 0) / (channelData?.channels.delivery.sale ?? 1)) * 100)
+          : 0,
+      isCombined: false,
+    },
+    {
+      title: "Total (All Channels)",
+      icon: TrendingUp,
+      orders: channelData?.combined.orders ?? 0,
+      sale: channelData?.combined.sale ?? 0,
+      cost: channelData?.combined.cost ?? 0,
+      profit: channelData?.combined.profit ?? 0,
+      marginPct: channelData?.combined.marginPct ?? 0,
+      isCombined: true,
+    },
+  ];
+
   return (
     <div className="space-y-6">
+      {/* Header + Day-wise Sales */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
+        <div className="lg:col-span-2 flex items-start justify-between gap-3 flex-wrap">
+          <PageHeader
+            icon={<LayoutDashboard className="h-5 w-5" />}
+            title="Dashboard"
+            subtitle={d?.branchName ?? "Welcome back, here's your overview"}
+          />
+          <OutletFilterSelect outletId={outletId} setOutletId={setOutletId} outlets={outlets} isSuperAdmin={isSuperAdmin} />
+        </div>
+        <ClickableCard interactive={salesDrillEnabled} onClick={goToSales}>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Day-wise Sales (This Week)</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="h-[140px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={d?.daywiseSales ?? []} margin={{ top: 4, right: 8, left: 0, bottom: 4 }}>
+                  <XAxis dataKey="label" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
+                  <YAxis tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
+                  <Tooltip formatter={(v: number) => [`${currency} ${v.toLocaleString()}`, "Sales"]} />
+                  <Bar dataKey="sales" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </ClickableCard>
+      </div>
+
       {/* Sales By Channel (gated on "reports" permission) */}
       {salesByChannelVisible && (
-        <div className="space-y-4">
+        <div className="space-y-6">
           {/* Header & Filter Bar */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 flex-wrap">
             <h3 className="text-sm font-semibold text-muted-foreground flex items-center gap-2">
@@ -352,310 +431,142 @@ const Dashboard = () => {
             </div>
           </div>
 
-          {/* 4 Cards Grid */}
+          {/* 4 Channel Rows (Dine In, Take Away, Delivery, Combined) */}
           {channelLoading ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              {Array.from({ length: 4 }).map((_, i) => (
-                <Card key={i} className="shadow-sm">
-                  <CardContent className="p-5">
-                    <div className="flex items-start justify-between">
-                      <div className="space-y-2">
-                        <Skeleton className="h-3.5 w-20" />
-                        <Skeleton className="h-7 w-28" />
-                        <Skeleton className="h-3 w-16" />
-                      </div>
-                      <Skeleton className="h-10 w-10 rounded-lg shrink-0" />
-                    </div>
-                    <div className="mt-3.5 pt-3 border-t border-border/50 flex justify-between">
-                      <Skeleton className="h-3.5 w-20" />
-                      <Skeleton className="h-3.5 w-20" />
-                    </div>
-                  </CardContent>
-                </Card>
+            <div className="space-y-6">
+              {Array.from({ length: 4 }).map((_, r) => (
+                <div key={r} className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <Skeleton className="h-5 w-32" />
+                    <Skeleton className="h-5 w-20" />
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    {Array.from({ length: 4 }).map((_, c) => (
+                      <Card key={c} className="shadow-sm">
+                        <CardContent className="p-5">
+                          <div className="flex items-center justify-between">
+                            <div className="space-y-2">
+                              <Skeleton className="h-3.5 w-20" />
+                              <Skeleton className="h-7 w-28" />
+                            </div>
+                            <Skeleton className="h-10 w-10 rounded-lg shrink-0" />
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                </div>
               ))}
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              {/* Dine In */}
-              <Card className="shadow-sm">
-                <CardContent className="p-5">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <p className="text-xs text-muted-foreground font-medium">Dine In</p>
-                      <p className="text-2xl font-bold mt-1">
-                        {currency} {(channelData?.channels.dineIn.sale ?? 0).toLocaleString()}
-                      </p>
-                      <span className="text-xs text-muted-foreground">
-                        {channelData?.channels.dineIn.orders ?? 0} orders
+            <div className="space-y-6">
+              {channelRows.map((row) => {
+                const ChannelIcon = row.icon;
+                return (
+                  <div key={row.title} className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div
+                          className={cn(
+                            "h-7 w-7 rounded-md flex items-center justify-center shrink-0",
+                            row.isCombined ? "bg-primary/10 text-primary" : "bg-muted text-foreground"
+                          )}
+                        >
+                          <ChannelIcon className="h-4 w-4" />
+                        </div>
+                        <h4 className="text-sm font-semibold text-foreground">{row.title}</h4>
+                      </div>
+                      <span className="text-xs text-muted-foreground font-medium bg-muted/60 px-2.5 py-1 rounded-full border border-border/40">
+                        {row.orders} {row.orders === 1 ? "order" : "orders"}
                       </span>
                     </div>
-                    <div className="h-10 w-10 rounded-lg flex items-center justify-center bg-muted shrink-0">
-                      <UtensilsCrossed className="h-5 w-5 text-muted-foreground" />
-                    </div>
-                  </div>
-                  <div className="mt-3.5 pt-3 border-t border-border/50 flex items-center justify-between text-xs">
-                    <div>
-                      <span className="text-muted-foreground">Cost: </span>
-                      <span className="font-semibold text-foreground">
-                        {currency} {(channelData?.channels.dineIn.cost ?? 0).toLocaleString()}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">Profit: </span>
-                      <span className={cn("font-semibold", (channelData?.channels.dineIn.profit ?? 0) >= 0 ? "text-success" : "text-destructive")}>
-                        {currency} {(channelData?.channels.dineIn.profit ?? 0).toLocaleString()}
-                      </span>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
 
-              {/* Take Away */}
-              <Card className="shadow-sm">
-                <CardContent className="p-5">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <p className="text-xs text-muted-foreground font-medium">Take Away</p>
-                      <p className="text-2xl font-bold mt-1">
-                        {currency} {(channelData?.channels.takeaway.sale ?? 0).toLocaleString()}
-                      </p>
-                      <span className="text-xs text-muted-foreground">
-                        {channelData?.channels.takeaway.orders ?? 0} orders
-                      </span>
-                    </div>
-                    <div className="h-10 w-10 rounded-lg flex items-center justify-center bg-muted shrink-0">
-                      <ShoppingBag className="h-5 w-5 text-muted-foreground" />
-                    </div>
-                  </div>
-                  <div className="mt-3.5 pt-3 border-t border-border/50 flex items-center justify-between text-xs">
-                    <div>
-                      <span className="text-muted-foreground">Cost: </span>
-                      <span className="font-semibold text-foreground">
-                        {currency} {(channelData?.channels.takeaway.cost ?? 0).toLocaleString()}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">Profit: </span>
-                      <span className={cn("font-semibold", (channelData?.channels.takeaway.profit ?? 0) >= 0 ? "text-success" : "text-destructive")}>
-                        {currency} {(channelData?.channels.takeaway.profit ?? 0).toLocaleString()}
-                      </span>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                      {/* Card 1: Total Sales */}
+                      <Card className="shadow-sm">
+                        <CardContent className="p-5">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="text-xs text-muted-foreground font-medium">Total Sales</p>
+                              <p className="text-2xl font-bold mt-1">
+                                {currency} {row.sale.toLocaleString()}
+                              </p>
+                            </div>
+                            <div className="h-10 w-10 rounded-lg flex items-center justify-center bg-muted shrink-0">
+                              <DollarSign className="h-5 w-5 text-muted-foreground" />
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
 
-              {/* Delivery */}
-              <Card className="shadow-sm">
-                <CardContent className="p-5">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <p className="text-xs text-muted-foreground font-medium">Delivery</p>
-                      <p className="text-2xl font-bold mt-1">
-                        {currency} {(channelData?.channels.delivery.sale ?? 0).toLocaleString()}
-                      </p>
-                      <span className="text-xs text-muted-foreground">
-                        {channelData?.channels.delivery.orders ?? 0} orders
-                      </span>
-                    </div>
-                    <div className="h-10 w-10 rounded-lg flex items-center justify-center bg-muted shrink-0">
-                      <Bike className="h-5 w-5 text-muted-foreground" />
-                    </div>
-                  </div>
-                  <div className="mt-3.5 pt-3 border-t border-border/50 flex items-center justify-between text-xs">
-                    <div>
-                      <span className="text-muted-foreground">Cost: </span>
-                      <span className="font-semibold text-foreground">
-                        {currency} {(channelData?.channels.delivery.cost ?? 0).toLocaleString()}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">Profit: </span>
-                      <span className={cn("font-semibold", (channelData?.channels.delivery.profit ?? 0) >= 0 ? "text-success" : "text-destructive")}>
-                        {currency} {(channelData?.channels.delivery.profit ?? 0).toLocaleString()}
-                      </span>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+                      {/* Card 2: Total Cost */}
+                      <Card className="shadow-sm">
+                        <CardContent className="p-5">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="text-xs text-muted-foreground font-medium">Total Cost</p>
+                              <p className="text-2xl font-bold mt-1">
+                                {currency} {row.cost.toLocaleString()}
+                              </p>
+                            </div>
+                            <div className="h-10 w-10 rounded-lg flex items-center justify-center bg-muted shrink-0">
+                              <Wallet className="h-5 w-5 text-muted-foreground" />
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
 
-              {/* Combined */}
-              <Card className="shadow-sm border-success/20">
-                <CardContent className="p-5">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <p className="text-xs text-muted-foreground font-medium">Combined</p>
-                      <p className="text-2xl font-bold mt-1">
-                        {currency} {(channelData?.combined.sale ?? 0).toLocaleString()}
-                      </p>
-                      <span className="text-xs text-muted-foreground">
-                        {channelData?.combined.orders ?? 0} orders
-                      </span>
-                    </div>
-                    <div className="h-10 w-10 rounded-lg flex items-center justify-center bg-success/10 shrink-0">
-                      <TrendingUp className="h-5 w-5 text-success" />
+                      {/* Card 3: Total Profit */}
+                      <Card className="shadow-sm">
+                        <CardContent className="p-5">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="text-xs text-muted-foreground font-medium">Total Profit</p>
+                              <p className={cn("text-2xl font-bold mt-1", row.profit >= 0 ? "text-success" : "text-destructive")}>
+                                {currency} {row.profit.toLocaleString()}
+                              </p>
+                            </div>
+                            <div
+                              className={cn(
+                                "h-10 w-10 rounded-lg flex items-center justify-center shrink-0",
+                                row.profit >= 0 ? "bg-success/10 text-success" : "bg-destructive/10 text-destructive"
+                              )}
+                            >
+                              <Coins className="h-5 w-5" />
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+
+                      {/* Card 4: Profit Margin */}
+                      <Card className="shadow-sm">
+                        <CardContent className="p-5">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="text-xs text-muted-foreground font-medium">Profit Margin</p>
+                              <p className={cn("text-2xl font-bold mt-1", row.marginPct >= 0 ? "text-success" : "text-destructive")}>
+                                {row.marginPct}%
+                              </p>
+                            </div>
+                            <div
+                              className={cn(
+                                "h-10 w-10 rounded-lg flex items-center justify-center shrink-0",
+                                row.marginPct >= 0 ? "bg-success/10 text-success" : "bg-destructive/10 text-destructive"
+                              )}
+                            >
+                              <Percent className="h-5 w-5" />
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
                     </div>
                   </div>
-                  <div className="mt-3.5 pt-3 border-t border-border/50 flex items-center justify-between text-xs">
-                    <div>
-                      <span className="text-muted-foreground">Cost: </span>
-                      <span className="font-semibold text-foreground">
-                        {currency} {(channelData?.combined.cost ?? 0).toLocaleString()}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">Profit: </span>
-                      <span className={cn("font-semibold", (channelData?.combined.profit ?? 0) >= 0 ? "text-success" : "text-destructive")}>
-                        {currency} {(channelData?.combined.profit ?? 0).toLocaleString()}
-                      </span>
-                    </div>
-                    <div className="pl-2 border-l border-border/50">
-                      <span className={cn("font-bold px-1.5 py-0.5 rounded text-[11px]", (channelData?.combined.marginPct ?? 0) >= 0 ? "bg-success/10 text-success" : "bg-destructive/10 text-destructive")}>
-                        {(channelData?.combined.marginPct ?? 0)}% margin
-                      </span>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+                );
+              })}
             </div>
           )}
         </div>
       )}
-
-      {/* Header + Day-wise Sales */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
-        <div className="lg:col-span-2 flex items-start justify-between gap-3 flex-wrap">
-          <PageHeader
-            icon={<LayoutDashboard className="h-5 w-5" />}
-            title="Dashboard"
-            subtitle={d?.branchName ?? "Welcome back, here's your overview"}
-          />
-          <OutletFilterSelect outletId={outletId} setOutletId={setOutletId} outlets={outlets} isSuperAdmin={isSuperAdmin} />
-        </div>
-        <ClickableCard interactive={salesDrillEnabled} onClick={goToSales}>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">Day-wise Sales (This Week)</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="h-[140px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={d?.daywiseSales ?? []} margin={{ top: 4, right: 8, left: 0, bottom: 4 }}>
-                  <XAxis dataKey="label" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
-                  <YAxis tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
-                  <Tooltip formatter={(v: number) => [`${currency} ${v.toLocaleString()}`, "Sales"]} />
-                  <Bar dataKey="sales" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </CardContent>
-        </ClickableCard>
-      </div>
-
-      {/* Today's Sales by Channel */}
-      <div>
-        <h3 className="text-sm font-semibold text-muted-foreground mb-3 flex items-center gap-2">
-          <DollarSign className="h-4 w-4" />
-          Today's Sales by Channel
-        </h3>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {/* Total Offline */}
-          <ClickableCard interactive={salesDrillEnabled} onClick={goToSales} className="border-success/20">
-            <CardContent className="p-5">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs text-muted-foreground font-medium">Total Offline Sale</p>
-                  <p className="text-2xl font-bold mt-1">{currency} {(d?.today.offline.sales ?? 0).toLocaleString()}</p>
-                  <span className="text-xs text-muted-foreground">{d?.today.offline.orders ?? 0} orders</span>
-                </div>
-                <div className="h-10 w-10 rounded-lg flex items-center justify-center bg-success/10">
-                  <ShoppingBag className="h-5 w-5 text-success" />
-                </div>
-              </div>
-            </CardContent>
-          </ClickableCard>
-
-          {/* Dine In */}
-          <ClickableCard interactive={salesDrillEnabled} onClick={goToSales}>
-            <CardContent className="p-5">
-              <div>
-                <p className="text-xs text-muted-foreground font-medium">Dine In</p>
-                <p className="text-2xl font-bold mt-1">{currency} {ch("Dine In").sales.toLocaleString()}</p>
-                <span className="text-xs text-muted-foreground">{ch("Dine In").orders} orders</span>
-              </div>
-            </CardContent>
-          </ClickableCard>
-
-          {/* Pick Up / Take Away */}
-          <ClickableCard interactive={salesDrillEnabled} onClick={goToSales}>
-            <CardContent className="p-5">
-              <div>
-                <p className="text-xs text-muted-foreground font-medium">PickUp</p>
-                <p className="text-2xl font-bold mt-1">{currency} {ch("Take Away").sales.toLocaleString()}</p>
-                <span className="text-xs text-muted-foreground">{ch("Take Away").orders} orders</span>
-              </div>
-            </CardContent>
-          </ClickableCard>
-
-          {/* Delivery */}
-          <ClickableCard interactive={salesDrillEnabled} onClick={goToSales}>
-            <CardContent className="p-5">
-              <div>
-                <p className="text-xs text-muted-foreground font-medium">Delivery</p>
-                <p className="text-2xl font-bold mt-1">{currency} {ch("Delivery").sales.toLocaleString()}</p>
-                <span className="text-xs text-muted-foreground">{ch("Delivery").orders} orders</span>
-              </div>
-            </CardContent>
-          </ClickableCard>
-
-          {/* Total Online */}
-          <ClickableCard interactive={salesDrillEnabled} onClick={goToSales} className="border-info/20">
-            <CardContent className="p-5">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs text-muted-foreground font-medium">Total Online Sale</p>
-                  <p className="text-2xl font-bold mt-1">{currency} {(d?.today.online.sales ?? 0).toLocaleString()}</p>
-                  <span className="text-xs text-muted-foreground">{d?.today.online.orders ?? 0} orders</span>
-                </div>
-                <div className="h-10 w-10 rounded-lg flex items-center justify-center bg-info/10">
-                  <TrendingUp className="h-5 w-5 text-info" />
-                </div>
-              </div>
-            </CardContent>
-          </ClickableCard>
-
-          {/* Foodpanda */}
-          <ClickableCard interactive={salesDrillEnabled} onClick={goToSales}>
-            <CardContent className="p-5">
-              <div>
-                <p className="text-xs text-muted-foreground font-medium">Foodpanda</p>
-                <p className="text-2xl font-bold mt-1">{currency} {ch("Foodpanda").sales.toLocaleString()}</p>
-                <span className="text-xs text-muted-foreground">{ch("Foodpanda").orders} orders</span>
-              </div>
-            </CardContent>
-          </ClickableCard>
-
-          {/* Self Order */}
-          <ClickableCard interactive={salesDrillEnabled} onClick={goToSales}>
-            <CardContent className="p-5">
-              <div>
-                <p className="text-xs text-muted-foreground font-medium">Self Order</p>
-                <p className="text-2xl font-bold mt-1">{currency} {ch("Self Order").sales.toLocaleString()}</p>
-                <span className="text-xs text-muted-foreground">{ch("Self Order").orders} orders</span>
-              </div>
-            </CardContent>
-          </ClickableCard>
-
-          {/* Online */}
-          <ClickableCard interactive={salesDrillEnabled} onClick={goToSales}>
-            <CardContent className="p-5">
-              <div>
-                <p className="text-xs text-muted-foreground font-medium">Online</p>
-                <p className="text-2xl font-bold mt-1">{currency} {ch("Online").sales.toLocaleString()}</p>
-                <span className="text-xs text-muted-foreground">{ch("Online").orders} orders</span>
-              </div>
-            </CardContent>
-          </ClickableCard>
-        </div>
-      </div>
 
       {/* Dough / Short-Life Batches */}
       <div>
