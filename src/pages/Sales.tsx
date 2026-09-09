@@ -4,7 +4,6 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
 import {
   Search,
@@ -12,7 +11,6 @@ import {
   Download,
   FileX,
   Loader2,
-  RefreshCw,
   Clock,
   X,
   ChevronDown,
@@ -29,15 +27,12 @@ import { DatePicker } from "@/components/ui/date-picker";
 import { TimePicker, formatTimeLabel } from "@/components/ui/time-picker";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { TablePagination } from "@/components/TablePagination";
-import { ORDER_TYPE_COLORS } from "@/lib/constants";
 import { orderService, type OrderRecord } from "@/services/order.service";
 import { useData } from "@/contexts/DataContext";
 import { useOrderEvents } from "@/hooks/use-order-events";
 import { useVisiblePolling } from "@/hooks/use-visible-polling";
 import { OrderPlacedPrintModal, type PlacedOrderSlipData } from "@/components/pos/OrderPlacedPrintModal";
 import { cn } from "@/lib/utils";
-
-const typeColor = ORDER_TYPE_COLORS;
 
 const PAGE_SIZE = 20;
 
@@ -194,26 +189,52 @@ const Sales = () => {
   const clearDates = () => { setDateFrom(""); setDateTo(""); setActivePreset(null); setPage(1); };
   const clearTime = () => { setTimeFrom(""); setTimeTo(""); setPage(1); };
 
-  const handleExport = () => {
-    const headers = ["Order #", "Date", "Time", "Customer", "Type", "Items", "Total", "Status", "Payment Method"];
-    const rows = orders.map((o) => [
-      o.orderNumber,
-      o.date ? new Date(o.date).toLocaleDateString() : "",
-      o.time || "",
-      o.customerName || "Walk-in",
-      // Export keeps the raw underlying type (e.g. "Self Order") for accounting accuracy,
-      // deliberately unlike the on-screen badge below, which shows "Dine In".
-      o.type,
-      String(o.items.length),
-      String(o.total),
-      o.status,
-      o.paymentMethod || "",
-    ]);
-    const csvContent = [headers.join(","), ...rows.map((r) => r.map((v) => `"${v}"`).join(","))].join("\n");
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a"); link.href = url; link.download = "ovenisto-sales-export.csv"; link.click();
-    URL.revokeObjectURL(url);
+  const [exporting, setExporting] = useState(false);
+
+  const handleExport = async () => {
+    try {
+      setExporting(true);
+      // Export all orders matching the active filters (up to 10,000)
+      const res = await orderService.getOrders({
+        search: search || undefined,
+        status: statusParam,
+        type: typeFilter !== "All" ? typeFilter : undefined,
+        from: dateFrom || undefined,
+        to: dateTo || undefined,
+        fromTime: timeFrom || undefined,
+        toTime: timeTo || undefined,
+        excludeUnpaid: true,
+        page: 1,
+        limit: 10000,
+      });
+      const exportOrders = res.data?.length ? res.data : orders;
+
+      const headers = ["Order #", "Date", "Time", "Customer", "Type", "Items", "Total", "Cost", "Profit", "Payment Method"];
+      const rows = exportOrders.map((o) => [
+        o.orderNumber,
+        o.date ? new Date(o.date).toLocaleDateString() : "",
+        o.time || "",
+        o.customerName || "Walk-in",
+        displayOrderType(o.type),
+        String(o.items.length),
+        String(o.total),
+        String(o.cost ?? 0),
+        String(o.profit ?? 0),
+        formatPaymentMethod(o.paymentMethod).label,
+      ]);
+      const csvContent = [headers.join(","), ...rows.map((r) => r.map((v) => `"${v}"`).join(","))].join("\n");
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `sales-orders-export-${toYmd(new Date())}.csv`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("Export failed:", err);
+    } finally {
+      setExporting(false);
+    }
   };
 
   const formatDate = (d: string | null) => d ? new Date(d).toLocaleDateString() : "—";
@@ -264,10 +285,10 @@ const Sales = () => {
         title="Sales & Orders"
         subtitle="View all orders and history"
         actions={
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={refreshOrders}><RefreshCw className="h-4 w-4 mr-2" />Refresh</Button>
-            <Button variant="outline" onClick={handleExport}><Download className="h-4 w-4 mr-2" />Export</Button>
-          </div>
+          <Button variant="outline" size="sm" onClick={handleExport} disabled={exporting}>
+            {exporting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
+            Export
+          </Button>
         }
       />
 
@@ -562,15 +583,21 @@ const Sales = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {orders.map((o) => {
+                  {orders.map((o, index) => {
                     const payment = formatPaymentMethod(o.paymentMethod);
                     const displayType = displayOrderType(o.type);
                     return (
-                      <TableRow key={o.id} className="hover:bg-muted/30 transition-colors">
+                      <TableRow
+                        key={o.id}
+                        className={cn(
+                          "transition-colors hover:bg-muted/40",
+                          index % 2 === 1 ? "bg-muted/20" : "bg-transparent"
+                        )}
+                      >
                         <TableCell className="font-medium">{o.orderNumber}</TableCell>
                         <TableCell className="text-xs">{formatDate(o.date)} {o.time}</TableCell>
                         <TableCell>{o.customerName || "Walk-in"}</TableCell>
-                        <TableCell><Badge variant="secondary" className={(typeColor as any)[displayType] ?? ""}>{displayType}</Badge></TableCell>
+                        <TableCell className="text-sm font-medium">{displayType}</TableCell>
                         <TableCell>{o.items.length} items</TableCell>
                         <TableCell className="font-medium">{currency} {Number(o.total).toLocaleString()}</TableCell>
                         <TableCell>{currency} {Number(o.cost ?? 0).toLocaleString()}</TableCell>
