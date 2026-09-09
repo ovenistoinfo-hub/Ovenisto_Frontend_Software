@@ -99,6 +99,10 @@ const Sales = () => {
       to: dateTo || undefined,
       fromTime: timeFilterOn ? timeFrom : undefined,
       toTime: timeFilterOn ? timeTo : undefined,
+      // This is order HISTORY -- a completed-but-unpaid order isn't a settled sale yet, so it
+      // never belongs here (unlike Kitchen Panel/Order Monitor/Waiter Panel, which still need
+      // to see it to actually collect payment).
+      excludeUnpaid: true,
       page,
       limit: PAGE_SIZE,
     }),
@@ -119,6 +123,7 @@ const Sales = () => {
       to: dateTo || undefined,
       fromTime: timeFilterOn ? timeFrom : undefined,
       toTime: timeFilterOn ? timeTo : undefined,
+      excludeUnpaid: true,
     }),
   });
 

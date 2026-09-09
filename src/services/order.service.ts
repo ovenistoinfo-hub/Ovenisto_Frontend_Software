@@ -170,6 +170,8 @@ export const orderService = {
     /** Optional time-of-day narrowing (24h "HH:mm"), applied within the date range. */
     fromTime?: string;
     toTime?: string;
+    /** Hide orders with no real payment recorded (null/empty/"Pending") -- Sales & Orders only. */
+    excludeUnpaid?: boolean;
     page?: number;
     limit?: number;
     outletId?: string;
@@ -183,6 +185,7 @@ export const orderService = {
     if (params?.to) q.set('to', params.to);
     if (params?.fromTime) q.set('fromTime', params.fromTime);
     if (params?.toTime) q.set('toTime', params.toTime);
+    if (params?.excludeUnpaid) q.set('excludeUnpaid', 'true');
     if (params?.page) q.set('page', String(params.page));
     if (params?.limit) q.set('limit', String(params.limit));
     // Super Admin branch filter (?outletId=) — read by the backend's resolveOutletScope
@@ -202,6 +205,7 @@ export const orderService = {
     to?: string;
     fromTime?: string;
     toTime?: string;
+    excludeUnpaid?: boolean;
     outletId?: string;
   }): Promise<{ sale: number; cost: number; profit: number; orders: number; marginPct: number }> {
     const q = new URLSearchParams();
@@ -212,6 +216,7 @@ export const orderService = {
     if (params?.to) q.set('to', params.to);
     if (params?.fromTime) q.set('fromTime', params.fromTime);
     if (params?.toTime) q.set('toTime', params.toTime);
+    if (params?.excludeUnpaid) q.set('excludeUnpaid', 'true');
     if (params?.outletId && params.outletId !== 'all') q.set('outletId', params.outletId);
     const res = await api.get<{ success: boolean; data: { sale: number; cost: number; profit: number; orders: number; marginPct: number } }>(`/orders/summary?${q.toString()}`);
     return res.data;
