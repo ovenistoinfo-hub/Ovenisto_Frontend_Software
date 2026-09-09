@@ -1894,7 +1894,14 @@ const POS = () => {
       setExpandedItemId(item.id);
       setPendingItem(item);
       setSelectedModifierQtys({});
-      setSelectedVariant(null);
+      // Default to the largest (highest-priced) size, not no selection -- the header price
+      // shown here is otherwise the item's own base price field, which a receipt can't tell
+      // apart from a real variant. Staff can still tap a different size chip to override.
+      const variants = (item as any).variants as { name: string; price: number }[] | undefined;
+      const largest = variants && variants.length > 0
+        ? [...variants].sort((a, b) => Number(b.price) - Number(a.price))[0]
+        : null;
+      setSelectedVariant(largest?.name ?? null);
     }
   };
 
@@ -1965,11 +1972,24 @@ const POS = () => {
 
   const addDirectToCart = () => {
     if (!pendingItem) return;
-    const itemPrice = resolvePrice(pendingItem, orderType);
+    // "Without Extras" only means "skip modifiers" -- it must still respect whichever size is
+    // selected (now defaulted to the largest, see addToCart's open branch), exactly like
+    // confirmAddToCart does. This previously always used the item's raw base price and never
+    // set variantId at all, regardless of the size chip shown as selected -- so an order placed
+    // this way had no recorded variant, and its receipt/cost couldn't tell which size was sold.
+    const variants = (pendingItem as any).variants || [];
+    const selectedVariantObj = selectedVariant ? variants.find((v: any) => v.name === selectedVariant) : null;
+    const itemPrice = selectedVariantObj ? resolvePrice(selectedVariantObj, orderType) : resolvePrice(pendingItem, orderType);
+    const variantLabel = selectedVariant ? ` (${selectedVariant})` : "";
     setCart((prev) => {
-      const existing = prev.find((c) => c.name === pendingItem.name && (!c.modifiers || c.modifiers.length === 0));
+      const fullName = `${pendingItem.name}${variantLabel}`;
+      const existing = prev.find((c) => c.name === fullName && (!c.modifiers || c.modifiers.length === 0));
       if (existing) return prev.map((c) => c === existing ? { ...c, qty: c.qty + 1 } : c);
-      return [...prev, { id: `${pendingItem.id}-${Date.now()}`, name: pendingItem.name, price: itemPrice, qty: 1, discount: 0, modifiers: [], cookingTime: (pendingItem as any).cookingTime || 0, menuItemId: pendingItem.id }];
+      return [...prev, {
+        id: `${pendingItem.id}-${Date.now()}`, name: fullName, price: itemPrice, qty: 1, discount: 0,
+        modifiers: [], cookingTime: (pendingItem as any).cookingTime || 0,
+        menuItemId: pendingItem.id, variantId: selectedVariantObj?.id || null,
+      }];
     });
     setShowModifiers(false);
     setPendingItem(null);
