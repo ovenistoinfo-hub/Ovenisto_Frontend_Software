@@ -6,10 +6,28 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
-import { Search, Receipt, Download, FileX, Loader2, RefreshCw, Clock, X } from "lucide-react";
+import {
+  Search,
+  Receipt,
+  Download,
+  FileX,
+  Loader2,
+  RefreshCw,
+  Clock,
+  X,
+  ChevronDown,
+  DollarSign,
+  Wallet,
+  Coins,
+  Percent,
+  UtensilsCrossed,
+  ShoppingBag,
+  Bike,
+} from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { DatePicker } from "@/components/ui/date-picker";
-import { TimePicker } from "@/components/ui/time-picker";
+import { TimePicker, formatTimeLabel } from "@/components/ui/time-picker";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { TablePagination } from "@/components/TablePagination";
 import { ORDER_TYPE_COLORS } from "@/lib/constants";
 import { orderService, type OrderRecord } from "@/services/order.service";
@@ -17,10 +35,18 @@ import { useData } from "@/contexts/DataContext";
 import { useOrderEvents } from "@/hooks/use-order-events";
 import { useVisiblePolling } from "@/hooks/use-visible-polling";
 import { OrderPlacedPrintModal, type PlacedOrderSlipData } from "@/components/pos/OrderPlacedPrintModal";
+import { cn } from "@/lib/utils";
 
 const typeColor = ORDER_TYPE_COLORS;
 
 const PAGE_SIZE = 20;
+
+const CHANNELS = [
+  { label: "All", value: "All", icon: null },
+  { label: "Dine In", value: "Dine In", icon: UtensilsCrossed },
+  { label: "Take Away", value: "Take Away", icon: ShoppingBag },
+  { label: "Delivery", value: "Delivery", icon: Bike },
+] as const;
 
 /** "YYYY-MM-DD" from local Y/M/D parts — never `.toISOString()`, which reads a Date as UTC and
  *  lands a day early in Pakistan (same reasoning as DatePicker's own toYmd). */
@@ -65,40 +91,49 @@ const Sales = () => {
   // (the user is free to change filters here without it fighting back).
   const [searchParams] = useSearchParams();
   const [search, setSearch] = useState("");
-  const [typeFilter, setTypeFilter] = useState(() => searchParams.get("type") || "All");
-  const [statusFilter, setStatusFilter] = useState(() => searchParams.get("status") || "All");
+  const initialType = searchParams.get("type");
+  const [typeFilter, setTypeFilter] = useState(() => {
+    if (!initialType || initialType === "Dine In,Take Away,Delivery") return "All";
+    return initialType;
+  });
   const [page, setPage] = useState(1);
 
   // Date range — presets set dateFrom/dateTo directly; picking either DatePicker by hand is
   // implicitly "Custom" (no separate Custom button needed, matches Reports.tsx's own filter bar).
-  const [activePreset, setActivePreset] = useState<string | null>(null);
-  const [dateFrom, setDateFrom] = useState(() => searchParams.get("from") || "");
-  const [dateTo, setDateTo] = useState(() => searchParams.get("to") || "");
+  const initialFrom = searchParams.get("from") || "";
+  const initialTo = searchParams.get("to") || "";
+  const [activePreset, setActivePreset] = useState<string | null>(() => {
+    if (!initialFrom && !initialTo) return null;
+    const today = toYmd(new Date());
+    if (initialFrom === today && initialTo === today) return "Today";
+    return null;
+  });
+  const [dateFrom, setDateFrom] = useState(initialFrom);
+  const [dateTo, setDateTo] = useState(initialTo);
 
-  // Time-of-day is a separate, optional narrowing — off by default (whole day).
-  const [timeFilterOn, setTimeFilterOn] = useState(() => Boolean(searchParams.get("fromTime") || searchParams.get("toTime")));
-  const [timeFrom, setTimeFrom] = useState(() => searchParams.get("fromTime") || "00:00");
-  const [timeTo, setTimeTo] = useState(() => searchParams.get("toTime") || "23:59");
+  // Time-of-day: optional narrowing via Popover, defaults to all-day when empty
+  const [timeFrom, setTimeFrom] = useState(() => searchParams.get("fromTime") || "");
+  const [timeTo, setTimeTo] = useState(() => searchParams.get("toTime") || "");
 
   const [receiptSlip, setReceiptSlip] = useState<PlacedOrderSlipData | null>(null);
   const [showReceipt, setShowReceipt] = useState(false);
 
-  // "All" on this page means "all finished orders" (completed + cancelled) — this is order
-  // history, not the live kitchen/board view, so it never asks the backend for
-  // pending/preparing/ready orders in the first place (fixes a stale client-side post-filter
-  // that also corrupted the pagination total — see the removed `orders.filter(...)` below).
-  const statusParam = statusFilter === "All" ? "completed,cancelled" : statusFilter;
+  // Sales & Orders is settled sales history, so it exclusively shows completed orders.
+  // Status filter buttons are removed per design; if a URL status is explicitly given, respect it.
+  const statusParam = searchParams.get("status") && searchParams.get("status") !== "All"
+    ? searchParams.get("status")!
+    : "completed";
 
   const { data: resp, isLoading: loading } = useQuery({
-    queryKey: ["orders", { search, typeFilter, statusParam, dateFrom, dateTo, timeFilterOn, timeFrom, timeTo, page }],
+    queryKey: ["orders", { search, typeFilter, statusParam, dateFrom, dateTo, timeFrom, timeTo, page }],
     queryFn: () => orderService.getOrders({
       search: search || undefined,
       status: statusParam,
       type: typeFilter !== "All" ? typeFilter : undefined,
       from: dateFrom || undefined,
       to: dateTo || undefined,
-      fromTime: timeFilterOn ? timeFrom : undefined,
-      toTime: timeFilterOn ? timeTo : undefined,
+      fromTime: timeFrom || undefined,
+      toTime: timeTo || undefined,
       // This is order HISTORY -- a completed-but-unpaid order isn't a settled sale yet, so it
       // never belongs here (unlike Kitchen Panel/Order Monitor/Waiter Panel, which still need
       // to see it to actually collect payment).
@@ -114,15 +149,15 @@ const Sales = () => {
   // this page) -- the 4 summary cards below. Independent of `page` on purpose: changing pages
   // must not refetch it, and it must not force the table to re-fetch either.
   const { data: summary } = useQuery({
-    queryKey: ["orders-summary", { search, typeFilter, statusParam, dateFrom, dateTo, timeFilterOn, timeFrom, timeTo }],
+    queryKey: ["orders-summary", { search, typeFilter, statusParam, dateFrom, dateTo, timeFrom, timeTo }],
     queryFn: () => orderService.getOrdersSummary({
       search: search || undefined,
       status: statusParam,
       type: typeFilter !== "All" ? typeFilter : undefined,
       from: dateFrom || undefined,
       to: dateTo || undefined,
-      fromTime: timeFilterOn ? timeFrom : undefined,
-      toTime: timeFilterOn ? timeTo : undefined,
+      fromTime: timeFrom || undefined,
+      toTime: timeTo || undefined,
       excludeUnpaid: true,
     }),
   });
@@ -140,7 +175,6 @@ const Sales = () => {
   // Reset to page 1 when filters change
   const handleSearch = (v: string) => { setSearch(v); setPage(1); };
   const handleType = (v: string) => { setTypeFilter(v); setPage(1); };
-  const handleStatus = (v: string) => { setStatusFilter(v); setPage(1); };
 
   const applyPreset = (preset: "Today" | "This Week" | "This Month") => {
     const now = new Date();
@@ -158,6 +192,7 @@ const Sales = () => {
   const handleDateFrom = (v: string) => { setDateFrom(v); setActivePreset(null); setPage(1); };
   const handleDateTo = (v: string) => { setDateTo(v); setActivePreset(null); setPage(1); };
   const clearDates = () => { setDateFrom(""); setDateTo(""); setActivePreset(null); setPage(1); };
+  const clearTime = () => { setTimeFrom(""); setTimeTo(""); setPage(1); };
 
   const handleExport = () => {
     const headers = ["Order #", "Date", "Time", "Customer", "Type", "Items", "Total", "Status", "Payment Method"];
@@ -238,70 +273,270 @@ const Sales = () => {
 
       {/* Totals for whichever filters are currently active above -- not just the visible page */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <Card className="shadow-sm"><CardContent className="p-4"><p className="text-xs text-muted-foreground font-medium">Total Sales</p><p className="text-xl font-bold mt-1">{currency} {(summary?.sale ?? 0).toLocaleString()}</p></CardContent></Card>
-        <Card className="shadow-sm"><CardContent className="p-4"><p className="text-xs text-muted-foreground font-medium">Total Cost</p><p className="text-xl font-bold mt-1">{currency} {(summary?.cost ?? 0).toLocaleString()}</p></CardContent></Card>
-        <Card className="shadow-sm"><CardContent className="p-4"><p className="text-xs text-muted-foreground font-medium">Total Profit</p><p className={`text-xl font-bold mt-1 ${(summary?.profit ?? 0) >= 0 ? "text-success" : "text-destructive"}`}>{currency} {(summary?.profit ?? 0).toLocaleString()}</p></CardContent></Card>
-        <Card className="shadow-sm"><CardContent className="p-4"><p className="text-xs text-muted-foreground font-medium">Total Margin</p><p className={`text-xl font-bold mt-1 ${(summary?.marginPct ?? 0) >= 0 ? "text-success" : "text-destructive"}`}>{summary?.marginPct ?? 0}%</p></CardContent></Card>
+        <Card className="shadow-sm border-border/80">
+          <CardContent className="p-4 flex items-center justify-between">
+            <div>
+              <p className="text-xs text-muted-foreground font-medium">Total Sales</p>
+              <p className="text-xl font-bold mt-1 tracking-tight">{currency} {(summary?.sale ?? 0).toLocaleString()}</p>
+            </div>
+            <div className="h-9 w-9 rounded-lg bg-emerald-500/10 text-emerald-500 flex items-center justify-center border border-emerald-500/20 shrink-0">
+              <DollarSign className="h-4 w-4" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="shadow-sm border-border/80">
+          <CardContent className="p-4 flex items-center justify-between">
+            <div>
+              <p className="text-xs text-muted-foreground font-medium">Total Cost</p>
+              <p className="text-xl font-bold mt-1 tracking-tight">{currency} {(summary?.cost ?? 0).toLocaleString()}</p>
+            </div>
+            <div className="h-9 w-9 rounded-lg bg-amber-500/10 text-amber-500 flex items-center justify-center border border-amber-500/20 shrink-0">
+              <Wallet className="h-4 w-4" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="shadow-sm border-border/80">
+          <CardContent className="p-4 flex items-center justify-between">
+            <div>
+              <p className="text-xs text-muted-foreground font-medium">Total Profit</p>
+              <p className={`text-xl font-bold mt-1 tracking-tight ${(summary?.profit ?? 0) >= 0 ? "text-emerald-500" : "text-destructive"}`}>
+                {currency} {(summary?.profit ?? 0).toLocaleString()}
+              </p>
+            </div>
+            <div className="h-9 w-9 rounded-lg bg-emerald-500/10 text-emerald-500 flex items-center justify-center border border-emerald-500/20 shrink-0">
+              <Coins className="h-4 w-4" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="shadow-sm border-border/80">
+          <CardContent className="p-4 flex items-center justify-between">
+            <div>
+              <p className="text-xs text-muted-foreground font-medium">Total Margin</p>
+              <p className={`text-xl font-bold mt-1 tracking-tight ${(summary?.marginPct ?? 0) >= 0 ? "text-emerald-500" : "text-destructive"}`}>
+                {summary?.marginPct ?? 0}%
+              </p>
+            </div>
+            <div className="h-9 w-9 rounded-lg bg-blue-500/10 text-blue-500 flex items-center justify-center border border-blue-500/20 shrink-0">
+              <Percent className="h-4 w-4" />
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
-      <Card className="shadow-sm">
-        <CardHeader className="pb-3">
-          <div className="flex flex-col gap-3">
-            <div className="relative w-full sm:max-w-sm">
+      <Card className="shadow-sm border-border/80">
+        <CardHeader className="pb-3 space-y-3">
+          {/* Row 1: Search + Channel Filter Segmented Control */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+            <div className="relative w-full sm:w-72">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input value={search} onChange={(e) => handleSearch(e.target.value)} placeholder="Search orders..." className="pl-9" />
-            </div>
-            <div className="flex gap-1.5 flex-wrap">
-              {["All", "Dine In", "Take Away", "Delivery", "Online"].map((t) => (
-                <Button key={t} variant={typeFilter === t ? "default" : "outline"} size="sm"
-                  onClick={() => handleType(t)}
-                  className={typeFilter === t ? "gradient-primary text-primary-foreground" : ""}>{t}</Button>
-              ))}
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="flex gap-1.5 flex-wrap">
-                {["All", "completed", "cancelled"].map((s) => (
-                  <Button key={s} variant={statusFilter === s ? "default" : "outline"} size="sm"
-                    onClick={() => handleStatus(s)}
-                    className={`capitalize ${statusFilter === s ? "gradient-primary text-primary-foreground" : ""}`}>{s}</Button>
-                ))}
-              </div>
-            </div>
-            {/* Date range: preset chips + always-visible From/To pickers (picking either counts as Custom) */}
-            <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-border/50">
-              {(["Today", "This Week", "This Month"] as const).map((p) => (
-                <Button key={p} variant={activePreset === p ? "default" : "outline"} size="sm"
-                  onClick={() => applyPreset(p)}
-                  className={activePreset === p ? "gradient-primary text-primary-foreground" : ""}>{p}</Button>
-              ))}
-              <span className="text-xs text-muted-foreground mx-1">or custom:</span>
-              <DatePicker value={dateFrom} onChange={handleDateFrom} placeholder="From date" className="h-8 w-36 text-xs" />
-              <span className="text-xs text-muted-foreground">to</span>
-              <DatePicker value={dateTo} onChange={handleDateTo} placeholder="To date" min={dateFrom || undefined} className="h-8 w-36 text-xs" />
-              {(dateFrom || dateTo) && (
-                <Button variant="ghost" size="sm" className="h-8 px-2 text-muted-foreground" onClick={clearDates}>Clear</Button>
+              <Input
+                value={search}
+                onChange={(e) => handleSearch(e.target.value)}
+                placeholder="Search orders..."
+                className="pl-9 h-9 text-xs bg-background"
+              />
+              {search && (
+                <button
+                  type="button"
+                  onClick={() => handleSearch("")}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
               )}
             </div>
-            {/* Time-of-day: optional, independent of the date range/preset above */}
-            <div className="flex flex-wrap items-center gap-1.5">
-              <Button
-                variant={timeFilterOn ? "default" : "outline"}
-                size="sm"
-                onClick={() => { setTimeFilterOn((v) => !v); setPage(1); }}
-                className={timeFilterOn ? "gradient-primary text-primary-foreground" : ""}
-              >
-                <Clock className="h-3.5 w-3.5 mr-1.5" />
-                {timeFilterOn ? "Time filter on" : "Filter by time"}
-              </Button>
-              {timeFilterOn && (
-                <>
-                  <TimePicker value={timeFrom} onChange={(v) => { setTimeFrom(v); setPage(1); }} className="h-8 w-32 text-xs" />
-                  <span className="text-xs text-muted-foreground">to</span>
-                  <TimePicker value={timeTo} onChange={(v) => { setTimeTo(v); setPage(1); }} className="h-8 w-32 text-xs" />
-                  <Button variant="ghost" size="sm" className="h-8 px-2 text-muted-foreground" onClick={() => setTimeFilterOn(false)}>
-                    <X className="h-3.5 w-3.5" />
+
+            <div className="inline-flex items-center p-0.5 rounded-lg bg-muted/60 border border-border/60 shadow-sm self-start sm:self-auto flex-wrap">
+              {CHANNELS.map(({ label, value, icon: Icon }) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => handleType(value)}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-all",
+                    typeFilter === value
+                      ? "bg-background text-foreground shadow-sm font-semibold"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  {Icon && <Icon className="h-3.5 w-3.5" />}
+                  <span>{label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Row 2: Date Presets + Date Range Capsule + Time Filter Popover */}
+          <div className="flex items-center gap-2.5 flex-wrap pt-2.5 border-t border-border/40">
+            {/* Presets Segmented Control */}
+            <div className="inline-flex items-center p-0.5 rounded-lg bg-muted/60 border border-border/60 shadow-sm">
+              {(["Today", "This Week", "This Month"] as const).map((p) => (
+                <button
+                  key={p}
+                  type="button"
+                  onClick={() => applyPreset(p)}
+                  className={cn(
+                    "px-3 py-1.5 text-xs font-medium rounded-md transition-all",
+                    activePreset === p
+                      ? "bg-background text-foreground shadow-sm font-semibold"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  {p}
+                </button>
+              ))}
+            </div>
+
+            {/* Date Pickers (From -> To) */}
+            <div className="inline-flex items-center gap-1.5">
+              <div className="w-36">
+                <DatePicker
+                  value={dateFrom}
+                  onChange={handleDateFrom}
+                  placeholder="Start date"
+                  className="h-8 text-xs bg-background"
+                />
+              </div>
+              <span className="text-xs text-muted-foreground/60 font-medium px-0.5">to</span>
+              <div className="w-36">
+                <DatePicker
+                  value={dateTo}
+                  onChange={handleDateTo}
+                  min={dateFrom || undefined}
+                  placeholder="End date"
+                  className="h-8 text-xs bg-background"
+                />
+              </div>
+              {(dateFrom || dateTo) && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={clearDates}
+                  className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-md"
+                  title="Clear date filter"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </Button>
+              )}
+            </div>
+
+            {/* Time Filter Popover */}
+            <div className="inline-flex items-center gap-1">
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className={cn(
+                      "h-8 px-2.5 text-xs font-medium gap-1.5 border shadow-sm transition-all",
+                      timeFrom || timeTo
+                        ? "border-primary/50 bg-primary/10 text-primary hover:bg-primary/15"
+                        : "border-border/70 bg-background text-muted-foreground hover:text-foreground hover:bg-muted"
+                    )}
+                  >
+                    <Clock className={cn("h-3.5 w-3.5 shrink-0", (timeFrom || timeTo) && "text-primary")} />
+                    <span>
+                      {timeFrom || timeTo
+                        ? `${timeFrom ? formatTimeLabel(timeFrom) : "12:00 AM"} – ${timeTo ? formatTimeLabel(timeTo) : "11:59 PM"}`
+                        : "All Day (Time)"}
+                    </span>
+                    <ChevronDown className="h-3 w-3 opacity-60 ml-0.5" />
                   </Button>
-                </>
+                </PopoverTrigger>
+                <PopoverContent className="w-80 p-3 space-y-3" align="start">
+                  <div className="flex items-center justify-between border-b border-border/40 pb-2">
+                    <div className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
+                      <Clock className="h-3.5 w-3.5 text-primary" />
+                      <span>Filter By Operating Hours</span>
+                    </div>
+                    {(timeFrom || timeTo) && (
+                      <button
+                        type="button"
+                        onClick={clearTime}
+                        className="text-[11px] text-destructive hover:underline font-medium"
+                      >
+                        Reset
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Quick Shift Presets */}
+                  <div className="space-y-1.5">
+                    <p className="text-[11px] font-medium text-muted-foreground">Quick Shift Presets</p>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      {[
+                        { label: "Lunch Shift", from: "11:00", to: "17:00" },
+                        { label: "Dinner Peak", from: "17:00", to: "23:59" },
+                        { label: "Late Night", from: "23:00", to: "04:00" },
+                        { label: "Full Operating Day", from: "11:00", to: "23:59" },
+                      ].map((shift) => (
+                        <Button
+                          key={shift.label}
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setTimeFrom(shift.from);
+                            setTimeTo(shift.to);
+                            setPage(1);
+                          }}
+                          className={cn(
+                            "h-7 text-[11px] justify-start px-2 font-normal border-border/60",
+                            timeFrom === shift.from && timeTo === shift.to
+                              ? "border-primary bg-primary/10 text-primary font-medium"
+                              : "hover:bg-muted"
+                          )}
+                        >
+                          {shift.label}
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Custom Time Selection using TimePicker */}
+                  <div className="space-y-2 pt-2 border-t border-border/40">
+                    <p className="text-[11px] font-medium text-muted-foreground">Custom Time Range</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-[10px] text-muted-foreground font-medium block mb-1">Start Time</label>
+                        <TimePicker
+                          value={timeFrom || "11:00"}
+                          onChange={(v) => {
+                            setTimeFrom(v);
+                            setPage(1);
+                          }}
+                          className="h-8 text-xs bg-background"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-muted-foreground font-medium block mb-1">End Time</label>
+                        <TimePicker
+                          value={timeTo || "23:59"}
+                          onChange={(v) => {
+                            setTimeTo(v);
+                            setPage(1);
+                          }}
+                          className="h-8 text-xs bg-background"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </PopoverContent>
+              </Popover>
+
+              {(timeFrom || timeTo) && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={clearTime}
+                  className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-md"
+                  title="Clear time filter"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </Button>
               )}
             </div>
           </div>

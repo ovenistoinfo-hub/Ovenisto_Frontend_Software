@@ -498,6 +498,38 @@ plus a body explaining _why_ the change was made when that is not obvious.
   where `status: 'pending'`, outlet-scoped), NOT a second frontend fetch. Same rule holds for
   any other sidebar badge: add it to the backend aggregate, don't reach for the `AppSidebar`
   `useState`.
+- **`Sales.tsx` (Sales & Orders) rebuild (2026-09-09)** — filter bar: Today/This Week/This Month
+  presets + custom `DatePicker` `from`/`to` + an optional `TimePicker` time-of-day range (all
+  wired to `GET /api/orders`'s `from`/`to`/`fromTime`/`toTime`). The Status column is gone,
+  replaced by Cost/Profit columns (from `getOrders`' new per-order `cost`/`profit` fields) plus 4
+  summary cards (Total Sales/Cost/Profit/Margin) backed by `orderService.getOrdersSummary`, which
+  totals the **whole** filtered set, not the visible page — its query key omits `page` on
+  purpose. Self-Order rows display as "Dine In" here (a local relabel; the row's real type is
+  untouched). The page always sends `excludeUnpaid: true` (a completed-but-unpaid order isn't a
+  settled sale). It reads `type`/`status`/`from`/`to`/`fromTime`/`toTime` from the URL **once on
+  mount** via `useSearchParams` to seed its filter state (no continuous URL sync) — that's how
+  the Dashboard's Sales By Channel "View Details" drill-down lands here pre-filtered.
+- **`OrderPlacedPrintModal` gained `directMode="bill"`** (`src/components/pos/`) — skips the
+  "Order Placed" 3-option grid (Print KOT / Print Customer Bill / Print KOT+Bill) and opens
+  straight into the bill preview, Back → Close. Only `Sales.tsx`'s "View Receipt" passes it;
+  `POS.tsx`/`WaiterPanel.tsx`/`OrderStatusBoard.tsx` don't, so their flow is unchanged. This is
+  the one receipt component all four pages now share — do not fork a fifth.
+- **`POS.tsx`'s "Add Without Extras" (`addDirectToCart`) used to ignore the selected size
+  entirely** — a separate code path from `confirmAddToCart` that always priced off the item's
+  base `price` and never set `variantId`, regardless of which chip looked selected. Fixed to
+  mirror `confirmAddToCart`'s variant resolution. Opening a variant item's card now also
+  **defaults `selectedVariant` to the highest-priced size** instead of no selection (the price
+  shown before selection is the item's own base `price`, which can coincide with a variant's
+  price without *being* that variant).
+- **Dashboard's Sales By Channel section (`Dashboard.tsx`)** got two Recharts bar charts at the
+  end (Sale vs Cost by Channel; Profit by Channel) + a "View Details" button per channel card
+  and clickable chart bars, all navigating to `/sales?status=completed&type=…&from=…&to=…` with
+  the section's active date/time window ("Total (All Channels)" passes
+  `type=Dine In,Take Away,Delivery` explicitly, *not* Sales & Orders' own "All"). Chart colors
+  were picked by running the `dataviz` skill's `validate_palette.js` against this theme's actual
+  hex values — Sale/Cost uses the one validated categorical pair (`--primary`/`--info`); Profit
+  is colored by sign (a status signal), which WARNed, mitigated with always-visible direct value
+  labels + a Profit/Loss legend key rather than color alone.
 
 <!-- code-review-graph MCP tools -->
 ## MCP Tools: code-review-graph
