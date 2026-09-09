@@ -38,14 +38,20 @@ function displayOrderType(type: string): string {
 
 /** Normalizes the Payment column/receipt to one consistent word for "nothing collected yet" —
  *  this page previously mixed a bare "—" and a literal "Pending" string for what is the same
- *  underlying state. Any real payment string is shown as-is (it already comes from Settings'
- *  configured payment method names, written server-side at order/payment time). */
+ *  underlying state. A real payment string has its "Rs.NNN" amount stripped per method — the
+ *  Total column already shows the amount, so repeating it here ("JazzCash: Rs.1,507") was
+ *  redundant; a split payment keeps each method name, comma-separated ("Cash, JazzCash"). */
 function formatPaymentMethod(method: string | null): { label: string; muted: boolean } {
   const trimmed = (method ?? "").trim();
   if (!trimmed || trimmed.toLowerCase() === "pending") {
     return { label: "Unpaid", muted: true };
   }
-  return { label: trimmed, muted: false };
+  const label = trimmed
+    .split(",")
+    .map((segment) => segment.replace(/:\s*(Rs\.?|PKR)\s*[\d,]+(\.\d+)?/i, "").trim())
+    .filter(Boolean)
+    .join(", ");
+  return { label: label || trimmed, muted: false };
 }
 
 const Sales = () => {
@@ -325,6 +331,7 @@ const Sales = () => {
         open={showReceipt}
         onOpenChange={setShowReceipt}
         slipData={receiptSlip}
+        directMode="bill"
       />
     </div>
   );

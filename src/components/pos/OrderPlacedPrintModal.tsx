@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Printer,
   ChefHat,
@@ -57,6 +57,10 @@ export interface OrderPlacedPrintModalProps {
   onOpenChange: (open: boolean) => void;
   slipData: PlacedOrderSlipData | null;
   onDone?: () => void;
+  /** Skip the "Order Placed" 3-option grid and open directly into this preview, with no way
+   *  to reach KOT/Both from it. For viewing a historical/settled order's customer receipt
+   *  (e.g. Sales & Orders' "View Receipt") -- a Kitchen Order Ticket makes no sense there. */
+  directMode?: "bill";
 }
 
 type PreviewMode = "kot" | "bill" | "both" | null;
@@ -263,8 +267,16 @@ export const OrderPlacedPrintModal: React.FC<OrderPlacedPrintModalProps> = ({
   onOpenChange,
   slipData,
   onDone,
+  directMode,
 }) => {
-  const [previewMode, setPreviewMode] = useState<PreviewMode>(null);
+  const [previewMode, setPreviewMode] = useState<PreviewMode>(directMode ?? null);
+
+  // The component instance is reused across different orders/opens, so re-sync each time the
+  // dialog opens rather than only on mount -- otherwise a second directMode open would still
+  // carry whatever previewMode the dialog's own close handler last reset it to.
+  useEffect(() => {
+    if (open) setPreviewMode(directMode ?? null);
+  }, [open, directMode]);
 
   if (!slipData) return null;
 
@@ -613,10 +625,10 @@ export const OrderPlacedPrintModal: React.FC<OrderPlacedPrintModalProps> = ({
               <Button
                 variant="outline"
                 className="h-10 px-5 rounded-xl border-border/70 text-foreground font-semibold gap-1.5"
-                onClick={() => setPreviewMode(null)}
+                onClick={() => (directMode ? handleDone() : setPreviewMode(null))}
               >
-                <ArrowLeft className="h-4 w-4" />
-                Back
+                {directMode ? <X className="h-4 w-4" /> : <ArrowLeft className="h-4 w-4" />}
+                {directMode ? "Close" : "Back"}
               </Button>
               <Button
                 className="flex-1 h-10 px-5 rounded-xl bg-orange-600 hover:bg-orange-500 text-white font-bold gap-2 shadow-sm active:scale-[0.98] transition-all"
