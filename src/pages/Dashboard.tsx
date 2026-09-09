@@ -376,16 +376,9 @@ const Dashboard = () => {
                 <div className="h-9 w-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center border border-primary/20 shrink-0 shadow-sm group-hover:bg-primary/20 transition-colors">
                   <DollarSign className="h-4 w-4" />
                 </div>
-                <div className="flex items-center gap-2">
-                  <h2 className="text-lg sm:text-xl font-bold tracking-tight text-foreground group-hover:text-primary transition-colors">
-                    Sales By Channel
-                  </h2>
-                  {channelSectionCollapsed && (
-                    <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
-                      {currency} {(channelData?.combined.sale ?? 0).toLocaleString()} • {channelData?.combined.orders ?? 0} {channelData?.combined.orders === 1 ? "order" : "orders"}
-                    </span>
-                  )}
-                </div>
+                <h2 className="text-lg sm:text-xl font-bold tracking-tight text-foreground group-hover:text-primary transition-colors whitespace-nowrap">
+                  Sales By Channel
+                </h2>
               </div>
 
               <div className="flex items-center gap-2 shrink-0">
