@@ -1,9 +1,11 @@
 import {
   TrendingUp, DollarSign, Wallet, ReceiptText, Flame, ArrowUpCircle, ArrowDownCircle,
-  BarChart3, ShoppingBag, Clock, ChevronRight, Trophy, Users, ChefHat, LayoutGrid, Ban, Package,
+  BarChart3, ShoppingBag, Clock, ChevronRight, ChevronDown, Trophy, Users, ChefHat, LayoutGrid, Ban, Package,
   ClipboardList, ArrowLeftRight, UserCheck, CalendarOff, Bike, CalendarCheck, Coins, Calendar as CalendarIcon,
-  UtensilsCrossed, Percent,
+  UtensilsCrossed, Percent, X,
 } from "lucide-react";
+import { DatePicker } from "@/components/ui/date-picker";
+import { TimePicker, formatTimeLabel } from "@/components/ui/time-picker";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
@@ -13,7 +15,6 @@ import { useState, useEffect, type ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Calendar as CalendarUI } from "@/components/ui/calendar";
 import { format } from "date-fns";
 import { reportService } from "@/services/report.service";
 import { stockService } from "@/services/stock.service";
@@ -147,11 +148,17 @@ const Dashboard = () => {
   // Cashier never had the Analytics page, so they don't get this zone.
   const customerIntelVisible = hasPermission("reports");
 
+  const toYmd = (date: Date) => {
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+  };
+
   // Sales By Channel (Date & optional Time filtered, gated on "reports" permission)
   const salesByChannelVisible = hasPermission("reports");
+  const [channelSectionCollapsed, setChannelSectionCollapsed] = useState<boolean>(false);
   const [channelPreset, setChannelPreset] = useState<string>("Today");
-  const [channelDateFrom, setChannelDateFrom] = useState<Date | undefined>(new Date());
-  const [channelDateTo, setChannelDateTo] = useState<Date | undefined>(new Date());
+  const [channelFromStr, setChannelFromStr] = useState<string>(toYmd(new Date()));
+  const [channelToStr, setChannelToStr] = useState<string>(toYmd(new Date()));
   const [channelTimeFrom, setChannelTimeFrom] = useState<string>("");
   const [channelTimeTo, setChannelTimeTo] = useState<string>("");
 
@@ -159,21 +166,18 @@ const Dashboard = () => {
     setChannelPreset(preset);
     const now = new Date();
     if (preset === "Today") {
-      setChannelDateFrom(now);
-      setChannelDateTo(now);
+      setChannelFromStr(toYmd(now));
+      setChannelToStr(toYmd(now));
     } else if (preset === "This Week") {
       const d = new Date(now);
       d.setDate(d.getDate() - 7);
-      setChannelDateFrom(d);
-      setChannelDateTo(now);
+      setChannelFromStr(toYmd(d));
+      setChannelToStr(toYmd(now));
     } else if (preset === "This Month") {
-      setChannelDateFrom(new Date(now.getFullYear(), now.getMonth(), 1));
-      setChannelDateTo(now);
+      setChannelFromStr(toYmd(new Date(now.getFullYear(), now.getMonth(), 1)));
+      setChannelToStr(toYmd(now));
     }
   };
-
-  const channelFromStr = (channelDateFrom ?? new Date()).toISOString().slice(0, 10);
-  const channelToStr = (channelDateTo ?? new Date()).toISOString().slice(0, 10);
 
   const { data: channelData, isLoading: channelLoading } = useQuery({
     queryKey: [
@@ -319,293 +323,379 @@ const Dashboard = () => {
         <div className="space-y-6">
           {/* Header & Filter Controls Container */}
           <div className="rounded-xl border border-border/70 bg-card/60 p-4 sm:p-5 shadow-sm backdrop-blur-sm space-y-4">
-            {/* Top row: Title + Branch badge + Super Admin OutletFilter */}
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-lg bg-primary/10 text-primary flex items-center justify-center border border-primary/20 shrink-0 shadow-sm">
-                  <DollarSign className="h-5 w-5" />
+            {/* Top row: Title + Collapse Arrow + Super Admin OutletFilter */}
+            <div className="flex items-center justify-between gap-3">
+              <div
+                className="flex items-center gap-3 cursor-pointer select-none group"
+                onClick={() => setChannelSectionCollapsed((prev) => !prev)}
+              >
+                <div className="h-9 w-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center border border-primary/20 shrink-0 shadow-sm group-hover:bg-primary/20 transition-colors">
+                  <DollarSign className="h-4 w-4" />
                 </div>
-                <div>
-                  <div className="flex items-center gap-2.5">
-                    <h2 className="text-lg sm:text-xl font-bold tracking-tight text-foreground">Sales By Channel</h2>
-                    {d?.branchName && (
-                      <span className="text-[11px] text-muted-foreground font-medium px-2.5 py-0.5 rounded-full bg-muted/80 border border-border/60">
-                        {d.branchName}
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    Live revenue, food costs, and profit margins across fulfillment channels
-                  </p>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-lg sm:text-xl font-bold tracking-tight text-foreground group-hover:text-primary transition-colors">
+                    Sales By Channel
+                  </h2>
+                  {channelSectionCollapsed && (
+                    <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
+                      {currency} {(channelData?.combined.sale ?? 0).toLocaleString()} • {channelData?.combined.orders ?? 0} {channelData?.combined.orders === 1 ? "order" : "orders"}
+                    </span>
+                  )}
                 </div>
               </div>
 
-              {isSuperAdmin && (
-                <div className="shrink-0">
+              <div className="flex items-center gap-2 shrink-0">
+                {isSuperAdmin && (
                   <OutletFilterSelect outletId={outletId} setOutletId={setOutletId} outlets={outlets} isSuperAdmin={isSuperAdmin} />
-                </div>
-              )}
-            </div>
-
-            {/* Filter Bar Row */}
-            <div className="flex items-center gap-2.5 flex-wrap pt-3 border-t border-border/40">
-              {/* Presets Segmented Control */}
-              <div className="inline-flex items-center p-0.5 rounded-lg bg-muted/60 border border-border/60 shadow-sm">
-                {(["Today", "This Week", "This Month"] as const).map((p) => (
-                  <button
-                    key={p}
-                    type="button"
-                    onClick={() => setPreset(p)}
-                    className={cn(
-                      "px-3 py-1.5 text-xs font-medium rounded-md transition-all",
-                      channelPreset === p
-                        ? "bg-background text-foreground shadow-sm font-semibold"
-                        : "text-muted-foreground hover:text-foreground"
-                    )}
-                  >
-                    {p}
-                  </button>
-                ))}
-              </div>
-
-              {/* Date Range Picker (Connected Capsule) */}
-              <div className="inline-flex items-center rounded-lg bg-background border border-border/70 shadow-sm text-xs">
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button variant="ghost" size="sm" className="h-8 px-2.5 text-xs font-medium hover:bg-muted gap-1.5 rounded-r-none">
-                      <CalendarIcon className="h-3.5 w-3.5 text-muted-foreground" />
-                      <span>{channelDateFrom ? format(channelDateFrom, "MMM d, yyyy") : "Start date"}</span>
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <CalendarUI
-                      mode="single"
-                      selected={channelDateFrom}
-                      onSelect={(d) => {
-                        setChannelDateFrom(d);
-                        setChannelPreset("Custom");
-                      }}
-                      className="p-3 pointer-events-auto"
-                    />
-                  </PopoverContent>
-                </Popover>
-
-                <span className="text-[11px] text-muted-foreground/50 px-1 border-x border-border/50 select-none py-1.5 font-medium">
-                  to
-                </span>
-
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button variant="ghost" size="sm" className="h-8 px-2.5 text-xs font-medium hover:bg-muted gap-1.5 rounded-l-none">
-                      <CalendarIcon className="h-3.5 w-3.5 text-muted-foreground" />
-                      <span>{channelDateTo ? format(channelDateTo, "MMM d, yyyy") : "End date"}</span>
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <CalendarUI
-                      mode="single"
-                      selected={channelDateTo}
-                      onSelect={(d) => {
-                        setChannelDateTo(d);
-                        setChannelPreset("Custom");
-                      }}
-                      className="p-3 pointer-events-auto"
-                    />
-                  </PopoverContent>
-                </Popover>
-              </div>
-
-              {/* Optional Time Filters */}
-              <div className="inline-flex items-center gap-1.5 rounded-lg bg-background border border-border/70 px-2.5 py-1 shadow-sm text-xs">
-                <Clock className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                <span className="text-[11px] text-muted-foreground font-medium">Time:</span>
-                <input
-                  type="time"
-                  value={channelTimeFrom}
-                  onChange={(e) => setChannelTimeFrom(e.target.value)}
-                  className="h-6 w-[70px] rounded bg-muted/40 border border-border/40 px-1 text-[11px] [color-scheme:dark] text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-                />
-                <span className="text-muted-foreground/40 text-[11px]">-</span>
-                <input
-                  type="time"
-                  value={channelTimeTo}
-                  onChange={(e) => setChannelTimeTo(e.target.value)}
-                  className="h-6 w-[70px] rounded bg-muted/40 border border-border/40 px-1 text-[11px] [color-scheme:dark] text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-                />
-                {(channelTimeFrom || channelTimeTo) && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-5 px-1.5 text-[10px] text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded"
-                    onClick={() => {
-                      setChannelTimeFrom("");
-                      setChannelTimeTo("");
-                    }}
-                    title="Clear time filter"
-                  >
-                    Clear
-                  </Button>
                 )}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setChannelSectionCollapsed((prev) => !prev)}
+                  className="h-8 px-2.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/70 gap-1.5 rounded-lg border border-border/50"
+                  title={channelSectionCollapsed ? "Expand Sales By Channel" : "Collapse Sales By Channel"}
+                  aria-label={channelSectionCollapsed ? "Expand Sales By Channel" : "Collapse Sales By Channel"}
+                >
+                  <span className="text-xs font-medium hidden sm:inline">
+                    {channelSectionCollapsed ? "Show" : "Hide"}
+                  </span>
+                  <ChevronDown
+                    className={cn(
+                      "h-4 w-4 transition-transform duration-200",
+                      channelSectionCollapsed ? "-rotate-90" : "rotate-0"
+                    )}
+                  />
+                </Button>
               </div>
             </div>
+
+            {/* Filter Bar Row (only shown when expanded) */}
+            {!channelSectionCollapsed && (
+              <div className="flex items-center gap-2.5 flex-wrap pt-3 border-t border-border/40">
+                {/* Presets Segmented Control */}
+                <div className="inline-flex items-center p-0.5 rounded-lg bg-muted/60 border border-border/60 shadow-sm">
+                  {(["Today", "This Week", "This Month"] as const).map((p) => (
+                    <button
+                      key={p}
+                      type="button"
+                      onClick={() => setPreset(p)}
+                      className={cn(
+                        "px-3 py-1.5 text-xs font-medium rounded-md transition-all",
+                        channelPreset === p
+                          ? "bg-background text-foreground shadow-sm font-semibold"
+                          : "text-muted-foreground hover:text-foreground"
+                      )}
+                    >
+                      {p}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Date Pickers (From -> To) */}
+                <div className="inline-flex items-center gap-1.5">
+                  <div className="w-36">
+                    <DatePicker
+                      value={channelFromStr}
+                      onChange={(val) => {
+                        setChannelFromStr(val);
+                        setChannelPreset("Custom");
+                      }}
+                      placeholder="Start date"
+                      className="h-8 text-xs bg-background"
+                    />
+                  </div>
+                  <span className="text-xs text-muted-foreground/60 font-medium px-0.5">to</span>
+                  <div className="w-36">
+                    <DatePicker
+                      value={channelToStr}
+                      onChange={(val) => {
+                        setChannelToStr(val);
+                        setChannelPreset("Custom");
+                      }}
+                      min={channelFromStr}
+                      placeholder="End date"
+                      className="h-8 text-xs bg-background"
+                    />
+                  </div>
+                </div>
+
+                {/* Time Filter Popover */}
+                <div className="inline-flex items-center gap-1">
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className={cn(
+                          "h-8 px-2.5 text-xs font-medium gap-1.5 border shadow-sm transition-all",
+                          channelTimeFrom || channelTimeTo
+                            ? "border-primary/50 bg-primary/10 text-primary hover:bg-primary/15"
+                            : "border-border/70 bg-background text-muted-foreground hover:text-foreground hover:bg-muted"
+                        )}
+                      >
+                        <Clock className={cn("h-3.5 w-3.5 shrink-0", (channelTimeFrom || channelTimeTo) && "text-primary")} />
+                        <span>
+                          {channelTimeFrom || channelTimeTo
+                            ? `${channelTimeFrom ? formatTimeLabel(channelTimeFrom) : "12:00 AM"} – ${channelTimeTo ? formatTimeLabel(channelTimeTo) : "11:59 PM"}`
+                            : "All Day (Time)"}
+                        </span>
+                        <ChevronDown className="h-3 w-3 opacity-60 ml-0.5" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-80 p-3 space-y-3" align="start">
+                      <div className="flex items-center justify-between border-b border-border/40 pb-2">
+                        <div className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
+                          <Clock className="h-3.5 w-3.5 text-primary" />
+                          <span>Filter By Operating Hours</span>
+                        </div>
+                        {(channelTimeFrom || channelTimeTo) && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setChannelTimeFrom("");
+                              setChannelTimeTo("");
+                            }}
+                            className="text-[11px] text-destructive hover:underline font-medium"
+                          >
+                            Reset
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Quick Shift Presets */}
+                      <div className="space-y-1.5">
+                        <p className="text-[11px] font-medium text-muted-foreground">Quick Shift Presets</p>
+                        <div className="grid grid-cols-2 gap-1.5">
+                          {[
+                            { label: "Lunch Shift", from: "11:00", to: "17:00" },
+                            { label: "Dinner Peak", from: "17:00", to: "23:59" },
+                            { label: "Late Night", from: "23:00", to: "04:00" },
+                            { label: "Full Operating Day", from: "11:00", to: "23:59" },
+                          ].map((shift) => (
+                            <Button
+                              key={shift.label}
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setChannelTimeFrom(shift.from);
+                                setChannelTimeTo(shift.to);
+                              }}
+                              className={cn(
+                                "h-7 text-[11px] justify-start px-2 font-normal border-border/60",
+                                channelTimeFrom === shift.from && channelTimeTo === shift.to
+                                  ? "border-primary bg-primary/10 text-primary font-medium"
+                                  : "hover:bg-muted"
+                              )}
+                            >
+                              {shift.label}
+                            </Button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Custom Time Selection using TimePicker */}
+                      <div className="space-y-2 pt-2 border-t border-border/40">
+                        <p className="text-[11px] font-medium text-muted-foreground">Custom Time Range</p>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="text-[10px] text-muted-foreground font-medium block mb-1">Start Time</label>
+                            <TimePicker
+                              value={channelTimeFrom || "11:00"}
+                              onChange={(v) => setChannelTimeFrom(v)}
+                              className="h-8 text-xs bg-background"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] text-muted-foreground font-medium block mb-1">End Time</label>
+                            <TimePicker
+                              value={channelTimeTo || "23:59"}
+                              onChange={(v) => setChannelTimeTo(v)}
+                              className="h-8 text-xs bg-background"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+
+                  {(channelTimeFrom || channelTimeTo) && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setChannelTimeFrom("");
+                        setChannelTimeTo("");
+                      }}
+                      className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-md"
+                      title="Clear time filter"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </Button>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
-          {/* 4 Channel Rows (Dine In, Take Away, Delivery, Combined) */}
-          {channelLoading ? (
-            <div className="space-y-6">
-              {Array.from({ length: 4 }).map((_, r) => (
-                <div key={r} className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Skeleton className="h-7 w-7 rounded-md" />
-                      <Skeleton className="h-5 w-28" />
-                    </div>
-                    <Skeleton className="h-5 w-20 rounded-full" />
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                    {Array.from({ length: 4 }).map((_, c) => (
-                      <Card key={c} className="shadow-sm border-border/60">
-                        <CardContent className="p-4 sm:p-5">
-                          <div className="flex items-center justify-between">
-                            <div className="space-y-2">
-                              <Skeleton className="h-3 w-20" />
-                              <Skeleton className="h-7 w-28" />
-                            </div>
-                            <Skeleton className="h-9 w-9 rounded-lg shrink-0" />
-                          </div>
-                        </CardContent>
-                      </Card>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="space-y-6">
-              {channelRows.map((row) => {
-                const ChannelIcon = row.icon;
-                return (
-                  <div key={row.title} className="space-y-3">
+          {/* 4 Channel Rows (Dine In, Take Away, Delivery, Combined) - hidden when collapsed */}
+          {!channelSectionCollapsed && (
+            channelLoading ? (
+              <div className="space-y-6">
+                {Array.from({ length: 4 }).map((_, r) => (
+                  <div key={r} className="space-y-3">
                     <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2.5">
-                        <div
+                      <div className="flex items-center gap-2">
+                        <Skeleton className="h-7 w-7 rounded-md" />
+                        <Skeleton className="h-5 w-28" />
+                      </div>
+                      <Skeleton className="h-5 w-20 rounded-full" />
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                      {Array.from({ length: 4 }).map((_, c) => (
+                        <Card key={c} className="shadow-sm border-border/60">
+                          <CardContent className="p-4 sm:p-5">
+                            <div className="flex items-center justify-between">
+                              <div className="space-y-2">
+                                <Skeleton className="h-3 w-20" />
+                                <Skeleton className="h-7 w-28" />
+                              </div>
+                              <Skeleton className="h-9 w-9 rounded-lg shrink-0" />
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {channelRows.map((row) => {
+                  const ChannelIcon = row.icon;
+                  return (
+                    <div key={row.title} className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2.5">
+                          <div
+                            className={cn(
+                              "h-7 w-7 rounded-md flex items-center justify-center shrink-0 border shadow-sm",
+                              row.color
+                            )}
+                          >
+                            <ChannelIcon className="h-3.5 w-3.5" />
+                          </div>
+                          <h4 className="text-sm font-semibold text-foreground tracking-tight">{row.title}</h4>
+                        </div>
+                        <span className="text-xs text-muted-foreground font-medium bg-muted/60 px-2.5 py-0.5 rounded-full border border-border/50">
+                          {row.orders} {row.orders === 1 ? "order" : "orders"}
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                        {/* Card 1: Total Sales */}
+                        <Card
                           className={cn(
-                            "h-7 w-7 rounded-md flex items-center justify-center shrink-0 border shadow-sm",
-                            row.color
+                            "shadow-sm transition-all border-border/70 hover:border-border",
+                            row.isCombined ? "bg-emerald-500/[0.02] border-emerald-500/30" : "bg-card/70"
                           )}
                         >
-                          <ChannelIcon className="h-3.5 w-3.5" />
-                        </div>
-                        <h4 className="text-sm font-semibold text-foreground tracking-tight">{row.title}</h4>
+                          <CardContent className="p-4 sm:p-5">
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Total Sales</p>
+                                <p className="text-2xl font-bold tracking-tight text-foreground mt-1">
+                                  {currency} {row.sale.toLocaleString()}
+                                </p>
+                              </div>
+                              <div className="h-9 w-9 rounded-lg flex items-center justify-center bg-primary/10 text-primary border border-primary/20 shrink-0">
+                                <DollarSign className="h-4 w-4" />
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+
+                        {/* Card 2: Total Cost */}
+                        <Card
+                          className={cn(
+                            "shadow-sm transition-all border-border/70 hover:border-border",
+                            row.isCombined ? "bg-emerald-500/[0.02] border-emerald-500/30" : "bg-card/70"
+                          )}
+                        >
+                          <CardContent className="p-4 sm:p-5">
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Total Cost</p>
+                                <p className="text-2xl font-bold tracking-tight text-foreground mt-1">
+                                  {currency} {row.cost.toLocaleString()}
+                                </p>
+                              </div>
+                              <div className="h-9 w-9 rounded-lg flex items-center justify-center bg-muted/80 text-muted-foreground border border-border/50 shrink-0">
+                                <Wallet className="h-4 w-4" />
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+
+                        {/* Card 3: Total Profit */}
+                        <Card
+                          className={cn(
+                            "shadow-sm transition-all border-border/70 hover:border-border",
+                            row.isCombined ? "bg-emerald-500/[0.02] border-emerald-500/30" : "bg-card/70"
+                          )}
+                        >
+                          <CardContent className="p-4 sm:p-5">
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Total Profit</p>
+                                <p className={cn("text-2xl font-bold tracking-tight mt-1", row.profit >= 0 ? "text-emerald-500" : "text-destructive")}>
+                                  {currency} {row.profit.toLocaleString()}
+                                </p>
+                              </div>
+                              <div
+                                className={cn(
+                                  "h-9 w-9 rounded-lg flex items-center justify-center shrink-0 border",
+                                  row.profit >= 0 ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" : "bg-destructive/10 text-destructive border-destructive/20"
+                                )}
+                              >
+                                <Coins className="h-4 w-4" />
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+
+                        {/* Card 4: Profit Margin */}
+                        <Card
+                          className={cn(
+                            "shadow-sm transition-all border-border/70 hover:border-border",
+                            row.isCombined ? "bg-emerald-500/[0.02] border-emerald-500/30" : "bg-card/70"
+                          )}
+                        >
+                          <CardContent className="p-4 sm:p-5">
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Profit Margin</p>
+                                <p className={cn("text-2xl font-bold tracking-tight mt-1", row.marginPct >= 0 ? "text-emerald-500" : "text-destructive")}>
+                                  {row.marginPct}%
+                                </p>
+                              </div>
+                              <div
+                                className={cn(
+                                  "h-9 w-9 rounded-lg flex items-center justify-center shrink-0 border",
+                                  row.marginPct >= 0 ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" : "bg-destructive/10 text-destructive border-destructive/20"
+                                )}
+                              >
+                                <Percent className="h-4 w-4" />
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
                       </div>
-                      <span className="text-xs text-muted-foreground font-medium bg-muted/60 px-2.5 py-0.5 rounded-full border border-border/50">
-                        {row.orders} {row.orders === 1 ? "order" : "orders"}
-                      </span>
                     </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                      {/* Card 1: Total Sales */}
-                      <Card
-                        className={cn(
-                          "shadow-sm transition-all border-border/70 hover:border-border",
-                          row.isCombined ? "bg-emerald-500/[0.02] border-emerald-500/30" : "bg-card/70"
-                        )}
-                      >
-                        <CardContent className="p-4 sm:p-5">
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Total Sales</p>
-                              <p className="text-2xl font-bold tracking-tight text-foreground mt-1">
-                                {currency} {row.sale.toLocaleString()}
-                              </p>
-                            </div>
-                            <div className="h-9 w-9 rounded-lg flex items-center justify-center bg-primary/10 text-primary border border-primary/20 shrink-0">
-                              <DollarSign className="h-4 w-4" />
-                            </div>
-                          </div>
-                        </CardContent>
-                      </Card>
-
-                      {/* Card 2: Total Cost */}
-                      <Card
-                        className={cn(
-                          "shadow-sm transition-all border-border/70 hover:border-border",
-                          row.isCombined ? "bg-emerald-500/[0.02] border-emerald-500/30" : "bg-card/70"
-                        )}
-                      >
-                        <CardContent className="p-4 sm:p-5">
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Total Cost</p>
-                              <p className="text-2xl font-bold tracking-tight text-foreground mt-1">
-                                {currency} {row.cost.toLocaleString()}
-                              </p>
-                            </div>
-                            <div className="h-9 w-9 rounded-lg flex items-center justify-center bg-muted/80 text-muted-foreground border border-border/50 shrink-0">
-                              <Wallet className="h-4 w-4" />
-                            </div>
-                          </div>
-                        </CardContent>
-                      </Card>
-
-                      {/* Card 3: Total Profit */}
-                      <Card
-                        className={cn(
-                          "shadow-sm transition-all border-border/70 hover:border-border",
-                          row.isCombined ? "bg-emerald-500/[0.02] border-emerald-500/30" : "bg-card/70"
-                        )}
-                      >
-                        <CardContent className="p-4 sm:p-5">
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Total Profit</p>
-                              <p className={cn("text-2xl font-bold tracking-tight mt-1", row.profit >= 0 ? "text-emerald-500" : "text-destructive")}>
-                                {currency} {row.profit.toLocaleString()}
-                              </p>
-                            </div>
-                            <div
-                              className={cn(
-                                "h-9 w-9 rounded-lg flex items-center justify-center shrink-0 border",
-                                row.profit >= 0 ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" : "bg-destructive/10 text-destructive border-destructive/20"
-                              )}
-                            >
-                              <Coins className="h-4 w-4" />
-                            </div>
-                          </div>
-                        </CardContent>
-                      </Card>
-
-                      {/* Card 4: Profit Margin */}
-                      <Card
-                        className={cn(
-                          "shadow-sm transition-all border-border/70 hover:border-border",
-                          row.isCombined ? "bg-emerald-500/[0.02] border-emerald-500/30" : "bg-card/70"
-                        )}
-                      >
-                        <CardContent className="p-4 sm:p-5">
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Profit Margin</p>
-                              <p className={cn("text-2xl font-bold tracking-tight mt-1", row.marginPct >= 0 ? "text-emerald-500" : "text-destructive")}>
-                                {row.marginPct}%
-                              </p>
-                            </div>
-                            <div
-                              className={cn(
-                                "h-9 w-9 rounded-lg flex items-center justify-center shrink-0 border",
-                                row.marginPct >= 0 ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" : "bg-destructive/10 text-destructive border-destructive/20"
-                              )}
-                            >
-                              <Percent className="h-4 w-4" />
-                            </div>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            )
           )}
         </div>
       )}
