@@ -155,6 +155,34 @@ export interface NetProfitReport {
   wasteByReason: { name: string; value: number }[];
 }
 
+export interface DealPerformanceRow {
+  dealId: string;
+  name: string;
+  /** DealType enum value (COMBO/OPTION_COMBO/PERCENTAGE/BUY_X_GET_Y/PROMO_CODE/MIN_SPEND), or a
+   *  generic fallback label when the deal was deleted and its live type can no longer be read. */
+  type: string;
+  redemptions: number;
+  revenue: number;
+  /** null for order-level deals (Promo Code/Min Spend) — not tied to specific menu items. */
+  cost: number | null;
+  profit: number | null;
+  marginPct: number | null;
+  /** How much this deal actually took off. Line-item deals: summed OrderItem.discount.
+   *  Promo Code/Min Spend: recomputed against each redeeming order's own subtotal (not read off
+   *  Order.discount, which can also include a manual discount stacked on top). */
+  discount: number;
+}
+
+export interface DealsPerformanceReport {
+  from: string;
+  to: string;
+  rows: DealPerformanceRow[];
+  totalRedemptions: number;
+  totalRevenue: number;
+  mostUsed: { name: string; redemptions: number } | null;
+  activeDealsCount: number;
+}
+
 export interface ReportParams {
   from: string; // YYYY-MM-DD
   to: string;   // YYYY-MM-DD
@@ -304,6 +332,14 @@ export const reportService = {
     if (params.outletId && params.outletId !== 'all') q.set('outletId', params.outletId);
     else q.set('outletId', 'all');
     const res = await api.get<{ success: boolean; data: NetProfitReport }>(`/reports/net-profit?${q.toString()}`);
+    return res.data;
+  },
+
+  async getDealsPerformance(params: { outletId?: string; from: string; to: string }): Promise<DealsPerformanceReport> {
+    const q = new URLSearchParams({ from: params.from, to: params.to });
+    if (params.outletId && params.outletId !== 'all') q.set('outletId', params.outletId);
+    else q.set('outletId', 'all');
+    const res = await api.get<{ success: boolean; data: DealsPerformanceReport }>(`/reports/deals-performance?${q.toString()}`);
     return res.data;
   },
 };

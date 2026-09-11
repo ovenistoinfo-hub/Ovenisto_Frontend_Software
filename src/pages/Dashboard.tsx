@@ -1,10 +1,12 @@
 import {
-  TrendingUp, DollarSign, Wallet, ReceiptText, Flame, ArrowUpCircle, ArrowDownCircle,
+  TrendingUp, DollarSign, Wallet, ArrowUpCircle, ArrowDownCircle,
   BarChart3, ShoppingBag, Clock, ChevronRight, ChevronDown, Trophy, Users, ChefHat, LayoutGrid, Ban, Package,
   ClipboardList, ArrowLeftRight, UserCheck, CalendarOff, Bike, CalendarCheck, Coins, Calendar as CalendarIcon,
   UtensilsCrossed, Percent, X, Layers, CreditCard, Banknote, Smartphone, TrendingDown,
+  Tag, Info,
 } from "lucide-react";
 import { DatePicker } from "@/components/ui/date-picker";
+import { Badge } from "@/components/ui/badge";
 import { TimePicker, formatTimeLabel } from "@/components/ui/time-picker";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -196,6 +198,12 @@ const Dashboard = () => {
   const [npFromStr, setNpFromStr] = useState<string>(toYmd(new Date(new Date().getFullYear(), new Date().getMonth(), 1)));
   const [npToStr, setNpToStr] = useState<string>(toYmd(new Date()));
 
+  // Deals Performance — same date-range-only choice as Net Profit (deal usage isn't hourly).
+  const [dpSectionCollapsed, setDpSectionCollapsed] = useState<boolean>(false);
+  const [dpPreset, setDpPreset] = useState<string>("This Month");
+  const [dpFromStr, setDpFromStr] = useState<string>(toYmd(new Date(new Date().getFullYear(), new Date().getMonth(), 1)));
+  const [dpToStr, setDpToStr] = useState<string>(toYmd(new Date()));
+
   const setPreset = (preset: string) => {
     setChannelPreset(preset);
     const now = new Date();
@@ -281,6 +289,23 @@ const Dashboard = () => {
     }
   };
 
+  const setDpRange = (preset: string) => {
+    setDpPreset(preset);
+    const now = new Date();
+    if (preset === "Today") {
+      setDpFromStr(toYmd(now));
+      setDpToStr(toYmd(now));
+    } else if (preset === "This Week") {
+      const d = new Date(now);
+      d.setDate(d.getDate() - 7);
+      setDpFromStr(toYmd(d));
+      setDpToStr(toYmd(now));
+    } else if (preset === "This Month") {
+      setDpFromStr(toYmd(new Date(now.getFullYear(), now.getMonth(), 1)));
+      setDpToStr(toYmd(now));
+    }
+  };
+
   const { data: channelData, isLoading: channelLoading } = useQuery({
     queryKey: [
       "sales-by-channel",
@@ -346,7 +371,13 @@ const Dashboard = () => {
     enabled: salesByChannelVisible,
   });
 
-  // Push-first real-time for the five filtered sales sections — invalidating just their own
+  const { data: dpData, isLoading: dpLoading } = useQuery({
+    queryKey: ["deals-performance", outletId, dpFromStr, dpToStr],
+    queryFn: () => reportService.getDealsPerformance({ outletId, from: dpFromStr, to: dpToStr }),
+    enabled: salesByChannelVisible,
+  });
+
+  // Push-first real-time for the six filtered sales sections — invalidating just their own
   // query keys (not the whole ["dashboard", outletId] query) avoids re-running the other 11
   // dashboard aggregates on every order event, matching how Sales.tsx keeps its order-list query
   // independent. The 180s poll (this app's standard interval for socket-backed page data) is a
@@ -358,6 +389,7 @@ const Dashboard = () => {
     queryClient.invalidateQueries({ queryKey: ["sales-by-payment-method"] });
     queryClient.invalidateQueries({ queryKey: ["top-items"] });
     queryClient.invalidateQueries({ queryKey: ["net-profit"] });
+    queryClient.invalidateQueries({ queryKey: ["deals-performance"] });
   };
   useOrderEvents(refreshSalesSections);
   useVisiblePolling(refreshSalesSections, 180_000);
@@ -381,9 +413,6 @@ const Dashboard = () => {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4"><Skeleton className="lg:col-span-2 h-72" /><Skeleton className="h-72" /></div>
     </div>
   );
-
-  const pays = d?.month.paymentBreakdown ?? [];
-  const maxPay = Math.max(1, ...pays.map(p => p.amount));
 
   // --- Customer Intelligence chart transforms — all derived from DashboardReport fields
   // already fetched above, never a client-side raw-order pull. ---
@@ -609,6 +638,53 @@ const Dashboard = () => {
     if (reason) params.set("reason", reason);
     navigate(`/stock/adjustments?${params.toString()}`);
   };
+  // Same 6-line P&L as the text waterfall above, charted. COGS/Food Loss/Expenses are always
+  // >= 0 (magnitudes, never negative) and plotted as plain bars like every other chart on this
+  // dashboard -- an earlier signed-bar version (dipping below zero) fought Recharts' negative-bar
+  // label placement and looked squashed. Only Gross Profit/Net Profit can legitimately go
+  // negative (a loss period); colored by sign, same treatment as "Profit by Channel" above. No
+  // drill-down on the bars themselves; the waterfall rows already cover it.
+  const npChartData = np ? [
+    { name: "Revenue", value: np.revenue, isCost: false },
+    { name: "COGS", value: np.cogs, isCost: true },
+    { name: "Gross Profit", value: np.grossProfit, isCost: false },
+    { name: "Food Loss", value: np.foodLoss, isCost: true },
+    { name: "Expenses", value: np.expenses, isCost: true },
+    { name: "Net Profit", value: np.netProfit, isCost: false },
+  ] : [];
+
+  // ── Deals Performance derivations ────────────────────────────────────────
+  const dp = dpData;
+  const DEAL_TYPE_LABELS: Record<string, string> = {
+    COMBO: "Fixed Bundle",
+    OPTION_COMBO: "Customizable Bundle",
+    PERCENTAGE: "% Discount",
+    BUY_X_GET_Y: "Buy X Get Y",
+    PROMO_CODE: "Promo Code",
+    MIN_SPEND: "Minimum Spend",
+    LINE_DEAL: "Deal (deleted)",
+    ORDER_DEAL: "Deal (deleted)",
+  };
+  const dealTypeLabel = (type: string) => DEAL_TYPE_LABELS[type] ?? type;
+  const ORDER_LEVEL_DEAL_TYPES = new Set(["PROMO_CODE", "MIN_SPEND"]);
+  // "View Details" on a deal row -- lands on Sales & Orders filtered to exactly that deal's
+  // redemptions, same date window this section has active. `dealName` rides along display-only
+  // (Sales.tsx's Deal <Select> is keyed by id, not name — a name isn't guaranteed unique across
+  // a deleted+recreated deal) so the synthetic-option fallback shows a real name instead of a
+  // bare UUID when the deal no longer appears in the live deals list.
+  const goToDealSales = (dealId: string, dealName: string) => {
+    const params = new URLSearchParams({
+      status: "completed", deal: dealId, dealName, from: dpFromStr, to: dpToStr,
+    });
+    navigate(`/sales?${params.toString()}`);
+  };
+  // Top 8 by revenue for the chart — a bar per deal beyond that gets unreadably thin, and the
+  // table below already lists every deal, ranked by redemptions.
+  const dpChartData = (dp?.rows ?? [])
+    .slice()
+    .sort((a, b) => b.revenue - a.revenue)
+    .slice(0, 8)
+    .map((r) => ({ name: r.name, revenue: r.revenue }));
 
   return (
     <div className="space-y-6">
@@ -2185,6 +2261,48 @@ const Dashboard = () => {
                     </div>
                   </div>
 
+                  {/* Net Profit Breakdown chart — same 6-line P&L as the waterfall above,
+                      charted. COGS/Food Loss/Expenses are plotted as their magnitude (never
+                      negative), same as every other bar chart on this dashboard — a plain,
+                      always-clear-of-the-axis "top" label, no custom positioning needed. */}
+                  <div className="rounded-xl border border-border/50 bg-card/40 p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <p className="text-sm font-semibold text-foreground">Net Profit Breakdown</p>
+                      <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
+                        <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-emerald-500" />Result</span>
+                        <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-destructive/50" />Cost</span>
+                      </div>
+                    </div>
+                    <div className="h-64">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={npChartData} barCategoryGap="24%" margin={{ top: 20 }}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                          <XAxis dataKey="name" tick={{ fontSize: 11 }} axisLine={{ stroke: "hsl(var(--border))" }} tickLine={false} interval={0} />
+                          <YAxis tick={{ fontSize: 12 }} axisLine={false} tickLine={false} tickFormatter={(v) => `${currency}${(v / 1000).toFixed(0)}k`} />
+                          <Tooltip content={<ChartTooltip />} cursor={{ fill: "hsl(var(--muted) / 0.15)", radius: 4 }} />
+                          <Bar dataKey="value" name="Amount" radius={[4, 4, 0, 0]} maxBarSize={48}>
+                            {npChartData.map((entry) => (
+                              <Cell
+                                key={entry.name}
+                                fill={
+                                  entry.isCost
+                                    ? "hsl(var(--destructive) / 0.5)"
+                                    : entry.value >= 0 ? "hsl(var(--success))" : "hsl(var(--destructive))"
+                                }
+                              />
+                            ))}
+                            <LabelList
+                              dataKey="value"
+                              position="top"
+                              formatter={(v: number) => `${v < 0 ? "−" : ""}${money(v)}`}
+                              style={{ fontSize: 10, fill: "hsl(var(--foreground))" }}
+                            />
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+
                   {/* Breakdowns — each row drills into its category/reason specifically. */}
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                     <div className="rounded-xl border border-border/50 bg-card/40 overflow-hidden">
@@ -2253,6 +2371,215 @@ const Dashboard = () => {
         </section>
       )}
 
+      {/* Deals Performance (same "reports" permission gate) */}
+      {salesByChannelVisible && (
+        <section
+          aria-label="Deals Performance"
+          className="rounded-2xl border border-border/80 bg-card/40 backdrop-blur-md shadow-sm overflow-hidden transition-all"
+        >
+          <div className={cn("p-4 sm:p-5 space-y-4 bg-card/70", !dpSectionCollapsed && "border-b border-border/50")}>
+            <div className="flex items-center justify-between gap-3">
+              <div
+                className="flex items-center gap-3 cursor-pointer select-none group"
+                onClick={() => setDpSectionCollapsed((prev) => !prev)}
+              >
+                <div className="h-9 w-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center border border-primary/20 shrink-0 shadow-sm group-hover:bg-primary/20 transition-colors">
+                  <Tag className="h-4 w-4" />
+                </div>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-lg sm:text-xl font-bold tracking-tight text-foreground group-hover:text-primary transition-colors">
+                    Deals Performance
+                  </h2>
+                  {dpSectionCollapsed && dp && (
+                    <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full border bg-primary/10 text-primary border-primary/20">
+                      {dp.totalRedemptions} redemptions
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setDpSectionCollapsed((prev) => !prev)}
+                  className="h-8 px-2.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/70 gap-1.5 rounded-lg border border-border/50"
+                  title={dpSectionCollapsed ? "Expand Deals Performance" : "Collapse Deals Performance"}
+                  aria-label={dpSectionCollapsed ? "Expand Deals Performance" : "Collapse Deals Performance"}
+                >
+                  <span className="text-xs font-medium hidden sm:inline">{dpSectionCollapsed ? "Show" : "Hide"}</span>
+                  <ChevronDown
+                    className={cn(
+                      "h-4 w-4 transition-transform duration-200",
+                      dpSectionCollapsed ? "-rotate-90" : "rotate-0"
+                    )}
+                  />
+                </Button>
+              </div>
+            </div>
+
+            {!dpSectionCollapsed && (
+              <div className="flex items-center gap-2.5 flex-wrap pt-3 border-t border-border/40">
+                <div className="inline-flex items-center p-0.5 rounded-lg bg-muted/60 border border-border/60 shadow-sm">
+                  {(["Today", "This Week", "This Month"] as const).map((p) => (
+                    <button
+                      key={p}
+                      type="button"
+                      onClick={() => setDpRange(p)}
+                      className={cn(
+                        "px-3 py-1.5 text-xs font-medium rounded-md transition-all",
+                        dpPreset === p
+                          ? "bg-background text-foreground shadow-sm font-semibold"
+                          : "text-muted-foreground hover:text-foreground"
+                      )}
+                    >
+                      {p}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="inline-flex items-center gap-1.5">
+                  <div className="w-36">
+                    <DatePicker
+                      value={dpFromStr}
+                      onChange={(val) => { setDpFromStr(val); setDpPreset("Custom"); }}
+                      placeholder="Start date"
+                      className="h-8 text-xs bg-background"
+                    />
+                  </div>
+                  <span className="text-xs text-muted-foreground/60 font-medium px-0.5">to</span>
+                  <div className="w-36">
+                    <DatePicker
+                      value={dpToStr}
+                      onChange={(val) => { setDpToStr(val); setDpPreset("Custom"); }}
+                      min={dpFromStr}
+                      placeholder="End date"
+                      className="h-8 text-xs bg-background"
+                    />
+                  </div>
+                </div>
+
+                <span className="text-[11px] text-muted-foreground/70">No time-of-day filter — deal usage isn't hourly.</span>
+              </div>
+            )}
+          </div>
+
+          {!dpSectionCollapsed && (
+            <div className="p-4 sm:p-5">
+              {dpLoading || !dp ? (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                    {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-20 rounded-lg" />)}
+                  </div>
+                  <Skeleton className="h-48 rounded-xl" />
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {/* Headline tiles */}
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                    <div className="rounded-lg bg-background/70 border border-border/50 p-3.5">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Total Redemptions</p>
+                      <p className="text-xl font-bold tracking-tight text-foreground mt-0.5">{dp.totalRedemptions.toLocaleString()}</p>
+                    </div>
+                    <div className="rounded-lg bg-background/70 border border-border/50 p-3.5">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Total Deal Revenue</p>
+                      <p className="text-xl font-bold tracking-tight text-foreground mt-0.5">{money(dp.totalRevenue)}</p>
+                    </div>
+                    <div className="rounded-lg bg-background/70 border border-border/50 p-3.5">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Most Used Deal</p>
+                      <p className="text-base font-bold tracking-tight text-foreground mt-0.5 truncate">{dp.mostUsed?.name ?? "—"}</p>
+                      {dp.mostUsed && <p className="text-[11px] text-muted-foreground mt-0.5">{dp.mostUsed.redemptions} redemptions</p>}
+                    </div>
+                    <div className="rounded-lg bg-background/70 border border-border/50 p-3.5">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Active Deals</p>
+                      <p className="text-xl font-bold tracking-tight text-foreground mt-0.5">{dp.activeDealsCount}</p>
+                    </div>
+                  </div>
+
+                  {dp.rows.length === 0 ? (
+                    <p className="text-sm text-muted-foreground py-6 text-center">No deals used this period.</p>
+                  ) : (
+                    <>
+                      {/* Revenue by Deal */}
+                      <div className="rounded-xl border border-border/50 bg-card/40 p-4">
+                        <p className="text-sm font-semibold text-foreground mb-3">Revenue by Deal</p>
+                        <div className="h-64">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={dpChartData} barCategoryGap="24%" margin={{ top: 20 }}>
+                              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                              <XAxis dataKey="name" tick={{ fontSize: 10 }} axisLine={{ stroke: "hsl(var(--border))" }} tickLine={false} interval={0} angle={-20} textAnchor="end" height={50} />
+                              <YAxis tick={{ fontSize: 12 }} axisLine={false} tickLine={false} tickFormatter={(v) => `${currency}${(v / 1000).toFixed(0)}k`} />
+                              <Tooltip content={<ChartTooltip />} cursor={{ fill: "hsl(var(--muted) / 0.15)", radius: 4 }} />
+                              <Bar dataKey="revenue" name="Revenue" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} maxBarSize={48}>
+                                <LabelList dataKey="revenue" position="top" formatter={(v: number) => money(v)} style={{ fontSize: 10, fill: "hsl(var(--foreground))" }} />
+                              </Bar>
+                            </BarChart>
+                          </ResponsiveContainer>
+                        </div>
+                      </div>
+
+                      {/* Per-deal table */}
+                      <div className="rounded-xl border border-border/50 bg-card/40 overflow-hidden">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Deal</TableHead>
+                              <TableHead>Type</TableHead>
+                              <TableHead className="text-right">Redemptions</TableHead>
+                              <TableHead className="text-right">Revenue</TableHead>
+                              <TableHead className="text-right">Discount</TableHead>
+                              <TableHead className="text-right">Cost</TableHead>
+                              <TableHead className="text-right">Profit</TableHead>
+                              <TableHead className="text-right">Margin</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {dp.rows.map((r) => (
+                              <TableRow
+                                key={r.dealId}
+                                className="cursor-pointer hover:bg-muted/30 transition-colors"
+                                onClick={() => goToDealSales(r.dealId, r.name)}
+                                title="View Details on Sales & Orders"
+                              >
+                                <TableCell className="font-medium">{r.name}</TableCell>
+                                <TableCell><Badge variant="outline" className="font-normal text-[11px]">{dealTypeLabel(r.type)}</Badge></TableCell>
+                                <TableCell className="text-right tabular-nums">{r.redemptions}</TableCell>
+                                <TableCell className="text-right tabular-nums font-medium">{money(r.revenue)}</TableCell>
+                                <TableCell className="text-right tabular-nums text-destructive">{r.discount > 0 ? `− ${money(r.discount)}` : "—"}</TableCell>
+                                <TableCell className="text-right tabular-nums text-muted-foreground">{r.cost !== null ? money(r.cost) : "—"}</TableCell>
+                                <TableCell className={cn(
+                                  "text-right tabular-nums",
+                                  r.profit === null ? "text-muted-foreground" : r.profit >= 0 ? "text-emerald-500" : "text-destructive"
+                                )}>
+                                  {r.profit !== null ? money(r.profit) : "—"}
+                                </TableCell>
+                                <TableCell className="text-right tabular-nums text-muted-foreground">{r.marginPct !== null ? `${r.marginPct}%` : "—"}</TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+
+                      {/* Caveat — mirrors Net Profit's Purchases-context footer */}
+                      {dp.rows.some((r) => ORDER_LEVEL_DEAL_TYPES.has(r.type)) && (
+                        <div className="flex items-start gap-2 rounded-md border border-border/40 bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+                          <Info className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                          <span>
+                            <span className="font-semibold text-foreground">Promo Code / Minimum Spend</span> rows have no Cost/Profit/Margin — the discount
+                            isn't tied to specific menu items. Discount is recomputed from the deal's current settings against each order's subtotal, so it
+                            can shift slightly if the deal's percentage/amount was edited after some of these orders were placed.
+                          </span>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </section>
+      )}
+
       {/* Dough / Short-Life Batches */}
       <div>
         <h3 className="text-sm font-semibold text-muted-foreground mb-3 flex items-center gap-2">
@@ -2304,98 +2631,27 @@ const Dashboard = () => {
         </Card>
       </div>
 
-      {/* Charts Row: Day-wise Sales & Payment Methods */}
-      <div className={cn("grid grid-cols-1 gap-4", tileVisible("payment-methods") ? "lg:grid-cols-2" : "")}>
-        {/* Day-wise Sales (This Week) */}
-        <div>
-          <h3 className="text-sm font-semibold text-muted-foreground mb-3 flex items-center gap-2">
-            <BarChart3 className="h-4 w-4" />
-            Day-wise Sales (This Week)
-          </h3>
-          <ClickableCard interactive={salesDrillEnabled} onClick={goToSales} className="h-[calc(100%-2rem)]">
-            <CardContent className="p-5 flex flex-col justify-between h-full">
-              <div className="h-[180px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={d?.daywiseSales ?? []} margin={{ top: 8, right: 8, left: 0, bottom: 4 }}>
-                    <XAxis dataKey="label" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
-                    <YAxis tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
-                    <Tooltip content={<ChartTooltip />} cursor={{ fill: "hsl(var(--muted) / 0.15)", radius: 4 }} />
-                    <Bar dataKey="sales" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </CardContent>
-          </ClickableCard>
-        </div>
-
-        {/* Payment Methods (This Month) */}
-        {tileVisible("payment-methods") && (
-          <div>
-            <h3 className="text-sm font-semibold text-muted-foreground mb-3 flex items-center gap-2">
-              <Wallet className="h-4 w-4" />
-              Payment Methods (This Month)
-            </h3>
-            <ClickableCard interactive onClick={() => goToTile("payment-methods")} className="h-[calc(100%-2rem)]">
-              <CardContent className="p-5">
-                {pays.length === 0 ? (
-                  <p className="text-sm text-muted-foreground py-10 text-center">No payments this month</p>
-                ) : (
-                  <div className="space-y-3 pt-1">
-                    {pays.map(p => (
-                      <div key={p.method} className="flex items-center gap-3">
-                        <span className="text-xs font-medium w-24 shrink-0">{p.method}</span>
-                        <div className="flex-1 bg-muted rounded h-2">
-                          <div
-                            className="h-2 rounded bg-primary"
-                            style={{ width: `${(p.amount / maxPay) * 100}%` }}
-                          />
-                        </div>
-                        <span className="text-xs font-semibold w-28 text-right">{currency} {p.amount.toLocaleString()}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </ClickableCard>
-          </div>
-        )}
+      {/* Day-wise Sales (This Week) */}
+      <div>
+        <h3 className="text-sm font-semibold text-muted-foreground mb-3 flex items-center gap-2">
+          <BarChart3 className="h-4 w-4" />
+          Day-wise Sales (This Week)
+        </h3>
+        <ClickableCard interactive={salesDrillEnabled} onClick={goToSales}>
+          <CardContent className="p-5">
+            <div className="h-[180px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={d?.daywiseSales ?? []} margin={{ top: 8, right: 8, left: 0, bottom: 4 }}>
+                  <XAxis dataKey="label" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
+                  <YAxis tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
+                  <Tooltip content={<ChartTooltip />} cursor={{ fill: "hsl(var(--muted) / 0.15)", radius: 4 }} />
+                  <Bar dataKey="sales" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </ClickableCard>
       </div>
-
-      {/* Top 10 Items (This Month) */}
-      {tileVisible("top-items") && (
-        <div>
-          <h3 className="text-sm font-semibold text-muted-foreground mb-3 flex items-center gap-2">
-            <Trophy className="h-4 w-4" />
-            Top 10 Items
-          </h3>
-          <ClickableCard interactive onClick={() => goToTile("top-items")}>
-            <CardContent className="p-5">
-              {(d?.topItems ?? []).length === 0 ? (
-                <p className="text-sm text-muted-foreground py-4 text-center">No item sales this month</p>
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Item</TableHead>
-                      <TableHead className="text-right">Qty</TableHead>
-                      <TableHead className="text-right">Revenue</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {(d?.topItems ?? []).slice(0, 10).map((item) => (
-                      <TableRow key={item.name}>
-                        <TableCell className="font-medium">{item.name}</TableCell>
-                        <TableCell className="text-right">{item.qty}</TableCell>
-                        <TableCell className="text-right">{currency} {item.revenue.toLocaleString()}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              )}
-            </CardContent>
-          </ClickableCard>
-        </div>
-      )}
 
       {/* Growth vs Last Month */}
       <div>
@@ -2428,77 +2684,6 @@ const Dashboard = () => {
               </CardContent>
             </Card>
           ))}
-        </div>
-      </div>
-
-      {/* Financial Overview (This Month) */}
-      <div>
-        <h3 className="text-sm font-semibold text-muted-foreground mb-3 flex items-center gap-2">
-          <TrendingUp className="h-4 w-4" />
-          Financial Overview (This Month)
-        </h3>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <ClickableCard interactive={salesDrillEnabled} onClick={goToSales}>
-            <CardContent className="p-5">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs text-muted-foreground font-medium">Gross Sale</p>
-                  <p className="text-2xl font-bold mt-1">{currency} {(d?.month.grossSale ?? 0).toLocaleString()}</p>
-                  <span className="text-xs text-muted-foreground">Discounts: {currency} {(d?.month.discounts ?? 0).toLocaleString()}</span>
-                </div>
-                <div className="h-10 w-10 rounded-lg flex items-center justify-center bg-blue-500/10">
-                  <ReceiptText className="h-5 w-5 text-blue-500" />
-                </div>
-              </div>
-            </CardContent>
-          </ClickableCard>
-
-          <ClickableCard interactive={salesDrillEnabled} onClick={goToSales}>
-            <CardContent className="p-5">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs text-muted-foreground font-medium">Revenue</p>
-                  <p className="text-2xl font-bold mt-1">{currency} {(d?.month.revenue ?? 0).toLocaleString()}</p>
-                  <span className="text-xs text-muted-foreground">After discounts + tax</span>
-                </div>
-                <div className="h-10 w-10 rounded-lg flex items-center justify-center bg-success/10">
-                  <Wallet className="h-5 w-5 text-success" />
-                </div>
-              </div>
-            </CardContent>
-          </ClickableCard>
-
-          <ClickableCard interactive={salesDrillEnabled} onClick={goToSales} className="border-destructive/20">
-            <CardContent className="p-5">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs text-muted-foreground font-medium">Food Loss</p>
-                  <p className="text-2xl font-bold mt-1 text-destructive">{currency} {(d?.month.foodLoss ?? 0).toLocaleString()}</p>
-                  <span className="text-xs text-muted-foreground">Waste this month</span>
-                </div>
-                <div className="h-10 w-10 rounded-lg flex items-center justify-center bg-destructive/10">
-                  <Flame className="h-5 w-5 text-destructive" />
-                </div>
-              </div>
-            </CardContent>
-          </ClickableCard>
-
-          <ClickableCard interactive={salesDrillEnabled} onClick={goToSales}>
-            <CardContent className="p-5">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs text-muted-foreground font-medium">Net Profit</p>
-                  <p className={`text-2xl font-bold mt-1 ${(d?.month.netProfit ?? 0) >= 0 ? "text-success" : "text-destructive"}`}>
-                    {currency} {(d?.month.netProfit ?? 0).toLocaleString()}
-                  </p>
-                  <span className="text-xs text-muted-foreground">Revenue − Expenses − Loss</span>
-                </div>
-                <div className={`h-10 w-10 rounded-lg flex items-center justify-center ${(d?.month.netProfit ?? 0) >= 0 ? "bg-success/10" : "bg-destructive/10"}`}>
-                  <TrendingUp className={`h-5 w-5 ${(d?.month.netProfit ?? 0) >= 0 ? "text-success" : "text-destructive"}`} />
-                </div>
-              </div>
-            </CardContent>
-          </ClickableCard>
         </div>
       </div>
 

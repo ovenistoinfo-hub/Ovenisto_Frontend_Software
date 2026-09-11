@@ -22,6 +22,7 @@ import {
   ShoppingBag,
   Bike,
   Tags,
+  Tag,
 } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { DatePicker } from "@/components/ui/date-picker";
@@ -31,6 +32,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { TablePagination } from "@/components/TablePagination";
 import { orderService, type OrderRecord } from "@/services/order.service";
 import { menuService } from "@/services/menu.service";
+import { dealService } from "@/services/deal.service";
 import { useData } from "@/contexts/DataContext";
 import { useOrderEvents } from "@/hooks/use-order-events";
 import { useVisiblePolling } from "@/hooks/use-visible-polling";
@@ -125,6 +127,15 @@ const Sales = () => {
   const [paymentMethodFilter, setPaymentMethodFilter] = useState(() => searchParams.get("paymentMethod") || "");
   const payActive = Boolean(paymentMethodFilter);
 
+  // Deal filter — "" means no filter. Arriving from the Dashboard "Deals Performance" drill-down
+  // pre-selects one via ?deal=<dealId>. Keyed by id (not name, unlike category/paymentMethod) —
+  // a deal name isn't guaranteed unique across a deleted+recreated deal. `?dealName=` rides
+  // along display-only, for the synthetic-option fallback below when the id isn't in the live
+  // deals list (deal deleted, or arrived before the list finished loading).
+  const [dealFilter, setDealFilter] = useState(() => searchParams.get("deal") || "");
+  const [dealFilterName] = useState(() => searchParams.get("dealName") || "");
+  const dealActive = Boolean(dealFilter);
+
   const [receiptSlip, setReceiptSlip] = useState<PlacedOrderSlipData | null>(null);
   const [showReceipt, setShowReceipt] = useState(false);
 
@@ -135,7 +146,7 @@ const Sales = () => {
     : "completed";
 
   const { data: resp, isLoading: loading } = useQuery({
-    queryKey: ["orders", { search, typeFilter, statusParam, dateFrom, dateTo, timeFrom, timeTo, categoryFilter, paymentMethodFilter, page }],
+    queryKey: ["orders", { search, typeFilter, statusParam, dateFrom, dateTo, timeFrom, timeTo, categoryFilter, paymentMethodFilter, dealFilter, page }],
     queryFn: () => orderService.getOrders({
       search: search || undefined,
       status: statusParam,
@@ -146,6 +157,7 @@ const Sales = () => {
       toTime: timeTo || undefined,
       category: categoryFilter || undefined,
       paymentMethod: paymentMethodFilter || undefined,
+      deal: dealFilter || undefined,
       // This is order HISTORY -- a completed-but-unpaid order isn't a settled sale yet, so it
       // never belongs here (unlike Kitchen Panel/Order Monitor/Waiter Panel, which still need
       // to see it to actually collect payment).
@@ -164,11 +176,21 @@ const Sales = () => {
     staleTime: 5 * 60_000,
   });
 
+  // Deals for the filter dropdown.
+  const { data: deals = [] } = useQuery({
+    queryKey: ["deals-all"],
+    queryFn: () => dealService.getDeals(),
+    staleTime: 5 * 60_000,
+  });
+  // The dropdown/hint show a real name even for a deal outside the fetched list (deleted, or
+  // the list hasn't loaded yet) — prefer the live name, fall back to what arrived in the URL.
+  const dealDisplayName = deals.find((d) => d.id === dealFilter)?.name || dealFilterName || dealFilter;
+
   // Sale/Cost/Profit/Margin totalled across every order the current filters match (not just
   // this page) -- the 4 summary cards below. Independent of `page` on purpose: changing pages
   // must not refetch it, and it must not force the table to re-fetch either.
   const { data: summary } = useQuery({
-    queryKey: ["orders-summary", { search, typeFilter, statusParam, dateFrom, dateTo, timeFrom, timeTo, categoryFilter, paymentMethodFilter }],
+    queryKey: ["orders-summary", { search, typeFilter, statusParam, dateFrom, dateTo, timeFrom, timeTo, categoryFilter, paymentMethodFilter, dealFilter }],
     queryFn: () => orderService.getOrdersSummary({
       search: search || undefined,
       status: statusParam,
@@ -179,6 +201,7 @@ const Sales = () => {
       toTime: timeTo || undefined,
       category: categoryFilter || undefined,
       paymentMethod: paymentMethodFilter || undefined,
+      deal: dealFilter || undefined,
       excludeUnpaid: true,
     }),
   });
@@ -198,6 +221,7 @@ const Sales = () => {
   const handleType = (v: string) => { setTypeFilter(v); setPage(1); };
   const handleCategory = (v: string) => { setCategoryFilter(v === "all" ? "" : v); setPage(1); };
   const handlePaymentMethod = (v: string) => { setPaymentMethodFilter(v === "all" ? "" : v); setPage(1); };
+  const handleDeal = (v: string) => { setDealFilter(v === "all" ? "" : v); setPage(1); };
 
   // Payment methods for the dropdown — the restaurant's configured list (DataContext mirrors
   // Settings), with a fallback so it's never empty.
@@ -208,9 +232,11 @@ const Sales = () => {
   // When a category filter is active the backend attaches each order's category-scoped slice;
   // the Total/Cost/Profit columns (and export) show that instead of the whole-order figure so
   // they reconcile with the Dashboard "Sales by Category" card the user drilled in from.
-  const rowSale = (o: OrderRecord) => (catActive ? Number(o.categorySale ?? 0) : Number(o.total));
-  const rowCost = (o: OrderRecord) => (catActive ? Number(o.categoryCost ?? 0) : Number(o.cost ?? 0));
-  const rowProfit = (o: OrderRecord) => (catActive ? Number(o.categoryProfit ?? 0) : Number(o.profit ?? 0));
+  // deal takes priority over category when both filters happen to be active (mirrors the
+  // backend's identical priority in getOrders — deal-slice checked before category-slice).
+  const rowSale = (o: OrderRecord) => (dealActive ? Number(o.dealSale ?? 0) : catActive ? Number(o.categorySale ?? 0) : Number(o.total));
+  const rowCost = (o: OrderRecord) => (dealActive ? Number(o.dealCost ?? 0) : catActive ? Number(o.categoryCost ?? 0) : Number(o.cost ?? 0));
+  const rowProfit = (o: OrderRecord) => (dealActive ? Number(o.dealProfit ?? 0) : catActive ? Number(o.categoryProfit ?? 0) : Number(o.profit ?? 0));
 
   const applyPreset = (preset: "Today" | "This Week" | "This Month") => {
     const now = new Date();
@@ -246,15 +272,16 @@ const Sales = () => {
         toTime: timeTo || undefined,
         category: categoryFilter || undefined,
         paymentMethod: paymentMethodFilter || undefined,
+        deal: dealFilter || undefined,
         excludeUnpaid: true,
         page: 1,
         limit: 10000,
       });
       const exportOrders = res.data?.length ? res.data : orders;
 
-      const saleHead = catActive ? `Sale (${categoryFilter})` : "Total";
-      const costHead = catActive ? `Cost (${categoryFilter})` : "Cost";
-      const profitHead = catActive ? `Profit (${categoryFilter})` : "Profit";
+      const saleHead = dealActive ? `Sale (${dealDisplayName})` : catActive ? `Sale (${categoryFilter})` : "Total";
+      const costHead = dealActive ? `Cost (${dealDisplayName})` : catActive ? `Cost (${categoryFilter})` : "Cost";
+      const profitHead = dealActive ? `Profit (${dealDisplayName})` : catActive ? `Profit (${categoryFilter})` : "Profit";
       const headers = ["Order #", "Date", "Time", "Customer", "Type", "Items", saleHead, costHead, profitHead, "Payment Method"];
       const rows = exportOrders.map((o) => [
         o.orderNumber,
@@ -680,10 +707,47 @@ const Sales = () => {
                 </Button>
               )}
             </div>
+
+            {/* Deal filter */}
+            <div className="inline-flex items-center gap-1">
+              <Select value={dealFilter || "all"} onValueChange={handleDeal}>
+                <SelectTrigger
+                  className={cn(
+                    "h-8 text-xs gap-1.5 border shadow-sm min-w-[9rem] transition-all",
+                    dealActive
+                      ? "border-border/80 bg-background text-foreground font-semibold"
+                      : "border-border/70 bg-background text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  <Tag className={cn("h-3.5 w-3.5 shrink-0", dealActive ? "text-foreground" : "text-muted-foreground")} />
+                  <SelectValue placeholder="All Deals" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Deals</SelectItem>
+                  {dealActive && !deals.some((d) => d.id === dealFilter) && (
+                    <SelectItem value={dealFilter}>{dealDisplayName}</SelectItem>
+                  )}
+                  {deals.map((d) => (
+                    <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {dealActive && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handleDeal("all")}
+                  className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-md"
+                  title="Clear deal filter"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </Button>
+              )}
+            </div>
           </div>
         </CardHeader>
         <CardContent>
-          {(catActive || payActive) && (
+          {(catActive || payActive || dealActive) && (
             <div className="mb-3 flex items-start gap-2 rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-xs text-muted-foreground">
               <Tags className="h-3.5 w-3.5 text-primary shrink-0 mt-0.5" />
               <span>
@@ -691,7 +755,10 @@ const Sales = () => {
                   <>Showing the <span className="font-semibold text-foreground">{categoryFilter}</span> portion of each order — Sale / Cost / Profit and the totals above cover only this category's items, not the whole order. </>
                 )}
                 {payActive && (
-                  <>Filtered to orders that used <span className="font-semibold text-foreground">{paymentMethodFilter}</span> — a split-payment order also appears under its other methods, and the amounts shown are full order totals.</>
+                  <>Filtered to orders that used <span className="font-semibold text-foreground">{paymentMethodFilter}</span> — a split-payment order also appears under its other methods, and the amounts shown are full order totals. </>
+                )}
+                {dealActive && (
+                  <>Showing <span className="font-semibold text-foreground">{dealDisplayName}</span>'s portion of each order — Sale / Cost / Profit and the totals above cover only this deal's contribution. For a Promo Code/Min Spend order that's the whole order (the deal discounts the entire order, not specific items). </>
                 )}
               </span>
             </div>
@@ -708,9 +775,9 @@ const Sales = () => {
                     <TableHead>Customer</TableHead>
                     <TableHead>Type</TableHead>
                     <TableHead>Items</TableHead>
-                    <TableHead>{catActive ? `Sale · ${categoryFilter}` : "Total"}</TableHead>
-                    <TableHead>{catActive ? `Cost · ${categoryFilter}` : "Cost"}</TableHead>
-                    <TableHead>{catActive ? `Profit · ${categoryFilter}` : "Profit"}</TableHead>
+                    <TableHead>{dealActive ? `Sale · ${dealDisplayName}` : catActive ? `Sale · ${categoryFilter}` : "Total"}</TableHead>
+                    <TableHead>{dealActive ? `Cost · ${dealDisplayName}` : catActive ? `Cost · ${categoryFilter}` : "Cost"}</TableHead>
+                    <TableHead>{dealActive ? `Profit · ${dealDisplayName}` : catActive ? `Profit · ${categoryFilter}` : "Profit"}</TableHead>
                     <TableHead>Payment</TableHead>
                     <TableHead>Actions</TableHead>
                   </TableRow>

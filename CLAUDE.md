@@ -592,9 +592,79 @@ plus a body explaining _why_ the change was made when that is not obvious.
   `refreshSalesSections`. Body: 4 headline tiles (Revenue / Gross Profit / **Net Profit** big +
   colored / Net Margin) + a **P&L waterfall** div (Revenue − COGS = Gross − Food Loss −
   Expenses = Net, each row labelled, subtotals highlighted) + `expenseByCategory` /
-  `wasteByReason` mini-lists + a muted "Purchases this period — not subtracted" footer. **No
-  Recharts chart** (a P&L reads better as a waterfall list; no colour-encoding risk).
+  `wasteByReason` mini-lists + a muted "Purchases this period — not subtracted" footer +
+  (added 2026-09-11, after live feedback) a **"Net Profit Breakdown" bar chart** below the
+  waterfall (`npChartData`): the same 6 lines, COGS/Food Loss/Expenses plotted as their
+  magnitude (never negative) like every other chart on this dashboard — an earlier version
+  plotted them as negative/dipping-below-zero bars to mirror the waterfall visually and it
+  fought Recharts' negative-bar `LabelList` positioning twice (labels collided with the XAxis,
+  then bars looked squashed after over-padding the Y-domain to fix that); reverted to plain
+  magnitude bars + built-in `position="top"` labels, zero custom positioning needed. Only Gross
+  Profit/Net Profit can legitimately go negative (a loss period), colored by sign. No drill-down
+  on the chart itself — the waterfall rows above already cover it.
   `report.service.ts`: `getNetProfit` + `NetProfitReport`.
+- **Dashboard audit (2026-09-11)** — three legacy sections removed as fully superseded:
+  "Payment Methods (This Month)" and "Top 10 Items (This Month)" (duplicated by Sales by Payment
+  Method / Top & Bottom Items, with less depth), and "Financial Overview (This Month)" (its Net
+  Profit tile used the known-wrong `d.month.netProfit` — no COGS — right below the correct Net
+  Profit section). Removed the now-dead `pays`/`maxPay` derivation and the now-unused
+  `ReceiptText`/`Flame` icon imports along with it. Kept: "Day-wise Sales (This Week)" (now full
+  width, no longer paired with the removed Payment Methods chart), "Growth vs Last Month",
+  Customer Intelligence, and the six operational tile zones (Today's Operations/Inventory &
+  Procurement/People/Delivery/Reservations/Cash Hub) — none of those overlap the 6 filterable
+  report sections.
+- **Dashboard "Deals Performance" section (`Dashboard.tsx`, 2026-09-11)** — the **sixth**
+  filterable section, same date-range-only choice as Net Profit (own `dp*` state —
+  `dpFromStr`/`dpToStr`/`dpPreset`, `setDpRange`; defaults to "This Month"). `reportService.
+  getDealsPerformance`, `["deals-performance"]` on the shared `refreshSalesSections`. Body: 4
+  headline tiles (Total Redemptions / Total Deal Revenue / Most Used Deal / Active Deals) + a
+  "Revenue by Deal" bar chart (`dpChartData`, top 8 by revenue) + a full per-deal `<Table>`
+  (Deal / Type badge / Redemptions / Revenue / Cost / Profit / Margin, `—` for the Cost/Profit/
+  Margin cells on Promo Code/Min Spend rows) sorted by redemptions, + a caveat footer (only
+  rendered when a Promo Code/Min Spend row is present) explaining why those rows have no
+  Cost/Profit. `dealTypeLabel()` maps the raw `DealType` string to a human label; `DEAL_TYPE_
+  LABELS`/`ORDER_LEVEL_DEAL_TYPES` are local consts next to the `dp`/`dpChartData` derivations.
+  `report.service.ts`: `getDealsPerformance` + `DealsPerformanceReport`/`DealPerformanceRow`.
+- **Deals Performance's table rows drill into Sales & Orders + `Sales.tsx` gained a Deal filter
+  (2026-09-11)** — each row's `onClick` calls `goToDealSales(dealId, name)` (defined next to
+  `dealTypeLabel`), navigating to `/sales?status=completed&deal=<dealId>&dealName=<name>&from=
+  &to=` (reusing `dpFromStr`/`dpToStr`). `Sales.tsx` gained a Deal `<Select>` — same visual
+  pattern as its Category/Payment Method filters, but keyed by **id** (`dealFilter`), not name:
+  a deal name isn't guaranteed unique across a deleted+recreated deal. Options come from
+  `dealService.getDeals()` (`["deals-all"]` query, 5-min staleTime); seeded from `?deal=` on
+  mount, with `?dealName=` (`dealFilterName` state) riding along display-only for the
+  synthetic-`<SelectItem>` fallback + hint banner when the id isn't in the live deals list
+  (`dealDisplayName` = live name if found, else the URL-carried name, else the raw id).
+  `orderService.getOrders`/`getOrdersSummary` gained a `deal?: string` param threaded through
+  exactly like `paymentMethod`; the shared hint-banner block (`catActive || payActive ||
+  dealActive`) grew a third paragraph for it.
+- **`deal=` gained a per-order slice (2026-09-11), superseding "no per-order slice" above** —
+  `OrderRecord` gained `dealSale`/`dealCost`/`dealProfit`. `Sales.tsx`'s `rowSale`/`rowCost`/
+  `rowProfit` and column headers now check `dealActive` FIRST, then `catActive`, then plain
+  whole-order (matches the backend's identical priority when both filters are somehow active at
+  once). The hint banner's deal paragraph explains the one asymmetry: a line-item deal's slice is
+  just its lines, but an order-level deal's (Promo Code/Min Spend) slice equals the whole order —
+  the deal discounts everything, not specific items, so there's nothing to prorate.
+- **Deals Performance gained a Discount column (2026-09-11)** — `DealPerformanceRow.discount`
+  (always present, not nullable like `cost`/`profit`) renders between Revenue and Cost in
+  `Dashboard.tsx`'s table, styled `text-destructive` with a `−` prefix when nonzero. The row
+  caveat footer (still gated on `ORDER_LEVEL_DEAL_TYPES`) was rewritten — it used to say the
+  exact discount "can't be isolated"; that's no longer true (the backend now recomputes it), so
+  the footer instead explains the narrower remaining caveats: no Cost/Profit/Margin for
+  order-level rows, and the figure can drift from what was actually charged if the deal's
+  percent/amount was edited after some orders redeemed it.
+- **Single discount per order (2026-09-11)** — a real bug: an order with a line-item deal
+  (Combo/Option Combo/%Discount/BOGO) could ALSO get a Minimum Spend/Promo Code discount stacked
+  on top, plus a manual discount on top of that. Fixed **entirely backend-side** (`createOrder`/
+  `updateOrder` in the backend's `order.controller.ts` — see that repo's CLAUDE.md for the exact
+  mechanism); no frontend files changed for the fix itself. Practical effect for POS/Waiter
+  Panel/Self-Order: submitting an order that already has a deal-priced line, WITH a manual
+  discount entered or a coupon code typed, now either silently drops the manual discount (order
+  succeeds, `discount` comes back as just the deal's own reduction) or — if a coupon code was
+  explicitly typed — the request now 400s with "Cannot apply a coupon — this order already has a
+  deal applied." **None of the three ordering UIs proactively hide/disable the manual-discount
+  input or coupon-code field yet when the cart already has a deal-tagged item** — that UI-side
+  guard (matching the backend rule) is a known follow-up, not yet built.
 - **Net Profit's rows drill into Sales/Expenses/Waste + `Expenses.tsx`/`StockAdjustments.tsx`
   gained real date filters (2026-09-11)** — the Revenue row → `goToRevenueSales()`
   (`/sales?status=completed&from=&to=`), the Food Loss row + each "Food loss by reason" row →

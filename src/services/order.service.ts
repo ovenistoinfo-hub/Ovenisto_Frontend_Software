@@ -96,6 +96,14 @@ export interface OrderRecord {
   categorySale?: number;
   categoryCost?: number;
   categoryProfit?: number;
+  /** This order's slice for the requested `deal` filter only. A line-item deal (Combo/Option
+   *  Combo/%Discount/BOGO) slices like category (revenue prorated across just its lines, cost =
+   *  real per-line COGS); an order-level deal (Promo Code/Min Spend) has no per-line slice — the
+   *  deal discounts the whole order, so these equal the whole-order sale/cost/profit. Present
+   *  only on GET /orders when a `deal` param was sent (Dashboard "Deals Performance" drill-down). */
+  dealSale?: number;
+  dealCost?: number;
+  dealProfit?: number;
   items: OrderItemRecord[];
   /** Legacy shared per-kitchen ticket — only orders whose items predate
    *  per-dish keys still use it (see kitchenDealProgress). */
@@ -184,6 +192,9 @@ export const orderService = {
     /** Keep only orders that used this payment method (split-aware: a split order matches every
      *  method it used). Amounts stay whole-order — no per-method slice. */
     paymentMethod?: string;
+    /** Keep only orders where this Deal id was redeemed (line-item or order-level). Amounts
+     *  stay whole-order — no per-deal slice, unlike category. */
+    deal?: string;
     page?: number;
     limit?: number;
     outletId?: string;
@@ -200,6 +211,7 @@ export const orderService = {
     if (params?.excludeUnpaid) q.set('excludeUnpaid', 'true');
     if (params?.category) q.set('category', params.category);
     if (params?.paymentMethod) q.set('paymentMethod', params.paymentMethod);
+    if (params?.deal) q.set('deal', params.deal);
     if (params?.page) q.set('page', String(params.page));
     if (params?.limit) q.set('limit', String(params.limit));
     // Super Admin branch filter (?outletId=) — read by the backend's resolveOutletScope
@@ -224,6 +236,8 @@ export const orderService = {
     category?: string;
     /** Same as getOrders: restrict to orders that used this payment method (whole-order totals). */
     paymentMethod?: string;
+    /** Same as getOrders: restrict to orders where this Deal id was redeemed (whole-order totals). */
+    deal?: string;
     outletId?: string;
   }): Promise<{ sale: number; cost: number; profit: number; orders: number; marginPct: number }> {
     const q = new URLSearchParams();
@@ -237,6 +251,7 @@ export const orderService = {
     if (params?.excludeUnpaid) q.set('excludeUnpaid', 'true');
     if (params?.category) q.set('category', params.category);
     if (params?.paymentMethod) q.set('paymentMethod', params.paymentMethod);
+    if (params?.deal) q.set('deal', params.deal);
     if (params?.outletId && params.outletId !== 'all') q.set('outletId', params.outletId);
     const res = await api.get<{ success: boolean; data: { sale: number; cost: number; profit: number; orders: number; marginPct: number } }>(`/orders/summary?${q.toString()}`);
     return res.data;
