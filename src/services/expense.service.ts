@@ -29,6 +29,9 @@ export const expenseService = {
     limit?: number;
     category?: string;
     search?: string;
+    /** YYYY-MM-DD, inclusive both ends. */
+    from?: string;
+    to?: string;
   }): Promise<{
     success: boolean;
     data: ExpenseRecord[];
@@ -40,6 +43,8 @@ export const expenseService = {
     if (params?.limit) qs.set('limit', String(params.limit));
     if (params?.category) qs.set('category', params.category);
     if (params?.search) qs.set('search', params.search);
+    if (params?.from) qs.set('from', params.from);
+    if (params?.to) qs.set('to', params.to);
     return api.get(`/expenses${qs.toString() ? `?${qs}` : ''}`);
   },
 

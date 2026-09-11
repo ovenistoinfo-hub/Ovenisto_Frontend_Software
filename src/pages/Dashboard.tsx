@@ -592,6 +592,23 @@ const Dashboard = () => {
   // ── Net Profit derivations ──────────────────────────────────────────────
   const np = npData;
   const money = (n: number) => `${currency} ${Math.abs(n).toLocaleString()}`;
+  // Drill-downs for the P&L waterfall rows — same date window, no time-of-day (none of the
+  // three destination pages filter by time). Sales.tsx / Expenses.tsx / StockAdjustments.tsx
+  // each read these params once on mount, exactly like the other four sections' drill-downs.
+  const goToRevenueSales = () => {
+    const params = new URLSearchParams({ status: "completed", from: npFromStr, to: npToStr });
+    navigate(`/sales?${params.toString()}`);
+  };
+  const goToExpenses = (category?: string) => {
+    const params = new URLSearchParams({ from: npFromStr, to: npToStr });
+    if (category) params.set("category", category);
+    navigate(`/expenses?${params.toString()}`);
+  };
+  const goToWaste = (reason?: string) => {
+    const params = new URLSearchParams({ from: npFromStr, to: npToStr });
+    if (reason) params.set("reason", reason);
+    navigate(`/stock/adjustments?${params.toString()}`);
+  };
 
   return (
     <div className="space-y-6">
@@ -2111,10 +2128,18 @@ const Dashboard = () => {
                     </div>
                   </div>
 
-                  {/* P&L waterfall */}
+                  {/* P&L waterfall — Revenue/Food Loss/Expenses rows drill into Sales/Waste/
+                      Expenses pages, pre-filtered to this section's exact date window. */}
                   <div className="rounded-xl border border-border/50 bg-card/40 divide-y divide-border/40 text-sm">
-                    <div className="flex items-center justify-between px-4 py-2.5">
-                      <span className="text-foreground">Revenue</span>
+                    <div
+                      className="flex items-center justify-between px-4 py-2.5 cursor-pointer hover:bg-muted/30 transition-colors group/row"
+                      onClick={goToRevenueSales}
+                      title="View Details on Sales & Orders"
+                    >
+                      <span className="text-foreground inline-flex items-center gap-1">
+                        Revenue
+                        <ChevronRight className="h-3 w-3 text-muted-foreground/40 transition-transform group-hover/row:translate-x-0.5" />
+                      </span>
                       <span className="font-medium tabular-nums">{money(np.revenue)}</span>
                     </div>
                     <div className="flex items-center justify-between px-4 py-2.5">
@@ -2127,12 +2152,26 @@ const Dashboard = () => {
                         {np.grossProfit < 0 ? "− " : ""}{money(np.grossProfit)} <span className="text-[11px] font-normal text-muted-foreground">({np.grossMarginPct}%)</span>
                       </span>
                     </div>
-                    <div className="flex items-center justify-between px-4 py-2.5">
-                      <span className="text-muted-foreground">− Food Loss <span className="text-[11px]">(expired / damaged / wasted stock)</span></span>
+                    <div
+                      className="flex items-center justify-between px-4 py-2.5 cursor-pointer hover:bg-muted/30 transition-colors group/row"
+                      onClick={() => goToWaste()}
+                      title="View Details on Stock Adjustments — Waste"
+                    >
+                      <span className="text-muted-foreground inline-flex items-center gap-1">
+                        − Food Loss <span className="text-[11px]">(expired / damaged / wasted stock)</span>
+                        <ChevronRight className="h-3 w-3 text-muted-foreground/40 transition-transform group-hover/row:translate-x-0.5" />
+                      </span>
                       <span className="tabular-nums text-muted-foreground">− {money(np.foodLoss)}</span>
                     </div>
-                    <div className="flex items-center justify-between px-4 py-2.5">
-                      <span className="text-muted-foreground">− Expenses <span className="text-[11px]">(rent / salary / utilities)</span></span>
+                    <div
+                      className="flex items-center justify-between px-4 py-2.5 cursor-pointer hover:bg-muted/30 transition-colors group/row"
+                      onClick={() => goToExpenses()}
+                      title="View Details on Expenses"
+                    >
+                      <span className="text-muted-foreground inline-flex items-center gap-1">
+                        − Expenses <span className="text-[11px]">(rent / salary / utilities)</span>
+                        <ChevronRight className="h-3 w-3 text-muted-foreground/40 transition-transform group-hover/row:translate-x-0.5" />
+                      </span>
                       <span className="tabular-nums text-muted-foreground">− {money(np.expenses)}</span>
                     </div>
                     <div className={cn(
@@ -2146,7 +2185,7 @@ const Dashboard = () => {
                     </div>
                   </div>
 
-                  {/* Breakdowns */}
+                  {/* Breakdowns — each row drills into its category/reason specifically. */}
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                     <div className="rounded-xl border border-border/50 bg-card/40 overflow-hidden">
                       <div className="px-4 py-2.5 bg-muted/40 border-b border-border/40">
@@ -2157,8 +2196,15 @@ const Dashboard = () => {
                           <p className="px-4 py-3 text-xs text-muted-foreground">No expenses recorded this period.</p>
                         ) : (
                           np.expenseByCategory.map((e) => (
-                            <div key={e.name} className="flex items-center justify-between px-4 py-2">
-                              <span className="text-muted-foreground truncate">{e.name}</span>
+                            <div
+                              key={e.name}
+                              className="flex items-center justify-between px-4 py-2 cursor-pointer hover:bg-muted/30 transition-colors group/row"
+                              onClick={() => goToExpenses(e.name)}
+                            >
+                              <span className="text-muted-foreground truncate inline-flex items-center gap-1">
+                                {e.name}
+                                <ChevronRight className="h-3 w-3 text-muted-foreground/40 transition-transform group-hover/row:translate-x-0.5" />
+                              </span>
                               <span className="tabular-nums font-medium">{money(e.value)}</span>
                             </div>
                           ))
@@ -2175,8 +2221,15 @@ const Dashboard = () => {
                           <p className="px-4 py-3 text-xs text-muted-foreground">No waste recorded this period.</p>
                         ) : (
                           np.wasteByReason.map((w) => (
-                            <div key={w.name} className="flex items-center justify-between px-4 py-2">
-                              <span className="text-muted-foreground truncate">{w.name}</span>
+                            <div
+                              key={w.name}
+                              className="flex items-center justify-between px-4 py-2 cursor-pointer hover:bg-muted/30 transition-colors group/row"
+                              onClick={() => goToWaste(w.name)}
+                            >
+                              <span className="text-muted-foreground truncate inline-flex items-center gap-1">
+                                {w.name}
+                                <ChevronRight className="h-3 w-3 text-muted-foreground/40 transition-transform group-hover/row:translate-x-0.5" />
+                              </span>
                               <span className="tabular-nums font-medium text-destructive">{money(w.value)}</span>
                             </div>
                           ))

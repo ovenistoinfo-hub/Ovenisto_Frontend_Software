@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { DatePicker } from "@/components/ui/date-picker";
 import {
   Plus, Search, Trash2, TrendingDown, CalendarDays, BarChart3, Eye, User, Phone,
   ChevronUp, X, ShoppingBag, AlertCircle, Check, ChevronsUpDown,
@@ -61,6 +63,12 @@ const emptyForm = {
   warehouseId: "",
 };
 
+/** "YYYY-MM-DD" from local Y/M/D parts — same reasoning as Sales.tsx's toYmd. */
+function toYmd(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
 const StockAdjustments = () => {
   const { settings } = useData();
   const { user } = useAuth();
@@ -84,6 +92,33 @@ const StockAdjustments = () => {
   const [reportView, setReportView] = useState<"daily" | "weekly" | "monthly">("daily");
   const [reasonOpen, setReasonOpen] = useState(false);
 
+  // Arriving from the Dashboard's "Net Profit" section pre-fills the date range (and reason,
+  // for a "Food loss by reason" row) via ?from=&to=&reason= — read once on mount, same one-shot
+  // URL hydration Sales.tsx uses. No time-of-day: waste isn't hourly.
+  const [searchParams] = useSearchParams();
+  const [dateFrom, setDateFrom] = useState(() => searchParams.get("from") || "");
+  const [dateTo, setDateTo] = useState(() => searchParams.get("to") || "");
+  const [activePreset, setActivePreset] = useState<string | null>(null);
+  const [reasonFilter, setReasonFilter] = useState(() => searchParams.get("reason") || "");
+
+  const applyDatePreset = (preset: "Today" | "This Week" | "This Month") => {
+    const now = new Date();
+    if (preset === "Today") {
+      setDateFrom(toYmd(now)); setDateTo(toYmd(now));
+    } else if (preset === "This Week") {
+      const from = new Date(now); from.setDate(from.getDate() - 7);
+      setDateFrom(toYmd(from)); setDateTo(toYmd(now));
+    } else {
+      setDateFrom(toYmd(new Date(now.getFullYear(), now.getMonth(), 1))); setDateTo(toYmd(now));
+    }
+    setActivePreset(preset);
+    setPage(1);
+  };
+  const handleDateFrom = (v: string) => { setDateFrom(v); setActivePreset(null); setPage(1); };
+  const handleDateTo = (v: string) => { setDateTo(v); setActivePreset(null); setPage(1); };
+  const clearDates = () => { setDateFrom(""); setDateTo(""); setActivePreset(null); setPage(1); };
+  const handleReasonFilter = (v: string) => { setReasonFilter(v === "all" ? "" : v); setPage(1); };
+
   const filteredWarehouses = useMemo(() => {
     if (!user) return [];
     if (user.role === "Super Admin") {
@@ -103,8 +138,14 @@ const StockAdjustments = () => {
     try {
       const whParam = selectedWarehouseId !== "all" ? selectedWarehouseId : undefined;
       const [wasteRes, adjRes, ings, whs] = await Promise.all([
-        stockService.getWasteRecords({ warehouseId: whParam, limit: 200 }),
-        stockService.getAdjustments({ warehouseId: whParam, limit: 200 }),
+        stockService.getWasteRecords({
+          warehouseId: whParam, limit: 200,
+          from: dateFrom || undefined, to: dateTo || undefined, reason: reasonFilter || undefined,
+        }),
+        stockService.getAdjustments({
+          warehouseId: whParam, limit: 200,
+          from: dateFrom || undefined, to: dateTo || undefined,
+        }),
         inventoryService.getIngredients(),
         warehouseService.getAll(),
       ]);
@@ -151,7 +192,7 @@ const StockAdjustments = () => {
     } finally {
       setLoading(false);
     }
-  }, [selectedWarehouseId]);
+  }, [selectedWarehouseId, dateFrom, dateTo, reasonFilter]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -565,6 +606,46 @@ const StockAdjustments = () => {
                 </Select>
               </div>
             )}
+          </div>
+
+          {/* Date range + reason — mirrors Sales.tsx's filter bar (no time-of-day, waste isn't
+              hourly). Seeded once from the Dashboard "Net Profit" drill-down. Applies to BOTH
+              the waste rows and the correction rows in the merged table below. */}
+          <div className="flex items-center gap-2.5 flex-wrap pt-3 mt-3 border-t border-border/40">
+            <div className="inline-flex items-center p-0.5 rounded-lg bg-muted/60 border border-border/60 shadow-sm">
+              {(["Today", "This Week", "This Month"] as const).map((p) => (
+                <button
+                  key={p}
+                  type="button"
+                  onClick={() => applyDatePreset(p)}
+                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${activePreset === p ? "bg-background text-foreground shadow-sm font-semibold" : "text-muted-foreground hover:text-foreground"}`}
+                >
+                  {p}
+                </button>
+              ))}
+            </div>
+            <div className="inline-flex items-center gap-1.5">
+              <div className="w-36"><DatePicker value={dateFrom} onChange={handleDateFrom} placeholder="Start date" className="h-8 text-xs bg-background" /></div>
+              <span className="text-xs text-muted-foreground/60 font-medium px-0.5">to</span>
+              <div className="w-36"><DatePicker value={dateTo} onChange={handleDateTo} min={dateFrom || undefined} placeholder="End date" className="h-8 text-xs bg-background" /></div>
+              {(dateFrom || dateTo) && (
+                <Button variant="ghost" size="sm" onClick={clearDates} className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-md" title="Clear date filter">
+                  <X className="h-3.5 w-3.5" />
+                </Button>
+              )}
+            </div>
+            <Select value={reasonFilter || "all"} onValueChange={handleReasonFilter}>
+              <SelectTrigger className="h-8 w-44 text-xs bg-background"><SelectValue placeholder="All Reasons" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Reasons</SelectItem>
+                {/* A drill-down reason (e.g. an auto-expiry or "Unspecified" reason) may not be
+                    in the fixed list — add it so the trigger doesn't show blank. */}
+                {reasonFilter && !WASTE_REASONS.includes(reasonFilter as (typeof WASTE_REASONS)[number]) && (
+                  <SelectItem value={reasonFilter}>{reasonFilter}</SelectItem>
+                )}
+                {WASTE_REASONS.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+              </SelectContent>
+            </Select>
           </div>
         </CardHeader>
         <CardContent>

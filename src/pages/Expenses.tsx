@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { expenseService, type ExpenseRecord } from "@/services/expense.service";
 import { useData } from "@/contexts/DataContext";
@@ -12,6 +13,7 @@ import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { DatePicker } from "@/components/ui/date-picker";
 import { Plus, Search, FileText, Pencil, Trash2, Wallet, Eye, User, ChevronUp, X } from "lucide-react";
 
 import { Skeleton } from "@/components/ui/skeleton";
@@ -20,6 +22,12 @@ import { PageHeader } from "@/components/ui/page-header";
 import { TablePagination } from "@/components/TablePagination";
 
 const categories = ["Utilities", "Rent", "Salary", "Maintenance", "Marketing", "Misc"];
+
+/** "YYYY-MM-DD" from local Y/M/D parts — same reasoning as Sales.tsx's toYmd. */
+function toYmd(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
 
 const Expenses = () => {
   const { settings } = useData();
@@ -37,9 +45,42 @@ const Expenses = () => {
   const [saving, setSaving] = useState(false);
   const [page, setPage] = useState(1);
 
+  // Arriving from the Dashboard's "Net Profit" section pre-fills the date range (and category,
+  // for an "Expenses by category" row) via ?from=&to=&category= — read once on mount, same
+  // one-shot URL hydration Sales.tsx uses. No time-of-day: expenses aren't hourly.
+  const [searchParams] = useSearchParams();
+  const [dateFrom, setDateFrom] = useState(() => searchParams.get("from") || "");
+  const [dateTo, setDateTo] = useState(() => searchParams.get("to") || "");
+  const [activePreset, setActivePreset] = useState<string | null>(null);
+  const [categoryFilter, setCategoryFilter] = useState(() => searchParams.get("category") || "");
+
+  const applyPreset = (preset: "Today" | "This Week" | "This Month") => {
+    const now = new Date();
+    if (preset === "Today") {
+      setDateFrom(toYmd(now)); setDateTo(toYmd(now));
+    } else if (preset === "This Week") {
+      const from = new Date(now); from.setDate(from.getDate() - 7);
+      setDateFrom(toYmd(from)); setDateTo(toYmd(now));
+    } else {
+      setDateFrom(toYmd(new Date(now.getFullYear(), now.getMonth(), 1))); setDateTo(toYmd(now));
+    }
+    setActivePreset(preset);
+    setPage(1);
+  };
+  const handleDateFrom = (v: string) => { setDateFrom(v); setActivePreset(null); setPage(1); };
+  const handleDateTo = (v: string) => { setDateTo(v); setActivePreset(null); setPage(1); };
+  const clearDates = () => { setDateFrom(""); setDateTo(""); setActivePreset(null); setPage(1); };
+  const handleCategoryFilter = (v: string) => { setCategoryFilter(v === "all" ? "" : v); setPage(1); };
+
   const { data: resp, isLoading: loading } = useQuery({
-    queryKey: ["expenses", { page, search }],
-    queryFn: () => expenseService.getAll({ page, limit: 20, search: search || undefined }),
+    queryKey: ["expenses", { page, search, dateFrom, dateTo, categoryFilter }],
+    queryFn: () => expenseService.getAll({
+      page, limit: 20,
+      search: search || undefined,
+      from: dateFrom || undefined,
+      to: dateTo || undefined,
+      category: categoryFilter || undefined,
+    }),
   });
   const expenses = resp?.data ?? [];
   const totalAmount = resp?.totalAmount ?? 0;
@@ -153,7 +194,49 @@ const Expenses = () => {
         </Card>
       )}
 
-      <Card className="shadow-sm"><CardHeader className="pb-3"><div className="relative max-w-sm"><Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} placeholder="Search..." className="pl-9" /></div></CardHeader>
+      <Card className="shadow-sm">
+        <CardHeader className="pb-3 space-y-3">
+          <div className="relative max-w-sm"><Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} placeholder="Search..." className="pl-9" /></div>
+
+          {/* Date range + category — mirrors Sales.tsx's filter bar (no time-of-day, expenses
+              aren't hourly). Seeded once from the Dashboard "Net Profit" drill-down. */}
+          <div className="flex items-center gap-2.5 flex-wrap pt-2 border-t border-border/40">
+            <div className="inline-flex items-center p-0.5 rounded-lg bg-muted/60 border border-border/60 shadow-sm">
+              {(["Today", "This Week", "This Month"] as const).map((p) => (
+                <button
+                  key={p}
+                  type="button"
+                  onClick={() => applyPreset(p)}
+                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${activePreset === p ? "bg-background text-foreground shadow-sm font-semibold" : "text-muted-foreground hover:text-foreground"}`}
+                >
+                  {p}
+                </button>
+              ))}
+            </div>
+            <div className="inline-flex items-center gap-1.5">
+              <div className="w-36"><DatePicker value={dateFrom} onChange={handleDateFrom} placeholder="Start date" className="h-8 text-xs bg-background" /></div>
+              <span className="text-xs text-muted-foreground/60 font-medium px-0.5">to</span>
+              <div className="w-36"><DatePicker value={dateTo} onChange={handleDateTo} min={dateFrom || undefined} placeholder="End date" className="h-8 text-xs bg-background" /></div>
+              {(dateFrom || dateTo) && (
+                <Button variant="ghost" size="sm" onClick={clearDates} className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-md" title="Clear date filter">
+                  <X className="h-3.5 w-3.5" />
+                </Button>
+              )}
+            </div>
+            <Select value={categoryFilter || "all"} onValueChange={handleCategoryFilter}>
+              <SelectTrigger className="h-8 w-44 text-xs bg-background"><SelectValue placeholder="All Categories" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Categories</SelectItem>
+                {/* A drill-down category (e.g. "Uncategorized") may not be in the fixed list —
+                    add it so the trigger doesn't show blank while still filtering correctly. */}
+                {categoryFilter && !categories.includes(categoryFilter) && (
+                  <SelectItem value={categoryFilter}>{categoryFilter}</SelectItem>
+                )}
+                {categories.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+        </CardHeader>
         <CardContent>
           {expenses.length === 0 ? (
             <div className="text-center py-12"><Wallet className="h-12 w-12 text-muted-foreground mx-auto mb-3 opacity-30" /><p className="text-muted-foreground">No expenses found</p><p className="text-xs text-muted-foreground mt-1.5">Add your first expense to get started.</p><Button size="sm" className="gradient-primary text-primary-foreground mt-3" onClick={openAdd}><Plus className="h-4 w-4 mr-1" />Add Expense</Button></div>

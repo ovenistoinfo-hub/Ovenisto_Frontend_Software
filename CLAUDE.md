@@ -595,6 +595,19 @@ plus a body explaining _why_ the change was made when that is not obvious.
   `wasteByReason` mini-lists + a muted "Purchases this period — not subtracted" footer. **No
   Recharts chart** (a P&L reads better as a waterfall list; no colour-encoding risk).
   `report.service.ts`: `getNetProfit` + `NetProfitReport`.
+- **Net Profit's rows drill into Sales/Expenses/Waste + `Expenses.tsx`/`StockAdjustments.tsx`
+  gained real date filters (2026-09-11)** — the Revenue row → `goToRevenueSales()`
+  (`/sales?status=completed&from=&to=`), the Food Loss row + each "Food loss by reason" row →
+  `goToWaste(reason?)` (`/stock/adjustments?from=&to=[&reason=]`), the Expenses row + each
+  "Expenses by category" row → `goToExpenses(category?)` (`/expenses?from=&to=[&category=]`) —
+  all three defined next to the `np`/`money` derivations, all reuse `npFromStr`/`npToStr`.
+  Neither destination page had ANY date filter before this: both gained a Sales.tsx-style bar
+  (Today/This Week/This Month + two `DatePicker`s, no time-of-day) seeded once from
+  `?from=&to=[&category=/&reason=]` via `useSearchParams`, threaded into
+  `expenseService.getAll`/`stockService.getWasteRecords`/`stockService.getAdjustments`.
+  `StockAdjustments.tsx` applies the same range to both its waste and correction fetches. Both
+  pages' category/reason `<Select>`s are fixed lists — a drill-down value outside the list gets
+  a synthetic extra `<SelectItem>` so the trigger doesn't render blank.
 
 <!-- code-review-graph MCP tools -->
 ## MCP Tools: code-review-graph

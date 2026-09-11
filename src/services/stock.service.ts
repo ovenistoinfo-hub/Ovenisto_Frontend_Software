@@ -122,12 +122,14 @@ export interface CreateProductionItemPayload {
 
 export const stockService = {
   // ── Stock Adjustments ──
-  async getAdjustments(params?: { search?: string; warehouseId?: string; page?: number; limit?: number }): Promise<{ data: StockAdjustmentRecord[]; meta: any }> {
+  async getAdjustments(params?: { search?: string; warehouseId?: string; page?: number; limit?: number; from?: string; to?: string }): Promise<{ data: StockAdjustmentRecord[]; meta: any }> {
     const q = new URLSearchParams();
     if (params?.search) q.set('search', params.search);
     if (params?.warehouseId) q.set('warehouseId', params.warehouseId);
     if (params?.page) q.set('page', String(params.page));
     if (params?.limit) q.set('limit', String(params.limit));
+    if (params?.from) q.set('from', params.from);
+    if (params?.to) q.set('to', params.to);
     const res = await api.get<{ success: boolean; data: StockAdjustmentRecord[]; meta: any }>(`/stock/adjustments?${q.toString()}`);
     return { data: res.data, meta: (res as any).meta };
   },
@@ -213,12 +215,15 @@ export const stockService = {
   },
 
   // ── Waste Records ──
-  async getWasteRecords(params?: { search?: string; page?: number; limit?: number; warehouseId?: string }): Promise<{ data: WasteRecord[]; meta: any }> {
+  async getWasteRecords(params?: { search?: string; page?: number; limit?: number; warehouseId?: string; from?: string; to?: string; reason?: string }): Promise<{ data: WasteRecord[]; meta: any }> {
     const q = new URLSearchParams();
     if (params?.search) q.set('search', params.search);
     if (params?.page) q.set('page', String(params.page));
     if (params?.limit) q.set('limit', String(params.limit));
     if (params?.warehouseId) q.set('warehouseId', params.warehouseId);
+    if (params?.from) q.set('from', params.from);
+    if (params?.to) q.set('to', params.to);
+    if (params?.reason) q.set('reason', params.reason);
     const res = await api.get<{ success: boolean; data: WasteRecord[]; meta: any }>(`/stock/waste?${q.toString()}`);
     return { data: res.data, meta: (res as any).meta };
   },
