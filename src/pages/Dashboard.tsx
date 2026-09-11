@@ -189,6 +189,13 @@ const Dashboard = () => {
   const [itemsTimeFrom, setItemsTimeFrom] = useState<string>("");
   const [itemsTimeTo, setItemsTimeTo] = useState<string>("");
 
+  // Net Profit — date range only (no time-of-day; expenses/waste aren't hourly). Defaults to
+  // "This Month" since a P&L over a single day is rarely what you want.
+  const [npSectionCollapsed, setNpSectionCollapsed] = useState<boolean>(false);
+  const [npPreset, setNpPreset] = useState<string>("This Month");
+  const [npFromStr, setNpFromStr] = useState<string>(toYmd(new Date(new Date().getFullYear(), new Date().getMonth(), 1)));
+  const [npToStr, setNpToStr] = useState<string>(toYmd(new Date()));
+
   const setPreset = (preset: string) => {
     setChannelPreset(preset);
     const now = new Date();
@@ -257,6 +264,23 @@ const Dashboard = () => {
     }
   };
 
+  const setNpRange = (preset: string) => {
+    setNpPreset(preset);
+    const now = new Date();
+    if (preset === "Today") {
+      setNpFromStr(toYmd(now));
+      setNpToStr(toYmd(now));
+    } else if (preset === "This Week") {
+      const d = new Date(now);
+      d.setDate(d.getDate() - 7);
+      setNpFromStr(toYmd(d));
+      setNpToStr(toYmd(now));
+    } else if (preset === "This Month") {
+      setNpFromStr(toYmd(new Date(now.getFullYear(), now.getMonth(), 1)));
+      setNpToStr(toYmd(now));
+    }
+  };
+
   const { data: channelData, isLoading: channelLoading } = useQuery({
     queryKey: [
       "sales-by-channel",
@@ -316,7 +340,13 @@ const Dashboard = () => {
     enabled: salesByChannelVisible,
   });
 
-  // Push-first real-time for the four filtered sales sections — invalidating just their own
+  const { data: npData, isLoading: npLoading } = useQuery({
+    queryKey: ["net-profit", outletId, npFromStr, npToStr],
+    queryFn: () => reportService.getNetProfit({ outletId, from: npFromStr, to: npToStr }),
+    enabled: salesByChannelVisible,
+  });
+
+  // Push-first real-time for the five filtered sales sections — invalidating just their own
   // query keys (not the whole ["dashboard", outletId] query) avoids re-running the other 11
   // dashboard aggregates on every order event, matching how Sales.tsx keeps its order-list query
   // independent. The 180s poll (this app's standard interval for socket-backed page data) is a
@@ -327,6 +357,7 @@ const Dashboard = () => {
     queryClient.invalidateQueries({ queryKey: ["sales-by-category"] });
     queryClient.invalidateQueries({ queryKey: ["sales-by-payment-method"] });
     queryClient.invalidateQueries({ queryKey: ["top-items"] });
+    queryClient.invalidateQueries({ queryKey: ["net-profit"] });
   };
   useOrderEvents(refreshSalesSections);
   useVisiblePolling(refreshSalesSections, 180_000);
@@ -557,6 +588,10 @@ const Dashboard = () => {
         </TableCell>
       </TableRow>
     ));
+
+  // ── Net Profit derivations ──────────────────────────────────────────────
+  const np = npData;
+  const money = (n: number) => `${currency} ${Math.abs(n).toLocaleString()}`;
 
   return (
     <div className="space-y-6">
@@ -1928,6 +1963,236 @@ const Dashboard = () => {
                       Only {totalItemsSold} {totalItemsSold === 1 ? "item" : "items"} sold this period — the list above is the full ranking.
                     </p>
                   )}
+                </div>
+              )}
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* Net Profit (same "reports" permission gate) */}
+      {salesByChannelVisible && (
+        <section
+          aria-label="Net Profit"
+          className="rounded-2xl border border-border/80 bg-card/40 backdrop-blur-md shadow-sm overflow-hidden transition-all"
+        >
+          <div className={cn("p-4 sm:p-5 space-y-4 bg-card/70", !npSectionCollapsed && "border-b border-border/50")}>
+            <div className="flex items-center justify-between gap-3">
+              <div
+                className="flex items-center gap-3 cursor-pointer select-none group"
+                onClick={() => setNpSectionCollapsed((prev) => !prev)}
+              >
+                <div className="h-9 w-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center border border-primary/20 shrink-0 shadow-sm group-hover:bg-primary/20 transition-colors">
+                  <Coins className="h-4 w-4" />
+                </div>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-lg sm:text-xl font-bold tracking-tight text-foreground group-hover:text-primary transition-colors">
+                    Net Profit
+                  </h2>
+                  {npSectionCollapsed && np && (
+                    <span
+                      className={cn(
+                        "text-xs font-semibold px-2.5 py-0.5 rounded-full border",
+                        np.netProfit >= 0
+                          ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20"
+                          : "bg-destructive/10 text-destructive border-destructive/20"
+                      )}
+                    >
+                      {np.netProfit < 0 ? "−" : ""}{money(np.netProfit)} • {np.netMarginPct}%
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setNpSectionCollapsed((prev) => !prev)}
+                  className="h-8 px-2.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/70 gap-1.5 rounded-lg border border-border/50"
+                  title={npSectionCollapsed ? "Expand Net Profit" : "Collapse Net Profit"}
+                  aria-label={npSectionCollapsed ? "Expand Net Profit" : "Collapse Net Profit"}
+                >
+                  <span className="text-xs font-medium hidden sm:inline">{npSectionCollapsed ? "Show" : "Hide"}</span>
+                  <ChevronDown
+                    className={cn(
+                      "h-4 w-4 transition-transform duration-200",
+                      npSectionCollapsed ? "-rotate-90" : "rotate-0"
+                    )}
+                  />
+                </Button>
+              </div>
+            </div>
+
+            {!npSectionCollapsed && (
+              <div className="flex items-center gap-2.5 flex-wrap pt-3 border-t border-border/40">
+                <div className="inline-flex items-center p-0.5 rounded-lg bg-muted/60 border border-border/60 shadow-sm">
+                  {(["Today", "This Week", "This Month"] as const).map((p) => (
+                    <button
+                      key={p}
+                      type="button"
+                      onClick={() => setNpRange(p)}
+                      className={cn(
+                        "px-3 py-1.5 text-xs font-medium rounded-md transition-all",
+                        npPreset === p
+                          ? "bg-background text-foreground shadow-sm font-semibold"
+                          : "text-muted-foreground hover:text-foreground"
+                      )}
+                    >
+                      {p}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="inline-flex items-center gap-1.5">
+                  <div className="w-36">
+                    <DatePicker
+                      value={npFromStr}
+                      onChange={(val) => { setNpFromStr(val); setNpPreset("Custom"); }}
+                      placeholder="Start date"
+                      className="h-8 text-xs bg-background"
+                    />
+                  </div>
+                  <span className="text-xs text-muted-foreground/60 font-medium px-0.5">to</span>
+                  <div className="w-36">
+                    <DatePicker
+                      value={npToStr}
+                      onChange={(val) => { setNpToStr(val); setNpPreset("Custom"); }}
+                      min={npFromStr}
+                      placeholder="End date"
+                      className="h-8 text-xs bg-background"
+                    />
+                  </div>
+                </div>
+
+                <span className="text-[11px] text-muted-foreground/70">No time-of-day filter — expenses &amp; waste aren't hourly.</span>
+              </div>
+            )}
+          </div>
+
+          {!npSectionCollapsed && (
+            <div className="p-4 sm:p-5">
+              {npLoading || !np ? (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                    {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-20 rounded-lg" />)}
+                  </div>
+                  <Skeleton className="h-48 rounded-xl" />
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {/* Headline tiles */}
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                    <div className="rounded-lg bg-background/70 border border-border/50 p-3.5">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Revenue</p>
+                      <p className="text-xl font-bold tracking-tight text-foreground mt-0.5">{money(np.revenue)}</p>
+                    </div>
+                    <div className="rounded-lg bg-background/70 border border-border/50 p-3.5">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Gross Profit</p>
+                      <p className={cn("text-xl font-bold tracking-tight mt-0.5", np.grossProfit >= 0 ? "text-emerald-500" : "text-destructive")}>
+                        {np.grossProfit < 0 ? "−" : ""}{money(np.grossProfit)}
+                      </p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">{np.grossMarginPct}% margin</p>
+                    </div>
+                    <div className={cn(
+                      "rounded-lg border p-3.5",
+                      np.netProfit >= 0 ? "bg-emerald-500/[0.04] border-emerald-500/25" : "bg-destructive/[0.04] border-destructive/25"
+                    )}>
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Net Profit</p>
+                      <p className={cn("text-2xl font-bold tracking-tight mt-0.5", np.netProfit >= 0 ? "text-emerald-500" : "text-destructive")}>
+                        {np.netProfit < 0 ? "−" : ""}{money(np.netProfit)}
+                      </p>
+                    </div>
+                    <div className="rounded-lg bg-background/70 border border-border/50 p-3.5">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Net Margin</p>
+                      <p className={cn("text-xl font-bold tracking-tight mt-0.5", np.netMarginPct >= 0 ? "text-emerald-500" : "text-destructive")}>
+                        {np.netMarginPct}%
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* P&L waterfall */}
+                  <div className="rounded-xl border border-border/50 bg-card/40 divide-y divide-border/40 text-sm">
+                    <div className="flex items-center justify-between px-4 py-2.5">
+                      <span className="text-foreground">Revenue</span>
+                      <span className="font-medium tabular-nums">{money(np.revenue)}</span>
+                    </div>
+                    <div className="flex items-center justify-between px-4 py-2.5">
+                      <span className="text-muted-foreground">− COGS <span className="text-[11px]">(ingredient cost of food sold)</span></span>
+                      <span className="tabular-nums text-muted-foreground">− {money(np.cogs)}</span>
+                    </div>
+                    <div className="flex items-center justify-between px-4 py-2.5 bg-muted/30">
+                      <span className="font-semibold text-foreground">= Gross Profit</span>
+                      <span className={cn("font-semibold tabular-nums", np.grossProfit >= 0 ? "text-emerald-500" : "text-destructive")}>
+                        {np.grossProfit < 0 ? "− " : ""}{money(np.grossProfit)} <span className="text-[11px] font-normal text-muted-foreground">({np.grossMarginPct}%)</span>
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between px-4 py-2.5">
+                      <span className="text-muted-foreground">− Food Loss <span className="text-[11px]">(expired / damaged / wasted stock)</span></span>
+                      <span className="tabular-nums text-muted-foreground">− {money(np.foodLoss)}</span>
+                    </div>
+                    <div className="flex items-center justify-between px-4 py-2.5">
+                      <span className="text-muted-foreground">− Expenses <span className="text-[11px]">(rent / salary / utilities)</span></span>
+                      <span className="tabular-nums text-muted-foreground">− {money(np.expenses)}</span>
+                    </div>
+                    <div className={cn(
+                      "flex items-center justify-between px-4 py-3",
+                      np.netProfit >= 0 ? "bg-emerald-500/[0.06]" : "bg-destructive/[0.06]"
+                    )}>
+                      <span className="font-bold text-foreground">= Net Profit</span>
+                      <span className={cn("font-bold text-base tabular-nums", np.netProfit >= 0 ? "text-emerald-500" : "text-destructive")}>
+                        {np.netProfit < 0 ? "− " : ""}{money(np.netProfit)} <span className="text-[11px] font-normal text-muted-foreground">({np.netMarginPct}%)</span>
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Breakdowns */}
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    <div className="rounded-xl border border-border/50 bg-card/40 overflow-hidden">
+                      <div className="px-4 py-2.5 bg-muted/40 border-b border-border/40">
+                        <p className="text-sm font-semibold text-foreground">Expenses by category</p>
+                      </div>
+                      <div className="divide-y divide-border/40 text-sm">
+                        {np.expenseByCategory.length === 0 ? (
+                          <p className="px-4 py-3 text-xs text-muted-foreground">No expenses recorded this period.</p>
+                        ) : (
+                          np.expenseByCategory.map((e) => (
+                            <div key={e.name} className="flex items-center justify-between px-4 py-2">
+                              <span className="text-muted-foreground truncate">{e.name}</span>
+                              <span className="tabular-nums font-medium">{money(e.value)}</span>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="rounded-xl border border-border/50 bg-card/40 overflow-hidden">
+                      <div className="px-4 py-2.5 bg-muted/40 border-b border-border/40">
+                        <p className="text-sm font-semibold text-foreground">Food loss by reason</p>
+                      </div>
+                      <div className="divide-y divide-border/40 text-sm">
+                        {np.wasteByReason.length === 0 ? (
+                          <p className="px-4 py-3 text-xs text-muted-foreground">No waste recorded this period.</p>
+                        ) : (
+                          np.wasteByReason.map((w) => (
+                            <div key={w.name} className="flex items-center justify-between px-4 py-2">
+                              <span className="text-muted-foreground truncate">{w.name}</span>
+                              <span className="tabular-nums font-medium text-destructive">{money(w.value)}</span>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Purchases — context only */}
+                  <div className="flex items-start gap-2 rounded-md border border-border/40 bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+                    <Package className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                    <span>
+                      <span className="font-semibold text-foreground">Purchases this period: {money(np.purchases)}</span> — stock bought from suppliers.
+                      Not subtracted above: it's inventory, and only counts as a cost as it's sold (COGS) or wasted (Food Loss).
+                    </span>
+                  </div>
                 </div>
               )}
             </div>

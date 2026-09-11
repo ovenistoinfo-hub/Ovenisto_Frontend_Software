@@ -129,6 +129,32 @@ export interface TopItemsReport {
   totalItems: number;
 }
 
+export interface NetProfitReport {
+  from: string;
+  to: string;
+  /** Σ Order.total (completed + cashApproved). */
+  revenue: number;
+  /** Recipe-ingredient cost of everything sold. */
+  cogs: number;
+  /** revenue − cogs. */
+  grossProfit: number;
+  /** Σ WasteRecord.cost — expired / damaged / wasted stock (Stock Adjustments–Waste page). */
+  foodLoss: number;
+  /** Σ Expense.amount — rent / salary / utilities (Expenses page). */
+  expenses: number;
+  /** revenue − cogs − foodLoss − expenses. The true bottom line. */
+  netProfit: number;
+  /** Σ Purchase.total for received purchases in range. CONTEXT ONLY — not subtracted; buying
+   *  stock is inventory, it becomes a cost as it's sold (cogs) or wasted (foodLoss). */
+  purchases: number;
+  grossMarginPct: number;
+  netMarginPct: number;
+  /** Sorted by value desc, positive only. */
+  expenseByCategory: { name: string; value: number }[];
+  /** Sorted by value desc, positive only. */
+  wasteByReason: { name: string; value: number }[];
+}
+
 export interface ReportParams {
   from: string; // YYYY-MM-DD
   to: string;   // YYYY-MM-DD
@@ -271,6 +297,13 @@ export const reportService = {
     if (params.fromTime) q.set('fromTime', params.fromTime);
     if (params.toTime) q.set('toTime', params.toTime);
     const res = await api.get<{ success: boolean; data: TopItemsReport }>(`/reports/top-items?${q.toString()}`);
+    return res.data;
+  },
+  async getNetProfit(params: { outletId?: string; from: string; to: string }): Promise<NetProfitReport> {
+    const q = new URLSearchParams({ from: params.from, to: params.to });
+    if (params.outletId && params.outletId !== 'all') q.set('outletId', params.outletId);
+    else q.set('outletId', 'all');
+    const res = await api.get<{ success: boolean; data: NetProfitReport }>(`/reports/net-profit?${q.toString()}`);
     return res.data;
   },
 };

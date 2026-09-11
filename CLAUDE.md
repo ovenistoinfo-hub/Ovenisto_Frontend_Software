@@ -585,6 +585,16 @@ plus a body explaining _why_ the change was made when that is not obvious.
   the two lists just mirror each other, so the Underperformers table is replaced by a one-line
   note. No chart, no drill-down (items are the leaf). `report.service.ts`: `getTopItems` +
   `TopItemsReport`/`TopItemRow`.
+- **Dashboard "Net Profit" section (`Dashboard.tsx`, 2026-09-11)** — the **fifth** filterable
+  section and the odd one out: **date range only** (own `np*` state — `npFromStr`/`npToStr`/
+  `npPreset`, `setNpRange`; defaults to "This Month"; NO time-of-day picker — expenses/waste
+  aren't hourly). `reportService.getNetProfit`, `["net-profit"]` on the shared
+  `refreshSalesSections`. Body: 4 headline tiles (Revenue / Gross Profit / **Net Profit** big +
+  colored / Net Margin) + a **P&L waterfall** div (Revenue − COGS = Gross − Food Loss −
+  Expenses = Net, each row labelled, subtotals highlighted) + `expenseByCategory` /
+  `wasteByReason` mini-lists + a muted "Purchases this period — not subtracted" footer. **No
+  Recharts chart** (a P&L reads better as a waterfall list; no colour-encoding risk).
+  `report.service.ts`: `getNetProfit` + `NetProfitReport`.
 
 <!-- code-review-graph MCP tools -->
 ## MCP Tools: code-review-graph
