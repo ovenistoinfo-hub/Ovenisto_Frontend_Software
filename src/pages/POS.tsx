@@ -2091,8 +2091,15 @@ const POS = () => {
   // discount" is applied, and this preview only means anything if it mirrors
   // that exactly. The order payload still sends `discount: orderDiscount`
   // (manual only); the server adds the deal amount on top itself.
+  //
+  // Skipped entirely once the cart already has a line-item deal (Combo/Option
+  // Combo/%Discount/Buy X Get Y) in it: createOrder now refuses to stack a
+  // Min Spend/Promo Code discount on top of one (single-discount-per-order
+  // rule), so previewing one here would show staff a total that's lower than
+  // what actually gets charged at checkout.
   useEffect(() => {
-    if (itemsSubtotal <= 0) { setDealPreview(null); return; }
+    const hasLineDeal = cart.some((c) => !!c.dealId);
+    if (itemsSubtotal <= 0 || hasLineDeal) { setDealPreview(null); return; }
     let cancelled = false;
     const timer = setTimeout(() => {
       orderService
@@ -2101,7 +2108,7 @@ const POS = () => {
         .catch(() => { if (!cancelled) setDealPreview(null); });
     }, 400);
     return () => { cancelled = true; clearTimeout(timer); };
-  }, [itemsSubtotal, orderType]);
+  }, [itemsSubtotal, orderType, cart]);
 
   const entriesTotal = Math.round(paymentEntries.reduce((s, e) => s + e.amount, 0));
   const totalPaid = entriesTotal;

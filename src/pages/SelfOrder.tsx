@@ -482,6 +482,10 @@ const SelfOrder = () => {
 
   const cartTotal = cart.reduce((s, i) => s + i.price * i.qty - (i.discount || 0), 0);
   const cartCount = cart.reduce((s, i) => s + i.qty, 0);
+  // A line-item deal (Combo/Option Combo/%Discount/Buy X Get Y) already in the cart — createOrder
+  // refuses to stack a Min Spend/Promo Code discount on top of one (single-discount-per-order
+  // rule), so neither the auto-preview nor the Promo Code input should offer one here.
+  const cartHasLineDeal = cart.some((i) => !!i.dealId);
 
   // ── Coupon / Minimum Spend ──
   const [couponInput, setCouponInput] = useState("");
@@ -496,7 +500,7 @@ const SelfOrder = () => {
   // entered Promo Code takes priority and pauses this check.
   useEffect(() => {
     if (manualCouponApplied || !table) return;
-    if (cartTotal <= 0) {
+    if (cartTotal <= 0 || cartHasLineDeal) {
       setAppliedCoupon(null);
       return;
     }
@@ -506,10 +510,10 @@ const SelfOrder = () => {
       .then((result) => { if (!cancelled) setAppliedCoupon(result); })
       .catch(() => { if (!cancelled) setAppliedCoupon(null); });
     return () => { cancelled = true; };
-  }, [cartTotal, table, manualCouponApplied]);
+  }, [cartTotal, table, manualCouponApplied, cartHasLineDeal]);
 
   const applyCoupon = async () => {
-    if (!couponInput.trim() || !table) return;
+    if (!couponInput.trim() || !table || cartHasLineDeal) return;
     setCheckingCoupon(true);
     setCouponError(null);
     try {
@@ -2405,6 +2409,10 @@ const SelfOrder = () => {
                     <X className="h-3.5 w-3.5" />
                   </Button>
                 </div>
+              ) : cartHasLineDeal ? (
+                <p className="text-[11px] text-muted-foreground p-2.5 rounded-xl bg-muted/30 border border-border/60">
+                  A deal is already applied to your order — remove it to use a promo code instead.
+                </p>
               ) : (
                 <div className="flex gap-2">
                   <Input

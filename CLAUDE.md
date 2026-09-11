@@ -655,16 +655,25 @@ plus a body explaining _why_ the change was made when that is not obvious.
   percent/amount was edited after some orders redeemed it.
 - **Single discount per order (2026-09-11)** — a real bug: an order with a line-item deal
   (Combo/Option Combo/%Discount/BOGO) could ALSO get a Minimum Spend/Promo Code discount stacked
-  on top, plus a manual discount on top of that. Fixed **entirely backend-side** (`createOrder`/
-  `updateOrder` in the backend's `order.controller.ts` — see that repo's CLAUDE.md for the exact
-  mechanism); no frontend files changed for the fix itself. Practical effect for POS/Waiter
-  Panel/Self-Order: submitting an order that already has a deal-priced line, WITH a manual
-  discount entered or a coupon code typed, now either silently drops the manual discount (order
-  succeeds, `discount` comes back as just the deal's own reduction) or — if a coupon code was
-  explicitly typed — the request now 400s with "Cannot apply a coupon — this order already has a
-  deal applied." **None of the three ordering UIs proactively hide/disable the manual-discount
-  input or coupon-code field yet when the cart already has a deal-tagged item** — that UI-side
-  guard (matching the backend rule) is a known follow-up, not yet built.
+  on top. Fixed backend-side (`createOrder`/`updateOrder` in the backend's `order.controller.ts`
+  — see that repo's CLAUDE.md for the exact mechanism). **Investigating this surfaced that
+  neither POS.tsx nor WaiterPanel.tsx actually has a manual "staff types a discount amount"
+  input anywhere** — `orderDiscount` (POS) / the equivalent in WaiterPanel is only ever reset to
+  0 or loaded from an existing order, never user-edited via a UI field in either file. So the
+  real frontend risk wasn't a manual-discount input to guard — it was the **Min Spend auto-preview
+  `useEffect`** (`POS.tsx` ~line 2094, `WaiterPanel.tsx` ~line 760, both explicitly commented as
+  mirroring each other) firing unconditionally and showing staff a discounted total that, after
+  the backend fix, would silently NOT apply at checkout once the cart also has a line-item deal —
+  a real UI/backend total mismatch, not just a UX nicety. Fixed: both effects now check
+  `cart.some(c => !!c.dealId)` (`cartItems` in WaiterPanel) and skip entirely (clear the preview
+  to null) when true, added to each effect's dependency array.
+  **`SelfOrder.tsx` is different — it has a genuine customer-typed coupon-code input** (the
+  Promo Code field, `couponInput`/`applyCoupon()`), plus the identical auto-preview pattern at
+  its own `useEffect` (~line 497). A `cartHasLineDeal` const (next to `cartTotal`/`cartCount`)
+  gates the auto-preview the same way, guards `applyCoupon()` itself (defense in depth), and
+  swaps the `<Input>`+Apply button for a muted explanatory message ("A deal is already applied to
+  your order — remove it to use a promo code instead.") whenever a deal item is in the cart, so
+  the customer never sees an input that would just get rejected.
 - **Net Profit's rows drill into Sales/Expenses/Waste + `Expenses.tsx`/`StockAdjustments.tsx`
   gained real date filters (2026-09-11)** — the Revenue row → `goToRevenueSales()`
   (`/sales?status=completed&from=&to=`), the Food Loss row + each "Food loss by reason" row →

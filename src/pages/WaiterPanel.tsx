@@ -757,8 +757,13 @@ const WaiterPanel = () => {
   // resolveOrderDiscount. Always Dine In — every WaiterPanel order is.
   const [dealPreview, setDealPreview] = useState<OrderCouponPreview | null>(null);
   const dealDiscount = dealPreview?.amount ?? 0;
+  // Skipped entirely once the cart already has a line-item deal (Combo/Option Combo/%Discount/
+  // Buy X Get Y) in it: createOrder now refuses to stack a Min Spend/Promo Code discount on top
+  // of one (single-discount-per-order rule), so previewing one here would show a total that's
+  // lower than what actually gets charged at checkout. Mirrors POS.tsx's identical guard.
   useEffect(() => {
-    if (cartTotal <= 0) { setDealPreview(null); return; }
+    const hasLineDeal = cartItems.some((c) => !!c.dealId);
+    if (cartTotal <= 0 || hasLineDeal) { setDealPreview(null); return; }
     let cancelled = false;
     const timer = setTimeout(() => {
       orderService
@@ -767,7 +772,7 @@ const WaiterPanel = () => {
         .catch(() => { if (!cancelled) setDealPreview(null); });
     }, 400);
     return () => { cancelled = true; clearTimeout(timer); };
-  }, [cartTotal]);
+  }, [cartTotal, cartItems]);
   // The earliest order's timestamp for the seating timer in the sidebar
   const oldest = activeTableOrders.length > 0
     ? activeTableOrders[activeTableOrders.length - 1].createdAt
