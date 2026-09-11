@@ -65,6 +65,31 @@ export interface SalesByCategoryRow {
   marginPct: number;
 }
 
+export interface StaffSalesRow {
+  /** null for a historical order with no logged-in staff attribution — grouped under
+   *  "Unassigned" by name instead; no id to drill down into Sales & Orders by. */
+  staffId: string | null;
+  name: string;
+  orders: number;
+  sale: number;
+  cost: number;
+  profit: number;
+  marginPct: number;
+  /** Which ordering surface(s) this staff member's orders came through in this window
+   *  ("POS", "Waiter", "Self-Order", ...), joined with " / " if more than one. */
+  source: string;
+}
+
+export interface SalesByStaffReport {
+  from: string;
+  to: string;
+  fromTime: string | null;
+  toTime: string | null;
+  /** Sorted by `sale` descending. */
+  rows: StaffSalesRow[];
+  combined: { sale: number; cost: number; profit: number; orders: number; marginPct: number };
+}
+
 export interface SalesByCategoryReport {
   from: string;
   to: string;
@@ -280,6 +305,21 @@ export const reportService = {
     if (params.fromTime) q.set('fromTime', params.fromTime);
     if (params.toTime) q.set('toTime', params.toTime);
     const res = await api.get<{ success: boolean; data: SalesByChannelReport }>(`/reports/sales-by-channel?${q.toString()}`);
+    return res.data;
+  },
+  async getSalesByStaff(params: {
+    outletId?: string;
+    from: string;
+    to: string;
+    fromTime?: string;
+    toTime?: string;
+  }): Promise<SalesByStaffReport> {
+    const q = new URLSearchParams({ from: params.from, to: params.to });
+    if (params.outletId && params.outletId !== 'all') q.set('outletId', params.outletId);
+    else q.set('outletId', 'all');
+    if (params.fromTime) q.set('fromTime', params.fromTime);
+    if (params.toTime) q.set('toTime', params.toTime);
+    const res = await api.get<{ success: boolean; data: SalesByStaffReport }>(`/reports/sales-by-staff?${q.toString()}`);
     return res.data;
   },
   async getSalesByCategory(params: {

@@ -674,6 +674,44 @@ plus a body explaining _why_ the change was made when that is not obvious.
   swaps the `<Input>`+Apply button for a muted explanatory message ("A deal is already applied to
   your order — remove it to use a promo code instead.") whenever a deal item is in the cart, so
   the customer never sees an input that would just get rejected.
+- **Dashboard "Sales by Staff" section (`Dashboard.tsx`, 2026-09-11)** — the **seventh**
+  filterable section, same date + optional time-of-day filter model as Sales By Channel (own
+  `staff*` state — `staffFromStr`/`staffToStr`/`staffTimeFrom`/`staffTimeTo`/`staffPreset`,
+  `setStaffRange`; the same "Filter By Shift Hours" popover with Lunch/Dinner/Late-Night/Full-Day
+  presets, copied verbatim). `reportService.getSalesByStaff`, `["sales-by-staff"]` on the shared
+  `refreshSalesSections`. Body: a full `<Table>` (Staff/Source/Orders/Sale/Cost/Profit/Margin,
+  Total row) + Sale-vs-Cost and Profit `<BarChart>`s, same visual treatment as Sales by Category
+  — `staffChartData` carries `staffId` alongside `name`/`sale`/`cost`/`profit` so the chart bars
+  can drill down too, not just table rows. `goToStaffSales(staffId, staffName?)` (next to
+  `staffChartData`) no-ops silently when `staffId` is null (an "Unassigned" row/bar — no id to
+  filter by); otherwise navigates to `/sales?status=completed&staffId=&staffName=&from=&to=
+  &fromTime=&toTime=`. `report.service.ts`: `getSalesByStaff` + `SalesByStaffReport`/
+  `StaffSalesRow`.
+- **`Sales.tsx` gained a Staff `<Select>` filter** (2026-09-11) — same visual pattern as the Deal
+  filter (`UserCheck` icon, `handleStaff`, synthetic fallback `<SelectItem>` when `staffFilter`
+  isn't in the fetched list). Options come from `userService.getStaffPicker()` (`["staff-picker"]`
+  query, 5-min staleTime) — the same id/name/role endpoint the cancellation-request approver
+  dropdown already uses, deliberately NOT the Manager+-only `getUsers`, since Sales & Orders (and
+  this filter) must work for a Cashier too. Restricted to `SALES_STAFF_ROLES` (module-level
+  const: `["Waiter", "Cashier", "Manager", "Admin", "Floor Manager"]`) — the roles that actually
+  place/manage sales orders; Kitchen Staff/Riders/Accountant/etc. never show up as `Order.staffId`
+  in practice and would just be noise in the list. Seeded from `?staffId=&staffName=` on mount/
+  navigation (`staffFilter`/`staffFilterName` state, `staffActive`, `staffDisplayName` = live
+  name from `staffOptions` else the URL-carried name else the raw id — same fallback chain as
+  `dealDisplayName`). Folds into the shared hint-banner block (`catActive || payActive ||
+  dealActive || staffActive`) and `orderService.getOrders`/`getOrdersSummary`'s `staffId?:
+  string` param (whole-order totals, no per-order slice — same as `paymentMethod`).
+- **`Sales.tsx` re-seeds its URL-driven filters on every navigation, not just first mount (fixed
+  2026-09-11)** — the staff drill-down chip not appearing on a second Dashboard click (same Sales
+  tab already open) surfaced that ALL of `typeFilter`/`activePreset`/`dateFrom`/`dateTo`/
+  `timeFrom`/`timeTo`/`categoryFilter`/`paymentMethodFilter`/`dealFilter`/`dealFilterName`/
+  `staffFilter`/`staffFilterName` only ever seeded from `searchParams.get(...)` once, via a
+  lazy `useState` initializer — React Router doesn't remount this component for a same-route
+  navigation, so a later drill-down updated the address bar but left every filter (and the
+  table) exactly as it was. Fixed with one `useEffect(() => { ...reseed all of them... },
+  [searchParams])` placed right after the state declarations — safe against fighting a user's
+  own in-page filter edits, since those never touch the URL (unchanged design), so
+  `searchParams`'s reference only changes on a real navigation.
 - **Net Profit's rows drill into Sales/Expenses/Waste + `Expenses.tsx`/`StockAdjustments.tsx`
   gained real date filters (2026-09-11)** — the Revenue row → `goToRevenueSales()`
   (`/sales?status=completed&from=&to=`), the Food Loss row + each "Food loss by reason" row →

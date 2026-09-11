@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -23,6 +23,7 @@ import {
   Bike,
   Tags,
   Tag,
+  UserCheck,
 } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { DatePicker } from "@/components/ui/date-picker";
@@ -33,6 +34,7 @@ import { TablePagination } from "@/components/TablePagination";
 import { orderService, type OrderRecord } from "@/services/order.service";
 import { menuService } from "@/services/menu.service";
 import { dealService } from "@/services/deal.service";
+import { userService } from "@/services/user.service";
 import { useData } from "@/contexts/DataContext";
 import { useOrderEvents } from "@/hooks/use-order-events";
 import { useVisiblePolling } from "@/hooks/use-visible-polling";
@@ -47,6 +49,11 @@ const CHANNELS = [
   { label: "Take Away", value: "Take Away", icon: ShoppingBag },
   { label: "Delivery", value: "Delivery", icon: Bike },
 ] as const;
+
+// Roles that actually place/manage sales orders -- Kitchen Staff, Riders, Accountant, etc.
+// never show up as Order.staffId in practice, so listing them in the Staff filter would just be
+// noise.
+const SALES_STAFF_ROLES = ["Waiter", "Cashier", "Manager", "Admin", "Floor Manager"];
 
 /** "YYYY-MM-DD" from local Y/M/D parts — never `.toISOString()`, which reads a Date as UTC and
  *  lands a day early in Pakistan (same reasoning as DatePicker's own toYmd). */
@@ -133,8 +140,47 @@ const Sales = () => {
   // along display-only, for the synthetic-option fallback below when the id isn't in the live
   // deals list (deal deleted, or arrived before the list finished loading).
   const [dealFilter, setDealFilter] = useState(() => searchParams.get("deal") || "");
-  const [dealFilterName] = useState(() => searchParams.get("dealName") || "");
+  const [dealFilterName, setDealFilterName] = useState(() => searchParams.get("dealName") || "");
   const dealActive = Boolean(dealFilter);
+
+  // Staff filter — "" means no filter. Arriving from the Dashboard "Sales by Staff" drill-down
+  // pre-selects one via ?staffId=<id>. Keyed by id (not name) since getStaffPicker returns ids;
+  // `?staffName=` rides along display-only, for the synthetic-option fallback below when the id
+  // isn't in the fetched staff list. Amounts stay whole-order, same as paymentMethod.
+  const [staffFilter, setStaffFilter] = useState(() => searchParams.get("staffId") || "");
+  const [staffFilterName, setStaffFilterName] = useState(() => searchParams.get("staffName") || "");
+  const staffActive = Boolean(staffFilter);
+
+  // Drill-down navigations (Dashboard -> Sales) land on this SAME route, just with a different
+  // query string — React Router does NOT remount this component for that, so the "seed once on
+  // mount" useState initializers above never re-run for a SECOND (or Nth) drill-down click while
+  // this tab stays open: the URL bar updates but the filters silently don't (the bug a staff
+  // drill-down surfaced — its chip never appeared because staffFilter was still whatever an
+  // earlier click, or nothing, had left it at). This effect re-seeds every URL-driven filter
+  // whenever the query string itself changes (a real new navigation). It does NOT fight the
+  // user's own in-page edits — those never touch the URL (see each filter's own comment above),
+  // so `searchParams`'s reference stays stable across them and this effect simply doesn't refire.
+  useEffect(() => {
+    const type = searchParams.get("type");
+    setTypeFilter(!type || type === "Dine In,Take Away,Delivery" ? "All" : type);
+
+    const from = searchParams.get("from") || "";
+    const to = searchParams.get("to") || "";
+    const today = toYmd(new Date());
+    setActivePreset(!from && !to ? null : (from === today && to === today ? "Today" : null));
+    setDateFrom(from);
+    setDateTo(to);
+
+    setTimeFrom(searchParams.get("fromTime") || "");
+    setTimeTo(searchParams.get("toTime") || "");
+    setCategoryFilter(searchParams.get("category") || "");
+    setPaymentMethodFilter(searchParams.get("paymentMethod") || "");
+    setDealFilter(searchParams.get("deal") || "");
+    setDealFilterName(searchParams.get("dealName") || "");
+    setStaffFilter(searchParams.get("staffId") || "");
+    setStaffFilterName(searchParams.get("staffName") || "");
+    setPage(1);
+  }, [searchParams]);
 
   const [receiptSlip, setReceiptSlip] = useState<PlacedOrderSlipData | null>(null);
   const [showReceipt, setShowReceipt] = useState(false);
@@ -146,7 +192,7 @@ const Sales = () => {
     : "completed";
 
   const { data: resp, isLoading: loading } = useQuery({
-    queryKey: ["orders", { search, typeFilter, statusParam, dateFrom, dateTo, timeFrom, timeTo, categoryFilter, paymentMethodFilter, dealFilter, page }],
+    queryKey: ["orders", { search, typeFilter, statusParam, dateFrom, dateTo, timeFrom, timeTo, categoryFilter, paymentMethodFilter, dealFilter, staffFilter, page }],
     queryFn: () => orderService.getOrders({
       search: search || undefined,
       status: statusParam,
@@ -158,6 +204,7 @@ const Sales = () => {
       category: categoryFilter || undefined,
       paymentMethod: paymentMethodFilter || undefined,
       deal: dealFilter || undefined,
+      staffId: staffFilter || undefined,
       // This is order HISTORY -- a completed-but-unpaid order isn't a settled sale yet, so it
       // never belongs here (unlike Kitchen Panel/Order Monitor/Waiter Panel, which still need
       // to see it to actually collect payment).
@@ -186,11 +233,21 @@ const Sales = () => {
   // the list hasn't loaded yet) — prefer the live name, fall back to what arrived in the URL.
   const dealDisplayName = deals.find((d) => d.id === dealFilter)?.name || dealFilterName || dealFilter;
 
+  // Staff for the filter dropdown — getStaffPicker (not the Manager+-only getUsers) is what
+  // every POS-facing role, including Cashier, is already allowed to call. Restricted to
+  // SALES_STAFF_ROLES.
+  const { data: staffOptions = [] } = useQuery({
+    queryKey: ["staff-picker", SALES_STAFF_ROLES],
+    queryFn: () => userService.getStaffPicker(SALES_STAFF_ROLES),
+    staleTime: 5 * 60_000,
+  });
+  const staffDisplayName = staffOptions.find((s) => s.id === staffFilter)?.name || staffFilterName || staffFilter;
+
   // Sale/Cost/Profit/Margin totalled across every order the current filters match (not just
   // this page) -- the 4 summary cards below. Independent of `page` on purpose: changing pages
   // must not refetch it, and it must not force the table to re-fetch either.
   const { data: summary } = useQuery({
-    queryKey: ["orders-summary", { search, typeFilter, statusParam, dateFrom, dateTo, timeFrom, timeTo, categoryFilter, paymentMethodFilter, dealFilter }],
+    queryKey: ["orders-summary", { search, typeFilter, statusParam, dateFrom, dateTo, timeFrom, timeTo, categoryFilter, paymentMethodFilter, dealFilter, staffFilter }],
     queryFn: () => orderService.getOrdersSummary({
       search: search || undefined,
       status: statusParam,
@@ -202,6 +259,7 @@ const Sales = () => {
       category: categoryFilter || undefined,
       paymentMethod: paymentMethodFilter || undefined,
       deal: dealFilter || undefined,
+      staffId: staffFilter || undefined,
       excludeUnpaid: true,
     }),
   });
@@ -222,6 +280,7 @@ const Sales = () => {
   const handleCategory = (v: string) => { setCategoryFilter(v === "all" ? "" : v); setPage(1); };
   const handlePaymentMethod = (v: string) => { setPaymentMethodFilter(v === "all" ? "" : v); setPage(1); };
   const handleDeal = (v: string) => { setDealFilter(v === "all" ? "" : v); setPage(1); };
+  const handleStaff = (v: string) => { setStaffFilter(v === "all" ? "" : v); setPage(1); };
 
   // Payment methods for the dropdown — the restaurant's configured list (DataContext mirrors
   // Settings), with a fallback so it's never empty.
@@ -273,6 +332,7 @@ const Sales = () => {
         category: categoryFilter || undefined,
         paymentMethod: paymentMethodFilter || undefined,
         deal: dealFilter || undefined,
+        staffId: staffFilter || undefined,
         excludeUnpaid: true,
         page: 1,
         limit: 10000,
@@ -744,10 +804,47 @@ const Sales = () => {
                 </Button>
               )}
             </div>
+
+            {/* Staff filter */}
+            <div className="inline-flex items-center gap-1">
+              <Select value={staffFilter || "all"} onValueChange={handleStaff}>
+                <SelectTrigger
+                  className={cn(
+                    "h-8 text-xs gap-1.5 border shadow-sm min-w-[9rem] transition-all",
+                    staffActive
+                      ? "border-border/80 bg-background text-foreground font-semibold"
+                      : "border-border/70 bg-background text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  <UserCheck className={cn("h-3.5 w-3.5 shrink-0", staffActive ? "text-foreground" : "text-muted-foreground")} />
+                  <SelectValue placeholder="All Staff" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Staff</SelectItem>
+                  {staffActive && !staffOptions.some((s) => s.id === staffFilter) && (
+                    <SelectItem value={staffFilter}>{staffDisplayName}</SelectItem>
+                  )}
+                  {staffOptions.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>{s.name} ({s.role})</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {staffActive && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handleStaff("all")}
+                  className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-md"
+                  title="Clear staff filter"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </Button>
+              )}
+            </div>
           </div>
         </CardHeader>
         <CardContent>
-          {(catActive || payActive || dealActive) && (
+          {(catActive || payActive || dealActive || staffActive) && (
             <div className="mb-3 flex items-start gap-2 rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-xs text-muted-foreground">
               <Tags className="h-3.5 w-3.5 text-primary shrink-0 mt-0.5" />
               <span>
@@ -759,6 +856,9 @@ const Sales = () => {
                 )}
                 {dealActive && (
                   <>Showing <span className="font-semibold text-foreground">{dealDisplayName}</span>'s portion of each order — Sale / Cost / Profit and the totals above cover only this deal's contribution. For a Promo Code/Min Spend order that's the whole order (the deal discounts the entire order, not specific items). </>
+                )}
+                {staffActive && (
+                  <>Filtered to orders placed by <span className="font-semibold text-foreground">{staffDisplayName}</span> — amounts shown are full order totals.</>
                 )}
               </span>
             </div>

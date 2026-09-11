@@ -195,6 +195,8 @@ export const orderService = {
     /** Keep only orders where this Deal id was redeemed (line-item or order-level). Amounts
      *  stay whole-order — no per-deal slice, unlike category. */
     deal?: string;
+    /** Keep only orders placed by this staff member (Order.staffId). Amounts stay whole-order. */
+    staffId?: string;
     page?: number;
     limit?: number;
     outletId?: string;
@@ -212,6 +214,7 @@ export const orderService = {
     if (params?.category) q.set('category', params.category);
     if (params?.paymentMethod) q.set('paymentMethod', params.paymentMethod);
     if (params?.deal) q.set('deal', params.deal);
+    if (params?.staffId) q.set('staffId', params.staffId);
     if (params?.page) q.set('page', String(params.page));
     if (params?.limit) q.set('limit', String(params.limit));
     // Super Admin branch filter (?outletId=) — read by the backend's resolveOutletScope
@@ -238,6 +241,8 @@ export const orderService = {
     paymentMethod?: string;
     /** Same as getOrders: restrict to orders where this Deal id was redeemed (whole-order totals). */
     deal?: string;
+    /** Same as getOrders: restrict to orders placed by this staff member. */
+    staffId?: string;
     outletId?: string;
   }): Promise<{ sale: number; cost: number; profit: number; orders: number; marginPct: number }> {
     const q = new URLSearchParams();
@@ -252,6 +257,7 @@ export const orderService = {
     if (params?.category) q.set('category', params.category);
     if (params?.paymentMethod) q.set('paymentMethod', params.paymentMethod);
     if (params?.deal) q.set('deal', params.deal);
+    if (params?.staffId) q.set('staffId', params.staffId);
     if (params?.outletId && params.outletId !== 'all') q.set('outletId', params.outletId);
     const res = await api.get<{ success: boolean; data: { sale: number; cost: number; profit: number; orders: number; marginPct: number } }>(`/orders/summary?${q.toString()}`);
     return res.data;
