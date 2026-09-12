@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -12,7 +13,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { DatePicker } from "@/components/ui/date-picker";
 import {
-  Plus, Search, Trash2, TrendingDown, CalendarDays, BarChart3, Eye, User, Phone,
+  Plus, Search, Trash2, Eye, User, Phone,
   ChevronUp, X, ShoppingBag, AlertCircle, Check, ChevronsUpDown,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -21,6 +22,7 @@ import { cn } from "@/lib/utils";
 import { TablePagination, paginate } from "@/components/TablePagination";
 import { PageHeader } from "@/components/ui/page-header";
 import { stockService, type WasteRecord, type StockAdjustmentRecord } from "@/services/stock.service";
+import { reportService } from "@/services/report.service";
 import { inventoryService, type IngredientRecord } from "@/services/inventory.service";
 import { warehouseService, type WarehouseRecord, type WarehouseStockRecord } from "@/services/warehouse.service";
 import { useData } from "@/contexts/DataContext";
@@ -89,7 +91,6 @@ const StockAdjustments = () => {
   const [page, setPage] = useState(1);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [reportView, setReportView] = useState<"daily" | "weekly" | "monthly">("daily");
   const [reasonOpen, setReasonOpen] = useState(false);
 
   // Arriving from the Dashboard's "Net Profit" section pre-fills the date range (and reason,
@@ -196,6 +197,18 @@ const StockAdjustments = () => {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
+  // Same 4 tiles + data source as the Dashboard's "Waste / Food Loss Trends" section
+  // (reportService.getWasteBreakdown), but connected to this page's own date/reason/warehouse
+  // filters (the Dashboard section only ever sends date range).
+  const { data: wasteBreakdown, isLoading: wasteBreakdownLoading } = useQuery({
+    queryKey: ["waste-breakdown", "page", dateFrom, dateTo, reasonFilter, selectedWarehouseId],
+    queryFn: () => reportService.getWasteBreakdown({
+      from: dateFrom, to: dateTo,
+      reason: reasonFilter || undefined,
+      warehouseId: selectedWarehouseId !== "all" ? selectedWarehouseId : undefined,
+    }),
+  });
+
   const stockWarehouseId = form.warehouseId || (selectedWarehouseId !== "all" ? selectedWarehouseId : "");
 
   useEffect(() => {
@@ -236,35 +249,6 @@ const StockAdjustments = () => {
 
   const selectedIng = ingredients.find((i) => i.id === form.ingredientId);
   const estimatedCost = selectedIng ? form.quantity * Number(selectedIng.purchasePrice || 0) : form.cost;
-
-  const todayStr = new Date().toISOString().slice(0, 10);
-  const today = new Date();
-  const totalLoss = wasteRows.reduce((s, w) => s + Number(w.cost || 0), 0);
-  const todayLoss = wasteRows.filter((w) => w.date.slice(0, 10) === todayStr).reduce((s, w) => s + Number(w.cost || 0), 0);
-
-  const startOfWeek = new Date(today);
-  startOfWeek.setDate(today.getDate() - ((today.getDay() + 6) % 7));
-  const weekStartStr = startOfWeek.toISOString().slice(0, 10);
-  const weeklyLoss = wasteRows.filter((w) => w.date.slice(0, 10) >= weekStartStr).reduce((s, w) => s + Number(w.cost || 0), 0);
-
-  const monthStr = todayStr.slice(0, 7);
-  const monthlyLoss = wasteRows.filter((w) => w.date.startsWith(monthStr)).reduce((s, w) => s + Number(w.cost || 0), 0);
-
-  const reportList = reportView === "daily"
-    ? wasteRows.filter((w) => w.date.slice(0, 10) === todayStr)
-    : reportView === "weekly"
-      ? wasteRows.filter((w) => w.date.slice(0, 10) >= weekStartStr)
-      : wasteRows.filter((w) => w.date.startsWith(monthStr));
-
-  const reasonMap = new Map<string, { count: number; loss: number }>();
-  reportList.forEach((w) => {
-    const r = w.reason || "Unknown";
-    const existing = reasonMap.get(r) || { count: 0, loss: 0 };
-    existing.count += 1;
-    existing.loss += Number(w.cost || 0);
-    reasonMap.set(r, existing);
-  });
-  const reasonBreakdown = Array.from(reasonMap.entries()).sort((a, b) => b[1].loss - a[1].loss);
 
   const resetForm = () => {
     let initialWhId = "";
@@ -374,39 +358,34 @@ const StockAdjustments = () => {
         ) : undefined}
       />
 
-      {/* KPI Cards — waste-cost only */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card className="shadow-sm border-destructive/20"><CardContent className="p-5"><div className="flex items-center gap-4"><div className="h-11 w-11 rounded-xl bg-destructive/10 flex items-center justify-center shrink-0"><Trash2 className="h-5 w-5 text-destructive" /></div><div className="min-w-0"><p className="text-xs text-muted-foreground">Total Waste Loss</p><p className="text-2xl font-bold tracking-tight text-destructive">{currency} {totalLoss.toLocaleString()}</p></div></div></CardContent></Card>
-        <Card className="shadow-sm"><CardContent className="p-5"><div className="flex items-center gap-4"><div className="h-11 w-11 rounded-xl bg-orange-500/10 flex items-center justify-center shrink-0"><CalendarDays className="h-5 w-5 text-orange-500" /></div><div className="min-w-0"><p className="text-xs text-muted-foreground">Today's Loss</p><p className="text-2xl font-bold tracking-tight text-orange-500">{currency} {todayLoss.toLocaleString()}</p></div></div></CardContent></Card>
-        <Card className="shadow-sm"><CardContent className="p-5"><div className="flex items-center gap-4"><div className="h-11 w-11 rounded-xl bg-warning/10 flex items-center justify-center shrink-0"><TrendingDown className="h-5 w-5 text-warning" /></div><div className="min-w-0"><p className="text-xs text-muted-foreground">This Week</p><p className="text-2xl font-bold tracking-tight text-warning">{currency} {weeklyLoss.toLocaleString()}</p></div></div></CardContent></Card>
-        <Card className="shadow-sm"><CardContent className="p-5"><div className="flex items-center gap-4"><div className="h-11 w-11 rounded-xl bg-purple-500/10 flex items-center justify-center shrink-0"><BarChart3 className="h-5 w-5 text-purple-500" /></div><div className="min-w-0"><p className="text-xs text-muted-foreground">This Month</p><p className="text-2xl font-bold tracking-tight text-purple-500">{currency} {monthlyLoss.toLocaleString()}</p></div></div></CardContent></Card>
-      </div>
-
-      {/* Breakdown Report — waste rows only */}
-      <Card className="shadow-sm">
-        <CardHeader className="pb-2">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-            <CardTitle className="text-base">Waste Breakdown by Reason</CardTitle>
-            <div className="flex gap-2">{(["daily", "weekly", "monthly"] as const).map((v) => (
-              <Button key={v} size="sm" variant={reportView === v ? "default" : "outline"} onClick={() => setReportView(v)} className="capitalize">{v}</Button>
-            ))}</div>
+      {/* KPI Cards — same 4 tiles + data source as the Dashboard's "Waste / Food Loss Trends"
+          section, connected to this page's own date/reason/warehouse filters. */}
+      {wasteBreakdownLoading || !wasteBreakdown ? (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-20 rounded-lg" />)}
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="rounded-lg bg-destructive/[0.04] border border-destructive/25 p-3.5">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Total Food Loss</p>
+            <p className="text-xl font-bold tracking-tight text-destructive mt-0.5">{currency} {wasteBreakdown.totalAmount.toLocaleString()}</p>
           </div>
-        </CardHeader>
-        <CardContent>
-          {reasonBreakdown.length === 0 ? (
-            <p className="text-center text-muted-foreground py-6 text-sm">No waste records for this period</p>
-          ) : (
-            <div className="space-y-2">
-              {reasonBreakdown.map(([reason, data]) => (
-                <div key={reason} className="flex items-center justify-between text-sm border-b pb-2 last:border-0">
-                  <div className="flex items-center gap-2"><span className="font-medium">{reason}</span><Badge variant="secondary" className="text-[10px]">{data.count}</Badge></div>
-                  <span className="text-destructive font-semibold">{currency} {data.loss.toLocaleString()}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+          <div className="rounded-lg bg-background/70 border border-border/50 p-3.5">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Incidents</p>
+            <p className="text-xl font-bold tracking-tight text-foreground mt-0.5">{wasteBreakdown.totalCount}</p>
+          </div>
+          <div className="rounded-lg bg-background/70 border border-border/50 p-3.5">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Avg / Day</p>
+            <p className="text-xl font-bold tracking-tight text-foreground mt-0.5">{currency} {wasteBreakdown.avgPerDay.toLocaleString()}</p>
+          </div>
+          <div className="rounded-lg bg-background/70 border border-border/50 p-3.5">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Top Reason</p>
+            <p className="text-xl font-bold tracking-tight text-foreground mt-0.5 truncate">
+              {wasteBreakdown.byReason.filter((r) => r.amount > 0)[0]?.name ?? "—"}
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Inline Record Form — Waste / Correction mode toggle */}
       {showAdd && canRecord && (

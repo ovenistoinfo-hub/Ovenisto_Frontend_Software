@@ -3,7 +3,7 @@ import {
   BarChart3, ShoppingBag, Clock, ChevronRight, ChevronDown, Trophy, Users, ChefHat, LayoutGrid, Ban, Package,
   ClipboardList, ArrowLeftRight, UserCheck, CalendarOff, Bike, CalendarCheck, Coins, Calendar as CalendarIcon,
   UtensilsCrossed, Percent, X, Layers, CreditCard, Banknote, Smartphone, TrendingDown,
-  Tag, Info,
+  Tag, Info, Building2, Receipt, Trash2, CalendarClock,
 } from "lucide-react";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Badge } from "@/components/ui/badge";
@@ -11,7 +11,7 @@ import { TimePicker, formatTimeLabel } from "@/components/ui/time-picker";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
-import { XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, Cell, LabelList, CartesianGrid } from "recharts";
+import { XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, Cell, LabelList, CartesianGrid, LineChart, Line } from "recharts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, useEffect, type ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
@@ -24,6 +24,7 @@ import { useOutletFilter } from "@/hooks/useOutletFilter";
 import { OutletFilterSelect } from "@/components/OutletFilterSelect";
 import { useVisiblePolling } from "@/hooks/use-visible-polling";
 import { useOrderEvents } from "@/hooks/use-order-events";
+import { useModuleEvents } from "@/hooks/use-module-events";
 import { Button } from "@/components/ui/button";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { useAuth } from "@/contexts/AuthContext";
@@ -213,6 +214,44 @@ const Dashboard = () => {
   const [staffTimeFrom, setStaffTimeFrom] = useState<string>("");
   const [staffTimeTo, setStaffTimeTo] = useState<string>("");
 
+  // Sales by Outlet — chain-wide branch comparison, date-range only (same reasoning as Deals
+  // Performance/Net Profit). Only meaningful for Super Admin viewing "All Outlets"; gated in JSX.
+  const [branchSectionCollapsed, setBranchSectionCollapsed] = useState<boolean>(false);
+  const [branchPreset, setBranchPreset] = useState<string>("This Month");
+  const [branchFromStr, setBranchFromStr] = useState<string>(toYmd(new Date(new Date().getFullYear(), new Date().getMonth(), 1)));
+  const [branchToStr, setBranchToStr] = useState<string>(toYmd(new Date()));
+
+  // Cancellation Requests — date-range only (a cancellation is a discrete event, not hourly).
+  const [crSectionCollapsed, setCrSectionCollapsed] = useState<boolean>(false);
+  const [crPreset, setCrPreset] = useState<string>("This Month");
+  const [crFromStr, setCrFromStr] = useState<string>(toYmd(new Date(new Date().getFullYear(), new Date().getMonth(), 1)));
+  const [crToStr, setCrToStr] = useState<string>(toYmd(new Date()));
+
+  // Purchases & Supplier Spend — date-range only (a purchase isn't hourly).
+  const [pSectionCollapsed, setPSectionCollapsed] = useState<boolean>(false);
+  const [pPreset, setPPreset] = useState<string>("This Month");
+  const [pFromStr, setPFromStr] = useState<string>(toYmd(new Date(new Date().getFullYear(), new Date().getMonth(), 1)));
+  const [pToStr, setPToStr] = useState<string>(toYmd(new Date()));
+
+  // Expenses Breakdown & Trends — date-range only, same reasoning as Net Profit/Purchases
+  // (an expense is a discrete daily record, not hourly).
+  const [expSectionCollapsed, setExpSectionCollapsed] = useState<boolean>(false);
+  const [expPreset, setExpPreset] = useState<string>("This Month");
+  const [expFromStr, setExpFromStr] = useState<string>(toYmd(new Date(new Date().getFullYear(), new Date().getMonth(), 1)));
+  const [expToStr, setExpToStr] = useState<string>(toYmd(new Date()));
+
+  // Waste / Food Loss Trends — same date-range-only shape as Expenses Breakdown.
+  const [wasteSectionCollapsed, setWasteSectionCollapsed] = useState<boolean>(false);
+  const [wastePreset, setWastePreset] = useState<string>("This Month");
+  const [wasteFromStr, setWasteFromStr] = useState<string>(toYmd(new Date(new Date().getFullYear(), new Date().getMonth(), 1)));
+  const [wasteToStr, setWasteToStr] = useState<string>(toYmd(new Date()));
+
+  // Attendance / HR Analytics — date-range only (AttendanceRecord.date is day-granularity).
+  const [attSectionCollapsed, setAttSectionCollapsed] = useState<boolean>(false);
+  const [attPreset, setAttPreset] = useState<string>("This Month");
+  const [attFromStr, setAttFromStr] = useState<string>(toYmd(new Date(new Date().getFullYear(), new Date().getMonth(), 1)));
+  const [attToStr, setAttToStr] = useState<string>(toYmd(new Date()));
+
   const setPreset = (preset: string) => {
     setChannelPreset(preset);
     const now = new Date();
@@ -315,6 +354,57 @@ const Dashboard = () => {
     }
   };
 
+  const setBranchRange = (preset: string) => {
+    setBranchPreset(preset);
+    const now = new Date();
+    if (preset === "Today") {
+      setBranchFromStr(toYmd(now));
+      setBranchToStr(toYmd(now));
+    } else if (preset === "This Week") {
+      const d = new Date(now);
+      d.setDate(d.getDate() - 7);
+      setBranchFromStr(toYmd(d));
+      setBranchToStr(toYmd(now));
+    } else if (preset === "This Month") {
+      setBranchFromStr(toYmd(new Date(now.getFullYear(), now.getMonth(), 1)));
+      setBranchToStr(toYmd(now));
+    }
+  };
+
+  const setCrRange = (preset: string) => {
+    setCrPreset(preset);
+    const now = new Date();
+    if (preset === "Today") {
+      setCrFromStr(toYmd(now));
+      setCrToStr(toYmd(now));
+    } else if (preset === "This Week") {
+      const d = new Date(now);
+      d.setDate(d.getDate() - 7);
+      setCrFromStr(toYmd(d));
+      setCrToStr(toYmd(now));
+    } else if (preset === "This Month") {
+      setCrFromStr(toYmd(new Date(now.getFullYear(), now.getMonth(), 1)));
+      setCrToStr(toYmd(now));
+    }
+  };
+
+  const setPRange = (preset: string) => {
+    setPPreset(preset);
+    const now = new Date();
+    if (preset === "Today") {
+      setPFromStr(toYmd(now));
+      setPToStr(toYmd(now));
+    } else if (preset === "This Week") {
+      const d = new Date(now);
+      d.setDate(d.getDate() - 7);
+      setPFromStr(toYmd(d));
+      setPToStr(toYmd(now));
+    } else if (preset === "This Month") {
+      setPFromStr(toYmd(new Date(now.getFullYear(), now.getMonth(), 1)));
+      setPToStr(toYmd(now));
+    }
+  };
+
   const setDpRange = (preset: string) => {
     setDpPreset(preset);
     const now = new Date();
@@ -329,6 +419,57 @@ const Dashboard = () => {
     } else if (preset === "This Month") {
       setDpFromStr(toYmd(new Date(now.getFullYear(), now.getMonth(), 1)));
       setDpToStr(toYmd(now));
+    }
+  };
+
+  const setExpRange = (preset: string) => {
+    setExpPreset(preset);
+    const now = new Date();
+    if (preset === "Today") {
+      setExpFromStr(toYmd(now));
+      setExpToStr(toYmd(now));
+    } else if (preset === "This Week") {
+      const d = new Date(now);
+      d.setDate(d.getDate() - 7);
+      setExpFromStr(toYmd(d));
+      setExpToStr(toYmd(now));
+    } else if (preset === "This Month") {
+      setExpFromStr(toYmd(new Date(now.getFullYear(), now.getMonth(), 1)));
+      setExpToStr(toYmd(now));
+    }
+  };
+
+  const setWasteRange = (preset: string) => {
+    setWastePreset(preset);
+    const now = new Date();
+    if (preset === "Today") {
+      setWasteFromStr(toYmd(now));
+      setWasteToStr(toYmd(now));
+    } else if (preset === "This Week") {
+      const d = new Date(now);
+      d.setDate(d.getDate() - 7);
+      setWasteFromStr(toYmd(d));
+      setWasteToStr(toYmd(now));
+    } else if (preset === "This Month") {
+      setWasteFromStr(toYmd(new Date(now.getFullYear(), now.getMonth(), 1)));
+      setWasteToStr(toYmd(now));
+    }
+  };
+
+  const setAttRange = (preset: string) => {
+    setAttPreset(preset);
+    const now = new Date();
+    if (preset === "Today") {
+      setAttFromStr(toYmd(now));
+      setAttToStr(toYmd(now));
+    } else if (preset === "This Week") {
+      const d = new Date(now);
+      d.setDate(d.getDate() - 7);
+      setAttFromStr(toYmd(d));
+      setAttToStr(toYmd(now));
+    } else if (preset === "This Month") {
+      setAttFromStr(toYmd(new Date(now.getFullYear(), now.getMonth(), 1)));
+      setAttToStr(toYmd(now));
     }
   };
 
@@ -416,11 +557,49 @@ const Dashboard = () => {
     enabled: salesByChannelVisible,
   });
 
-  // Push-first real-time for the seven filtered sales sections — invalidating just their own
+  const branchSectionVisible = salesByChannelVisible && isSuperAdmin && outletId === "all";
+  const { data: branchData, isLoading: branchLoading } = useQuery({
+    queryKey: ["sales-by-outlet", branchFromStr, branchToStr],
+    queryFn: () => reportService.getSalesByOutlet({ outletId, from: branchFromStr, to: branchToStr }),
+    enabled: branchSectionVisible,
+  });
+
+  const { data: crData, isLoading: crLoading } = useQuery({
+    queryKey: ["cancellation-requests", outletId, crFromStr, crToStr],
+    queryFn: () => reportService.getCancellationRequestsReport({ outletId, from: crFromStr, to: crToStr }),
+    enabled: salesByChannelVisible,
+  });
+
+  const { data: pData, isLoading: pLoading } = useQuery({
+    queryKey: ["purchases-by-supplier", outletId, pFromStr, pToStr],
+    queryFn: () => reportService.getPurchasesBySupplier({ outletId, from: pFromStr, to: pToStr }),
+    enabled: salesByChannelVisible,
+  });
+
+  const { data: expData, isLoading: expLoading } = useQuery({
+    queryKey: ["expenses-breakdown", outletId, expFromStr, expToStr],
+    queryFn: () => reportService.getExpensesBreakdown({ outletId, from: expFromStr, to: expToStr }),
+    enabled: salesByChannelVisible,
+  });
+
+  const { data: wasteData, isLoading: wasteLoading } = useQuery({
+    queryKey: ["waste-breakdown", outletId, wasteFromStr, wasteToStr],
+    queryFn: () => reportService.getWasteBreakdown({ outletId, from: wasteFromStr, to: wasteToStr }),
+    enabled: salesByChannelVisible,
+  });
+
+  const { data: attData, isLoading: attLoading } = useQuery({
+    queryKey: ["attendance-analytics", outletId, attFromStr, attToStr],
+    queryFn: () => reportService.getAttendanceAnalytics({ outletId, from: attFromStr, to: attToStr }),
+    enabled: salesByChannelVisible,
+  });
+
+  // Push-first real-time for the ten filtered sales/ops sections — invalidating just their own
   // query keys (not the whole ["dashboard", outletId] query) avoids re-running the other 11
   // dashboard aggregates on every order event, matching how Sales.tsx keeps its order-list query
   // independent. The 180s poll (this app's standard interval for socket-backed page data) is a
-  // safety net only.
+  // safety net only. Cancellation Requests / Purchases also refresh on their own module socket
+  // events (separate useModuleEvents calls below) since order events alone don't cover either.
   const refreshSalesSections = () => {
     if (!salesByChannelVisible) return;
     queryClient.invalidateQueries({ queryKey: ["sales-by-channel"] });
@@ -430,7 +609,14 @@ const Dashboard = () => {
     queryClient.invalidateQueries({ queryKey: ["net-profit"] });
     queryClient.invalidateQueries({ queryKey: ["deals-performance"] });
     queryClient.invalidateQueries({ queryKey: ["sales-by-staff"] });
+    queryClient.invalidateQueries({ queryKey: ["sales-by-outlet"] });
+    queryClient.invalidateQueries({ queryKey: ["cancellation-requests"] });
+    queryClient.invalidateQueries({ queryKey: ["purchases-by-supplier"] });
+    queryClient.invalidateQueries({ queryKey: ["expenses-breakdown"] });
+    queryClient.invalidateQueries({ queryKey: ["waste-breakdown"] });
   };
+  useModuleEvents(["cancellationRequest:created", "cancellationRequest:updated"], refreshSalesSections);
+  useModuleEvents(["purchase:created", "purchase:updated", "purchase:deleted"], refreshSalesSections);
   useOrderEvents(refreshSalesSections);
   useVisiblePolling(refreshSalesSections, 180_000);
 
@@ -693,6 +879,47 @@ const Dashboard = () => {
     { name: "Net Profit", value: np.netProfit, isCost: false },
   ] : [];
 
+  // ── Expenses Breakdown & Trends derivations ──────────────────────────────
+  const exp = expData;
+  // Category row / bar drill-down -- same destination + param shape as Net Profit's own
+  // goToExpenses(category?) above, but keyed to this section's own date window, not npFromStr/To.
+  const goToExpCategory = (category?: string) => {
+    const params = new URLSearchParams({ from: expFromStr, to: expToStr });
+    if (category) params.set("category", category);
+    navigate(`/expenses?${params.toString()}`);
+  };
+  // Trend point drill-down -- one specific day.
+  const goToExpDay = (date: string) => {
+    const params = new URLSearchParams({ from: date, to: date });
+    navigate(`/expenses?${params.toString()}`);
+  };
+  const expCategoryChartData = (exp?.byCategory ?? []).filter((c) => c.amount > 0);
+  // Trend chart's x-axis label -- "Sep 12" style, short enough not to collide at 30-31 points.
+  const expTrendChartData = (exp?.trend ?? []).map((t) => ({
+    ...t,
+    label: new Date(`${t.date}T00:00:00.000Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" }),
+  }));
+
+  // ── Waste / Food Loss Trends derivations ─────────────────────────────────
+  const waste = wasteData;
+  // Row/bar/point drill-down -- lands on Stock Adjustments--Waste, pre-filtered to this
+  // section's own date window (same param shape Net Profit's goToWaste uses, but keyed to
+  // wasteFromStr/wasteToStr, not npFromStr/npToStr).
+  const goToWasteReason = (reason?: string) => {
+    const params = new URLSearchParams({ from: wasteFromStr, to: wasteToStr });
+    if (reason) params.set("reason", reason);
+    navigate(`/stock/adjustments?${params.toString()}`);
+  };
+  const goToWasteDay = (date: string) => {
+    const params = new URLSearchParams({ from: date, to: date });
+    navigate(`/stock/adjustments?${params.toString()}`);
+  };
+  const wasteReasonChartData = (waste?.byReason ?? []).filter((r) => r.amount > 0);
+  const wasteTrendChartData = (waste?.trend ?? []).map((t) => ({
+    ...t,
+    label: new Date(`${t.date}T00:00:00.000Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" }),
+  }));
+
   // ── Deals Performance derivations ────────────────────────────────────────
   const dp = dpData;
   const DEAL_TYPE_LABELS: Record<string, string> = {
@@ -741,6 +968,45 @@ const Dashboard = () => {
     if (staffTimeFrom) params.set("fromTime", staffTimeFrom);
     if (staffTimeTo) params.set("toTime", staffTimeTo);
     navigate(`/sales?${params.toString()}`);
+  };
+
+  // ── Sales by Outlet derivations ──────────────────────────────────────────
+  const branchChartData = (branchData?.rows ?? []).slice(0, 8).map((r) => ({ name: r.name, outletId: r.outletId, sale: r.sale, cost: r.cost, profit: r.profit }));
+  // Row/bar click switches the whole Dashboard's own outlet filter (useOutletFilter) to that
+  // branch, rather than navigating to Sales & Orders — Sales.tsx has no outlet filter of its own
+  // (Super Admin isn't wired there), and re-scoping the Dashboard is more useful anyway: every
+  // other section on this page instantly re-filters to just that branch too.
+  const goToBranch = (branchOutletId: string | null) => {
+    if (!branchOutletId) return;
+    setOutletId(branchOutletId);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  // ── Cancellation Requests derivations ────────────────────────────────────
+  const crReasonChartData = (crData?.byReason ?? []).map((r) => ({ name: r.reason, count: r.count, refunded: r.refunded }));
+  // Tiles/chart-bars/staff-rows all land on /cancellation-requests pre-filtered to this
+  // section's active date window. `status` defaults the page's own status tabs (which
+  // otherwise default to "pending") — "all" for the whole-period tiles, "approved" for the
+  // reason/staff breakdowns (those are computed from approved requests only on the backend).
+  const goToCancellations = (opts?: { status?: string; reason?: string; responsibleUserId?: string; responsibleName?: string }) => {
+    const params = new URLSearchParams();
+    if (crFromStr) params.set("from", crFromStr);
+    if (crToStr) params.set("to", crToStr);
+    params.set("status", opts?.status ?? "all");
+    if (opts?.reason) params.set("reason", opts.reason);
+    if (opts?.responsibleUserId) params.set("responsibleUserId", opts.responsibleUserId);
+    if (opts?.responsibleName) params.set("responsibleName", opts.responsibleName);
+    navigate(`/cancellation-requests?${params.toString()}`);
+  };
+
+  // ── Purchases & Supplier Spend derivations ───────────────────────────────
+  const pChartData = (pData?.rows ?? []).slice(0, 8).map((r) => ({ name: r.name, id: r.id, total: r.total, paid: r.paid, due: r.due }));
+  const goToPurchases = (supplierId?: string | null) => {
+    const params = new URLSearchParams();
+    if (pFromStr) params.set("from", pFromStr);
+    if (pToStr) params.set("to", pToStr);
+    if (supplierId) params.set("supplierId", supplierId);
+    navigate(`/purchases?${params.toString()}`);
   };
 
   return (
@@ -2428,6 +2694,483 @@ const Dashboard = () => {
         </section>
       )}
 
+      {/* Expenses Breakdown & Trends (same "reports" permission gate) */}
+      {salesByChannelVisible && (
+        <section
+          aria-label="Expenses Breakdown & Trends"
+          className="rounded-2xl border border-border/80 bg-card/40 backdrop-blur-md shadow-sm overflow-hidden transition-all"
+        >
+          <div className={cn("p-4 sm:p-5 space-y-4 bg-card/70", !expSectionCollapsed && "border-b border-border/50")}>
+            <div className="flex items-center justify-between gap-3">
+              <div
+                className="flex items-center gap-3 cursor-pointer select-none group"
+                onClick={() => setExpSectionCollapsed((prev) => !prev)}
+              >
+                <div className="h-9 w-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center border border-primary/20 shrink-0 shadow-sm group-hover:bg-primary/20 transition-colors">
+                  <Receipt className="h-4 w-4" />
+                </div>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-lg sm:text-xl font-bold tracking-tight text-foreground group-hover:text-primary transition-colors">
+                    Expenses Breakdown &amp; Trends
+                  </h2>
+                  {expSectionCollapsed && exp && (
+                    <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full border bg-primary/10 text-primary border-primary/20">
+                      {money(exp.totalAmount)}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setExpSectionCollapsed((prev) => !prev)}
+                  className="h-8 px-2.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/70 gap-1.5 rounded-lg border border-border/50"
+                  title={expSectionCollapsed ? "Expand Expenses Breakdown & Trends" : "Collapse Expenses Breakdown & Trends"}
+                  aria-label={expSectionCollapsed ? "Expand Expenses Breakdown & Trends" : "Collapse Expenses Breakdown & Trends"}
+                >
+                  <span className="text-xs font-medium hidden sm:inline">{expSectionCollapsed ? "Show" : "Hide"}</span>
+                  <ChevronDown
+                    className={cn(
+                      "h-4 w-4 transition-transform duration-200",
+                      expSectionCollapsed ? "-rotate-90" : "rotate-0"
+                    )}
+                  />
+                </Button>
+              </div>
+            </div>
+
+            {!expSectionCollapsed && (
+              <div className="flex items-center gap-2.5 flex-wrap pt-3 border-t border-border/40">
+                <div className="inline-flex items-center p-0.5 rounded-lg bg-muted/60 border border-border/60 shadow-sm">
+                  {(["Today", "This Week", "This Month"] as const).map((p) => (
+                    <button
+                      key={p}
+                      type="button"
+                      onClick={() => setExpRange(p)}
+                      className={cn(
+                        "px-3 py-1.5 text-xs font-medium rounded-md transition-all",
+                        expPreset === p
+                          ? "bg-background text-foreground shadow-sm font-semibold"
+                          : "text-muted-foreground hover:text-foreground"
+                      )}
+                    >
+                      {p}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="inline-flex items-center gap-1.5">
+                  <div className="w-36">
+                    <DatePicker
+                      value={expFromStr}
+                      onChange={(val) => { setExpFromStr(val); setExpPreset("Custom"); }}
+                      placeholder="Start date"
+                      className="h-8 text-xs bg-background"
+                    />
+                  </div>
+                  <span className="text-xs text-muted-foreground/60 font-medium px-0.5">to</span>
+                  <div className="w-36">
+                    <DatePicker
+                      value={expToStr}
+                      onChange={(val) => { setExpToStr(val); setExpPreset("Custom"); }}
+                      min={expFromStr}
+                      placeholder="End date"
+                      className="h-8 text-xs bg-background"
+                    />
+                  </div>
+                </div>
+
+                <span className="text-[11px] text-muted-foreground/70">No time-of-day filter — expenses aren't hourly.</span>
+              </div>
+            )}
+          </div>
+
+          {!expSectionCollapsed && (
+            <div className="p-4 sm:p-5">
+              {expLoading || !exp ? (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                    {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-20 rounded-lg" />)}
+                  </div>
+                  <Skeleton className="h-48 rounded-xl" />
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {/* Headline tiles */}
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                    <div className="rounded-lg bg-background/70 border border-border/50 p-3.5">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Total Expenses</p>
+                      <p className="text-xl font-bold tracking-tight text-foreground mt-0.5">{money(exp.totalAmount)}</p>
+                    </div>
+                    <div className="rounded-lg bg-background/70 border border-border/50 p-3.5">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Transactions</p>
+                      <p className="text-xl font-bold tracking-tight text-foreground mt-0.5">{exp.totalCount}</p>
+                    </div>
+                    <div className="rounded-lg bg-background/70 border border-border/50 p-3.5">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Avg / Day</p>
+                      <p className="text-xl font-bold tracking-tight text-foreground mt-0.5">{money(exp.avgPerDay)}</p>
+                    </div>
+                    <div className="rounded-lg bg-background/70 border border-border/50 p-3.5">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Top Category</p>
+                      <p className="text-xl font-bold tracking-tight text-foreground mt-0.5 truncate">
+                        {expCategoryChartData[0]?.name ?? "—"}
+                      </p>
+                      {expCategoryChartData[0] && (
+                        <p className="text-[11px] text-muted-foreground mt-0.5">{money(expCategoryChartData[0].amount)}</p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Trend over time */}
+                  <div className="rounded-xl border border-border/50 bg-card/40 p-4">
+                    <p className="text-sm font-semibold text-foreground mb-3">Daily Trend</p>
+                    {expTrendChartData.every((t) => t.amount === 0) ? (
+                      <p className="text-xs text-muted-foreground py-8 text-center">No expenses recorded this period.</p>
+                    ) : (
+                      <div className="h-56">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <LineChart
+                            data={expTrendChartData}
+                            margin={{ top: 10, right: 10 }}
+                            onClick={(state) => {
+                              const p = state?.activePayload?.[0]?.payload as { date: string } | undefined;
+                              if (p?.date) goToExpDay(p.date);
+                            }}
+                          >
+                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                            <XAxis dataKey="label" tick={{ fontSize: 10 }} axisLine={{ stroke: "hsl(var(--border))" }} tickLine={false} interval="preserveStartEnd" />
+                            <YAxis tick={{ fontSize: 12 }} axisLine={false} tickLine={false} tickFormatter={(v) => `${currency}${(v / 1000).toFixed(0)}k`} />
+                            <Tooltip content={<ChartTooltip />} cursor={{ stroke: "hsl(var(--border))" }} />
+                            <Line
+                              type="monotone"
+                              dataKey="amount"
+                              name="Expenses"
+                              stroke="hsl(var(--primary))"
+                              strokeWidth={2}
+                              dot={{ r: 2, cursor: "pointer" }}
+                              activeDot={{ r: 4, cursor: "pointer" }}
+                            />
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </div>
+                    )}
+                    <p className="text-[11px] text-muted-foreground/70 mt-2">Click a point to view that day's expenses.</p>
+                  </div>
+
+                  {/* By category — chart + table, same clickable-row pattern as every other
+                      breakdown on this dashboard. */}
+                  <div className="rounded-xl border border-border/50 bg-card/40 p-4">
+                    <p className="text-sm font-semibold text-foreground mb-3">Expenses by Category</p>
+                    {expCategoryChartData.length === 0 ? (
+                      <p className="text-xs text-muted-foreground py-8 text-center">No expenses recorded this period.</p>
+                    ) : (
+                      <div className="h-56">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart
+                            data={expCategoryChartData}
+                            barCategoryGap="24%"
+                            margin={{ top: 20 }}
+                            onClick={(state) => {
+                              const p = state?.activePayload?.[0]?.payload as { name: string } | undefined;
+                              if (p?.name) goToExpCategory(p.name);
+                            }}
+                          >
+                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                            <XAxis dataKey="name" tick={{ fontSize: 11 }} axisLine={{ stroke: "hsl(var(--border))" }} tickLine={false} interval={0} />
+                            <YAxis tick={{ fontSize: 12 }} axisLine={false} tickLine={false} tickFormatter={(v) => `${currency}${(v / 1000).toFixed(0)}k`} />
+                            <Tooltip content={<ChartTooltip />} cursor={{ fill: "hsl(var(--muted) / 0.15)", radius: 4 }} />
+                            <Bar dataKey="amount" name="Amount" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} maxBarSize={48} cursor="pointer">
+                              <LabelList dataKey="amount" position="top" formatter={(v: number) => money(v)} style={{ fontSize: 10, fill: "hsl(var(--foreground))" }} />
+                            </Bar>
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="rounded-xl border border-border/50 bg-card/40 overflow-hidden">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="hover:bg-transparent border-border/40">
+                          <TableHead>Category</TableHead>
+                          <TableHead className="text-right">Transactions</TableHead>
+                          <TableHead className="text-right">Amount</TableHead>
+                          <TableHead className="text-right">% of Total</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {(exp.byCategory ?? []).map((c) => (
+                          <TableRow
+                            key={c.name}
+                            className={cn("border-border/40", c.amount > 0 && "cursor-pointer hover:bg-muted/30 transition-colors")}
+                            onClick={() => c.amount > 0 && goToExpCategory(c.name)}
+                          >
+                            <TableCell className={cn("font-medium", c.amount === 0 && "text-muted-foreground/60")}>
+                              {c.name}
+                            </TableCell>
+                            <TableCell className="text-right tabular-nums">{c.count}</TableCell>
+                            <TableCell className="text-right tabular-nums font-medium">{money(c.amount)}</TableCell>
+                            <TableCell className="text-right tabular-nums text-muted-foreground">
+                              {exp.totalAmount > 0 ? `${Math.round((c.amount / exp.totalAmount) * 100)}%` : "—"}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                        <TableRow className="border-border/40 bg-muted/30 font-semibold">
+                          <TableCell>Total</TableCell>
+                          <TableCell className="text-right tabular-nums">{exp.totalCount}</TableCell>
+                          <TableCell className="text-right tabular-nums">{money(exp.totalAmount)}</TableCell>
+                          <TableCell className="text-right tabular-nums">100%</TableCell>
+                        </TableRow>
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* Waste / Food Loss Trends (same "reports" permission gate) */}
+      {salesByChannelVisible && (
+        <section
+          aria-label="Waste / Food Loss Trends"
+          className="rounded-2xl border border-border/80 bg-card/40 backdrop-blur-md shadow-sm overflow-hidden transition-all"
+        >
+          <div className={cn("p-4 sm:p-5 space-y-4 bg-card/70", !wasteSectionCollapsed && "border-b border-border/50")}>
+            <div className="flex items-center justify-between gap-3">
+              <div
+                className="flex items-center gap-3 cursor-pointer select-none group"
+                onClick={() => setWasteSectionCollapsed((prev) => !prev)}
+              >
+                <div className="h-9 w-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center border border-primary/20 shrink-0 shadow-sm group-hover:bg-primary/20 transition-colors">
+                  <Trash2 className="h-4 w-4" />
+                </div>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-lg sm:text-xl font-bold tracking-tight text-foreground group-hover:text-primary transition-colors">
+                    Waste / Food Loss Trends
+                  </h2>
+                  {wasteSectionCollapsed && waste && (
+                    <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full border bg-destructive/10 text-destructive border-destructive/20">
+                      {money(waste.totalAmount)}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setWasteSectionCollapsed((prev) => !prev)}
+                  className="h-8 px-2.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/70 gap-1.5 rounded-lg border border-border/50"
+                  title={wasteSectionCollapsed ? "Expand Waste / Food Loss Trends" : "Collapse Waste / Food Loss Trends"}
+                  aria-label={wasteSectionCollapsed ? "Expand Waste / Food Loss Trends" : "Collapse Waste / Food Loss Trends"}
+                >
+                  <span className="text-xs font-medium hidden sm:inline">{wasteSectionCollapsed ? "Show" : "Hide"}</span>
+                  <ChevronDown
+                    className={cn(
+                      "h-4 w-4 transition-transform duration-200",
+                      wasteSectionCollapsed ? "-rotate-90" : "rotate-0"
+                    )}
+                  />
+                </Button>
+              </div>
+            </div>
+
+            {!wasteSectionCollapsed && (
+              <div className="flex items-center gap-2.5 flex-wrap pt-3 border-t border-border/40">
+                <div className="inline-flex items-center p-0.5 rounded-lg bg-muted/60 border border-border/60 shadow-sm">
+                  {(["Today", "This Week", "This Month"] as const).map((p) => (
+                    <button
+                      key={p}
+                      type="button"
+                      onClick={() => setWasteRange(p)}
+                      className={cn(
+                        "px-3 py-1.5 text-xs font-medium rounded-md transition-all",
+                        wastePreset === p
+                          ? "bg-background text-foreground shadow-sm font-semibold"
+                          : "text-muted-foreground hover:text-foreground"
+                      )}
+                    >
+                      {p}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="inline-flex items-center gap-1.5">
+                  <div className="w-36">
+                    <DatePicker
+                      value={wasteFromStr}
+                      onChange={(val) => { setWasteFromStr(val); setWastePreset("Custom"); }}
+                      placeholder="Start date"
+                      className="h-8 text-xs bg-background"
+                    />
+                  </div>
+                  <span className="text-xs text-muted-foreground/60 font-medium px-0.5">to</span>
+                  <div className="w-36">
+                    <DatePicker
+                      value={wasteToStr}
+                      onChange={(val) => { setWasteToStr(val); setWastePreset("Custom"); }}
+                      min={wasteFromStr}
+                      placeholder="End date"
+                      className="h-8 text-xs bg-background"
+                    />
+                  </div>
+                </div>
+
+                <span className="text-[11px] text-muted-foreground/70">No time-of-day filter — waste isn't hourly.</span>
+              </div>
+            )}
+          </div>
+
+          {!wasteSectionCollapsed && (
+            <div className="p-4 sm:p-5">
+              {wasteLoading || !waste ? (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                    {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-20 rounded-lg" />)}
+                  </div>
+                  <Skeleton className="h-48 rounded-xl" />
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {/* Headline tiles */}
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                    <div className="rounded-lg bg-destructive/[0.04] border border-destructive/25 p-3.5">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Total Food Loss</p>
+                      <p className="text-xl font-bold tracking-tight text-destructive mt-0.5">{money(waste.totalAmount)}</p>
+                    </div>
+                    <div className="rounded-lg bg-background/70 border border-border/50 p-3.5">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Incidents</p>
+                      <p className="text-xl font-bold tracking-tight text-foreground mt-0.5">{waste.totalCount}</p>
+                    </div>
+                    <div className="rounded-lg bg-background/70 border border-border/50 p-3.5">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Avg / Day</p>
+                      <p className="text-xl font-bold tracking-tight text-foreground mt-0.5">{money(waste.avgPerDay)}</p>
+                    </div>
+                    <div className="rounded-lg bg-background/70 border border-border/50 p-3.5">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Top Reason</p>
+                      <p className="text-xl font-bold tracking-tight text-foreground mt-0.5 truncate">
+                        {wasteReasonChartData[0]?.name ?? "—"}
+                      </p>
+                      {wasteReasonChartData[0] && (
+                        <p className="text-[11px] text-muted-foreground mt-0.5">{money(wasteReasonChartData[0].amount)}</p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Trend over time */}
+                  <div className="rounded-xl border border-border/50 bg-card/40 p-4">
+                    <p className="text-sm font-semibold text-foreground mb-3">Daily Trend</p>
+                    {wasteTrendChartData.every((t) => t.amount === 0) ? (
+                      <p className="text-xs text-muted-foreground py-8 text-center">No waste recorded this period.</p>
+                    ) : (
+                      <div className="h-56">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <LineChart
+                            data={wasteTrendChartData}
+                            margin={{ top: 10, right: 10 }}
+                            onClick={(state) => {
+                              const p = state?.activePayload?.[0]?.payload as { date: string } | undefined;
+                              if (p?.date) goToWasteDay(p.date);
+                            }}
+                          >
+                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                            <XAxis dataKey="label" tick={{ fontSize: 10 }} axisLine={{ stroke: "hsl(var(--border))" }} tickLine={false} interval="preserveStartEnd" />
+                            <YAxis tick={{ fontSize: 12 }} axisLine={false} tickLine={false} tickFormatter={(v) => `${currency}${(v / 1000).toFixed(0)}k`} />
+                            <Tooltip content={<ChartTooltip />} cursor={{ stroke: "hsl(var(--border))" }} />
+                            <Line
+                              type="monotone"
+                              dataKey="amount"
+                              name="Food Loss"
+                              stroke="hsl(var(--destructive))"
+                              strokeWidth={2}
+                              dot={{ r: 2, cursor: "pointer" }}
+                              activeDot={{ r: 4, cursor: "pointer" }}
+                            />
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </div>
+                    )}
+                    <p className="text-[11px] text-muted-foreground/70 mt-2">Click a point to view that day's waste records.</p>
+                  </div>
+
+                  {/* By reason — chart + table */}
+                  <div className="rounded-xl border border-border/50 bg-card/40 p-4">
+                    <p className="text-sm font-semibold text-foreground mb-3">Food Loss by Reason</p>
+                    {wasteReasonChartData.length === 0 ? (
+                      <p className="text-xs text-muted-foreground py-8 text-center">No waste recorded this period.</p>
+                    ) : (
+                      <div className="h-56">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart
+                            data={wasteReasonChartData}
+                            barCategoryGap="24%"
+                            margin={{ top: 20 }}
+                            onClick={(state) => {
+                              const p = state?.activePayload?.[0]?.payload as { name: string } | undefined;
+                              if (p?.name) goToWasteReason(p.name);
+                            }}
+                          >
+                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                            <XAxis dataKey="name" tick={{ fontSize: 11 }} axisLine={{ stroke: "hsl(var(--border))" }} tickLine={false} interval={0} />
+                            <YAxis tick={{ fontSize: 12 }} axisLine={false} tickLine={false} tickFormatter={(v) => `${currency}${(v / 1000).toFixed(0)}k`} />
+                            <Tooltip content={<ChartTooltip />} cursor={{ fill: "hsl(var(--muted) / 0.15)", radius: 4 }} />
+                            <Bar dataKey="amount" name="Amount" fill="hsl(var(--destructive) / 0.6)" radius={[4, 4, 0, 0]} maxBarSize={48} cursor="pointer">
+                              <LabelList dataKey="amount" position="top" formatter={(v: number) => money(v)} style={{ fontSize: 10, fill: "hsl(var(--foreground))" }} />
+                            </Bar>
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="rounded-xl border border-border/50 bg-card/40 overflow-hidden">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="hover:bg-transparent border-border/40">
+                          <TableHead>Reason</TableHead>
+                          <TableHead className="text-right">Incidents</TableHead>
+                          <TableHead className="text-right">Amount</TableHead>
+                          <TableHead className="text-right">% of Total</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {(waste.byReason ?? []).map((r) => (
+                          <TableRow
+                            key={r.name}
+                            className={cn("border-border/40", r.amount > 0 && "cursor-pointer hover:bg-muted/30 transition-colors")}
+                            onClick={() => r.amount > 0 && goToWasteReason(r.name)}
+                          >
+                            <TableCell className={cn("font-medium", r.amount === 0 && "text-muted-foreground/60")}>
+                              {r.name}
+                            </TableCell>
+                            <TableCell className="text-right tabular-nums">{r.count}</TableCell>
+                            <TableCell className="text-right tabular-nums font-medium text-destructive">{money(r.amount)}</TableCell>
+                            <TableCell className="text-right tabular-nums text-muted-foreground">
+                              {waste.totalAmount > 0 ? `${Math.round((r.amount / waste.totalAmount) * 100)}%` : "—"}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                        <TableRow className="border-border/40 bg-muted/30 font-semibold">
+                          <TableCell>Total</TableCell>
+                          <TableCell className="text-right tabular-nums">{waste.totalCount}</TableCell>
+                          <TableCell className="text-right tabular-nums text-destructive">{money(waste.totalAmount)}</TableCell>
+                          <TableCell className="text-right tabular-nums">100%</TableCell>
+                        </TableRow>
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </section>
+      )}
+
       {/* Deals Performance (same "reports" permission gate) */}
       {salesByChannelVisible && (
         <section
@@ -2965,6 +3708,650 @@ const Dashboard = () => {
                       </div>
                     </div>
                   </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* Sales by Outlet — Super Admin, chain-wide view only. A single-outlet scope always
+          yields one row, which has no comparative value, so the section is hidden rather than
+          shown half-useful. */}
+      {branchSectionVisible && (
+        <section
+          aria-label="Sales by Outlet"
+          className="rounded-2xl border border-border/80 bg-card/40 backdrop-blur-md shadow-sm overflow-hidden transition-all"
+        >
+          <div className={cn("p-4 sm:p-5 space-y-4 bg-card/70", !branchSectionCollapsed && "border-b border-border/50")}>
+            <div className="flex items-center justify-between gap-3">
+              <div
+                className="flex items-center gap-3 cursor-pointer select-none group"
+                onClick={() => setBranchSectionCollapsed((prev) => !prev)}
+              >
+                <div className="h-9 w-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center border border-primary/20 shrink-0 shadow-sm group-hover:bg-primary/20 transition-colors">
+                  <Building2 className="h-4 w-4" />
+                </div>
+                <h2 className="text-lg sm:text-xl font-bold tracking-tight text-foreground group-hover:text-primary transition-colors whitespace-nowrap">
+                  Sales by Outlet
+                </h2>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setBranchSectionCollapsed((prev) => !prev)}
+                  className="h-8 px-2.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/70 gap-1.5 rounded-lg border border-border/50"
+                  title={branchSectionCollapsed ? "Expand Sales by Outlet" : "Collapse Sales by Outlet"}
+                  aria-label={branchSectionCollapsed ? "Expand Sales by Outlet" : "Collapse Sales by Outlet"}
+                >
+                  <span className="text-xs font-medium hidden sm:inline">
+                    {branchSectionCollapsed ? "Show" : "Hide"}
+                  </span>
+                  <ChevronDown
+                    className={cn(
+                      "h-4 w-4 transition-transform duration-200",
+                      branchSectionCollapsed ? "-rotate-90" : "rotate-0"
+                    )}
+                  />
+                </Button>
+              </div>
+            </div>
+
+            {!branchSectionCollapsed && (
+              <div className="flex items-center gap-2.5 flex-wrap pt-3 border-t border-border/40">
+                <div className="inline-flex items-center p-0.5 rounded-lg bg-muted/60 border border-border/60 shadow-sm">
+                  {(["Today", "This Week", "This Month"] as const).map((p) => (
+                    <button
+                      key={p}
+                      type="button"
+                      onClick={() => setBranchRange(p)}
+                      className={cn(
+                        "px-3 py-1.5 text-xs font-medium rounded-md transition-all",
+                        branchPreset === p
+                          ? "bg-background text-foreground shadow-sm font-semibold"
+                          : "text-muted-foreground hover:text-foreground"
+                      )}
+                    >
+                      {p}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="inline-flex items-center gap-1.5">
+                  <div className="w-36">
+                    <DatePicker
+                      value={branchFromStr}
+                      onChange={(val) => { setBranchFromStr(val); setBranchPreset("Custom"); }}
+                      placeholder="Start date"
+                      className="h-8 text-xs bg-background"
+                    />
+                  </div>
+                  <span className="text-xs text-muted-foreground/60 font-medium px-0.5">to</span>
+                  <div className="w-36">
+                    <DatePicker
+                      value={branchToStr}
+                      onChange={(val) => { setBranchToStr(val); setBranchPreset("Custom"); }}
+                      min={branchFromStr}
+                      placeholder="End date"
+                      className="h-8 text-xs bg-background"
+                    />
+                  </div>
+                </div>
+
+                <span className="text-[11px] text-muted-foreground/70">Click a branch to view its own Dashboard.</span>
+              </div>
+            )}
+          </div>
+
+          {!branchSectionCollapsed && (
+            <div className="p-4 sm:p-5">
+              {branchLoading ? (
+                <div className="space-y-2">
+                  {Array.from({ length: 3 }).map((_, i) => (
+                    <Skeleton key={i} className="h-10 rounded-lg" />
+                  ))}
+                </div>
+              ) : (branchData?.rows ?? []).length === 0 ? (
+                <p className="text-sm text-muted-foreground py-8 text-center">No sales in this period.</p>
+              ) : (
+                <div className="space-y-4">
+                  <div className="overflow-x-auto -mx-1 px-1">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="bg-muted/50 hover:bg-muted/50">
+                          <TableHead>Outlet</TableHead>
+                          <TableHead className="text-right">Orders</TableHead>
+                          <TableHead className="text-right">Sale</TableHead>
+                          <TableHead className="text-right">Cost</TableHead>
+                          <TableHead className="text-right">Profit</TableHead>
+                          <TableHead className="text-right">Margin</TableHead>
+                          <TableHead className="w-8" />
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {(branchData?.rows ?? []).map((r) => (
+                          <TableRow
+                            key={r.outletId ?? r.name}
+                            className={cn(
+                              "transition-colors group/row",
+                              r.outletId ? "cursor-pointer hover:bg-primary/5" : "opacity-70"
+                            )}
+                            onClick={() => goToBranch(r.outletId)}
+                            title={r.outletId ? "View this branch's Dashboard" : "No outlet on these orders — can't drill down"}
+                          >
+                            <TableCell className="font-medium">{r.name}</TableCell>
+                            <TableCell className="text-right text-muted-foreground">{r.orders}</TableCell>
+                            <TableCell className="text-right font-medium">{currency} {r.sale.toLocaleString()}</TableCell>
+                            <TableCell className="text-right">{currency} {r.cost.toLocaleString()}</TableCell>
+                            <TableCell className={cn("text-right font-medium", r.profit >= 0 ? "text-emerald-500" : "text-destructive")}>
+                              {currency} {r.profit.toLocaleString()}
+                            </TableCell>
+                            <TableCell className={cn("text-right", r.marginPct >= 0 ? "text-emerald-500" : "text-destructive")}>
+                              {r.marginPct}%
+                            </TableCell>
+                            <TableCell className="w-8">
+                              {r.outletId && <ChevronRight className="h-4 w-4 text-muted-foreground/40 transition-all group-hover/row:text-primary group-hover/row:translate-x-0.5" />}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                        {branchData?.combined && (
+                          <TableRow className="border-t-2 border-emerald-500/30 bg-emerald-500/[0.04] font-semibold">
+                            <TableCell className="font-bold">Total</TableCell>
+                            <TableCell className="text-right">{branchData.combined.orders}</TableCell>
+                            <TableCell className="text-right">{currency} {branchData.combined.sale.toLocaleString()}</TableCell>
+                            <TableCell className="text-right">{currency} {branchData.combined.cost.toLocaleString()}</TableCell>
+                            <TableCell className={cn("text-right", branchData.combined.profit >= 0 ? "text-emerald-500" : "text-destructive")}>
+                              {currency} {branchData.combined.profit.toLocaleString()}
+                            </TableCell>
+                            <TableCell className={cn("text-right", branchData.combined.marginPct >= 0 ? "text-emerald-500" : "text-destructive")}>
+                              {branchData.combined.marginPct}%
+                            </TableCell>
+                            <TableCell className="w-8" />
+                          </TableRow>
+                        )}
+                      </TableBody>
+                    </Table>
+                  </div>
+
+                  {branchChartData.length > 0 && (
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    <div className="rounded-xl border border-border/50 bg-card/40 p-4">
+                      <p className="text-sm font-semibold text-foreground mb-3">Sale vs Cost by Outlet</p>
+                      <div className="h-64">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart data={branchChartData} barGap={4} barCategoryGap="24%">
+                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                            <XAxis dataKey="name" tick={{ fontSize: 11 }} axisLine={{ stroke: "hsl(var(--border))" }} tickLine={false} interval={0} angle={-20} textAnchor="end" height={54} />
+                            <YAxis tick={{ fontSize: 12 }} axisLine={false} tickLine={false} tickFormatter={(v) => `${currency}${(v / 1000).toFixed(0)}k`} />
+                            <Tooltip content={<ChartTooltip />} cursor={{ fill: "hsl(var(--muted) / 0.15)", radius: 4 }} />
+                            <Legend wrapperStyle={{ fontSize: 12 }} />
+                            <Bar
+                              dataKey="sale" name="Sale" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} maxBarSize={36}
+                              cursor="pointer"
+                              onClick={(data: any) => goToBranch(data?.outletId ?? null)}
+                            />
+                            <Bar
+                              dataKey="cost" name="Cost" fill="hsl(var(--info))" radius={[4, 4, 0, 0]} maxBarSize={36}
+                              cursor="pointer"
+                              onClick={(data: any) => goToBranch(data?.outletId ?? null)}
+                            />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
+
+                    <div className="rounded-xl border border-border/50 bg-card/40 p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <p className="text-sm font-semibold text-foreground">Profit by Outlet</p>
+                        <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
+                          <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-emerald-500" />Profit</span>
+                          <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-destructive" />Loss</span>
+                        </div>
+                      </div>
+                      <div className="h-64">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart data={branchChartData} barCategoryGap="30%" margin={{ top: 20 }}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                            <XAxis dataKey="name" tick={{ fontSize: 11 }} axisLine={{ stroke: "hsl(var(--border))" }} tickLine={false} interval={0} angle={-20} textAnchor="end" height={54} />
+                            <YAxis tick={{ fontSize: 12 }} axisLine={false} tickLine={false} tickFormatter={(v) => `${currency}${(v / 1000).toFixed(0)}k`} />
+                            <Tooltip content={<ChartTooltip />} cursor={{ fill: "hsl(var(--muted) / 0.15)", radius: 4 }} />
+                            <Bar
+                              dataKey="profit" name="Profit" radius={[4, 4, 0, 0]} maxBarSize={44}
+                              cursor="pointer"
+                              onClick={(data: any) => goToBranch(data?.outletId ?? null)}
+                            >
+                              {branchChartData.map((entry) => (
+                                <Cell key={entry.name} fill={entry.profit >= 0 ? "hsl(var(--success))" : "hsl(var(--destructive))"} />
+                              ))}
+                              <LabelList
+                                dataKey="profit"
+                                position="top"
+                                formatter={(v: number) => `${currency} ${v.toLocaleString()}`}
+                                style={{ fontSize: 10, fill: "hsl(var(--foreground))" }}
+                              />
+                            </Bar>
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
+                  </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* Cancellation Requests (same "reports" permission gate) */}
+      {salesByChannelVisible && (
+        <section
+          aria-label="Cancellation Requests"
+          className="rounded-2xl border border-border/80 bg-card/40 backdrop-blur-md shadow-sm overflow-hidden transition-all"
+        >
+          <div className={cn("p-4 sm:p-5 space-y-4 bg-card/70", !crSectionCollapsed && "border-b border-border/50")}>
+            <div className="flex items-center justify-between gap-3">
+              <div
+                className="flex items-center gap-3 cursor-pointer select-none group"
+                onClick={() => setCrSectionCollapsed((prev) => !prev)}
+              >
+                <div className="h-9 w-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center border border-primary/20 shrink-0 shadow-sm group-hover:bg-primary/20 transition-colors">
+                  <Ban className="h-4 w-4" />
+                </div>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-lg sm:text-xl font-bold tracking-tight text-foreground group-hover:text-primary transition-colors whitespace-nowrap">
+                    Cancellation Requests
+                  </h2>
+                  {crSectionCollapsed && crData && (
+                    <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full border bg-primary/10 text-primary border-primary/20">
+                      {crData.totalRequests} requests
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setCrSectionCollapsed((prev) => !prev)}
+                  className="h-8 px-2.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/70 gap-1.5 rounded-lg border border-border/50"
+                  title={crSectionCollapsed ? "Expand Cancellation Requests" : "Collapse Cancellation Requests"}
+                  aria-label={crSectionCollapsed ? "Expand Cancellation Requests" : "Collapse Cancellation Requests"}
+                >
+                  <span className="text-xs font-medium hidden sm:inline">{crSectionCollapsed ? "Show" : "Hide"}</span>
+                  <ChevronDown
+                    className={cn(
+                      "h-4 w-4 transition-transform duration-200",
+                      crSectionCollapsed ? "-rotate-90" : "rotate-0"
+                    )}
+                  />
+                </Button>
+              </div>
+            </div>
+
+            {!crSectionCollapsed && (
+              <div className="flex items-center gap-2.5 flex-wrap pt-3 border-t border-border/40">
+                <div className="inline-flex items-center p-0.5 rounded-lg bg-muted/60 border border-border/60 shadow-sm">
+                  {(["Today", "This Week", "This Month"] as const).map((p) => (
+                    <button
+                      key={p}
+                      type="button"
+                      onClick={() => setCrRange(p)}
+                      className={cn(
+                        "px-3 py-1.5 text-xs font-medium rounded-md transition-all",
+                        crPreset === p
+                          ? "bg-background text-foreground shadow-sm font-semibold"
+                          : "text-muted-foreground hover:text-foreground"
+                      )}
+                    >
+                      {p}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="inline-flex items-center gap-1.5">
+                  <div className="w-36">
+                    <DatePicker
+                      value={crFromStr}
+                      onChange={(val) => { setCrFromStr(val); setCrPreset("Custom"); }}
+                      placeholder="Start date"
+                      className="h-8 text-xs bg-background"
+                    />
+                  </div>
+                  <span className="text-xs text-muted-foreground/60 font-medium px-0.5">to</span>
+                  <div className="w-36">
+                    <DatePicker
+                      value={crToStr}
+                      onChange={(val) => { setCrToStr(val); setCrPreset("Custom"); }}
+                      min={crFromStr}
+                      placeholder="End date"
+                      className="h-8 text-xs bg-background"
+                    />
+                  </div>
+                </div>
+
+                <span className="text-[11px] text-muted-foreground/70">No time-of-day filter — cancellations aren't hourly.</span>
+              </div>
+            )}
+          </div>
+
+          {!crSectionCollapsed && (
+            <div className="p-4 sm:p-5">
+              {crLoading || !crData ? (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                    {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-20 rounded-lg" />)}
+                  </div>
+                  <Skeleton className="h-48 rounded-xl" />
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {/* Headline tiles — each drills into Cancellation Requests filtered to this
+                      section's date window + the matching status. */}
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                    <div
+                      className="rounded-lg bg-background/70 border border-border/50 p-3.5 cursor-pointer hover:border-primary/40 hover:shadow-sm transition-all"
+                      onClick={() => goToCancellations({ status: "all" })}
+                      title="View all requests this period"
+                    >
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Total Requests</p>
+                      <p className="text-xl font-bold tracking-tight text-foreground mt-0.5">{crData.totalRequests.toLocaleString()}</p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">{crData.rejected} rejected</p>
+                    </div>
+                    <div
+                      className="rounded-lg bg-background/70 border border-border/50 p-3.5 cursor-pointer hover:border-primary/40 hover:shadow-sm transition-all"
+                      onClick={() => goToCancellations({ status: "approved" })}
+                      title="View approved requests this period"
+                    >
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Approved</p>
+                      <p className="text-xl font-bold tracking-tight text-foreground mt-0.5">{crData.approved.toLocaleString()}</p>
+                    </div>
+                    <div
+                      className="rounded-lg bg-background/70 border border-border/50 p-3.5 cursor-pointer hover:border-primary/40 hover:shadow-sm transition-all"
+                      onClick={() => goToCancellations({ status: "pending" })}
+                      title="View pending requests this period"
+                    >
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Pending Review</p>
+                      <p className={cn("text-xl font-bold tracking-tight mt-0.5", crData.pending > 0 ? "text-warning" : "text-foreground")}>
+                        {crData.pending.toLocaleString()}
+                      </p>
+                    </div>
+                    <div
+                      className="rounded-lg bg-background/70 border border-border/50 p-3.5 cursor-pointer hover:border-primary/40 hover:shadow-sm transition-all"
+                      onClick={() => goToCancellations({ status: "approved" })}
+                      title="View approved (refunded) requests this period"
+                    >
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Total Refunded</p>
+                      <p className="text-xl font-bold tracking-tight text-destructive mt-0.5">{money(crData.totalRefunded)}</p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">+{money(crData.totalPenalties)} in penalties</p>
+                    </div>
+                  </div>
+
+                  {crData.approved === 0 ? (
+                    <p className="text-sm text-muted-foreground py-6 text-center">No approved cancellations this period.</p>
+                  ) : (
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                      <div className="rounded-xl border border-border/50 bg-card/40 p-4">
+                        <p className="text-sm font-semibold text-foreground mb-3">Cancellations by Reason</p>
+                        <div className="h-64">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={crReasonChartData} barCategoryGap="30%" margin={{ top: 20 }}>
+                              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                              <XAxis dataKey="name" tick={{ fontSize: 11 }} axisLine={{ stroke: "hsl(var(--border))" }} tickLine={false} interval={0} angle={-20} textAnchor="end" height={54} />
+                              <YAxis tick={{ fontSize: 12 }} axisLine={false} tickLine={false} allowDecimals={false} />
+                              <Tooltip content={<ChartTooltip />} cursor={{ fill: "hsl(var(--muted) / 0.15)", radius: 4 }} />
+                              <Bar
+                                dataKey="count" name="Count" fill="hsl(var(--destructive) / 0.7)" radius={[4, 4, 0, 0]} maxBarSize={44}
+                                cursor="pointer"
+                                onClick={(data: any) => goToCancellations({ status: "approved", reason: data?.name })}
+                              >
+                                <LabelList dataKey="count" position="top" style={{ fontSize: 10, fill: "hsl(var(--foreground))" }} />
+                              </Bar>
+                            </BarChart>
+                          </ResponsiveContainer>
+                        </div>
+                      </div>
+
+                      <div className="rounded-xl border border-border/50 bg-card/40 overflow-hidden">
+                        <div className="px-4 py-2.5 bg-muted/40 border-b border-border/40">
+                          <p className="text-sm font-semibold text-foreground">Most Responsible Staff</p>
+                        </div>
+                        <div className="divide-y divide-border/40 text-sm">
+                          {crData.byStaff.length === 0 ? (
+                            <p className="px-4 py-3 text-xs text-muted-foreground">No staff member marked responsible this period.</p>
+                          ) : (
+                            crData.byStaff.map((s) => (
+                              <div
+                                key={s.id}
+                                className="flex items-center justify-between px-4 py-2 cursor-pointer hover:bg-muted/30 transition-colors group/row"
+                                onClick={() => goToCancellations({ status: "approved", responsibleUserId: s.id, responsibleName: s.name })}
+                              >
+                                <span className="text-muted-foreground truncate inline-flex items-center gap-1">
+                                  {s.name}
+                                  <ChevronRight className="h-3 w-3 text-muted-foreground/40 transition-transform group-hover/row:translate-x-0.5" />
+                                </span>
+                                <span className="flex items-center gap-2">
+                                  <span className="text-[11px] text-muted-foreground">{s.count} incident{s.count === 1 ? "" : "s"}</span>
+                                  <span className="tabular-nums font-medium text-destructive">{money(s.penalty)}</span>
+                                </span>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* Purchases & Supplier Spend (same "reports" permission gate) */}
+      {salesByChannelVisible && (
+        <section
+          aria-label="Purchases & Supplier Spend"
+          className="rounded-2xl border border-border/80 bg-card/40 backdrop-blur-md shadow-sm overflow-hidden transition-all"
+        >
+          <div className={cn("p-4 sm:p-5 space-y-4 bg-card/70", !pSectionCollapsed && "border-b border-border/50")}>
+            <div className="flex items-center justify-between gap-3">
+              <div
+                className="flex items-center gap-3 cursor-pointer select-none group"
+                onClick={() => setPSectionCollapsed((prev) => !prev)}
+              >
+                <div className="h-9 w-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center border border-primary/20 shrink-0 shadow-sm group-hover:bg-primary/20 transition-colors">
+                  <ShoppingBag className="h-4 w-4" />
+                </div>
+                <h2 className="text-lg sm:text-xl font-bold tracking-tight text-foreground group-hover:text-primary transition-colors whitespace-nowrap">
+                  Purchases & Supplier Spend
+                </h2>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setPSectionCollapsed((prev) => !prev)}
+                  className="h-8 px-2.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/70 gap-1.5 rounded-lg border border-border/50"
+                  title={pSectionCollapsed ? "Expand Purchases & Supplier Spend" : "Collapse Purchases & Supplier Spend"}
+                  aria-label={pSectionCollapsed ? "Expand Purchases & Supplier Spend" : "Collapse Purchases & Supplier Spend"}
+                >
+                  <span className="text-xs font-medium hidden sm:inline">{pSectionCollapsed ? "Show" : "Hide"}</span>
+                  <ChevronDown
+                    className={cn(
+                      "h-4 w-4 transition-transform duration-200",
+                      pSectionCollapsed ? "-rotate-90" : "rotate-0"
+                    )}
+                  />
+                </Button>
+              </div>
+            </div>
+
+            {!pSectionCollapsed && (
+              <div className="flex items-center gap-2.5 flex-wrap pt-3 border-t border-border/40">
+                <div className="inline-flex items-center p-0.5 rounded-lg bg-muted/60 border border-border/60 shadow-sm">
+                  {(["Today", "This Week", "This Month"] as const).map((p) => (
+                    <button
+                      key={p}
+                      type="button"
+                      onClick={() => setPRange(p)}
+                      className={cn(
+                        "px-3 py-1.5 text-xs font-medium rounded-md transition-all",
+                        pPreset === p
+                          ? "bg-background text-foreground shadow-sm font-semibold"
+                          : "text-muted-foreground hover:text-foreground"
+                      )}
+                    >
+                      {p}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="inline-flex items-center gap-1.5">
+                  <div className="w-36">
+                    <DatePicker
+                      value={pFromStr}
+                      onChange={(val) => { setPFromStr(val); setPPreset("Custom"); }}
+                      placeholder="Start date"
+                      className="h-8 text-xs bg-background"
+                    />
+                  </div>
+                  <span className="text-xs text-muted-foreground/60 font-medium px-0.5">to</span>
+                  <div className="w-36">
+                    <DatePicker
+                      value={pToStr}
+                      onChange={(val) => { setPToStr(val); setPPreset("Custom"); }}
+                      min={pFromStr}
+                      placeholder="End date"
+                      className="h-8 text-xs bg-background"
+                    />
+                  </div>
+                </div>
+
+                <span className="text-[11px] text-muted-foreground/70">No time-of-day filter — purchases aren't hourly.</span>
+              </div>
+            )}
+          </div>
+
+          {!pSectionCollapsed && (
+            <div className="p-4 sm:p-5">
+              {pLoading || !pData ? (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                    {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-20 rounded-lg" />)}
+                  </div>
+                  <Skeleton className="h-48 rounded-xl" />
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {/* Headline tiles */}
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                    <div
+                      className="rounded-lg bg-background/70 border border-border/50 p-3.5 cursor-pointer hover:border-primary/40 hover:shadow-sm transition-all"
+                      onClick={() => goToPurchases()}
+                      title="View all purchases this period"
+                    >
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Total Purchases</p>
+                      <p className="text-xl font-bold tracking-tight text-foreground mt-0.5">{money(pData.totalAmount)}</p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">{pData.purchaseCount} purchase{pData.purchaseCount === 1 ? "" : "s"}</p>
+                    </div>
+                    <div className="rounded-lg bg-background/70 border border-border/50 p-3.5">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Total Paid</p>
+                      <p className="text-xl font-bold tracking-tight text-foreground mt-0.5">{money(pData.totalPaid)}</p>
+                    </div>
+                    <div className="rounded-lg bg-background/70 border border-border/50 p-3.5">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Total Due</p>
+                      <p className={cn("text-xl font-bold tracking-tight mt-0.5", pData.totalDue > 0 ? "text-destructive" : "text-foreground")}>
+                        {money(pData.totalDue)}
+                      </p>
+                    </div>
+                    <div className="rounded-lg bg-background/70 border border-border/50 p-3.5">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Active Suppliers</p>
+                      <p className="text-xl font-bold tracking-tight text-foreground mt-0.5">{pData.supplierCount.toLocaleString()}</p>
+                    </div>
+                  </div>
+
+                  {pData.rows.length === 0 ? (
+                    <p className="text-sm text-muted-foreground py-6 text-center">No purchases this period.</p>
+                  ) : (
+                    <>
+                      <div className="rounded-xl border border-border/50 bg-card/40 p-4">
+                        <p className="text-sm font-semibold text-foreground mb-3">Spend by Supplier</p>
+                        <div className="h-64">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={pChartData} barGap={4} barCategoryGap="24%">
+                              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                              <XAxis dataKey="name" tick={{ fontSize: 11 }} axisLine={{ stroke: "hsl(var(--border))" }} tickLine={false} interval={0} angle={-20} textAnchor="end" height={54} />
+                              <YAxis tick={{ fontSize: 12 }} axisLine={false} tickLine={false} tickFormatter={(v) => `${currency}${(v / 1000).toFixed(0)}k`} />
+                              <Tooltip content={<ChartTooltip />} cursor={{ fill: "hsl(var(--muted) / 0.15)", radius: 4 }} />
+                              <Legend wrapperStyle={{ fontSize: 12 }} />
+                              <Bar
+                                dataKey="paid" name="Paid" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} maxBarSize={36}
+                                cursor="pointer"
+                                onClick={(data: any) => goToPurchases(data?.id ?? null)}
+                              />
+                              <Bar
+                                dataKey="due" name="Due" fill="hsl(var(--destructive) / 0.7)" radius={[4, 4, 0, 0]} maxBarSize={36}
+                                cursor="pointer"
+                                onClick={(data: any) => goToPurchases(data?.id ?? null)}
+                              />
+                            </BarChart>
+                          </ResponsiveContainer>
+                        </div>
+                      </div>
+
+                      <div className="overflow-x-auto -mx-1 px-1">
+                        <Table>
+                          <TableHeader>
+                            <TableRow className="bg-muted/50 hover:bg-muted/50">
+                              <TableHead>Supplier</TableHead>
+                              <TableHead className="text-right">Purchases</TableHead>
+                              <TableHead className="text-right">Total</TableHead>
+                              <TableHead className="text-right">Paid</TableHead>
+                              <TableHead className="text-right">Due</TableHead>
+                              <TableHead className="w-8" />
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {pData.rows.map((r) => (
+                              <TableRow
+                                key={r.id || r.name}
+                                className={cn(
+                                  "transition-colors group/row",
+                                  r.id ? "cursor-pointer hover:bg-primary/5" : "opacity-70"
+                                )}
+                                onClick={() => goToPurchases(r.id || null)}
+                                title={r.id ? "View this supplier's purchases" : "No supplier on these purchases — can't drill down"}
+                              >
+                                <TableCell className="font-medium">{r.name}</TableCell>
+                                <TableCell className="text-right text-muted-foreground">{r.count}</TableCell>
+                                <TableCell className="text-right font-medium">{money(r.total)}</TableCell>
+                                <TableCell className="text-right">{money(r.paid)}</TableCell>
+                                <TableCell className={cn("text-right", r.due > 0 ? "text-destructive font-medium" : "text-muted-foreground")}>
+                                  {money(r.due)}
+                                </TableCell>
+                                <TableCell className="w-8">
+                                  {r.id && <ChevronRight className="h-4 w-4 text-muted-foreground/40 transition-all group-hover/row:text-primary group-hover/row:translate-x-0.5" />}
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                            <TableRow className="border-t-2 border-emerald-500/30 bg-emerald-500/[0.04] font-semibold">
+                              <TableCell className="font-bold">Total</TableCell>
+                              <TableCell className="text-right">{pData.purchaseCount}</TableCell>
+                              <TableCell className="text-right">{money(pData.totalAmount)}</TableCell>
+                              <TableCell className="text-right">{money(pData.totalPaid)}</TableCell>
+                              <TableCell className={cn("text-right", pData.totalDue > 0 ? "text-destructive" : "")}>{money(pData.totalDue)}</TableCell>
+                              <TableCell className="w-8" />
+                            </TableRow>
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </>
                   )}
                 </div>
               )}

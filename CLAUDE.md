@@ -725,6 +725,77 @@ plus a body explaining _why_ the change was made when that is not obvious.
   `StockAdjustments.tsx` applies the same range to both its waste and correction fetches. Both
   pages' category/reason `<Select>`s are fixed lists — a drill-down value outside the list gets
   a synthetic extra `<SelectItem>` so the trigger doesn't render blank.
+- **`use-module-events.ts`'s `invalidateCacheForEvents` never cleared the `/reports` GET cache
+  (fixed 2026-09-12)** — found from a live report that no Dashboard sales/report section updated
+  on an order-completion socket event, only on a hard page reload. `refreshSalesSections` did
+  correctly call `queryClient.invalidateQueries` for all seven sections on `order:updated`/
+  `order:created`, but the resulting `reportService.getX()` refetch still went through `api.ts`'s
+  own 30s in-memory GET cache, which was never told to drop its `/reports/*` entries on an order
+  event (only `/orders`/`/customers`/`/delivery/*` were cleared) — so it kept serving the stale
+  pre-event response instead of making a real network request. A manual page reload "fixed" it
+  only because reloading resets that in-memory `Map`. Fixed by adding `api.clearCache("/reports")`
+  to both the `order:created` and generic `evt.startsWith("order:")` branches.
+- **Three more Dashboard sections (2026-09-12)**, same "date range, no time-of-day" filter model
+  as Net Profit/Deals Performance — own `branch*`/`cr*`/`p*` state blocks (`*SectionCollapsed`,
+  `*Preset`, `*FromStr`, `*ToStr`, `set*Range`), each with a `reportService.getX` query key on
+  the shared `refreshSalesSections`:
+  - **Sales by Outlet** — `branchSectionVisible = salesByChannelVisible && isSuperAdmin &&
+    outletId === "all"` (only meaningful chain-wide). Row/bar click calls `setOutletId(branchId)`
+    (from `useOutletFilter()`) directly — the one Dashboard drill-down that re-scopes the page
+    itself instead of navigating to `/sales`.
+  - **Cancellation Requests** — 4 headline tiles, ALL individually clickable (unlike Purchases &
+    Supplier Spend below), + a reason bar chart + a staff table, drilling into
+    `CancellationRequests.tsx` via `?from=&to=[&reason=/&responsibleUserId=&responsibleName=/
+    &status=]`. `CancellationRequests.tsx` gained its first-ever filter bar: a Sales.tsx-style
+    date range (presets + two `DatePicker`s) plus removable Reason/Staff `Badge` chips, seeded
+    via the correct re-seeding `useEffect` keyed on `searchParams` (not the older one-shot
+    `useState(() => searchParams.get(...))` bug documented above — deliberately not repeated
+    here). See the backend CLAUDE.md for `listCancellationRequests`'s new `from`/`to`/`reason`/
+    `responsibleUserId` params and why its date filter needs the same PKT shift `Order.createdAt`
+    does.
+  - **Purchases & Supplier Spend** — 4 tiles, but only "Total Purchases" is individually
+    clickable of the four (Total Paid/Total Due/Active Suppliers aren't) — the chart bars and
+    table rows both are. `Purchases.tsx` gained a matching filter bar + fixed a real pre-existing
+    bug: its `vendorFilter` `<Select>` had been filtering **client-side only**, even though the
+    backend already supported `supplierId` — `purchaseService.getAll()` now sends
+    `supplierId`/`from`/`to` server-side (query key updated to match), and the redundant
+    client-side `supplierId` re-check was dropped from the `filtered` derivation. The vendor
+    `<Select>`'s `onValueChange` now also resets `page` to 1; a synthetic fallback `<SelectItem>`
+    covers a drill-down `supplierId` not yet in the loaded list.
+  - **The same `/reports`-cache gap fixed 2026-09-12 above resurfaced twice more** as these wired
+    up their own socket events — `use-module-events.ts`'s `cancellationRequest:` and `purchase:`
+    branches each gained their own `api.clearCache("/reports")`.
+- **Two more Dashboard sections + a second no-socket-event `/reports`-staleness class
+  (2026-09-12)** — `exp*`/`waste*` state blocks, same shape as the three above:
+  - **Expenses Breakdown & Trends** — 4 tiles (Total Expenses/Transactions/Avg-per-day/Top
+    Category) + a clickable daily-trend `<LineChart>` + a clickable by-category `<BarChart>` + a
+    full table, every category row/trend point drilling into `/expenses?from=&to=[&category=]`.
+    `report.service.ts` gained `getExpensesBreakdown`/`ExpensesBreakdownReport`.
+  - **Waste / Food Loss Trends** — identical shape, for `WasteRecord`, drilling into
+    `/stock/adjustments?from=&to=[&reason=]`. `report.service.ts` gained
+    `getWasteBreakdown`/`WasteBreakdownReport` (params include optional `warehouseId`/`reason` —
+    used only by `StockAdjustments.tsx`'s own tiles below, never by the Dashboard section).
+  - **`Purchases.tsx` and `StockAdjustments.tsx` each had their fixed-window KPI cards replaced
+    with these Dashboard-matching tiles, now genuinely connected to each page's own filter bar** —
+    this was the point of building the two endpoints above, not just a Dashboard addition:
+    - `Purchases.tsx`: the old 4 cards (Total/Today's/This Week/This Month, from
+      `purchaseService.getStats()` — fixed windows, ignored the page's own date filter entirely)
+      are gone; the new tiles call `reportService.getPurchasesBySupplier({ from: dateFrom, to:
+      dateTo })` — deliberately ignoring `vendorFilter`, matching the Dashboard section's own
+      scope exactly (whole-range-all-suppliers). `purchaseService.getStats()` and its backing
+      `/purchases/stats/summary` client call are now fully unused and were deleted (confirmed via
+      a repo-wide grep before removing).
+    - `StockAdjustments.tsx`: the old 4 cards (computed client-side from an already-loaded,
+      200-row-capped list, using hardcoded today/week/month windows that ignored the page's own
+      filter bar) **and** the whole "Waste Breakdown by Reason" Daily/Weekly/Monthly panel are
+      gone. The new tiles call `reportService.getWasteBreakdown` with `from`/`to`/`reason`/
+      `warehouseId` all wired to the page's own filter state — unlike Purchases.tsx, this page's
+      extra filters (reason, warehouse) **are** threaded through, since the user explicitly asked
+      for "filters se connected" here and this page has more of them than Purchases.tsx does.
+  - **A second no-socket-event `/reports`-staleness class**: `Expense`/`WasteRecord` mutations
+    emit no socket event at all (unlike orders/purchases/cancellation-requests), so only
+    `api.ts`'s `MUTATION_DEPENDENCIES` could clear `/reports` after one. Fixed by adding
+    `'/expenses': ['/reports']` and appending `'/reports'` to the existing `'/stock'` entry.
 
 <!-- code-review-graph MCP tools -->
 ## MCP Tools: code-review-graph

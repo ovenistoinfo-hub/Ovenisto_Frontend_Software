@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Ban, Check, X } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
@@ -10,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
 import { PageHeader } from "@/components/ui/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
+import { DatePicker } from "@/components/ui/date-picker";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import {
@@ -21,6 +23,12 @@ import { useOutletFilter } from "@/hooks/useOutletFilter";
 import { OutletFilterSelect } from "@/components/OutletFilterSelect";
 import { useModuleEvents } from "@/hooks/use-module-events";
 import { api } from "@/services/api";
+
+/** "YYYY-MM-DD" from local Y/M/D parts — same reasoning as Sales.tsx's toYmd. */
+function toYmd(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
 
 // Rank-and-file staff only — never a manager/admin (they're the approver pool, not
 // someone who gets blamed/penalized for a cancellation).
@@ -42,8 +50,49 @@ const CancellationRequests = () => {
   const [rejectId, setRejectId] = useState<string | null>(null);
   const [rejectNote, setRejectNote] = useState("");
 
+  // Arriving from the Dashboard's "Cancellation Requests" section pre-fills the date range
+  // (+ status/reason/responsible-staff for a specific tile/bar/row drill-down) via
+  // ?from=&to=&status=&reason=&responsibleUserId=&responsibleName=. Re-seeds on every genuinely
+  // new navigation (not just first mount) — the same `useEffect` keyed on `searchParams` Sales.tsx
+  // uses, fixing the "second drill-down from the same tab doesn't update" bug found there; safe
+  // against fighting this page's own in-page filter clicks since those never touch the URL.
+  const [searchParams] = useSearchParams();
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [activePreset, setActivePreset] = useState<string | null>(null);
+  const [reasonFilter, setReasonFilter] = useState("");
+  const [responsibleFilter, setResponsibleFilter] = useState("");
+  const [responsibleFilterName, setResponsibleFilterName] = useState("");
+
+  useEffect(() => {
+    setDateFrom(searchParams.get("from") || "");
+    setDateTo(searchParams.get("to") || "");
+    setActivePreset(null);
+    setReasonFilter(searchParams.get("reason") || "");
+    setResponsibleFilter(searchParams.get("responsibleUserId") || "");
+    setResponsibleFilterName(searchParams.get("responsibleName") || "");
+    const statusParam = searchParams.get("status");
+    if (statusParam) setStatusFilter(statusParam as "pending" | "approved" | "rejected" | "all");
+  }, [searchParams]);
+
+  const applyPreset = (preset: "Today" | "This Week" | "This Month") => {
+    const now = new Date();
+    if (preset === "Today") {
+      setDateFrom(toYmd(now)); setDateTo(toYmd(now));
+    } else if (preset === "This Week") {
+      const from = new Date(now); from.setDate(from.getDate() - 7);
+      setDateFrom(toYmd(from)); setDateTo(toYmd(now));
+    } else {
+      setDateFrom(toYmd(new Date(now.getFullYear(), now.getMonth(), 1))); setDateTo(toYmd(now));
+    }
+    setActivePreset(preset);
+  };
+  const handleDateFrom = (v: string) => { setDateFrom(v); setActivePreset(null); };
+  const handleDateTo = (v: string) => { setDateTo(v); setActivePreset(null); };
+  const clearDates = () => { setDateFrom(""); setDateTo(""); setActivePreset(null); };
+
   const { data: requests = [], isLoading } = useQuery({
-    queryKey: ["cancellation-requests", statusFilter, selectedOutletId],
+    queryKey: ["cancellation-requests", statusFilter, selectedOutletId, dateFrom, dateTo, reasonFilter, responsibleFilter],
     queryFn: () => {
       // api.ts caches GETs for 30s, so an event-driven invalidation would otherwise
       // be served the same stale list it was pushed to replace.
@@ -51,6 +100,10 @@ const CancellationRequests = () => {
       return cancellationRequestService.list({
         status: statusFilter === "all" ? undefined : statusFilter,
         outletId: selectedOutletId !== "all" ? selectedOutletId : undefined,
+        from: dateFrom || undefined,
+        to: dateTo || undefined,
+        reason: reasonFilter || undefined,
+        responsibleUserId: responsibleFilter || undefined,
       });
     },
     // Cancellation-request push events (below) are the primary freshness mechanism, and
@@ -130,6 +183,49 @@ const CancellationRequests = () => {
             {f}
           </Button>
         ))}
+      </div>
+
+      {/* Date range — mirrors Sales.tsx/Expenses.tsx's filter bar (no time-of-day, a
+          cancellation is a discrete event, not hourly). Seeded from the Dashboard's
+          Cancellation Requests section drill-down. */}
+      <div className="flex items-center gap-2.5 flex-wrap">
+        <div className="inline-flex items-center p-0.5 rounded-lg bg-muted/60 border border-border/60 shadow-sm">
+          {(["Today", "This Week", "This Month"] as const).map((p) => (
+            <button
+              key={p}
+              type="button"
+              onClick={() => applyPreset(p)}
+              className={cn(
+                "px-3 py-1.5 text-xs font-medium rounded-md transition-all",
+                activePreset === p ? "bg-background text-foreground shadow-sm font-semibold" : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              {p}
+            </button>
+          ))}
+        </div>
+        <div className="inline-flex items-center gap-1.5">
+          <div className="w-36"><DatePicker value={dateFrom} onChange={handleDateFrom} placeholder="Start date" className="h-8 text-xs bg-background" /></div>
+          <span className="text-xs text-muted-foreground/60 font-medium px-0.5">to</span>
+          <div className="w-36"><DatePicker value={dateTo} onChange={handleDateTo} min={dateFrom || undefined} placeholder="End date" className="h-8 text-xs bg-background" /></div>
+          {(dateFrom || dateTo) && (
+            <Button variant="ghost" size="sm" onClick={clearDates} className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-md" title="Clear date filter">
+              <X className="h-3.5 w-3.5" />
+            </Button>
+          )}
+        </div>
+        {reasonFilter && (
+          <Badge variant="outline" className="h-8 px-3 gap-1.5 text-xs font-normal border-primary/30 bg-primary/5 text-primary">
+            Reason: {reasonFilter}
+            <button type="button" onClick={() => setReasonFilter("")} className="hover:text-destructive"><X className="h-3 w-3" /></button>
+          </Badge>
+        )}
+        {responsibleFilter && (
+          <Badge variant="outline" className="h-8 px-3 gap-1.5 text-xs font-normal border-primary/30 bg-primary/5 text-primary">
+            Staff: {responsibleFilterName || responsibleFilter}
+            <button type="button" onClick={() => { setResponsibleFilter(""); setResponsibleFilterName(""); }} className="hover:text-destructive"><X className="h-3 w-3" /></button>
+          </Badge>
+        )}
       </div>
 
       <Card className="shadow-sm">

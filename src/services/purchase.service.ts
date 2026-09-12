@@ -85,6 +85,8 @@ export const purchaseService = {
     supplierId?: string;
     status?: string;
     outletId?: string;
+    from?: string;
+    to?: string;
   }): Promise<{
     success: boolean;
     data: PurchaseRecord[];
@@ -96,6 +98,8 @@ export const purchaseService = {
     if (params?.supplierId) qs.set('supplierId', params.supplierId);
     if (params?.status) qs.set('status', params.status);
     if (params?.outletId) qs.set('outletId', params.outletId);
+    if (params?.from) qs.set('from', params.from);
+    if (params?.to) qs.set('to', params.to);
     return api.get(`/purchases${qs.toString() ? `?${qs}` : ''}`);
   },
 
@@ -121,14 +125,5 @@ export const purchaseService = {
 
   async delete(id: string): Promise<void> {
     await api.delete(`/purchases/${id}`);
-  },
-  
-  async getStats(params?: { supplierId?: string }): Promise<{
-    success: boolean;
-    data: { total: number; today: number; weekly: number; monthly: number };
-  }> {
-    const qs = new URLSearchParams();
-    if (params?.supplierId) qs.set('supplierId', params.supplierId);
-    return api.get(`/purchases/stats/summary${qs.toString() ? `?${qs}` : ''}`);
   },
 };

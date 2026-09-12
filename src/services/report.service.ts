@@ -90,6 +90,167 @@ export interface SalesByStaffReport {
   combined: { sale: number; cost: number; profit: number; orders: number; marginPct: number };
 }
 
+export interface OutletSalesRow {
+  /** null only for a legacy order with no outlet stamped — grouped under "No Outlet". */
+  outletId: string | null;
+  name: string;
+  orders: number;
+  sale: number;
+  cost: number;
+  profit: number;
+  marginPct: number;
+}
+
+export interface SalesByOutletReport {
+  from: string;
+  to: string;
+  fromTime: string | null;
+  toTime: string | null;
+  /** Sorted by `sale` descending. */
+  rows: OutletSalesRow[];
+  combined: { sale: number; cost: number; profit: number; orders: number; marginPct: number };
+}
+
+export interface CancellationReasonRow {
+  reason: string;
+  count: number;
+  refunded: number;
+}
+
+export interface CancellationStaffRow {
+  id: string;
+  name: string;
+  count: number;
+  penalty: number;
+}
+
+export interface CancellationRequestsReport {
+  from: string;
+  to: string;
+  totalRequests: number;
+  approved: number;
+  rejected: number;
+  pending: number;
+  totalRefunded: number;
+  totalPenalties: number;
+  /** Approved requests only, sorted by count desc, top 8. */
+  byReason: CancellationReasonRow[];
+  /** Approved requests with a responsible staff member only, sorted by count desc, top 8. */
+  byStaff: CancellationStaffRow[];
+}
+
+export interface SupplierSpendRow {
+  /** '' only for legacy purchases with no supplier stamped — grouped under "No Supplier". */
+  id: string;
+  name: string;
+  count: number;
+  total: number;
+  paid: number;
+  due: number;
+}
+
+export interface PurchasesBySupplierReport {
+  from: string | null;
+  to: string | null;
+  purchaseCount: number;
+  supplierCount: number;
+  totalAmount: number;
+  totalPaid: number;
+  totalDue: number;
+  /** Every supplier with activity in range, sorted by total desc — not capped server-side. */
+  rows: SupplierSpendRow[];
+}
+
+export interface ExpenseCategoryRow {
+  name: string;
+  amount: number;
+  count: number;
+}
+
+export interface ExpenseTrendPoint {
+  /** YYYY-MM-DD. */
+  date: string;
+  amount: number;
+}
+
+export interface ExpensesBreakdownReport {
+  from: string | null;
+  to: string | null;
+  totalAmount: number;
+  totalCount: number;
+  avgPerDay: number;
+  /** Zero-filled against the fixed category list Expenses.tsx offers (Utilities/Rent/Salary/
+   *  Maintenance/Marketing/Misc); "Uncategorized" only appears with real activity. Sorted by
+   *  amount desc. */
+  byCategory: ExpenseCategoryRow[];
+  /** One point per calendar day in range, zero-filled so the trend chart has no gaps. */
+  trend: ExpenseTrendPoint[];
+}
+
+export interface WasteReasonRow {
+  name: string;
+  amount: number;
+  count: number;
+}
+
+export interface WasteTrendPoint {
+  /** YYYY-MM-DD. */
+  date: string;
+  amount: number;
+}
+
+export interface WasteBreakdownReport {
+  from: string | null;
+  to: string | null;
+  totalAmount: number;
+  totalCount: number;
+  avgPerDay: number;
+  /** Zero-filled against the fixed reason list StockAdjustments.tsx offers (Expired/Spoiled/
+   *  Overcooked/Accidental/Damaged/Other); "Unspecified" and any dynamic reason (e.g. the
+   *  auto-expiry system's "Expired (auto waste)") only appear with real activity. Sorted by
+   *  amount desc. */
+  byReason: WasteReasonRow[];
+  /** One point per calendar day in range, zero-filled so the trend chart has no gaps. */
+  trend: WasteTrendPoint[];
+}
+
+export interface AttendanceStaffRow {
+  userId: string;
+  name: string;
+  role: string;
+  present: number;
+  late: number;
+  halfday: number;
+  absent: number;
+  overtimeMinutes: number;
+}
+
+export interface AttendanceTrendPoint {
+  /** YYYY-MM-DD. */
+  date: string;
+  present: number;
+  late: number;
+  halfday: number;
+  absent: number;
+}
+
+export interface AttendanceAnalyticsReport {
+  from: string;
+  to: string;
+  totalRecords: number;
+  present: number;
+  late: number;
+  halfday: number;
+  absent: number;
+  /** % of records that are present/late/halfday (i.e. not absent). */
+  attendanceRate: number;
+  totalOvertimeMinutes: number;
+  /** Not capped server-side, sorted by present+late desc. */
+  byStaff: AttendanceStaffRow[];
+  /** One point per calendar day in range, zero-filled so the trend chart has no gaps. */
+  trend: AttendanceTrendPoint[];
+}
+
 export interface SalesByCategoryReport {
   from: string;
   to: string;
@@ -320,6 +481,82 @@ export const reportService = {
     if (params.fromTime) q.set('fromTime', params.fromTime);
     if (params.toTime) q.set('toTime', params.toTime);
     const res = await api.get<{ success: boolean; data: SalesByStaffReport }>(`/reports/sales-by-staff?${q.toString()}`);
+    return res.data;
+  },
+  async getSalesByOutlet(params: {
+    outletId?: string;
+    from: string;
+    to: string;
+    fromTime?: string;
+    toTime?: string;
+  }): Promise<SalesByOutletReport> {
+    const q = new URLSearchParams({ from: params.from, to: params.to });
+    if (params.outletId && params.outletId !== 'all') q.set('outletId', params.outletId);
+    else q.set('outletId', 'all');
+    if (params.fromTime) q.set('fromTime', params.fromTime);
+    if (params.toTime) q.set('toTime', params.toTime);
+    const res = await api.get<{ success: boolean; data: SalesByOutletReport }>(`/reports/sales-by-outlet?${q.toString()}`);
+    return res.data;
+  },
+  async getCancellationRequestsReport(params: {
+    outletId?: string;
+    from: string;
+    to: string;
+  }): Promise<CancellationRequestsReport> {
+    const q = new URLSearchParams({ from: params.from, to: params.to });
+    if (params.outletId && params.outletId !== 'all') q.set('outletId', params.outletId);
+    else q.set('outletId', 'all');
+    const res = await api.get<{ success: boolean; data: CancellationRequestsReport }>(`/reports/cancellation-requests?${q.toString()}`);
+    return res.data;
+  },
+  async getPurchasesBySupplier(params: {
+    outletId?: string;
+    from: string;
+    to: string;
+  }): Promise<PurchasesBySupplierReport> {
+    const q = new URLSearchParams({ from: params.from, to: params.to });
+    if (params.outletId && params.outletId !== 'all') q.set('outletId', params.outletId);
+    else q.set('outletId', 'all');
+    const res = await api.get<{ success: boolean; data: PurchasesBySupplierReport }>(`/reports/purchases-by-supplier?${q.toString()}`);
+    return res.data;
+  },
+  async getExpensesBreakdown(params: {
+    outletId?: string;
+    from: string;
+    to: string;
+  }): Promise<ExpensesBreakdownReport> {
+    const q = new URLSearchParams({ from: params.from, to: params.to });
+    if (params.outletId && params.outletId !== 'all') q.set('outletId', params.outletId);
+    else q.set('outletId', 'all');
+    const res = await api.get<{ success: boolean; data: ExpensesBreakdownReport }>(`/reports/expenses-breakdown?${q.toString()}`);
+    return res.data;
+  },
+  async getWasteBreakdown(params: {
+    outletId?: string;
+    from: string;
+    to: string;
+    /** StockAdjustments.tsx-only — keeps its own summary tiles in sync with its warehouse/reason
+     *  dropdowns. The Dashboard section never sends either. */
+    warehouseId?: string;
+    reason?: string;
+  }): Promise<WasteBreakdownReport> {
+    const q = new URLSearchParams({ from: params.from, to: params.to });
+    if (params.outletId && params.outletId !== 'all') q.set('outletId', params.outletId);
+    else q.set('outletId', 'all');
+    if (params.warehouseId) q.set('warehouseId', params.warehouseId);
+    if (params.reason) q.set('reason', params.reason);
+    const res = await api.get<{ success: boolean; data: WasteBreakdownReport }>(`/reports/waste-breakdown?${q.toString()}`);
+    return res.data;
+  },
+  async getAttendanceAnalytics(params: {
+    outletId?: string;
+    from: string;
+    to: string;
+  }): Promise<AttendanceAnalyticsReport> {
+    const q = new URLSearchParams({ from: params.from, to: params.to });
+    if (params.outletId && params.outletId !== 'all') q.set('outletId', params.outletId);
+    else q.set('outletId', 'all');
+    const res = await api.get<{ success: boolean; data: AttendanceAnalyticsReport }>(`/reports/attendance?${q.toString()}`);
     return res.data;
   },
   async getSalesByCategory(params: {

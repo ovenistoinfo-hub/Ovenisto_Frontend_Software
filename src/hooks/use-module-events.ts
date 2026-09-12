@@ -16,15 +16,30 @@ function invalidateCacheForEvents(eventsList: string[]): void {
       // it via this push event, so the customers cache must invalidate here too.
       api.clearCache("/orders");
       api.clearCache("/customers");
+      api.clearCache("/reports");
     } else if (evt.startsWith("order:")) {
+      // Every Dashboard sales/report section (Sales By Channel, Category, Payment
+      // Method, Top Items, Net Profit, Deals Performance, Sales by Staff) reads
+      // through /reports/*. Without this, react-query's invalidateQueries still
+      // re-calls reportService.getX() on an order event, but api.ts's own 30s GET
+      // cache serves the stale cached response instead of a real network request —
+      // the section only updates once that cache naturally expires or the page is
+      // hard-refreshed (which resets this in-memory cache). Order status changes
+      // (e.g. Order Monitor's Complete Order) only emit "order:updated", not
+      // "order:created", so this must be cleared in this branch too, not just above.
       api.clearCache("/orders");
+      api.clearCache("/reports");
       api.clearCache("/delivery/dashboard");
       api.clearCache("/delivery/my-assignments");
     } else if (evt.startsWith("table:")) {
       api.clearCache("/tables");
     } else if (evt.startsWith("cancellationRequest:")) {
+      // Same /reports gap as the order: branch above — the Dashboard's Cancellation Requests
+      // section reads /reports/cancellation-requests, which a filed/approved/rejected request
+      // changes without necessarily also emitting an order: event this same tick.
       api.clearCache("/cancellation-requests");
       api.clearCache("/orders");
+      api.clearCache("/reports");
     } else if (evt.startsWith("challan:")) {
       api.clearCache("/challans");
     } else if (evt.startsWith("demand:")) {
@@ -32,7 +47,10 @@ function invalidateCacheForEvents(eventsList: string[]): void {
     } else if (evt.startsWith("purchaseRequest:")) {
       api.clearCache("/purchase-requests");
     } else if (evt.startsWith("purchase:")) {
+      // Same /reports gap as the order:/cancellationRequest: branches above — the Dashboard's
+      // Purchases & Supplier Spend section reads /reports/purchases-by-supplier.
       api.clearCache("/purchases");
+      api.clearCache("/reports");
     } else if (evt.startsWith("reservation:")) {
       api.clearCache("/reservations");
     } else if (evt.startsWith("delivery:")) {

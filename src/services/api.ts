@@ -178,11 +178,21 @@ function getBasePath(endpoint: string): string {
 const MUTATION_DEPENDENCIES: Record<string, string[]> = {
   '/purchases': ['/suppliers', '/warehouses', '/inventory'],
   '/suppliers': ['/purchases'],
-  '/stock': ['/warehouses', '/inventory'],
+  // '/reports' added alongside '/warehouses'/'/inventory' for the same reason as '/expenses'
+  // below: POST /stock/waste has no socket event either, so the Dashboard's Net Profit + Waste /
+  // Food Loss Trends sections would otherwise show a stale /reports response for up to 30s after
+  // logging waste on the Stock Adjustments page.
+  '/stock': ['/warehouses', '/inventory', '/reports'],
   '/challans': ['/warehouses', '/inventory'],
   '/demands': ['/warehouses', '/inventory'],
   '/purchase-requests': ['/warehouses', '/inventory'],
   '/orders': ['/warehouses', '/inventory'],
+  // Expenses have no socket event at all (grep confirms — unlike orders/purchases/cancellation
+  // requests), so the Dashboard's Net Profit + Expenses Breakdown sections would otherwise show a
+  // stale /reports response for up to 30s (api.ts's own GET cache) after adding/editing/deleting
+  // an expense on the Expenses page, same bug class as the two /reports cache gaps fixed
+  // elsewhere this session for socket-driven sections.
+  '/expenses': ['/reports'],
 };
 
 // POSTs that read rather than write. They live under a mutating base path

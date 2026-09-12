@@ -5,6 +5,7 @@ import { supplierService, type SupplierRecord } from "@/services/supplier.servic
 import { inventoryService, type IngredientRecord, type IngredientCategoryRecord, type UnitRecord } from "@/services/inventory.service";
 import { warehouseService, type WarehouseRecord } from "@/services/warehouse.service";
 import { purchaseRequestService, type PurchaseRequestRecord } from "@/services/purchase-request.service";
+import { reportService } from "@/services/report.service";
 import { useData } from "@/contexts/DataContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -17,11 +18,18 @@ import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { Plus, Search, Eye, Trash2, ShoppingCart, Printer, CalendarIcon, User, Phone, Mail, ChevronUp, X, Wallet, CalendarDays, TrendingUp, BarChart3 } from "lucide-react";
+import { Plus, Search, Eye, Trash2, ShoppingCart, Printer, CalendarIcon, User, Phone, Mail, ChevronUp, X, Wallet } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { format, parseISO } from "date-fns";
 import { cn } from "@/lib/utils";
+import { DatePicker } from "@/components/ui/date-picker";
+
+/** "YYYY-MM-DD" from local Y/M/D parts — same reasoning as Sales.tsx's toYmd. */
+function toYmd(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { useSearchParams } from "react-router-dom";
@@ -133,6 +141,40 @@ const Purchases = () => {
   const [page, setPage] = useState(1);
   const [vendorFilter, setVendorFilter] = useState("");
 
+  // Arriving from the Dashboard's "Purchases & Supplier Spend" section pre-fills the date range
+  // (+ supplierId for a specific supplier-row/bar drill-down) via ?from=&to=&supplierId=. Re-seeds
+  // on every genuinely new navigation, not just first mount — the same useEffect-keyed-on-
+  // searchParams pattern Sales.tsx/CancellationRequests.tsx use, so a second drill-down from the
+  // same open tab actually updates the filters. No time-of-day: a purchase isn't hourly.
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [activePreset, setActivePreset] = useState<string | null>(null);
+
+  useEffect(() => {
+    setDateFrom(searchParams.get("from") || "");
+    setDateTo(searchParams.get("to") || "");
+    setActivePreset(null);
+    setVendorFilter(searchParams.get("supplierId") || "");
+    setPage(1);
+  }, [searchParams]);
+
+  const applyPreset = (preset: "Today" | "This Week" | "This Month") => {
+    const now = new Date();
+    if (preset === "Today") {
+      setDateFrom(toYmd(now)); setDateTo(toYmd(now));
+    } else if (preset === "This Week") {
+      const from = new Date(now); from.setDate(from.getDate() - 7);
+      setDateFrom(toYmd(from)); setDateTo(toYmd(now));
+    } else {
+      setDateFrom(toYmd(new Date(now.getFullYear(), now.getMonth(), 1))); setDateTo(toYmd(now));
+    }
+    setActivePreset(preset);
+    setPage(1);
+  };
+  const handleDateFrom = (v: string) => { setDateFrom(v); setActivePreset(null); setPage(1); };
+  const handleDateTo = (v: string) => { setDateTo(v); setActivePreset(null); setPage(1); };
+  const clearDates = () => { setDateFrom(""); setDateTo(""); setActivePreset(null); setPage(1); };
+
   // Add form state
   const [form, setForm] = useState({ invoiceNumber: "" });
   const [selectedSuppliers, setSelectedSuppliers] = useState<string[]>([]);
@@ -182,17 +224,25 @@ const Purchases = () => {
   const autoFillDone = useRef(false);
 
   const { data: purchasesResp, isLoading: loading } = useQuery({
-    queryKey: ["purchases", { page, limit: 20 }],
-    queryFn: () => purchaseService.getAll({ page, limit: 20 }),
+    queryKey: ["purchases", { page, limit: 20, supplierId: vendorFilter, from: dateFrom, to: dateTo }],
+    queryFn: () => purchaseService.getAll({
+      page, limit: 20,
+      supplierId: vendorFilter || undefined,
+      from: dateFrom || undefined,
+      to: dateTo || undefined,
+    }),
   });
   const purchases = purchasesResp?.data ?? [];
   const totalItems = purchasesResp?.meta.total ?? 0;
 
-  const { data: purchaseStatsResp } = useQuery({
-    queryKey: ["purchases", "stats", { supplierId: vendorFilter }],
-    queryFn: () => purchaseService.getStats({ supplierId: vendorFilter || undefined }),
+  // Same tiles as the Dashboard's "Purchases & Supplier Spend" section, same data source
+  // (reportService.getPurchasesBySupplier) and same date-range-only scope — ignores vendorFilter
+  // on purpose, matching that section exactly, so these totals mean "this date range, all
+  // suppliers" regardless of which single supplier the table below is filtered to.
+  const { data: psData, isLoading: psLoading } = useQuery({
+    queryKey: ["purchases-by-supplier", dateFrom, dateTo],
+    queryFn: () => reportService.getPurchasesBySupplier({ from: dateFrom, to: dateTo }),
   });
-  const stats = purchaseStatsResp?.data ?? { total: 0, today: 0, weekly: 0, monthly: 0 };
 
   // Live updates: the backend pushes purchase changes to the owning outlet's room only.
   const PURCHASE_EVENTS = ["purchase:created", "purchase:updated", "purchase:deleted"] as const;
@@ -205,6 +255,10 @@ const Purchases = () => {
     // which a purchase legitimately changes (supplier dues, stock levels).
     api.clearCache('/purchases');
     queryClient.invalidateQueries({ queryKey: ["purchases"] });
+    // "purchases-by-supplier" doesn't share the "purchases" key prefix, so it needs its own
+    // invalidation call — invalidateCacheForEvents (inside useModuleEvents) already clears the
+    // api.ts /reports cache for every "purchase:" event, this just tells react-query to refetch.
+    queryClient.invalidateQueries({ queryKey: ["purchases-by-supplier"] });
 
     const invoiceNo = payload?.invoiceNo ?? payload?.billNo ?? payload?.invoiceNumber;
     if (invoiceNo) {
@@ -363,13 +417,12 @@ const Purchases = () => {
     setShowDialog(true);
   }, [searchParams, ingredients]);
 
+  // supplierId/date range are now server-side (getAll above) — this only narrows the current
+  // page's rows by the free-text search, which has no server-side equivalent.
   const filtered = purchases.filter(
     (p) =>
-      (!vendorFilter || p.supplierId === vendorFilter) &&
-      (
-        (p.supplierName || "").toLowerCase().includes(search.toLowerCase()) ||
-        (p.invoiceNumber || "").toLowerCase().includes(search.toLowerCase())
-      )
+      (p.supplierName || "").toLowerCase().includes(search.toLowerCase()) ||
+      (p.invoiceNumber || "").toLowerCase().includes(search.toLowerCase())
   );
 
   const openAdd = () => {
@@ -767,69 +820,35 @@ const Purchases = () => {
         }
       />
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card className="shadow-sm border-primary/20">
-          <CardContent className="p-5">
-            <div className="flex items-center gap-4">
-              <div className="h-11 w-11 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
-                <ShoppingCart className="h-5 w-5 text-primary" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-xs text-muted-foreground">Total Purchases</p>
-                <p className="text-2xl font-bold tracking-tight text-primary">
-                  {currency} {stats.total.toLocaleString()}
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="shadow-sm">
-          <CardContent className="p-5">
-            <div className="flex items-center gap-4">
-              <div className="h-11 w-11 rounded-xl bg-orange-500/10 flex items-center justify-center shrink-0">
-                <CalendarDays className="h-5 w-5 text-orange-500" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-xs text-muted-foreground">Today's Purchases</p>
-                <p className="text-2xl font-bold tracking-tight text-orange-500">
-                  {currency} {stats.today.toLocaleString()}
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="shadow-sm">
-          <CardContent className="p-5">
-            <div className="flex items-center gap-4">
-              <div className="h-11 w-11 rounded-xl bg-warning/10 flex items-center justify-center shrink-0">
-                <TrendingUp className="h-5 w-5 text-warning" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-xs text-muted-foreground">This Week</p>
-                <p className="text-2xl font-bold tracking-tight text-warning">
-                  {currency} {stats.weekly.toLocaleString()}
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="shadow-sm">
-          <CardContent className="p-5">
-            <div className="flex items-center gap-4">
-              <div className="h-11 w-11 rounded-xl bg-purple-500/10 flex items-center justify-center shrink-0">
-                <BarChart3 className="h-5 w-5 text-purple-500" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-xs text-muted-foreground">This Month</p>
-                <p className="text-2xl font-bold tracking-tight text-purple-500">
-                  {currency} {stats.monthly.toLocaleString()}
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+      {/* KPI Cards — same 4 tiles + data source as the Dashboard's "Purchases & Supplier Spend"
+          section (reportService.getPurchasesBySupplier), scoped to this page's own date filter. */}
+      {psLoading || !psData ? (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-20 rounded-lg" />)}
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="rounded-lg bg-background/70 border border-border/50 p-3.5">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Total Purchases</p>
+            <p className="text-xl font-bold tracking-tight text-foreground mt-0.5">{currency} {psData.totalAmount.toLocaleString()}</p>
+            <p className="text-[11px] text-muted-foreground mt-0.5">{psData.purchaseCount} purchase{psData.purchaseCount === 1 ? "" : "s"}</p>
+          </div>
+          <div className="rounded-lg bg-background/70 border border-border/50 p-3.5">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Total Paid</p>
+            <p className="text-xl font-bold tracking-tight text-foreground mt-0.5">{currency} {psData.totalPaid.toLocaleString()}</p>
+          </div>
+          <div className="rounded-lg bg-background/70 border border-border/50 p-3.5">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Total Due</p>
+            <p className={cn("text-xl font-bold tracking-tight mt-0.5", psData.totalDue > 0 ? "text-destructive" : "text-foreground")}>
+              {currency} {psData.totalDue.toLocaleString()}
+            </p>
+          </div>
+          <div className="rounded-lg bg-background/70 border border-border/50 p-3.5">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Active Suppliers</p>
+            <p className="text-xl font-bold tracking-tight text-foreground mt-0.5">{psData.supplierCount.toLocaleString()}</p>
+          </div>
+        </div>
+      )}
 
       {/* ── Inline Add Purchase Form Panel ── */}
       {showDialog && (
@@ -1435,7 +1454,7 @@ const Purchases = () => {
       )}
 
       <Card className="shadow-sm">
-        <CardHeader className="pb-3">
+        <CardHeader className="pb-3 space-y-3">
           <div className="flex flex-wrap gap-3 items-end">
             <div className="relative flex-1 min-w-[200px]">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -1447,13 +1466,48 @@ const Purchases = () => {
               />
             </div>
             <div className="w-48">
-              <Select value={vendorFilter || "__all__"} onValueChange={v => setVendorFilter(v === "__all__" ? "" : v)}>
+              <Select value={vendorFilter || "__all__"} onValueChange={v => { setVendorFilter(v === "__all__" ? "" : v); setPage(1); }}>
                 <SelectTrigger><SelectValue placeholder="All Vendors" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="__all__">All Vendors</SelectItem>
+                  {/* A drill-down supplier may already be gone from the picker fetch race — keep
+                      the trigger from going blank while it still filters correctly. */}
+                  {vendorFilter && !suppliers.some(s => s.id === vendorFilter) && (
+                    <SelectItem value={vendorFilter}>Selected Supplier</SelectItem>
+                  )}
                   {suppliers.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
                 </SelectContent>
               </Select>
+            </div>
+          </div>
+
+          {/* Date range — mirrors Sales.tsx/Expenses.tsx's filter bar (no time-of-day, a purchase
+              isn't hourly). Seeded from the Dashboard "Purchases & Supplier Spend" drill-down. */}
+          <div className="flex items-center gap-2.5 flex-wrap pt-2 border-t border-border/40">
+            <div className="inline-flex items-center p-0.5 rounded-lg bg-muted/60 border border-border/60 shadow-sm">
+              {(["Today", "This Week", "This Month"] as const).map((p) => (
+                <button
+                  key={p}
+                  type="button"
+                  onClick={() => applyPreset(p)}
+                  className={cn(
+                    "px-3 py-1.5 text-xs font-medium rounded-md transition-all",
+                    activePreset === p ? "bg-background text-foreground shadow-sm font-semibold" : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  {p}
+                </button>
+              ))}
+            </div>
+            <div className="inline-flex items-center gap-1.5">
+              <div className="w-36"><DatePicker value={dateFrom} onChange={handleDateFrom} placeholder="Start date" className="h-8 text-xs bg-background" /></div>
+              <span className="text-xs text-muted-foreground/60 font-medium px-0.5">to</span>
+              <div className="w-36"><DatePicker value={dateTo} onChange={handleDateTo} min={dateFrom || undefined} placeholder="End date" className="h-8 text-xs bg-background" /></div>
+              {(dateFrom || dateTo) && (
+                <Button variant="ghost" size="sm" onClick={clearDates} className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-md" title="Clear date filter">
+                  <X className="h-3.5 w-3.5" />
+                </Button>
+              )}
             </div>
           </div>
         </CardHeader>
