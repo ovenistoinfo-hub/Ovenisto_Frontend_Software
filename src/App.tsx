@@ -50,8 +50,6 @@ const Attendance = lazy(() => import("./pages/Attendance"));
 const CancellationRequests = lazy(() => import("./pages/CancellationRequests"));
 const Employees = lazy(() => import("./pages/Employees"));
 const Payroll = lazy(() => import("./pages/Payroll"));
-const Reports = lazy(() => import("./pages/Reports"));
-const SMS = lazy(() => import("./pages/SMS"));
 const Profile = lazy(() => import("./pages/Profile"));
 const CustomerDisplay = lazy(() => import("./pages/CustomerDisplay"));
 const OrderStatusBoard = lazy(() => import("./pages/OrderStatusBoard"));
@@ -177,8 +175,6 @@ function AppRoutes() {
       <Route path="/payroll" element={<ProtectedRoute module="payroll"><AppLayout><Payroll /></AppLayout></ProtectedRoute>} />
       <Route path="/rider-portal" element={<ProtectedRoute module="rider-portal"><AppLayout><RiderPortal /></AppLayout></ProtectedRoute>} />
       <Route path="/my-portal" element={<ProtectedRoute module="my-portal"><AppLayout><EmployeePortal /></AppLayout></ProtectedRoute>} />
-      <Route path="/reports" element={<ProtectedRoute module="reports"><AppLayout><Reports /></AppLayout></ProtectedRoute>} />
-      <Route path="/sms" element={<ProtectedRoute module="sms"><AppLayout><SMS /></AppLayout></ProtectedRoute>} />
       <Route path="/profile" element={<ProtectedRoute><AppLayout><Profile /></AppLayout></ProtectedRoute>} />
       <Route path="*" element={<NotFound />} />
     </Routes>

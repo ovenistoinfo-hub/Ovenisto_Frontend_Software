@@ -3,7 +3,7 @@ import { useLocation, Link } from "react-router-dom";
 import {
   Home, BarChart3, ShoppingCart, ChefHat, UtensilsCrossed, Store, Settings, Globe, CalendarDays,
   Pizza, Factory, Package, DollarSign, ShoppingBag, CreditCard, ArrowLeftRight,
-  Users, Clock, FileText, MessageSquare, ChevronDown, ChevronRight, Flame, LogOut, Link2,
+  Users, Clock, ChevronDown, ChevronRight, Flame, LogOut, Link2,
   Bike, CalendarCheck, LayoutGrid, ClipboardList, CalendarOff, UserCircle, IdCard, Coins, Ban, Tag
 } from "lucide-react";
 import {
@@ -87,10 +87,6 @@ export const navSections = [
     { title: "Payroll", url: "/payroll", icon: Coins, module: "payroll" },
     { title: "Users", url: "/users", icon: Users, module: "users" },
     { title: "HR Management", url: "/attendance", icon: Clock, module: "attendance" },
-  ]},
-  { label: "Report", items: [
-    { title: "Reports", url: "/reports", icon: FileText, module: "reports" },
-    { title: "Send SMS", url: "/sms", icon: MessageSquare, module: "sms" },
   ]},
 ];
 
