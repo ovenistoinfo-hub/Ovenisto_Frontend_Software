@@ -1214,6 +1214,14 @@ const Dashboard = () => {
   const allSections: DashboardSectionItem[] = [
     // Sales & Revenue
     {
+      id: "sales-by-outlet",
+      label: "Sales by Outlet",
+      group: "Sales & Revenue",
+      icon: Building2,
+      visible: branchSectionVisible,
+      description: "Chain-wide & branch sales, cost, profit and margin",
+    },
+    {
       id: "sales-by-channel",
       label: "Sales By Channel",
       group: "Sales & Revenue",
@@ -1427,6 +1435,16 @@ const Dashboard = () => {
               <BarChart3 className="h-3.5 w-3.5 text-emerald-500" /> Monitor
             </Link>
           </div>
+
+          {/* Super Admin Branch Switcher Dropdown */}
+          {isSuperAdmin && (
+            <OutletFilterSelect
+              outletId={outletId}
+              setOutletId={setOutletId}
+              outlets={outlets}
+              isSuperAdmin={isSuperAdmin}
+            />
+          )}
 
           <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg hover:bg-muted" onClick={toggleTheme} title="Toggle theme">
             {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
