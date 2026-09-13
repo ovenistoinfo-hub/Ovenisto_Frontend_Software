@@ -66,13 +66,15 @@ export const cashSettlementService = {
     return res.data;
   },
 
-  async getHistory(params?: { staffId?: string; role?: string; page?: number; limit?: number; date?: string }): Promise<{ data: CashSettlementRecord[]; meta?: any }> {
+  async getHistory(params?: { staffId?: string; role?: string; page?: number; limit?: number; date?: string; from?: string; to?: string }): Promise<{ data: CashSettlementRecord[]; meta?: any }> {
     const q = new URLSearchParams();
     if (params?.staffId) q.set('staffId', params.staffId);
     if (params?.role) q.set('role', params.role);
     if (params?.page) q.set('page', String(params.page));
     if (params?.limit) q.set('limit', String(params.limit));
     if (params?.date) q.set('date', params.date);
+    if (params?.from) q.set('from', params.from);
+    if (params?.to) q.set('to', params.to);
     const queryString = q.toString() ? `?${q.toString()}` : '';
     const res = await api.get<{ success: boolean; data: CashSettlementRecord[]; meta?: any }>(`/cash-settlements/history${queryString}`);
     return { data: res.data, meta: res.meta };

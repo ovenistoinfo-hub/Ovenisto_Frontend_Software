@@ -1,20 +1,26 @@
-import { useState, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useMemo, useEffect } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useData } from "@/contexts/DataContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { customerService } from "@/services/customer.service";
-import { orderService } from "@/services/order.service";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DatePicker } from "@/components/ui/date-picker";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { Search, Eye, Plus, Users, Trash2, Loader2 } from "lucide-react";
+import { Search, Eye, Plus, Users, Trash2, Loader2, Info } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { toast } from "sonner";
 import { formatPakistaniPhone } from "@/lib/utils";
 import { TablePagination, paginate } from "@/components/TablePagination";
+
+/** "YYYY-MM-DD" from local Y/M/D parts — same reasoning as Sales.tsx/Expenses.tsx's toYmd. */
+function toYmd(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
 
 const Customers = () => {
   const navigate = useNavigate();
@@ -30,12 +36,64 @@ const Customers = () => {
   const [saving, setSaving] = useState(false);
   const currency = settings.currency || "Rs.";
 
+  // Dashboard-pill-style date range (Today/This Week/This Month + paired DatePickers), same
+  // pattern as Expenses.tsx/CashHub.tsx. Optional — with none set, the page shows every
+  // customer's lifetime totals (unchanged behavior); with a range set, only customers with an
+  // order in that window are shown and their Orders/Total Spent/Due reflect just that window
+  // (see customer.controller.ts's getCustomers).
+  const [rangeFrom, setRangeFrom] = useState("");
+  const [rangeTo, setRangeTo] = useState("");
+  const [activePreset, setActivePreset] = useState<string | null>(null);
+
+  const applyPreset = (preset: "Today" | "This Week" | "This Month") => {
+    const now = new Date();
+    if (preset === "Today") {
+      setRangeFrom(toYmd(now)); setRangeTo(toYmd(now));
+    } else if (preset === "This Week") {
+      const from = new Date(now); from.setDate(from.getDate() - 7);
+      setRangeFrom(toYmd(from)); setRangeTo(toYmd(now));
+    } else {
+      setRangeFrom(toYmd(new Date(now.getFullYear(), now.getMonth(), 1))); setRangeTo(toYmd(now));
+    }
+    setActivePreset(preset);
+    setPage(1);
+  };
+  const handleRangeFrom = (v: string) => { setRangeFrom(v); setActivePreset(null); setPage(1); };
+  const handleRangeTo = (v: string) => { setRangeTo(v); setActivePreset(null); setPage(1); };
+  const clearRange = () => { setRangeFrom(""); setRangeTo(""); setActivePreset(null); setPage(1); };
+
+  // Arriving from the Dashboard's "Customer Analytics" section pre-fills the date range (+ a
+  // specific top-customer's name into search). Re-seeds on every genuinely new navigation, not
+  // just first mount — same useEffect-keyed-on-searchParams pattern used everywhere else.
+  const [searchParams] = useSearchParams();
+  useEffect(() => {
+    const from = searchParams.get("from");
+    const to = searchParams.get("to");
+    const name = searchParams.get("search");
+    if (from || to || name) {
+      if (from) setRangeFrom(from);
+      if (to) setRangeTo(to);
+      setActivePreset(null);
+      if (name) setSearch(name);
+      setPage(1);
+    }
+  }, [searchParams]);
+
   const { data: resp, isLoading } = useQuery({
-    queryKey: ["customers", { search }],
-    queryFn: () => customerService.getCustomers({ search: search || undefined, limit: 1000 }),
+    queryKey: ["customers", { search, rangeFrom, rangeTo }],
+    queryFn: () => customerService.getCustomers({
+      search: search || undefined,
+      limit: 1000,
+      from: rangeFrom || undefined,
+      to: rangeTo || undefined,
+    }),
   });
   const rawCustomers = resp?.data ?? [];
 
+  // Backend already dedups by phone/name and computes Orders/Total Spent/Due (period-scoped
+  // when a range is active) — this just guards against the rare case of two raw rows still
+  // sharing a key, merging contact fields only (never re-summing stats the backend already
+  // computed correctly).
   const customers = useMemo(() => {
     const map = new Map<string, (typeof rawCustomers)[0]>();
     for (const c of rawCustomers) {
@@ -57,45 +115,7 @@ const Customers = () => {
     return Array.from(map.values());
   }, [rawCustomers]);
 
-  const { data: allOrdersResp } = useQuery({
-    queryKey: ["all-orders-for-customers-page"],
-    queryFn: () => orderService.getOrders({ limit: 1000 }),
-  });
-  const allOrders = allOrdersResp?.data ?? [];
-
-  const customerStatsMap = useMemo(() => {
-    const map: Record<string, { totalOrders: number; totalSpent: number; outstandingDue: number }> = {};
-    for (const o of allOrders) {
-      if (!o.customerName || o.customerName === "Walk-in") continue;
-      const nameKey = o.customerName.toLowerCase().trim();
-      const phoneClean = o.phone ? o.phone.replace(/\D/g, "") : "";
-      
-      if (!map[nameKey]) {
-        map[nameKey] = { totalOrders: 0, totalSpent: 0, outstandingDue: 0 };
-      }
-      if (phoneClean && phoneClean.length === 11 && phoneClean !== "00000000000" && !map[phoneClean]) {
-        map[phoneClean] = map[nameKey];
-      }
-
-      map[nameKey].totalOrders += 1;
-      if (o.status !== "cancelled") {
-        // COD-advance-aware settlement check (mirrors POS.tsx / Shifts.tsx's isSettledOrder
-        // and the backend's cash-settlement.service.ts): a pure "Cash on Delivery"/"COD" order
-        // with no advance collected yet has had NO money collected, so it must not count as
-        // spent — it belongs in outstandingDue instead, same as a Pending/Unpaid order.
-        const pm = (o.paymentMethod || "").toLowerCase().trim();
-        const isPureUncollectedCod = (pm === "cash on delivery" || pm === "cod" || pm === "cash-on-delivery") && Number(o.advancePayment || 0) <= 0;
-        const isUnpaid = !o.paymentMethod || pm === "pending" || pm === "unpaid" || isPureUncollectedCod;
-        if (!isUnpaid) {
-          map[nameKey].totalSpent += Number(o.total || 0);
-        } else {
-          map[nameKey].outstandingDue += Number(o.total || 0);
-        }
-      }
-    }
-    return map;
-  }, [allOrders]);
-
+  const periodActive = Boolean(rangeFrom || rangeTo);
   const paged = paginate(customers, page);
 
   const formatPhoneNumber = (val: string): string => {
@@ -162,11 +182,48 @@ const Customers = () => {
         </Card>
       )}
       <Card className="shadow-sm">
-        <CardHeader className="pb-3">
+        <CardHeader className="pb-3 space-y-3">
           <div className="relative max-w-sm">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} placeholder="Search by name or phone..." className="pl-9" />
           </div>
+
+          {/* Date range — mirrors Expenses.tsx's filter bar. Seeded from the Dashboard's
+              "Customer Analytics" drill-down. */}
+          <div className="flex items-center gap-2.5 flex-wrap pt-2 border-t border-border/40">
+            <div className="inline-flex items-center p-0.5 rounded-lg bg-muted/60 border border-border/60 shadow-sm">
+              {(["Today", "This Week", "This Month"] as const).map((p) => (
+                <button
+                  key={p}
+                  type="button"
+                  onClick={() => applyPreset(p)}
+                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${activePreset === p ? "bg-background text-foreground shadow-sm font-semibold" : "text-muted-foreground hover:text-foreground"}`}
+                >
+                  {p}
+                </button>
+              ))}
+            </div>
+            <div className="inline-flex items-center gap-1.5">
+              <div className="w-36"><DatePicker value={rangeFrom} onChange={handleRangeFrom} placeholder="Start date" className="h-8 text-xs bg-background" /></div>
+              <span className="text-xs text-muted-foreground/60 font-medium px-0.5">to</span>
+              <div className="w-36"><DatePicker value={rangeTo} onChange={handleRangeTo} min={rangeFrom || undefined} placeholder="End date" className="h-8 text-xs bg-background" /></div>
+            </div>
+            {periodActive && (
+              <Button variant="ghost" size="sm" onClick={clearRange} className="h-8 text-xs font-semibold rounded-xl text-muted-foreground hover:text-foreground">
+                Clear Filters
+              </Button>
+            )}
+          </div>
+
+          {periodActive && (
+            <div className="flex items-start gap-2 text-xs text-muted-foreground bg-muted/40 border border-border/50 rounded-lg px-3 py-2">
+              <Info className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+              <span>
+                Showing only customers with activity between <strong className="text-foreground">{rangeFrom || rangeTo}</strong> and{" "}
+                <strong className="text-foreground">{rangeTo || rangeFrom}</strong> — Orders/Total Spent/Due reflect this period, not lifetime.
+              </span>
+            </div>
+          )}
         </CardHeader>
         <CardContent>
           {isLoading ? (
@@ -191,12 +248,11 @@ const Customers = () => {
                   </TableHeader>
                   <TableBody>
                     {paged.map((c, i) => {
-                      const nameKey = c.name.toLowerCase().trim();
-                      const phoneClean = c.phone ? c.phone.replace(/\D/g, "") : "";
-                      const stat = customerStatsMap[nameKey] || (phoneClean ? customerStatsMap[phoneClean] : null);
-                      const totalOrdersCount = stat ? stat.totalOrders : c.totalOrders;
-                      const totalSpentVal = stat ? stat.totalSpent : c.totalSpent;
-                      const outstandingDueVal = stat ? stat.outstandingDue : c.outstandingDue;
+                      // Backend-computed already (lifetime, or period-scoped when a date range
+                      // is active — see customer.controller.ts's getCustomers).
+                      const totalOrdersCount = c.totalOrders;
+                      const totalSpentVal = c.totalSpent;
+                      const outstandingDueVal = c.outstandingDue;
 
                       return (
                         <TableRow key={c.id} className="hover:bg-muted/30 transition-colors">

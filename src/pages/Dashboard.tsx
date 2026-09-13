@@ -1,9 +1,9 @@
 import {
-  TrendingUp, DollarSign, Wallet, ArrowUpCircle, ArrowDownCircle,
-  BarChart3, ShoppingBag, Clock, ChevronRight, ChevronDown, Trophy, Users, ChefHat, LayoutGrid, Ban, Package,
-  ClipboardList, ArrowLeftRight, UserCheck, CalendarOff, Bike, CalendarCheck, Coins, Calendar as CalendarIcon,
+  TrendingUp, DollarSign, Wallet,
+  BarChart3, ShoppingBag, Clock, ChevronRight, ChevronDown, Trophy, Users, Ban, Package,
+  UserCheck, Bike, CalendarCheck, Coins, Calendar as CalendarIcon,
   UtensilsCrossed, Percent, X, Layers, CreditCard, Banknote, Smartphone, TrendingDown,
-  Tag, Info, Building2, Receipt, Trash2, CalendarClock,
+  Tag, Info, Building2, Receipt, Trash2, CalendarClock, Truck,
 } from "lucide-react";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Badge } from "@/components/ui/badge";
@@ -13,8 +13,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, Cell, LabelList, CartesianGrid, LineChart, Line } from "recharts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState, useEffect, type ReactNode } from "react";
-import type { LucideIcon } from "lucide-react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { format } from "date-fns";
@@ -29,69 +28,6 @@ import { Button } from "@/components/ui/button";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
-import { DASHBOARD_TILES } from "@/lib/dashboardTiles";
-
-/**
- * Whole-Card tap target, mirroring POS.tsx's menu-card hover/press classes so it feels
- * right on mouse and the POS tablet. `interactive` false renders a plain, static Card —
- * no chevron, no hover lift (a viewer who can't reach the destination just sees the data).
- */
-function ClickableCard({ interactive, onClick, className, children }: { interactive: boolean; onClick?: () => void; className?: string; children: ReactNode }) {
-  return (
-    <Card
-      className={cn(
-        "shadow-sm relative transition-all duration-200",
-        interactive && "cursor-pointer hover:shadow-xl hover:border-primary/40 hover:-translate-y-0.5 active:scale-[0.99]",
-        className
-      )}
-      onClick={interactive ? onClick : undefined}
-      role={interactive ? "button" : undefined}
-      tabIndex={interactive ? 0 : undefined}
-      onKeyDown={interactive ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick?.(); } } : undefined}
-    >
-      {children}
-      {interactive && <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/40 absolute top-2 right-2" />}
-    </Card>
-  );
-}
-
-/**
- * One operational-zone stat card (Phase 4). `visible` is the tile's own permission check —
- * returning null here (rather than the caller skipping the JSX) keeps every zone's tile
- * list declarative and uniform. Icon box always stays neutral (`bg-muted`) — only
- * `valueClassName` may color the number itself, for the handful of tiles that represent an
- * actual problem count (non-zero low stock / pending approvals).
- */
-function StatTile({
-  visible, interactive, onClick, icon: Icon, title, value, valueClassName, sub,
-}: {
-  visible: boolean;
-  interactive: boolean;
-  onClick?: () => void;
-  icon: LucideIcon;
-  title: string;
-  value: ReactNode;
-  valueClassName?: string;
-  sub?: ReactNode;
-}) {
-  if (!visible) return null;
-  return (
-    <ClickableCard interactive={interactive} onClick={onClick}>
-      <CardContent className="p-5">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <p className="text-xs text-muted-foreground font-medium">{title}</p>
-            <p className={cn("text-2xl font-bold mt-1", valueClassName)}>{value}</p>
-            {sub && <p className="text-xs text-muted-foreground mt-1">{sub}</p>}
-          </div>
-          <div className="h-10 w-10 rounded-lg flex items-center justify-center bg-muted shrink-0">
-            <Icon className="h-5 w-5 text-muted-foreground" />
-          </div>
-        </div>
-      </CardContent>
-    </ClickableCard>
-  );
-}
 
 /**
  * Themed Recharts tooltip — matches the app's popover surface. Lists every series in the
@@ -120,38 +56,13 @@ function ChartTooltip({ active, payload, label }: {
 const Dashboard = () => {
   const { outletId, setOutletId, outlets, isSuperAdmin } = useOutletFilter();
   const navigate = useNavigate();
-  const { user, hasPermission } = useAuth();
+  const { hasPermission } = useAuth();
   const queryClient = useQueryClient();
   const { data: d, isLoading: loading } = useQuery({
     queryKey: ["dashboard", outletId],
     queryFn: () => reportService.getDashboard({ outletId }),
   });
   const currency = "Rs.";
-
-  // All tiles this viewer can actually reach — filtered once, same idiom AppSidebar.tsx
-  // uses for navSections. The always-on cards below (day-wise chart, channel cards,
-  // financial overview, Customer Intelligence's charts) aren't tiles; they're gated
-  // separately by their own permission check (salesDrillEnabled / customerIntelVisible).
-  const visibleTiles = DASHBOARD_TILES.filter((t) => hasPermission(t.module));
-  const tileVisible = (id: string) => visibleTiles.some((t) => t.id === id);
-  // Today's Operations / Inventory / People / Delivery / Reservations / Cash Hub are 100%
-  // tile-driven (unlike Sales & Finance / Customer Intelligence, which mix tiles with
-  // always-on charts) — a zone header renders only if at least one of its tiles is visible,
-  // the same skip-empty-group idiom AppSidebar.tsx uses for navSections.
-  const zoneVisible = (zone: string) => visibleTiles.some((t) => t.zone === zone);
-  const goToTile = (id: string) => {
-    const tile = visibleTiles.find((t) => t.id === id);
-    if (!tile) return;
-    if (tile.superAdminRoute && user?.role === "Super Admin") navigate(tile.superAdminRoute.route);
-    else navigate(tile.route);
-  };
-  const salesDrillEnabled = hasPermission("sales");
-  const goToSales = () => navigate("/sales");
-  // Customer Intelligence is the merged-in Analytics page — keep its pre-merge audience
-  // (Analytics was gated on "analytics", held only by Manager + the wildcard roles).
-  // "reports" is the natural successor and maps to the exact same set; Floor Manager /
-  // Cashier never had the Analytics page, so they don't get this zone.
-  const customerIntelVisible = hasPermission("reports");
 
   const toYmd = (date: Date) => {
     const pad = (n: number) => String(n).padStart(2, "0");
@@ -251,6 +162,46 @@ const Dashboard = () => {
   const [attPreset, setAttPreset] = useState<string>("This Month");
   const [attFromStr, setAttFromStr] = useState<string>(toYmd(new Date(new Date().getFullYear(), new Date().getMonth(), 1)));
   const [attToStr, setAttToStr] = useState<string>(toYmd(new Date()));
+
+  // Reservations Analytics — date-range only (Reservation.date is day-granularity).
+  const [resSectionCollapsed, setResSectionCollapsed] = useState<boolean>(false);
+  const [resPreset, setResPreset] = useState<string>("This Month");
+  const [resFromStr, setResFromStr] = useState<string>(toYmd(new Date(new Date().getFullYear(), new Date().getMonth(), 1)));
+  const [resToStr, setResToStr] = useState<string>(toYmd(new Date()));
+
+  // Delivery / Rider Performance — date range + time-of-day would need real timestamps either
+  // way; kept date-only like every other non-Sales-derived section for consistency.
+  const [dlvSectionCollapsed, setDlvSectionCollapsed] = useState<boolean>(false);
+  const [dlvPreset, setDlvPreset] = useState<string>("This Month");
+  const [dlvFromStr, setDlvFromStr] = useState<string>(toYmd(new Date(new Date().getFullYear(), new Date().getMonth(), 1)));
+  const [dlvToStr, setDlvToStr] = useState<string>(toYmd(new Date()));
+
+  // Cash Hub Settlement Trends — date range only, same reasoning as every non-Sales section.
+  const [cshSectionCollapsed, setCshSectionCollapsed] = useState<boolean>(false);
+  const [cshPreset, setCshPreset] = useState<string>("This Month");
+  const [cshFromStr, setCshFromStr] = useState<string>(toYmd(new Date(new Date().getFullYear(), new Date().getMonth(), 1)));
+  const [cshToStr, setCshToStr] = useState<string>(toYmd(new Date()));
+
+  // Customer Analytics — date range only (customer acquisition isn't hourly), same reasoning as
+  // Cash Hub Settlement Trends.
+  const [custSectionCollapsed, setCustSectionCollapsed] = useState<boolean>(false);
+  const [custPreset, setCustPreset] = useState<string>("This Month");
+  const [custFromStr, setCustFromStr] = useState<string>(toYmd(new Date(new Date().getFullYear(), new Date().getMonth(), 1)));
+  const [custToStr, setCustToStr] = useState<string>(toYmd(new Date()));
+
+  // Dough / Short-Life Batches — a LIVE "right now" view (which batches are close to
+  // expiring), same reasoning as the Delivery Board note elsewhere on this page: no date
+  // range makes sense for "what's expiring soon," so this only gets the collapsible section
+  // chrome, not a filter bar.
+  const [doughSectionCollapsed, setDoughSectionCollapsed] = useState<boolean>(false);
+
+  // Order Timing & Patterns — date range only (an hour-of-day/weekday pattern isn't meaningful
+  // over a time-of-day sub-window). Promotes the old fixed-window "Customer Intelligence" charts
+  // (Peak Hours/Order Type Trend/Day-of-Week Performance) into a real filterable section.
+  const [stSectionCollapsed, setStSectionCollapsed] = useState<boolean>(false);
+  const [stPreset, setStPreset] = useState<string>("This Month");
+  const [stFromStr, setStFromStr] = useState<string>(toYmd(new Date(new Date().getFullYear(), new Date().getMonth(), 1)));
+  const [stToStr, setStToStr] = useState<string>(toYmd(new Date()));
 
   const setPreset = (preset: string) => {
     setChannelPreset(preset);
@@ -473,6 +424,91 @@ const Dashboard = () => {
     }
   };
 
+  const setResRange = (preset: string) => {
+    setResPreset(preset);
+    const now = new Date();
+    if (preset === "Today") {
+      setResFromStr(toYmd(now));
+      setResToStr(toYmd(now));
+    } else if (preset === "This Week") {
+      const d = new Date(now);
+      d.setDate(d.getDate() - 7);
+      setResFromStr(toYmd(d));
+      setResToStr(toYmd(now));
+    } else if (preset === "This Month") {
+      setResFromStr(toYmd(new Date(now.getFullYear(), now.getMonth(), 1)));
+      setResToStr(toYmd(now));
+    }
+  };
+
+  const setDlvRange = (preset: string) => {
+    setDlvPreset(preset);
+    const now = new Date();
+    if (preset === "Today") {
+      setDlvFromStr(toYmd(now));
+      setDlvToStr(toYmd(now));
+    } else if (preset === "This Week") {
+      const d = new Date(now);
+      d.setDate(d.getDate() - 7);
+      setDlvFromStr(toYmd(d));
+      setDlvToStr(toYmd(now));
+    } else if (preset === "This Month") {
+      setDlvFromStr(toYmd(new Date(now.getFullYear(), now.getMonth(), 1)));
+      setDlvToStr(toYmd(now));
+    }
+  };
+
+  const setCshRange = (preset: string) => {
+    setCshPreset(preset);
+    const now = new Date();
+    if (preset === "Today") {
+      setCshFromStr(toYmd(now));
+      setCshToStr(toYmd(now));
+    } else if (preset === "This Week") {
+      const d = new Date(now);
+      d.setDate(d.getDate() - 7);
+      setCshFromStr(toYmd(d));
+      setCshToStr(toYmd(now));
+    } else if (preset === "This Month") {
+      setCshFromStr(toYmd(new Date(now.getFullYear(), now.getMonth(), 1)));
+      setCshToStr(toYmd(now));
+    }
+  };
+
+  const setCustRange = (preset: string) => {
+    setCustPreset(preset);
+    const now = new Date();
+    if (preset === "Today") {
+      setCustFromStr(toYmd(now));
+      setCustToStr(toYmd(now));
+    } else if (preset === "This Week") {
+      const d = new Date(now);
+      d.setDate(d.getDate() - 7);
+      setCustFromStr(toYmd(d));
+      setCustToStr(toYmd(now));
+    } else if (preset === "This Month") {
+      setCustFromStr(toYmd(new Date(now.getFullYear(), now.getMonth(), 1)));
+      setCustToStr(toYmd(now));
+    }
+  };
+
+  const setStRange = (preset: string) => {
+    setStPreset(preset);
+    const now = new Date();
+    if (preset === "Today") {
+      setStFromStr(toYmd(now));
+      setStToStr(toYmd(now));
+    } else if (preset === "This Week") {
+      const d = new Date(now);
+      d.setDate(d.getDate() - 7);
+      setStFromStr(toYmd(d));
+      setStToStr(toYmd(now));
+    } else if (preset === "This Month") {
+      setStFromStr(toYmd(new Date(now.getFullYear(), now.getMonth(), 1)));
+      setStToStr(toYmd(now));
+    }
+  };
+
   const { data: channelData, isLoading: channelLoading } = useQuery({
     queryKey: [
       "sales-by-channel",
@@ -594,6 +630,36 @@ const Dashboard = () => {
     enabled: salesByChannelVisible,
   });
 
+  const { data: resData, isLoading: resLoading } = useQuery({
+    queryKey: ["reservation-analytics", outletId, resFromStr, resToStr],
+    queryFn: () => reportService.getReservationAnalytics({ outletId, from: resFromStr, to: resToStr }),
+    enabled: salesByChannelVisible,
+  });
+
+  const { data: dlvData, isLoading: dlvLoading } = useQuery({
+    queryKey: ["delivery-performance", outletId, dlvFromStr, dlvToStr],
+    queryFn: () => reportService.getDeliveryPerformance({ outletId, from: dlvFromStr, to: dlvToStr }),
+    enabled: salesByChannelVisible,
+  });
+
+  const { data: cshData, isLoading: cshLoading } = useQuery({
+    queryKey: ["cash-settlement-trends", outletId, cshFromStr, cshToStr],
+    queryFn: () => reportService.getCashSettlementTrends({ outletId, from: cshFromStr, to: cshToStr }),
+    enabled: salesByChannelVisible,
+  });
+
+  const { data: custData, isLoading: custLoading } = useQuery({
+    queryKey: ["customer-analytics", outletId, custFromStr, custToStr],
+    queryFn: () => reportService.getCustomerAnalytics({ outletId, from: custFromStr, to: custToStr }),
+    enabled: salesByChannelVisible,
+  });
+
+  const { data: stData, isLoading: stLoading } = useQuery({
+    queryKey: ["sales-timing", outletId, stFromStr, stToStr],
+    queryFn: () => reportService.getSalesTiming({ outletId, from: stFromStr, to: stToStr }),
+    enabled: salesByChannelVisible,
+  });
+
   // Push-first real-time for the ten filtered sales/ops sections — invalidating just their own
   // query keys (not the whole ["dashboard", outletId] query) avoids re-running the other 11
   // dashboard aggregates on every order event, matching how Sales.tsx keeps its order-list query
@@ -614,9 +680,18 @@ const Dashboard = () => {
     queryClient.invalidateQueries({ queryKey: ["purchases-by-supplier"] });
     queryClient.invalidateQueries({ queryKey: ["expenses-breakdown"] });
     queryClient.invalidateQueries({ queryKey: ["waste-breakdown"] });
+    queryClient.invalidateQueries({ queryKey: ["attendance-analytics"] });
+    queryClient.invalidateQueries({ queryKey: ["reservation-analytics"] });
+    queryClient.invalidateQueries({ queryKey: ["delivery-performance"] });
+    queryClient.invalidateQueries({ queryKey: ["cash-settlement-trends"] });
+    queryClient.invalidateQueries({ queryKey: ["customer-analytics"] });
+    queryClient.invalidateQueries({ queryKey: ["sales-timing"] });
   };
   useModuleEvents(["cancellationRequest:created", "cancellationRequest:updated"], refreshSalesSections);
   useModuleEvents(["purchase:created", "purchase:updated", "purchase:deleted"], refreshSalesSections);
+  useModuleEvents(["reservation:created", "reservation:updated", "reservation:deleted"], refreshSalesSections);
+  useModuleEvents(["delivery:assigned", "delivery:status_updated"], refreshSalesSections);
+  useModuleEvents(["cashSettlement:created"], refreshSalesSections);
   useOrderEvents(refreshSalesSections);
   useVisiblePolling(refreshSalesSections, 180_000);
 
@@ -639,29 +714,6 @@ const Dashboard = () => {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4"><Skeleton className="lg:col-span-2 h-72" /><Skeleton className="h-72" /></div>
     </div>
   );
-
-  // --- Customer Intelligence chart transforms — all derived from DashboardReport fields
-  // already fetched above, never a client-side raw-order pull. ---
-  const peakHoursChart = (d?.peakHours ?? []).map(p => ({ hour: `${p.hour}:00`, orders: p.orders, revenue: p.revenue }));
-  const customerActivityChart = d?.customerActivity ?? [];
-  const dayPerformanceChart = d?.dayOfWeekPerformance ?? [];
-  // Mirrors reports.helpers.ts's ONLINE_TYPES on the backend — the two repos share no code,
-  // so this short list is kept in sync by hand, same as this file's own channel handling.
-  const ONLINE_TYPES = ["Foodpanda", "Online", "Self Order"];
-  const weekdayLabels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-  const orderTypeTrendChart = (() => {
-    const byDay = new Map(weekdayLabels.map(l => [l, { day: l, online: 0, offline: 0 }]));
-    for (const row of d?.orderTypeTrend ?? []) {
-      const bucket = byDay.get(row.day);
-      if (!bucket) continue;
-      if (ONLINE_TYPES.includes(row.type)) bucket.online += row.count; else bucket.offline += row.count;
-    }
-    return [...byDay.values()];
-  })();
-  // Exact count, not an estimate: customerActivity's newCustomers is 1 exactly once per
-  // customer (their first day in the week), so summing it across all 7 days gives the
-  // week's unique-customer total with zero extra queries.
-  const uniqueCustomersThisWeek = (d?.customerActivity ?? []).reduce((s, day) => s + day.newCustomers, 0);
 
   const channelRows = [
     {
@@ -919,6 +971,126 @@ const Dashboard = () => {
     ...t,
     label: new Date(`${t.date}T00:00:00.000Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" }),
   }));
+
+  // ── Attendance / HR Analytics derivations ────────────────────────────────
+  const att = attData;
+  const goToAttendance = (userId?: string, userName?: string) => {
+    const params = new URLSearchParams({ from: attFromStr, to: attToStr });
+    if (userId) params.set("userId", userId);
+    if (userName) params.set("userName", userName);
+    navigate(`/attendance?${params.toString()}`);
+  };
+  // Top 8 by present+late for the chart — the full table below lists every staff member.
+  const attStaffChartData = (att?.byStaff ?? [])
+    .slice()
+    .sort((a, b) => (b.present + b.late) - (a.present + a.late))
+    .slice(0, 8)
+    .map((r) => ({ name: r.name, userId: r.userId, present: r.present, late: r.late, absent: r.absent }));
+  const attTrendChartData = (att?.trend ?? []).map((t) => ({
+    ...t,
+    label: new Date(`${t.date}T00:00:00.000Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" }),
+  }));
+
+  // ── Reservations Analytics derivations ───────────────────────────────────
+  const res = resData;
+  const goToReservations = (status?: string) => {
+    const params = new URLSearchParams({ from: resFromStr, to: resToStr });
+    if (status) params.set("status", status);
+    navigate(`/reservations?${params.toString()}`);
+  };
+  const goToReservationsDay = (date: string) => {
+    const params = new URLSearchParams({ from: date, to: date });
+    navigate(`/reservations?${params.toString()}`);
+  };
+  // Same status label/color set Reservations.tsx's own `statusColors` map uses, mirrored here
+  // as chart fill colors (a Tailwind class can't be a recharts `fill`).
+  const RESERVATION_STATUS_LABELS: Record<string, string> = {
+    pending: "Pending", confirmed: "Confirmed", seated: "Seated",
+    completed: "Completed", cancelled: "Cancelled", noShow: "No-Show",
+  };
+  const RESERVATION_STATUS_COLORS: Record<string, string> = {
+    pending: "hsl(var(--warning))", confirmed: "hsl(var(--info))", seated: "hsl(var(--primary))",
+    completed: "hsl(var(--success))", cancelled: "hsl(var(--destructive))", noShow: "hsl(var(--muted-foreground))",
+  };
+  const resStatusChartData = (res?.byStatus ?? [])
+    .filter((r) => r.count > 0)
+    .map((r) => ({ ...r, label: RESERVATION_STATUS_LABELS[r.status] ?? r.status }));
+  const resTrendChartData = (res?.trend ?? []).map((t) => ({
+    ...t,
+    label: new Date(`${t.date}T00:00:00.000Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" }),
+  }));
+
+  // ── Delivery / Rider Performance derivations ─────────────────────────────
+  const dlv = dlvData;
+  // Delivery.tsx is a live "today only" ops board with no date-range or rider filter of its
+  // own (confirmed: no useSearchParams, no date state at all) -- unlike every other section's
+  // destination page this session, it can't actually show a historical filtered view. "View
+  // Details" here deliberately lands on the plain page rather than a URL it can't consume.
+  const goToDelivery = () => navigate("/delivery");
+  // Top 8 by deliveries for the chart -- the full table below lists every rider.
+  const dlvRiderChartData = (dlv?.byRider ?? []).slice(0, 8).map((r) => ({ name: r.name, deliveries: r.deliveries, commission: r.commission }));
+  const dlvTrendChartData = (dlv?.trend ?? []).map((t) => ({
+    ...t,
+    label: new Date(`${t.date}T00:00:00.000Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" }),
+  }));
+
+  // ── Cash Hub Settlement Trends derivations ───────────────────────────────
+  const csh = cshData;
+  const goToCashHub = (staffName?: string) => {
+    const params = new URLSearchParams({ from: cshFromStr, to: cshToStr });
+    if (staffName) params.set("staffName", staffName);
+    navigate(`/cash-hub?${params.toString()}`);
+  };
+  // Top 8 by totalAmount for the chart -- the full table below lists every staff member.
+  const cshStaffChartData = (csh?.byStaff ?? []).slice(0, 8).map((r) => ({ name: r.name, totalAmount: r.totalAmount }));
+  const cshTrendChartData = (csh?.trend ?? []).map((t) => ({
+    ...t,
+    label: new Date(`${t.date}T00:00:00.000Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" }),
+  }));
+
+  // ── Customer Analytics derivations ───────────────────────────────────────
+  const cust = custData;
+  const goToCustomers = (name?: string) => {
+    const params = new URLSearchParams({ from: custFromStr, to: custToStr });
+    if (name) params.set("search", name);
+    navigate(`/customers?${params.toString()}`);
+  };
+  // Top 8 by spend for the chart -- the full table below lists the top 10.
+  const custTopChartData = (cust?.topCustomers ?? []).slice(0, 8).map((r) => ({ name: r.name, spent: r.spent }));
+  const custTrendChartData = (cust?.trend ?? []).map((t) => ({
+    ...t,
+    label: new Date(`${t.date}T00:00:00.000Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" }),
+  }));
+
+  // ── Order Timing & Patterns derivations ──────────────────────────────────
+  const st = stData;
+  const stPeakHoursChartData = (st?.peakHours ?? []).map((p) => ({ ...p, label: `${p.hour}:00` }));
+  const stChannelChartData = (st?.byChannelTrend ?? []).map((t) => ({
+    ...t,
+    label: new Date(`${t.date}T00:00:00.000Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" }),
+  }));
+  const stBusiestHour = (st?.peakHours ?? []).reduce<{ hour: number; orders: number; revenue: number } | null>(
+    (best, cur) => (cur.orders > (best?.orders ?? -1) ? cur : best), null
+  );
+  const stBusiestDay = (st?.dayOfWeek ?? []).reduce<{ label: string; orderCount: number; avgSales: number } | null>(
+    (best, cur) => (cur.orderCount > (best?.orderCount ?? -1) ? cur : best), null
+  );
+  const stTotalOrders = (st?.peakHours ?? []).reduce((s, p) => s + p.orders, 0);
+  const stTotalRevenue = (st?.peakHours ?? []).reduce((s, p) => s + p.revenue, 0);
+  // Peak Hours bar click -> Sales & Orders filtered to that PKT hour-of-day within this
+  // section's own date range (Sales.tsx already supports fromTime/toTime).
+  const goToSalesByHour = (hour: number) => {
+    const hh = String(hour).padStart(2, "0");
+    const params = new URLSearchParams({
+      status: "completed", from: stFromStr, to: stToStr, fromTime: `${hh}:00`, toTime: `${hh}:59`,
+    });
+    navigate(`/sales?${params.toString()}`);
+  };
+  // A channel bar click -> Sales & Orders filtered to that channel + that specific day.
+  const goToSalesByChannelDay = (type: "Dine In" | "Take Away" | "Delivery", date: string) => {
+    const params = new URLSearchParams({ status: "completed", type, from: date, to: date });
+    navigate(`/sales?${params.toString()}`);
+  };
 
   // ── Deals Performance derivations ────────────────────────────────────────
   const dp = dpData;
@@ -3171,6 +3343,919 @@ const Dashboard = () => {
         </section>
       )}
 
+      {/* Attendance / HR Analytics (same "reports" permission gate) */}
+      {salesByChannelVisible && (
+        <section
+          aria-label="Attendance / HR Analytics"
+          className="rounded-2xl border border-border/80 bg-card/40 backdrop-blur-md shadow-sm overflow-hidden transition-all"
+        >
+          <div className={cn("p-4 sm:p-5 space-y-4 bg-card/70", !attSectionCollapsed && "border-b border-border/50")}>
+            <div className="flex items-center justify-between gap-3">
+              <div
+                className="flex items-center gap-3 cursor-pointer select-none group"
+                onClick={() => setAttSectionCollapsed((prev) => !prev)}
+              >
+                <div className="h-9 w-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center border border-primary/20 shrink-0 shadow-sm group-hover:bg-primary/20 transition-colors">
+                  <CalendarClock className="h-4 w-4" />
+                </div>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-lg sm:text-xl font-bold tracking-tight text-foreground group-hover:text-primary transition-colors">
+                    Attendance / HR Analytics
+                  </h2>
+                  {attSectionCollapsed && att && (
+                    <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full border bg-primary/10 text-primary border-primary/20">
+                      {att.attendanceRate}% attendance
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setAttSectionCollapsed((prev) => !prev)}
+                  className="h-8 px-2.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/70 gap-1.5 rounded-lg border border-border/50"
+                  title={attSectionCollapsed ? "Expand Attendance / HR Analytics" : "Collapse Attendance / HR Analytics"}
+                  aria-label={attSectionCollapsed ? "Expand Attendance / HR Analytics" : "Collapse Attendance / HR Analytics"}
+                >
+                  <span className="text-xs font-medium hidden sm:inline">{attSectionCollapsed ? "Show" : "Hide"}</span>
+                  <ChevronDown
+                    className={cn(
+                      "h-4 w-4 transition-transform duration-200",
+                      attSectionCollapsed ? "-rotate-90" : "rotate-0"
+                    )}
+                  />
+                </Button>
+              </div>
+            </div>
+
+            {!attSectionCollapsed && (
+              <div className="flex items-center gap-2.5 flex-wrap pt-3 border-t border-border/40">
+                <div className="inline-flex items-center p-0.5 rounded-lg bg-muted/60 border border-border/60 shadow-sm">
+                  {(["Today", "This Week", "This Month"] as const).map((p) => (
+                    <button
+                      key={p}
+                      type="button"
+                      onClick={() => setAttRange(p)}
+                      className={cn(
+                        "px-3 py-1.5 text-xs font-medium rounded-md transition-all",
+                        attPreset === p
+                          ? "bg-background text-foreground shadow-sm font-semibold"
+                          : "text-muted-foreground hover:text-foreground"
+                      )}
+                    >
+                      {p}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="inline-flex items-center gap-1.5">
+                  <div className="w-36">
+                    <DatePicker
+                      value={attFromStr}
+                      onChange={(val) => { setAttFromStr(val); setAttPreset("Custom"); }}
+                      placeholder="Start date"
+                      className="h-8 text-xs bg-background"
+                    />
+                  </div>
+                  <span className="text-xs text-muted-foreground/60 font-medium px-0.5">to</span>
+                  <div className="w-36">
+                    <DatePicker
+                      value={attToStr}
+                      onChange={(val) => { setAttToStr(val); setAttPreset("Custom"); }}
+                      min={attFromStr}
+                      placeholder="End date"
+                      className="h-8 text-xs bg-background"
+                    />
+                  </div>
+                </div>
+
+                <span className="text-[11px] text-muted-foreground/70">No time-of-day filter — attendance is per-day.</span>
+              </div>
+            )}
+          </div>
+
+          {!attSectionCollapsed && (
+            <div className="p-4 sm:p-5">
+              {attLoading || !att ? (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                    {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-20 rounded-lg" />)}
+                  </div>
+                  <Skeleton className="h-48 rounded-xl" />
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {/* Headline tiles */}
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                    <div className="rounded-lg bg-background/70 border border-border/50 p-3.5">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Present</p>
+                      <p className="text-xl font-bold tracking-tight text-emerald-500 mt-0.5">{att.present.toLocaleString()}</p>
+                    </div>
+                    <div className="rounded-lg bg-background/70 border border-border/50 p-3.5">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Late</p>
+                      <p className="text-xl font-bold tracking-tight text-warning mt-0.5">{att.late.toLocaleString()}</p>
+                    </div>
+                    <div className="rounded-lg bg-background/70 border border-border/50 p-3.5">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Absent</p>
+                      <p className="text-xl font-bold tracking-tight text-destructive mt-0.5">{att.absent.toLocaleString()}</p>
+                    </div>
+                    <div className="rounded-lg bg-background/70 border border-border/50 p-3.5">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Total Overtime</p>
+                      <p className="text-xl font-bold tracking-tight text-foreground mt-0.5">{(att.totalOvertimeMinutes / 60).toFixed(1)}h</p>
+                    </div>
+                  </div>
+
+                  {/* Trend over time — stacked by status */}
+                  <div className="rounded-xl border border-border/50 bg-card/40 p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <p className="text-sm font-semibold text-foreground">Daily Attendance</p>
+                      <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
+                        <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-emerald-500" />Present</span>
+                        <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-warning" />Late</span>
+                        <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-info" />Half Day</span>
+                        <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-destructive" />Absent</span>
+                      </div>
+                    </div>
+                    {attTrendChartData.every((t) => t.present + t.late + t.halfday + t.absent === 0) ? (
+                      <p className="text-xs text-muted-foreground py-8 text-center">No attendance records this period.</p>
+                    ) : (
+                      <div className="h-56">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart data={attTrendChartData} barCategoryGap="24%" margin={{ top: 10, right: 10 }}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                            <XAxis dataKey="label" tick={{ fontSize: 10 }} axisLine={{ stroke: "hsl(var(--border))" }} tickLine={false} interval="preserveStartEnd" />
+                            <YAxis tick={{ fontSize: 12 }} axisLine={false} tickLine={false} allowDecimals={false} />
+                            <Tooltip content={<ChartTooltip />} cursor={{ fill: "hsl(var(--muted) / 0.15)", radius: 4 }} />
+                            <Bar dataKey="present" name="Present" stackId="att" fill="hsl(var(--success))" />
+                            <Bar dataKey="late" name="Late" stackId="att" fill="hsl(var(--warning))" />
+                            <Bar dataKey="halfday" name="Half Day" stackId="att" fill="hsl(var(--info))" />
+                            <Bar dataKey="absent" name="Absent" stackId="att" fill="hsl(var(--destructive))" radius={[4, 4, 0, 0]} />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* By staff — top 8 by present+late */}
+                  {attStaffChartData.length > 0 && (
+                    <div className="rounded-xl border border-border/50 bg-card/40 p-4">
+                      <p className="text-sm font-semibold text-foreground mb-3">Attendance by Staff</p>
+                      <div className="h-64">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart
+                            data={attStaffChartData}
+                            barGap={4}
+                            barCategoryGap="24%"
+                            onClick={(state) => {
+                              const p = state?.activePayload?.[0]?.payload as { userId: string; name: string } | undefined;
+                              if (p?.userId) goToAttendance(p.userId, p.name);
+                            }}
+                          >
+                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                            <XAxis dataKey="name" tick={{ fontSize: 11 }} axisLine={{ stroke: "hsl(var(--border))" }} tickLine={false} interval={0} angle={-20} textAnchor="end" height={54} />
+                            <YAxis tick={{ fontSize: 12 }} axisLine={false} tickLine={false} allowDecimals={false} />
+                            <Tooltip content={<ChartTooltip />} cursor={{ fill: "hsl(var(--muted) / 0.15)", radius: 4 }} />
+                            <Legend wrapperStyle={{ fontSize: 12 }} />
+                            <Bar dataKey="present" name="Present" fill="hsl(var(--success))" radius={[4, 4, 0, 0]} maxBarSize={36} cursor="pointer" />
+                            <Bar dataKey="late" name="Late" fill="hsl(var(--warning))" radius={[4, 4, 0, 0]} maxBarSize={36} cursor="pointer" />
+                            <Bar dataKey="absent" name="Absent" fill="hsl(var(--destructive))" radius={[4, 4, 0, 0]} maxBarSize={36} cursor="pointer" />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="rounded-xl border border-border/50 bg-card/40 overflow-hidden">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="hover:bg-transparent border-border/40">
+                          <TableHead>Staff</TableHead>
+                          <TableHead>Role</TableHead>
+                          <TableHead className="text-right">Present</TableHead>
+                          <TableHead className="text-right">Late</TableHead>
+                          <TableHead className="text-right">Half Day</TableHead>
+                          <TableHead className="text-right">Absent</TableHead>
+                          <TableHead className="text-right">Overtime</TableHead>
+                          <TableHead className="w-8" />
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {(att.byStaff ?? []).length === 0 ? (
+                          <TableRow>
+                            <TableCell colSpan={8} className="text-center text-muted-foreground py-6">No attendance records this period.</TableCell>
+                          </TableRow>
+                        ) : (
+                          att.byStaff.map((r) => (
+                            <TableRow
+                              key={r.userId}
+                              className="border-border/40 cursor-pointer hover:bg-primary/5 transition-colors group/row"
+                              onClick={() => goToAttendance(r.userId, r.name)}
+                              title="View this staff member's attendance"
+                            >
+                              <TableCell className="font-medium">{r.name}</TableCell>
+                              <TableCell className="text-muted-foreground">{r.role}</TableCell>
+                              <TableCell className="text-right tabular-nums text-emerald-500">{r.present}</TableCell>
+                              <TableCell className="text-right tabular-nums text-warning">{r.late}</TableCell>
+                              <TableCell className="text-right tabular-nums text-info">{r.halfday}</TableCell>
+                              <TableCell className="text-right tabular-nums text-destructive">{r.absent}</TableCell>
+                              <TableCell className="text-right tabular-nums text-muted-foreground">{(r.overtimeMinutes / 60).toFixed(1)}h</TableCell>
+                              <TableCell className="w-8">
+                                <ChevronRight className="h-4 w-4 text-muted-foreground/40 transition-all group-hover/row:text-primary group-hover/row:translate-x-0.5" />
+                              </TableCell>
+                            </TableRow>
+                          ))
+                        )}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* Reservations Analytics (same "reports" permission gate) */}
+      {salesByChannelVisible && (
+        <section
+          aria-label="Reservations Analytics"
+          className="rounded-2xl border border-border/80 bg-card/40 backdrop-blur-md shadow-sm overflow-hidden transition-all"
+        >
+          <div className={cn("p-4 sm:p-5 space-y-4 bg-card/70", !resSectionCollapsed && "border-b border-border/50")}>
+            <div className="flex items-center justify-between gap-3">
+              <div
+                className="flex items-center gap-3 cursor-pointer select-none group"
+                onClick={() => setResSectionCollapsed((prev) => !prev)}
+              >
+                <div className="h-9 w-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center border border-primary/20 shrink-0 shadow-sm group-hover:bg-primary/20 transition-colors">
+                  <CalendarCheck className="h-4 w-4" />
+                </div>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-lg sm:text-xl font-bold tracking-tight text-foreground group-hover:text-primary transition-colors">
+                    Reservations Analytics
+                  </h2>
+                  {resSectionCollapsed && res && (
+                    <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full border bg-primary/10 text-primary border-primary/20">
+                      {res.totalReservations} bookings
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setResSectionCollapsed((prev) => !prev)}
+                  className="h-8 px-2.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/70 gap-1.5 rounded-lg border border-border/50"
+                  title={resSectionCollapsed ? "Expand Reservations Analytics" : "Collapse Reservations Analytics"}
+                  aria-label={resSectionCollapsed ? "Expand Reservations Analytics" : "Collapse Reservations Analytics"}
+                >
+                  <span className="text-xs font-medium hidden sm:inline">{resSectionCollapsed ? "Show" : "Hide"}</span>
+                  <ChevronDown
+                    className={cn(
+                      "h-4 w-4 transition-transform duration-200",
+                      resSectionCollapsed ? "-rotate-90" : "rotate-0"
+                    )}
+                  />
+                </Button>
+              </div>
+            </div>
+
+            {!resSectionCollapsed && (
+              <div className="flex items-center gap-2.5 flex-wrap pt-3 border-t border-border/40">
+                <div className="inline-flex items-center p-0.5 rounded-lg bg-muted/60 border border-border/60 shadow-sm">
+                  {(["Today", "This Week", "This Month"] as const).map((p) => (
+                    <button
+                      key={p}
+                      type="button"
+                      onClick={() => setResRange(p)}
+                      className={cn(
+                        "px-3 py-1.5 text-xs font-medium rounded-md transition-all",
+                        resPreset === p
+                          ? "bg-background text-foreground shadow-sm font-semibold"
+                          : "text-muted-foreground hover:text-foreground"
+                      )}
+                    >
+                      {p}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="inline-flex items-center gap-1.5">
+                  <div className="w-36">
+                    <DatePicker
+                      value={resFromStr}
+                      onChange={(val) => { setResFromStr(val); setResPreset("Custom"); }}
+                      placeholder="Start date"
+                      className="h-8 text-xs bg-background"
+                    />
+                  </div>
+                  <span className="text-xs text-muted-foreground/60 font-medium px-0.5">to</span>
+                  <div className="w-36">
+                    <DatePicker
+                      value={resToStr}
+                      onChange={(val) => { setResToStr(val); setResPreset("Custom"); }}
+                      min={resFromStr}
+                      placeholder="End date"
+                      className="h-8 text-xs bg-background"
+                    />
+                  </div>
+                </div>
+
+                <span className="text-[11px] text-muted-foreground/70">No time-of-day filter — bookings are per-day.</span>
+              </div>
+            )}
+          </div>
+
+          {!resSectionCollapsed && (
+            <div className="p-4 sm:p-5">
+              {resLoading || !res ? (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                    {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-20 rounded-lg" />)}
+                  </div>
+                  <Skeleton className="h-48 rounded-xl" />
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {/* Headline tiles */}
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                    <div className="rounded-lg bg-background/70 border border-border/50 p-3.5">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Total Bookings</p>
+                      <p className="text-xl font-bold tracking-tight text-foreground mt-0.5">{res.totalReservations.toLocaleString()}</p>
+                    </div>
+                    <div className="rounded-lg bg-background/70 border border-border/50 p-3.5">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Total Guests</p>
+                      <p className="text-xl font-bold tracking-tight text-foreground mt-0.5">{res.totalGuests.toLocaleString()}</p>
+                    </div>
+                    <div className="rounded-lg bg-background/70 border border-border/50 p-3.5">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Cancelled</p>
+                      <p className="text-xl font-bold tracking-tight text-destructive mt-0.5">{res.cancelledCount.toLocaleString()}</p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">{res.cancelRate}% of bookings</p>
+                    </div>
+                    <div className="rounded-lg bg-background/70 border border-border/50 p-3.5">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">No-Show</p>
+                      <p className="text-xl font-bold tracking-tight text-muted-foreground mt-0.5">{res.noShowCount.toLocaleString()}</p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">{res.noShowRate}% of bookings</p>
+                    </div>
+                  </div>
+
+                  {/* Trend over time */}
+                  <div className="rounded-xl border border-border/50 bg-card/40 p-4">
+                    <p className="text-sm font-semibold text-foreground mb-3">Daily Bookings</p>
+                    {resTrendChartData.every((t) => t.count === 0) ? (
+                      <p className="text-xs text-muted-foreground py-8 text-center">No reservations this period.</p>
+                    ) : (
+                      <div className="h-56">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <LineChart
+                            data={resTrendChartData}
+                            margin={{ top: 10, right: 10 }}
+                            onClick={(state) => {
+                              const p = state?.activePayload?.[0]?.payload as { date: string } | undefined;
+                              if (p?.date) goToReservationsDay(p.date);
+                            }}
+                          >
+                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                            <XAxis dataKey="label" tick={{ fontSize: 10 }} axisLine={{ stroke: "hsl(var(--border))" }} tickLine={false} interval="preserveStartEnd" />
+                            <YAxis tick={{ fontSize: 12 }} axisLine={false} tickLine={false} allowDecimals={false} />
+                            <Tooltip content={<ChartTooltip />} cursor={{ stroke: "hsl(var(--border))" }} />
+                            <Line type="monotone" dataKey="count" name="Bookings" stroke="hsl(var(--primary))" strokeWidth={2} dot={{ r: 2, cursor: "pointer" }} activeDot={{ r: 4, cursor: "pointer" }} />
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </div>
+                    )}
+                    <p className="text-[11px] text-muted-foreground/70 mt-2">Click a point to view that day's bookings.</p>
+                  </div>
+
+                  {/* By status — chart + table */}
+                  <div className="rounded-xl border border-border/50 bg-card/40 p-4">
+                    <p className="text-sm font-semibold text-foreground mb-3">Bookings by Status</p>
+                    {resStatusChartData.length === 0 ? (
+                      <p className="text-xs text-muted-foreground py-8 text-center">No reservations this period.</p>
+                    ) : (
+                      <div className="h-56">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart
+                            data={resStatusChartData}
+                            barCategoryGap="24%"
+                            margin={{ top: 20 }}
+                            onClick={(state) => {
+                              const p = state?.activePayload?.[0]?.payload as { status: string } | undefined;
+                              if (p?.status) goToReservations(p.status);
+                            }}
+                          >
+                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                            <XAxis dataKey="label" tick={{ fontSize: 11 }} axisLine={{ stroke: "hsl(var(--border))" }} tickLine={false} interval={0} />
+                            <YAxis tick={{ fontSize: 12 }} axisLine={false} tickLine={false} allowDecimals={false} />
+                            <Tooltip content={<ChartTooltip />} cursor={{ fill: "hsl(var(--muted) / 0.15)", radius: 4 }} />
+                            <Bar dataKey="count" name="Bookings" radius={[4, 4, 0, 0]} maxBarSize={48} cursor="pointer">
+                              {resStatusChartData.map((entry) => (
+                                <Cell key={entry.status} fill={RESERVATION_STATUS_COLORS[entry.status] ?? "hsl(var(--primary))"} />
+                              ))}
+                              <LabelList dataKey="count" position="top" style={{ fontSize: 10, fill: "hsl(var(--foreground))" }} />
+                            </Bar>
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="rounded-xl border border-border/50 bg-card/40 overflow-hidden">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="hover:bg-transparent border-border/40">
+                          <TableHead>Status</TableHead>
+                          <TableHead className="text-right">Bookings</TableHead>
+                          <TableHead className="text-right">Guests</TableHead>
+                          <TableHead className="text-right">% of Total</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {(res.byStatus ?? []).map((r) => (
+                          <TableRow
+                            key={r.status}
+                            className={cn("border-border/40", r.count > 0 && "cursor-pointer hover:bg-muted/30 transition-colors")}
+                            onClick={() => r.count > 0 && goToReservations(r.status)}
+                          >
+                            <TableCell className={cn("font-medium", r.count === 0 && "text-muted-foreground/60")}>
+                              {RESERVATION_STATUS_LABELS[r.status] ?? r.status}
+                            </TableCell>
+                            <TableCell className="text-right tabular-nums">{r.count}</TableCell>
+                            <TableCell className="text-right tabular-nums">{r.guests}</TableCell>
+                            <TableCell className="text-right tabular-nums text-muted-foreground">
+                              {res.totalReservations > 0 ? `${Math.round((r.count / res.totalReservations) * 100)}%` : "—"}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                        <TableRow className="border-border/40 bg-muted/30 font-semibold">
+                          <TableCell>Total</TableCell>
+                          <TableCell className="text-right tabular-nums">{res.totalReservations}</TableCell>
+                          <TableCell className="text-right tabular-nums">{res.totalGuests}</TableCell>
+                          <TableCell className="text-right tabular-nums">100%</TableCell>
+                        </TableRow>
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* Delivery / Rider Performance (same "reports" permission gate) */}
+      {salesByChannelVisible && (
+        <section
+          aria-label="Delivery / Rider Performance"
+          className="rounded-2xl border border-border/80 bg-card/40 backdrop-blur-md shadow-sm overflow-hidden transition-all"
+        >
+          <div className={cn("p-4 sm:p-5 space-y-4 bg-card/70", !dlvSectionCollapsed && "border-b border-border/50")}>
+            <div className="flex items-center justify-between gap-3">
+              <div
+                className="flex items-center gap-3 cursor-pointer select-none group"
+                onClick={() => setDlvSectionCollapsed((prev) => !prev)}
+              >
+                <div className="h-9 w-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center border border-primary/20 shrink-0 shadow-sm group-hover:bg-primary/20 transition-colors">
+                  <Truck className="h-4 w-4" />
+                </div>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-lg sm:text-xl font-bold tracking-tight text-foreground group-hover:text-primary transition-colors">
+                    Delivery / Rider Performance
+                  </h2>
+                  {dlvSectionCollapsed && dlv && (
+                    <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full border bg-primary/10 text-primary border-primary/20">
+                      {dlv.totalDeliveries} deliveries
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setDlvSectionCollapsed((prev) => !prev)}
+                  className="h-8 px-2.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/70 gap-1.5 rounded-lg border border-border/50"
+                  title={dlvSectionCollapsed ? "Expand Delivery / Rider Performance" : "Collapse Delivery / Rider Performance"}
+                  aria-label={dlvSectionCollapsed ? "Expand Delivery / Rider Performance" : "Collapse Delivery / Rider Performance"}
+                >
+                  <span className="text-xs font-medium hidden sm:inline">{dlvSectionCollapsed ? "Show" : "Hide"}</span>
+                  <ChevronDown
+                    className={cn(
+                      "h-4 w-4 transition-transform duration-200",
+                      dlvSectionCollapsed ? "-rotate-90" : "rotate-0"
+                    )}
+                  />
+                </Button>
+              </div>
+            </div>
+
+            {!dlvSectionCollapsed && (
+              <div className="flex items-center gap-2.5 flex-wrap pt-3 border-t border-border/40">
+                <div className="inline-flex items-center p-0.5 rounded-lg bg-muted/60 border border-border/60 shadow-sm">
+                  {(["Today", "This Week", "This Month"] as const).map((p) => (
+                    <button
+                      key={p}
+                      type="button"
+                      onClick={() => setDlvRange(p)}
+                      className={cn(
+                        "px-3 py-1.5 text-xs font-medium rounded-md transition-all",
+                        dlvPreset === p
+                          ? "bg-background text-foreground shadow-sm font-semibold"
+                          : "text-muted-foreground hover:text-foreground"
+                      )}
+                    >
+                      {p}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="inline-flex items-center gap-1.5">
+                  <div className="w-36">
+                    <DatePicker
+                      value={dlvFromStr}
+                      onChange={(val) => { setDlvFromStr(val); setDlvPreset("Custom"); }}
+                      placeholder="Start date"
+                      className="h-8 text-xs bg-background"
+                    />
+                  </div>
+                  <span className="text-xs text-muted-foreground/60 font-medium px-0.5">to</span>
+                  <div className="w-36">
+                    <DatePicker
+                      value={dlvToStr}
+                      onChange={(val) => { setDlvToStr(val); setDlvPreset("Custom"); }}
+                      min={dlvFromStr}
+                      placeholder="End date"
+                      className="h-8 text-xs bg-background"
+                    />
+                  </div>
+                </div>
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 px-2.5 text-xs gap-1.5 ml-auto"
+                  onClick={goToDelivery}
+                >
+                  View Delivery Board <ChevronRight className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            )}
+          </div>
+
+          {!dlvSectionCollapsed && (
+            <div className="p-4 sm:p-5">
+              {dlvLoading || !dlv ? (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                    {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-20 rounded-lg" />)}
+                  </div>
+                  <Skeleton className="h-48 rounded-xl" />
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {/* Headline tiles */}
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                    <div className="rounded-lg bg-background/70 border border-border/50 p-3.5">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Total Deliveries</p>
+                      <p className="text-xl font-bold tracking-tight text-foreground mt-0.5">{dlv.totalDeliveries.toLocaleString()}</p>
+                    </div>
+                    <div className="rounded-lg bg-background/70 border border-border/50 p-3.5">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Rider Commission</p>
+                      <p className="text-xl font-bold tracking-tight text-foreground mt-0.5">{money(dlv.totalCommission)}</p>
+                    </div>
+                    <div className="rounded-lg bg-background/70 border border-border/50 p-3.5">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Avg Delivery Time</p>
+                      <p className="text-xl font-bold tracking-tight text-foreground mt-0.5">{dlv.avgDeliveryMinutes}m</p>
+                    </div>
+                    <div className="rounded-lg bg-background/70 border border-border/50 p-3.5">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Returned / Failed</p>
+                      <p className={cn("text-xl font-bold tracking-tight mt-0.5", dlv.returnedCount > 0 ? "text-destructive" : "text-foreground")}>
+                        {dlv.returnedCount.toLocaleString()}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Trend over time */}
+                  <div className="rounded-xl border border-border/50 bg-card/40 p-4">
+                    <p className="text-sm font-semibold text-foreground mb-3">Daily Deliveries</p>
+                    {dlvTrendChartData.every((t) => t.count === 0) ? (
+                      <p className="text-xs text-muted-foreground py-8 text-center">No deliveries this period.</p>
+                    ) : (
+                      <div className="h-56">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <LineChart data={dlvTrendChartData} margin={{ top: 10, right: 10 }}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                            <XAxis dataKey="label" tick={{ fontSize: 10 }} axisLine={{ stroke: "hsl(var(--border))" }} tickLine={false} interval="preserveStartEnd" />
+                            <YAxis tick={{ fontSize: 12 }} axisLine={false} tickLine={false} allowDecimals={false} />
+                            <Tooltip content={<ChartTooltip />} cursor={{ stroke: "hsl(var(--border))" }} />
+                            <Line type="monotone" dataKey="count" name="Deliveries" stroke="hsl(var(--primary))" strokeWidth={2} dot={{ r: 2 }} activeDot={{ r: 4 }} />
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* By rider — top 8 */}
+                  {dlvRiderChartData.length > 0 && (
+                    <div className="rounded-xl border border-border/50 bg-card/40 p-4">
+                      <p className="text-sm font-semibold text-foreground mb-3">Deliveries by Rider</p>
+                      <div className="h-64">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart data={dlvRiderChartData} barCategoryGap="24%" margin={{ top: 20 }}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                            <XAxis dataKey="name" tick={{ fontSize: 11 }} axisLine={{ stroke: "hsl(var(--border))" }} tickLine={false} interval={0} angle={-20} textAnchor="end" height={54} />
+                            <YAxis tick={{ fontSize: 12 }} axisLine={false} tickLine={false} allowDecimals={false} />
+                            <Tooltip content={<ChartTooltip />} cursor={{ fill: "hsl(var(--muted) / 0.15)", radius: 4 }} />
+                            <Bar dataKey="deliveries" name="Deliveries" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} maxBarSize={48} />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="rounded-xl border border-border/50 bg-card/40 overflow-hidden">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="hover:bg-transparent border-border/40">
+                          <TableHead>Rider</TableHead>
+                          <TableHead className="text-right">Deliveries</TableHead>
+                          <TableHead className="text-right">Commission</TableHead>
+                          <TableHead className="text-right">Avg Time</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {(dlv.byRider ?? []).length === 0 ? (
+                          <TableRow>
+                            <TableCell colSpan={4} className="text-center text-muted-foreground py-6">No deliveries this period.</TableCell>
+                          </TableRow>
+                        ) : (
+                          dlv.byRider.map((r) => (
+                            <TableRow key={r.riderId} className="border-border/40">
+                              <TableCell className="font-medium">{r.name}</TableCell>
+                              <TableCell className="text-right tabular-nums">{r.deliveries}</TableCell>
+                              <TableCell className="text-right tabular-nums">{money(r.commission)}</TableCell>
+                              <TableCell className="text-right tabular-nums text-muted-foreground">{r.avgMinutes}m</TableCell>
+                            </TableRow>
+                          ))
+                        )}
+                        <TableRow className="border-border/40 bg-muted/30 font-semibold">
+                          <TableCell>Total</TableCell>
+                          <TableCell className="text-right tabular-nums">{dlv.totalDeliveries}</TableCell>
+                          <TableCell className="text-right tabular-nums">{money(dlv.totalCommission)}</TableCell>
+                          <TableCell className="text-right tabular-nums">{dlv.avgDeliveryMinutes}m</TableCell>
+                        </TableRow>
+                      </TableBody>
+                    </Table>
+                  </div>
+
+                  <div className="flex items-start gap-2 rounded-md border border-border/40 bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+                    <Info className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                    <span>
+                      <span className="font-semibold text-foreground">Delivery Board</span> is a live "today" view with no
+                      date-range filter of its own, so rows here don't drill into a matching filtered view — "View Delivery
+                      Board" above just opens the live page.
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* Cash Hub Settlement Trends (same "reports" permission gate) */}
+      {salesByChannelVisible && (
+        <section
+          aria-label="Cash Hub Settlement Trends"
+          className="rounded-2xl border border-border/80 bg-card/40 backdrop-blur-md shadow-sm overflow-hidden transition-all"
+        >
+          <div className={cn("p-4 sm:p-5 space-y-4 bg-card/70", !cshSectionCollapsed && "border-b border-border/50")}>
+            <div className="flex items-center justify-between gap-3">
+              <div
+                className="flex items-center gap-3 cursor-pointer select-none group"
+                onClick={() => setCshSectionCollapsed((prev) => !prev)}
+              >
+                <div className="h-9 w-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center border border-primary/20 shrink-0 shadow-sm group-hover:bg-primary/20 transition-colors">
+                  <Wallet className="h-4 w-4" />
+                </div>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-lg sm:text-xl font-bold tracking-tight text-foreground group-hover:text-primary transition-colors">
+                    Cash Hub Settlement Trends
+                  </h2>
+                  {cshSectionCollapsed && csh && (
+                    <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full border bg-primary/10 text-primary border-primary/20">
+                      {money(csh.totalAmount)}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setCshSectionCollapsed((prev) => !prev)}
+                  className="h-8 px-2.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/70 gap-1.5 rounded-lg border border-border/50"
+                  title={cshSectionCollapsed ? "Expand Cash Hub Settlement Trends" : "Collapse Cash Hub Settlement Trends"}
+                  aria-label={cshSectionCollapsed ? "Expand Cash Hub Settlement Trends" : "Collapse Cash Hub Settlement Trends"}
+                >
+                  <span className="text-xs font-medium hidden sm:inline">{cshSectionCollapsed ? "Show" : "Hide"}</span>
+                  <ChevronDown
+                    className={cn(
+                      "h-4 w-4 transition-transform duration-200",
+                      cshSectionCollapsed ? "-rotate-90" : "rotate-0"
+                    )}
+                  />
+                </Button>
+              </div>
+            </div>
+
+            {!cshSectionCollapsed && (
+              <div className="flex items-center gap-2.5 flex-wrap pt-3 border-t border-border/40">
+                <div className="inline-flex items-center p-0.5 rounded-lg bg-muted/60 border border-border/60 shadow-sm">
+                  {(["Today", "This Week", "This Month"] as const).map((p) => (
+                    <button
+                      key={p}
+                      type="button"
+                      onClick={() => setCshRange(p)}
+                      className={cn(
+                        "px-3 py-1.5 text-xs font-medium rounded-md transition-all",
+                        cshPreset === p
+                          ? "bg-background text-foreground shadow-sm font-semibold"
+                          : "text-muted-foreground hover:text-foreground"
+                      )}
+                    >
+                      {p}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="inline-flex items-center gap-1.5">
+                  <div className="w-36">
+                    <DatePicker
+                      value={cshFromStr}
+                      onChange={(val) => { setCshFromStr(val); setCshPreset("Custom"); }}
+                      placeholder="Start date"
+                      className="h-8 text-xs bg-background"
+                    />
+                  </div>
+                  <span className="text-xs text-muted-foreground/60 font-medium px-0.5">to</span>
+                  <div className="w-36">
+                    <DatePicker
+                      value={cshToStr}
+                      onChange={(val) => { setCshToStr(val); setCshPreset("Custom"); }}
+                      min={cshFromStr}
+                      placeholder="End date"
+                      className="h-8 text-xs bg-background"
+                    />
+                  </div>
+                </div>
+
+                <span className="text-[11px] text-muted-foreground/70">No time-of-day filter — settlements aren't hourly.</span>
+              </div>
+            )}
+          </div>
+
+          {!cshSectionCollapsed && (
+            <div className="p-4 sm:p-5">
+              {cshLoading || !csh ? (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                    {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-20 rounded-lg" />)}
+                  </div>
+                  <Skeleton className="h-48 rounded-xl" />
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {/* Headline tiles */}
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                    <div className="rounded-lg bg-background/70 border border-border/50 p-3.5">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Total Settlements</p>
+                      <p className="text-xl font-bold tracking-tight text-foreground mt-0.5">{csh.totalSettlements.toLocaleString()}</p>
+                    </div>
+                    <div className="rounded-lg bg-background/70 border border-border/50 p-3.5">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Total Settled</p>
+                      <p className="text-xl font-bold tracking-tight text-foreground mt-0.5">{money(csh.totalAmount)}</p>
+                    </div>
+                    <div className="rounded-lg bg-background/70 border border-border/50 p-3.5">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Cash Difference</p>
+                      <p className={cn("text-xl font-bold tracking-tight mt-0.5", csh.totalDifference < 0 ? "text-destructive" : "text-emerald-500")}>
+                        {csh.totalDifference < 0 ? "−" : ""}{money(csh.totalDifference)}
+                      </p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">{csh.totalDifference < 0 ? "Shortage" : "Overage"}</p>
+                    </div>
+                    <div className="rounded-lg bg-background/70 border border-border/50 p-3.5">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Staff Settled</p>
+                      <p className="text-xl font-bold tracking-tight text-foreground mt-0.5">{csh.byStaff.length.toLocaleString()}</p>
+                    </div>
+                  </div>
+
+                  {/* Trend over time */}
+                  <div className="rounded-xl border border-border/50 bg-card/40 p-4">
+                    <p className="text-sm font-semibold text-foreground mb-3">Daily Settlements</p>
+                    {cshTrendChartData.every((t) => t.amount === 0) ? (
+                      <p className="text-xs text-muted-foreground py-8 text-center">No settlements this period.</p>
+                    ) : (
+                      <div className="h-56">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <LineChart data={cshTrendChartData} margin={{ top: 10, right: 10 }}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                            <XAxis dataKey="label" tick={{ fontSize: 10 }} axisLine={{ stroke: "hsl(var(--border))" }} tickLine={false} interval="preserveStartEnd" />
+                            <YAxis tick={{ fontSize: 12 }} axisLine={false} tickLine={false} tickFormatter={(v) => `${currency}${(v / 1000).toFixed(0)}k`} />
+                            <Tooltip content={<ChartTooltip />} cursor={{ stroke: "hsl(var(--border))" }} />
+                            <Line type="monotone" dataKey="amount" name="Settled" stroke="hsl(var(--primary))" strokeWidth={2} dot={{ r: 2, cursor: "pointer" }} activeDot={{ r: 4, cursor: "pointer" }} />
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* By staff — top 8 */}
+                  {cshStaffChartData.length > 0 && (
+                    <div className="rounded-xl border border-border/50 bg-card/40 p-4">
+                      <p className="text-sm font-semibold text-foreground mb-3">Settlements by Staff</p>
+                      <div className="h-64">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart
+                            data={cshStaffChartData}
+                            barCategoryGap="24%"
+                            margin={{ top: 20 }}
+                            onClick={(state) => {
+                              const p = state?.activePayload?.[0]?.payload as { name: string } | undefined;
+                              if (p?.name) goToCashHub(p.name);
+                            }}
+                          >
+                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                            <XAxis dataKey="name" tick={{ fontSize: 11 }} axisLine={{ stroke: "hsl(var(--border))" }} tickLine={false} interval={0} angle={-20} textAnchor="end" height={54} />
+                            <YAxis tick={{ fontSize: 12 }} axisLine={false} tickLine={false} tickFormatter={(v) => `${currency}${(v / 1000).toFixed(0)}k`} />
+                            <Tooltip content={<ChartTooltip />} cursor={{ fill: "hsl(var(--muted) / 0.15)", radius: 4 }} />
+                            <Bar dataKey="totalAmount" name="Settled" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} maxBarSize={48} cursor="pointer" />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="rounded-xl border border-border/50 bg-card/40 overflow-hidden">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="hover:bg-transparent border-border/40">
+                          <TableHead>Staff</TableHead>
+                          <TableHead className="text-right">Settlements</TableHead>
+                          <TableHead className="text-right">Total Settled</TableHead>
+                          <TableHead className="text-right">Difference</TableHead>
+                          <TableHead className="w-8" />
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {(csh.byStaff ?? []).length === 0 ? (
+                          <TableRow>
+                            <TableCell colSpan={5} className="text-center text-muted-foreground py-6">No settlements this period.</TableCell>
+                          </TableRow>
+                        ) : (
+                          csh.byStaff.map((r) => (
+                            <TableRow
+                              key={r.staffId}
+                              className="border-border/40 cursor-pointer hover:bg-primary/5 transition-colors group/row"
+                              onClick={() => goToCashHub(r.name)}
+                              title="View this staff member's settlements"
+                            >
+                              <TableCell className="font-medium">{r.name}</TableCell>
+                              <TableCell className="text-right tabular-nums">{r.count}</TableCell>
+                              <TableCell className="text-right tabular-nums">{money(r.totalAmount)}</TableCell>
+                              <TableCell className={cn("text-right tabular-nums", r.totalDifference < 0 ? "text-destructive" : "text-muted-foreground")}>
+                                {r.totalDifference < 0 ? "−" : ""}{money(r.totalDifference)}
+                              </TableCell>
+                              <TableCell className="w-8">
+                                <ChevronRight className="h-4 w-4 text-muted-foreground/40 transition-all group-hover/row:text-primary group-hover/row:translate-x-0.5" />
+                              </TableCell>
+                            </TableRow>
+                          ))
+                        )}
+                        <TableRow className="border-border/40 bg-muted/30 font-semibold">
+                          <TableCell>Total</TableCell>
+                          <TableCell className="text-right tabular-nums">{csh.totalSettlements}</TableCell>
+                          <TableCell className="text-right tabular-nums">{money(csh.totalAmount)}</TableCell>
+                          <TableCell className={cn("text-right tabular-nums", csh.totalDifference < 0 ? "text-destructive" : "")}>
+                            {csh.totalDifference < 0 ? "−" : ""}{money(csh.totalDifference)}
+                          </TableCell>
+                          <TableCell className="w-8" />
+                        </TableRow>
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </section>
+      )}
+
       {/* Deals Performance (same "reports" permission gate) */}
       {salesByChannelVisible && (
         <section
@@ -4360,14 +5445,55 @@ const Dashboard = () => {
         </section>
       )}
 
-      {/* Dough / Short-Life Batches */}
-      <div>
-        <h3 className="text-sm font-semibold text-muted-foreground mb-3 flex items-center gap-2">
-          <Clock className="h-4 w-4" />
-          Dough / Short-Life Batches
-        </h3>
-        <Card className="shadow-sm">
-          <CardContent className="p-5">
+      {/* Dough / Short-Life Batches — a live view, no date filter (see state comment above) */}
+      <section
+        aria-label="Dough / Short-Life Batches"
+        className="rounded-2xl border border-border/80 bg-card/40 backdrop-blur-md shadow-sm overflow-hidden transition-all"
+      >
+        <div className={cn("p-4 sm:p-5 bg-card/70", !doughSectionCollapsed && "border-b border-border/50")}>
+          <div className="flex items-center justify-between gap-3">
+            <div
+              className="flex items-center gap-3 cursor-pointer select-none group"
+              onClick={() => setDoughSectionCollapsed((prev) => !prev)}
+            >
+              <div className="h-9 w-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center border border-primary/20 shrink-0 shadow-sm group-hover:bg-primary/20 transition-colors">
+                <Clock className="h-4 w-4" />
+              </div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-lg sm:text-xl font-bold tracking-tight text-foreground group-hover:text-primary transition-colors">
+                  Dough / Short-Life Batches
+                </h2>
+                {doughSectionCollapsed && (
+                  <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full border bg-primary/10 text-primary border-primary/20">
+                    {doughBatches.length} active
+                  </span>
+                )}
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setDoughSectionCollapsed((prev) => !prev)}
+                className="h-8 px-2.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/70 gap-1.5 rounded-lg border border-border/50"
+                title={doughSectionCollapsed ? "Expand Dough / Short-Life Batches" : "Collapse Dough / Short-Life Batches"}
+                aria-label={doughSectionCollapsed ? "Expand Dough / Short-Life Batches" : "Collapse Dough / Short-Life Batches"}
+              >
+                <span className="text-xs font-medium hidden sm:inline">{doughSectionCollapsed ? "Show" : "Hide"}</span>
+                <ChevronDown
+                  className={cn(
+                    "h-4 w-4 transition-transform duration-200",
+                    doughSectionCollapsed ? "-rotate-90" : "rotate-0"
+                  )}
+                />
+              </Button>
+            </div>
+          </div>
+        </div>
+
+        {!doughSectionCollapsed && (
+          <div className="p-4 sm:p-5">
             {doughBatches.length === 0 ? (
               <p className="text-sm text-muted-foreground py-4 text-center">No active dough batches</p>
             ) : (
@@ -4407,372 +5533,472 @@ const Dashboard = () => {
                 })}
               </div>
             )}
-          </CardContent>
-        </Card>
-      </div>
+          </div>
+        )}
+      </section>
 
-      {/* Day-wise Sales (This Week) */}
-      <div>
-        <h3 className="text-sm font-semibold text-muted-foreground mb-3 flex items-center gap-2">
-          <BarChart3 className="h-4 w-4" />
-          Day-wise Sales (This Week)
-        </h3>
-        <ClickableCard interactive={salesDrillEnabled} onClick={goToSales}>
-          <CardContent className="p-5">
-            <div className="h-[180px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={d?.daywiseSales ?? []} margin={{ top: 8, right: 8, left: 0, bottom: 4 }}>
-                  <XAxis dataKey="label" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
-                  <YAxis tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
-                  <Tooltip content={<ChartTooltip />} cursor={{ fill: "hsl(var(--muted) / 0.15)", radius: 4 }} />
-                  <Bar dataKey="sales" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
+      {/* Customer Analytics (same "reports" permission gate) */}
+      {salesByChannelVisible && (
+        <section
+          aria-label="Customer Analytics"
+          className="rounded-2xl border border-border/80 bg-card/40 backdrop-blur-md shadow-sm overflow-hidden transition-all"
+        >
+          <div className={cn("p-4 sm:p-5 space-y-4 bg-card/70", !custSectionCollapsed && "border-b border-border/50")}>
+            <div className="flex items-center justify-between gap-3">
+              <div
+                className="flex items-center gap-3 cursor-pointer select-none group"
+                onClick={() => setCustSectionCollapsed((prev) => !prev)}
+              >
+                <div className="h-9 w-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center border border-primary/20 shrink-0 shadow-sm group-hover:bg-primary/20 transition-colors">
+                  <Users className="h-4 w-4" />
+                </div>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-lg sm:text-xl font-bold tracking-tight text-foreground group-hover:text-primary transition-colors">
+                    Customer Analytics
+                  </h2>
+                  {custSectionCollapsed && cust && (
+                    <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full border bg-primary/10 text-primary border-primary/20">
+                      {cust.newCustomers} new
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setCustSectionCollapsed((prev) => !prev)}
+                  className="h-8 px-2.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/70 gap-1.5 rounded-lg border border-border/50"
+                  title={custSectionCollapsed ? "Expand Customer Analytics" : "Collapse Customer Analytics"}
+                  aria-label={custSectionCollapsed ? "Expand Customer Analytics" : "Collapse Customer Analytics"}
+                >
+                  <span className="text-xs font-medium hidden sm:inline">{custSectionCollapsed ? "Show" : "Hide"}</span>
+                  <ChevronDown
+                    className={cn(
+                      "h-4 w-4 transition-transform duration-200",
+                      custSectionCollapsed ? "-rotate-90" : "rotate-0"
+                    )}
+                  />
+                </Button>
+              </div>
             </div>
-          </CardContent>
-        </ClickableCard>
-      </div>
 
-      {/* Growth vs Last Month */}
-      <div>
-        <h3 className="text-sm font-semibold text-muted-foreground mb-3 flex items-center gap-2">
-          <TrendingUp className="h-4 w-4" />
-          Growth vs Last Month
-        </h3>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          {[
-            { label: "Online Growth", value: d?.month.growthOnlinePct ?? 0 },
-            { label: "Offline Growth", value: d?.month.growthOfflinePct ?? 0 },
-            { label: "Overall Growth", value: d?.month.overallGrowthPct ?? 0 },
-          ].map(({ label, value }) => (
-            <Card key={label} className="shadow-sm">
-              <CardContent className="p-5">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-xs text-muted-foreground font-medium">{label}</p>
-                    <p className={`text-2xl font-bold mt-1 ${value >= 0 ? "text-success" : "text-destructive"}`}>
-                      {value >= 0 ? "+" : ""}{value}%
-                    </p>
+            {!custSectionCollapsed && (
+              <div className="flex items-center gap-2.5 flex-wrap pt-3 border-t border-border/40">
+                <div className="inline-flex items-center p-0.5 rounded-lg bg-muted/60 border border-border/60 shadow-sm">
+                  {(["Today", "This Week", "This Month"] as const).map((p) => (
+                    <button
+                      key={p}
+                      type="button"
+                      onClick={() => setCustRange(p)}
+                      className={cn(
+                        "px-3 py-1.5 text-xs font-medium rounded-md transition-all",
+                        custPreset === p
+                          ? "bg-background text-foreground shadow-sm font-semibold"
+                          : "text-muted-foreground hover:text-foreground"
+                      )}
+                    >
+                      {p}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="inline-flex items-center gap-1.5">
+                  <div className="w-36">
+                    <DatePicker
+                      value={custFromStr}
+                      onChange={(val) => { setCustFromStr(val); setCustPreset("Custom"); }}
+                      placeholder="Start date"
+                      className="h-8 text-xs bg-background"
+                    />
                   </div>
-                  <div className={`h-10 w-10 rounded-lg flex items-center justify-center ${value >= 0 ? "bg-success/10" : "bg-destructive/10"}`}>
-                    {value >= 0
-                      ? <ArrowUpCircle className="h-5 w-5 text-success" />
-                      : <ArrowDownCircle className="h-5 w-5 text-destructive" />
-                    }
+                  <span className="text-xs text-muted-foreground/60 font-medium px-0.5">to</span>
+                  <div className="w-36">
+                    <DatePicker
+                      value={custToStr}
+                      onChange={(val) => { setCustToStr(val); setCustPreset("Custom"); }}
+                      min={custFromStr}
+                      placeholder="End date"
+                      className="h-8 text-xs bg-background"
+                    />
                   </div>
                 </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      </div>
 
-      {/* Customer Intelligence */}
-      {customerIntelVisible && (
-        <div>
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-semibold text-muted-foreground flex items-center gap-2">
-              <Users className="h-4 w-4" />
-              Customer Intelligence
-            </h3>
-            {/* The zone itself is gated on hasPermission("reports"), so this link is always reachable here. */}
-            <Button variant="ghost" size="sm" className="h-7 text-xs gap-1 text-muted-foreground" onClick={() => navigate("/reports")}>
-              View full reports <ChevronRight className="h-3 w-3" />
-            </Button>
+                <span className="text-[11px] text-muted-foreground/70">No time-of-day filter — customer acquisition isn't hourly.</span>
+              </div>
+            )}
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
-            <Card className="shadow-sm">
-              <CardContent className="p-5">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-xs text-muted-foreground font-medium">Unique Customers (This Week)</p>
-                    <p className="text-2xl font-bold mt-1">{uniqueCustomersThisWeek}</p>
+          {!custSectionCollapsed && (
+            <div className="p-4 sm:p-5">
+              {custLoading || !cust ? (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                    {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-20 rounded-lg" />)}
                   </div>
-                  <div className="h-10 w-10 rounded-lg flex items-center justify-center bg-primary/10">
-                    <Users className="h-5 w-5 text-primary" />
-                  </div>
+                  <Skeleton className="h-48 rounded-xl" />
                 </div>
-              </CardContent>
-            </Card>
-          </div>
+              ) : (
+                <div className="space-y-4">
+                  {/* Headline tiles */}
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                    <div className="rounded-lg bg-background/70 border border-border/50 p-3.5">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">New Customers</p>
+                      <p className="text-xl font-bold tracking-tight text-foreground mt-0.5">{cust.newCustomers.toLocaleString()}</p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">{cust.totalCustomersActive.toLocaleString()} active this period</p>
+                    </div>
+                    <div className="rounded-lg bg-background/70 border border-border/50 p-3.5">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Returning Customers</p>
+                      <p className="text-xl font-bold tracking-tight text-foreground mt-0.5">{cust.returningCustomers.toLocaleString()}</p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">{cust.repeatRatePct}% repeat rate</p>
+                    </div>
+                    <div className="rounded-lg bg-background/70 border border-border/50 p-3.5">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Revenue from Customers</p>
+                      <p className="text-xl font-bold tracking-tight text-foreground mt-0.5">{money(cust.totalRevenue)}</p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">{cust.totalOrders.toLocaleString()} orders</p>
+                    </div>
+                    <div className="rounded-lg bg-background/70 border border-border/50 p-3.5">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Avg Order Value</p>
+                      <p className="text-xl font-bold tracking-tight text-foreground mt-0.5">{money(cust.avgOrderValue)}</p>
+                    </div>
+                  </div>
 
-          {tileVisible("top-customers") && (
-            <Card className="shadow-sm mb-4">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base">Top 10 Customers</CardTitle>
-              </CardHeader>
-              <CardContent className="p-0">
-                {(d?.topCustomers ?? []).length === 0 ? (
-                  <p className="text-sm text-muted-foreground py-4 text-center">No customer history available yet</p>
-                ) : (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Customer</TableHead>
-                        <TableHead className="text-right">Orders</TableHead>
-                        <TableHead className="text-right">Spent</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {(d?.topCustomers ?? []).map((c, idx) => (
-                        <TableRow
-                          key={c.customerId ?? `${c.name}-${idx}`}
-                          className={cn(c.customerId && "cursor-pointer hover:bg-muted/30")}
-                          onClick={c.customerId ? () => navigate(`/customers/${c.customerId}`) : undefined}
-                        >
-                          <TableCell className="font-medium">{c.name}</TableCell>
-                          <TableCell className="text-right">{c.totalOrders}</TableCell>
-                          <TableCell className="text-right">{currency} {c.totalSpent.toLocaleString()}</TableCell>
+                  {/* Trend over time */}
+                  <div className="rounded-xl border border-border/50 bg-card/40 p-4">
+                    <p className="text-sm font-semibold text-foreground mb-3">New Customers Trend</p>
+                    {custTrendChartData.every((t) => t.newCustomers === 0) ? (
+                      <p className="text-xs text-muted-foreground py-8 text-center">No new customers this period.</p>
+                    ) : (
+                      <div className="h-56">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <LineChart data={custTrendChartData} margin={{ top: 10, right: 10 }}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                            <XAxis dataKey="label" tick={{ fontSize: 10 }} axisLine={{ stroke: "hsl(var(--border))" }} tickLine={false} interval="preserveStartEnd" />
+                            <YAxis tick={{ fontSize: 12 }} axisLine={false} tickLine={false} allowDecimals={false} />
+                            <Tooltip content={<ChartTooltip />} cursor={{ stroke: "hsl(var(--border))" }} />
+                            <Line type="monotone" dataKey="newCustomers" name="New" stroke="hsl(var(--primary))" strokeWidth={2} dot={{ r: 2, cursor: "pointer" }} activeDot={{ r: 4, cursor: "pointer" }} />
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Top customers by spend — top 8 */}
+                  {custTopChartData.length > 0 && (
+                    <div className="rounded-xl border border-border/50 bg-card/40 p-4">
+                      <p className="text-sm font-semibold text-foreground mb-3">Top Customers by Spend</p>
+                      <div className="h-64">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart
+                            data={custTopChartData}
+                            barCategoryGap="24%"
+                            margin={{ top: 20 }}
+                            onClick={(state) => {
+                              const p = state?.activePayload?.[0]?.payload as { name: string } | undefined;
+                              if (p?.name) goToCustomers(p.name);
+                            }}
+                          >
+                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                            <XAxis dataKey="name" tick={{ fontSize: 11 }} axisLine={{ stroke: "hsl(var(--border))" }} tickLine={false} interval={0} angle={-20} textAnchor="end" height={54} />
+                            <YAxis tick={{ fontSize: 12 }} axisLine={false} tickLine={false} tickFormatter={(v) => `${currency}${(v / 1000).toFixed(0)}k`} />
+                            <Tooltip content={<ChartTooltip />} cursor={{ fill: "hsl(var(--muted) / 0.15)", radius: 4 }} />
+                            <Bar dataKey="spent" name="Spent" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} maxBarSize={48} cursor="pointer" />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="rounded-xl border border-border/50 bg-card/40 overflow-hidden">
+                    <div className="px-4 pt-3 text-xs text-muted-foreground">Top 10 customers by spend in this period.</div>
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="hover:bg-transparent border-border/40">
+                          <TableHead>Customer</TableHead>
+                          <TableHead className="text-right">Orders</TableHead>
+                          <TableHead className="text-right">Spent</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead className="w-8" />
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                )}
-              </CardContent>
-            </Card>
+                      </TableHeader>
+                      <TableBody>
+                        {(cust.topCustomers ?? []).length === 0 ? (
+                          <TableRow>
+                            <TableCell colSpan={5} className="text-center text-muted-foreground py-6">No customer activity this period.</TableCell>
+                          </TableRow>
+                        ) : (
+                          cust.topCustomers.map((r, idx) => (
+                            <TableRow
+                              key={r.customerId ?? `${r.name}-${idx}`}
+                              className="border-border/40 cursor-pointer hover:bg-primary/5 transition-colors group/row"
+                              onClick={() => goToCustomers(r.name)}
+                              title="View this customer in Customers"
+                            >
+                              <TableCell className="font-medium">{r.name}</TableCell>
+                              <TableCell className="text-right tabular-nums">{r.orders}</TableCell>
+                              <TableCell className="text-right tabular-nums">{money(r.spent)}</TableCell>
+                              <TableCell>
+                                <span className={cn(
+                                  "text-[10px] font-semibold px-2 py-0.5 rounded-full border",
+                                  r.isNew ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/30" : "bg-muted text-muted-foreground border-border/50"
+                                )}>
+                                  {r.isNew ? "New" : "Returning"}
+                                </span>
+                              </TableCell>
+                              <TableCell className="w-8">
+                                <ChevronRight className="h-4 w-4 text-muted-foreground/40 transition-all group-hover/row:text-primary group-hover/row:translate-x-0.5" />
+                              </TableCell>
+                            </TableRow>
+                          ))
+                        )}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
+              )}
+            </div>
           )}
+        </section>
+      )}
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <Card className="shadow-sm">
-              <CardHeader className="pb-2"><CardTitle className="text-base">Peak Hours (This Week)</CardTitle></CardHeader>
-              <CardContent>
-                <div className="h-[220px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={peakHoursChart}>
-                      <XAxis dataKey="hour" tick={{ fontSize: 9 }} interval={1} stroke="hsl(var(--muted-foreground))" />
-                      <YAxis tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
-                      <Tooltip
-                        content={({ active, payload, label }) => {
-                          if (!active || !payload?.length) return null;
-                          const row = payload[0].payload as { orders: number; revenue: number };
-                          return (
-                            <div className="rounded-md border bg-popover px-3 py-2 text-xs shadow-sm">
-                              <p className="font-medium mb-1">{label}</p>
-                              <p className="text-muted-foreground">{row.orders} orders</p>
-                              <p className="text-muted-foreground">{currency} {row.revenue.toLocaleString()} revenue</p>
-                            </div>
-                          );
-                        }}
-                        cursor={{ fill: "hsl(var(--muted) / 0.15)", radius: 4 }}
-                      />
-                      <Bar dataKey="orders" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
+      {/* Order Timing & Patterns (same "reports" permission gate) */}
+      {salesByChannelVisible && (
+        <section
+          aria-label="Order Timing & Patterns"
+          className="rounded-2xl border border-border/80 bg-card/40 backdrop-blur-md shadow-sm overflow-hidden transition-all"
+        >
+          <div className={cn("p-4 sm:p-5 space-y-4 bg-card/70", !stSectionCollapsed && "border-b border-border/50")}>
+            <div className="flex items-center justify-between gap-3">
+              <div
+                className="flex items-center gap-3 cursor-pointer select-none group"
+                onClick={() => setStSectionCollapsed((prev) => !prev)}
+              >
+                <div className="h-9 w-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center border border-primary/20 shrink-0 shadow-sm group-hover:bg-primary/20 transition-colors">
+                  <Clock className="h-4 w-4" />
                 </div>
-              </CardContent>
-            </Card>
-
-            <Card className="shadow-sm">
-              <CardHeader className="pb-2"><CardTitle className="text-base">Customer Activity (This Week)</CardTitle></CardHeader>
-              <CardContent>
-                <div className="h-[220px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={customerActivityChart}>
-                      <XAxis dataKey="day" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
-                      <YAxis tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
-                      <Tooltip content={<ChartTooltip />} cursor={{ fill: "hsl(var(--muted) / 0.15)", radius: 4 }} />
-                      <Legend wrapperStyle={{ fontSize: 11 }} />
-                      <Bar dataKey="newCustomers" stackId="c" name="New" fill="hsl(var(--primary))" />
-                      <Bar dataKey="returningCustomers" stackId="c" name="Returning" fill="hsl(var(--info))" radius={[4, 4, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-lg sm:text-xl font-bold tracking-tight text-foreground group-hover:text-primary transition-colors">
+                    Order Timing & Patterns
+                  </h2>
+                  {stSectionCollapsed && stBusiestHour && (
+                    <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full border bg-primary/10 text-primary border-primary/20">
+                      Busiest: {stBusiestHour.hour}:00
+                    </span>
+                  )}
                 </div>
-              </CardContent>
-            </Card>
+              </div>
 
-            <Card className="shadow-sm">
-              <CardHeader className="pb-2"><CardTitle className="text-base">Order Type Trend (This Week)</CardTitle></CardHeader>
-              <CardContent>
-                <div className="h-[220px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={orderTypeTrendChart}>
-                      <XAxis dataKey="day" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
-                      <YAxis tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
-                      <Tooltip content={<ChartTooltip />} cursor={{ fill: "hsl(var(--muted) / 0.15)", radius: 4 }} />
-                      <Legend wrapperStyle={{ fontSize: 11 }} />
-                      <Bar dataKey="offline" stackId="t" name="Offline" fill="hsl(var(--success))" />
-                      <Bar dataKey="online" stackId="t" name="Online" fill="hsl(var(--info))" radius={[4, 4, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
+              <div className="flex items-center gap-2 shrink-0">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setStSectionCollapsed((prev) => !prev)}
+                  className="h-8 px-2.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/70 gap-1.5 rounded-lg border border-border/50"
+                  title={stSectionCollapsed ? "Expand Order Timing & Patterns" : "Collapse Order Timing & Patterns"}
+                  aria-label={stSectionCollapsed ? "Expand Order Timing & Patterns" : "Collapse Order Timing & Patterns"}
+                >
+                  <span className="text-xs font-medium hidden sm:inline">{stSectionCollapsed ? "Show" : "Hide"}</span>
+                  <ChevronDown
+                    className={cn(
+                      "h-4 w-4 transition-transform duration-200",
+                      stSectionCollapsed ? "-rotate-90" : "rotate-0"
+                    )}
+                  />
+                </Button>
+              </div>
+            </div>
+
+            {!stSectionCollapsed && (
+              <div className="flex items-center gap-2.5 flex-wrap pt-3 border-t border-border/40">
+                <div className="inline-flex items-center p-0.5 rounded-lg bg-muted/60 border border-border/60 shadow-sm">
+                  {(["Today", "This Week", "This Month"] as const).map((p) => (
+                    <button
+                      key={p}
+                      type="button"
+                      onClick={() => setStRange(p)}
+                      className={cn(
+                        "px-3 py-1.5 text-xs font-medium rounded-md transition-all",
+                        stPreset === p
+                          ? "bg-background text-foreground shadow-sm font-semibold"
+                          : "text-muted-foreground hover:text-foreground"
+                      )}
+                    >
+                      {p}
+                    </button>
+                  ))}
                 </div>
-              </CardContent>
-            </Card>
 
-            <Card className="shadow-sm">
-              <CardHeader className="pb-2"><CardTitle className="text-base">Day-of-Week Performance (60 Days)</CardTitle></CardHeader>
-              <CardContent>
-                <div className="h-[220px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={dayPerformanceChart}>
-                      <XAxis dataKey="label" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
-                      <YAxis tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
-                      <Tooltip
-                        content={({ active, payload, label }) => {
-                          if (!active || !payload?.length) return null;
-                          const row = payload[0].payload as { orderCount: number; avgSales: number };
-                          return (
-                            <div className="rounded-md border bg-popover px-3 py-2 text-xs shadow-sm">
-                              <p className="font-medium mb-1">{label}</p>
-                              <p className="text-muted-foreground">Avg order: {currency} {row.avgSales.toLocaleString()}</p>
-                              <p className="text-muted-foreground">{row.orderCount} orders</p>
-                            </div>
-                          );
-                        }}
-                        cursor={{ fill: "hsl(var(--muted) / 0.15)", radius: 4 }}
-                      />
-                      <Bar dataKey="avgSales" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
+                <div className="inline-flex items-center gap-1.5">
+                  <div className="w-36">
+                    <DatePicker
+                      value={stFromStr}
+                      onChange={(val) => { setStFromStr(val); setStPreset("Custom"); }}
+                      placeholder="Start date"
+                      className="h-8 text-xs bg-background"
+                    />
+                  </div>
+                  <span className="text-xs text-muted-foreground/60 font-medium px-0.5">to</span>
+                  <div className="w-36">
+                    <DatePicker
+                      value={stToStr}
+                      onChange={(val) => { setStToStr(val); setStPreset("Custom"); }}
+                      min={stFromStr}
+                      placeholder="End date"
+                      className="h-8 text-xs bg-background"
+                    />
+                  </div>
                 </div>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-      )}
 
-      {/* Today's Operations */}
-      {zoneVisible("operations") && (
-        <div>
-          <h3 className="text-sm font-semibold text-muted-foreground mb-3 flex items-center gap-2">
-            <BarChart3 className="h-4 w-4" />
-            Today's Operations
-          </h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <StatTile
-              visible={tileVisible("live-orders")} interactive onClick={() => goToTile("live-orders")}
-              icon={BarChart3} title="Live Orders"
-              value={(d?.today.liveStatus.pending ?? 0) + (d?.today.liveStatus.preparing ?? 0) + (d?.today.liveStatus.ready ?? 0)}
-              sub={`Pending ${d?.today.liveStatus.pending ?? 0} · Preparing ${d?.today.liveStatus.preparing ?? 0} · Ready ${d?.today.liveStatus.ready ?? 0}`}
-            />
-            <StatTile
-              visible={tileVisible("kitchens-preparing")} interactive onClick={() => goToTile("kitchens-preparing")}
-              icon={ChefHat} title="Kitchens"
-              value={d?.today.liveStatus.preparing ?? 0}
-              sub="Orders in preparation"
-            />
-            <StatTile
-              visible={tileVisible("tables")} interactive onClick={() => goToTile("tables")}
-              icon={LayoutGrid} title="Tables"
-              value={d?.tables.occupied ?? 0}
-              sub={`${d?.tables.available ?? 0} available`}
-            />
-            <StatTile
-              visible={tileVisible("cancellation-requests")} interactive onClick={() => goToTile("cancellation-requests")}
-              icon={Ban} title="Cancellation Requests"
-              value={d?.pendingCancellations ?? 0}
-              valueClassName={(d?.pendingCancellations ?? 0) > 0 ? "text-warning" : undefined}
-              sub="Awaiting approval"
-            />
+                <span className="text-[11px] text-muted-foreground/70">Hours/weekdays shown are PKT wall-clock time.</span>
+              </div>
+            )}
           </div>
-        </div>
-      )}
 
-      {/* Inventory & Procurement */}
-      {zoneVisible("inventory") && (
-        <div>
-          <h3 className="text-sm font-semibold text-muted-foreground mb-3 flex items-center gap-2">
-            <Package className="h-4 w-4" />
-            Inventory & Procurement
-          </h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <StatTile
-              visible={tileVisible("low-stock")} interactive onClick={() => goToTile("low-stock")}
-              icon={Package} title="Low Stock Alert"
-              value={d?.lowStockCount ?? 0}
-              valueClassName={(d?.lowStockCount ?? 0) > 0 ? "text-destructive" : undefined}
-              sub="At or below threshold"
-            />
-            <StatTile
-              visible={tileVisible("pending-purchase-requests")} interactive onClick={() => goToTile("pending-purchase-requests")}
-              icon={ClipboardList} title="Pending Purchase Requests"
-              value={d?.pendingPurchaseRequests ?? 0}
-              valueClassName={(d?.pendingPurchaseRequests ?? 0) > 0 ? "text-warning" : undefined}
-            />
-            <StatTile
-              visible={tileVisible("pending-demands")} interactive onClick={() => goToTile("pending-demands")}
-              icon={ArrowLeftRight} title="Pending Demands"
-              value={d?.pendingDemands ?? 0}
-              valueClassName={(d?.pendingDemands ?? 0) > 0 ? "text-warning" : undefined}
-            />
-          </div>
-        </div>
-      )}
+          {!stSectionCollapsed && (
+            <div className="p-4 sm:p-5">
+              {stLoading || !st ? (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                    {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-20 rounded-lg" />)}
+                  </div>
+                  <Skeleton className="h-48 rounded-xl" />
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {/* Headline tiles */}
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                    <div className="rounded-lg bg-background/70 border border-border/50 p-3.5">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Busiest Hour</p>
+                      <p className="text-xl font-bold tracking-tight text-foreground mt-0.5">
+                        {stBusiestHour ? `${stBusiestHour.hour}:00` : "—"}
+                      </p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">{stBusiestHour ? `${stBusiestHour.orders} orders` : "No orders this period"}</p>
+                    </div>
+                    <div className="rounded-lg bg-background/70 border border-border/50 p-3.5">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Busiest Day</p>
+                      <p className="text-xl font-bold tracking-tight text-foreground mt-0.5">{stBusiestDay?.label ?? "—"}</p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">{stBusiestDay ? `Avg ${money(stBusiestDay.avgSales)}` : "No orders this period"}</p>
+                    </div>
+                    <div className="rounded-lg bg-background/70 border border-border/50 p-3.5">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Total Orders</p>
+                      <p className="text-xl font-bold tracking-tight text-foreground mt-0.5">{stTotalOrders.toLocaleString()}</p>
+                    </div>
+                    <div className="rounded-lg bg-background/70 border border-border/50 p-3.5">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Total Revenue</p>
+                      <p className="text-xl font-bold tracking-tight text-foreground mt-0.5">{money(stTotalRevenue)}</p>
+                    </div>
+                  </div>
 
-      {/* People */}
-      {zoneVisible("people") && (
-        <div>
-          <h3 className="text-sm font-semibold text-muted-foreground mb-3 flex items-center gap-2">
-            <UserCheck className="h-4 w-4" />
-            People
-          </h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <StatTile
-              visible={tileVisible("attendance-today")} interactive onClick={() => goToTile("attendance-today")}
-              icon={UserCheck} title="Today's Attendance"
-              value={d?.attendanceToday.present ?? 0}
-              sub={`Late ${d?.attendanceToday.late ?? 0} · Absent ${d?.attendanceToday.absent ?? 0}`}
-            />
-            <StatTile
-              visible={tileVisible("pending-leave")} interactive onClick={() => goToTile("pending-leave")}
-              icon={CalendarOff} title="Pending Leave Requests"
-              value={d?.pendingLeaveRequests ?? 0}
-              valueClassName={(d?.pendingLeaveRequests ?? 0) > 0 ? "text-warning" : undefined}
-            />
-          </div>
-        </div>
-      )}
+                  {/* Peak Hours */}
+                  <div className="rounded-xl border border-border/50 bg-card/40 p-4">
+                    <p className="text-sm font-semibold text-foreground mb-3">Peak Hours</p>
+                    {stTotalOrders === 0 ? (
+                      <p className="text-xs text-muted-foreground py-8 text-center">No orders this period.</p>
+                    ) : (
+                      <div className="h-56">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart
+                            data={stPeakHoursChartData}
+                            margin={{ top: 10, right: 10 }}
+                            onClick={(state) => {
+                              const p = state?.activePayload?.[0]?.payload as { hour: number } | undefined;
+                              if (p) goToSalesByHour(p.hour);
+                            }}
+                          >
+                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                            <XAxis dataKey="label" tick={{ fontSize: 9 }} interval={1} axisLine={{ stroke: "hsl(var(--border))" }} tickLine={false} />
+                            <YAxis tick={{ fontSize: 12 }} axisLine={false} tickLine={false} allowDecimals={false} />
+                            <Tooltip
+                              content={({ active, payload, label }) => {
+                                if (!active || !payload?.length) return null;
+                                const row = payload[0].payload as { orders: number; revenue: number };
+                                return (
+                                  <div className="rounded-md border bg-popover px-3 py-2 text-xs shadow-sm">
+                                    <p className="font-medium mb-1">{label}</p>
+                                    <p className="text-muted-foreground">{row.orders} orders</p>
+                                    <p className="text-muted-foreground">{money(row.revenue)} revenue</p>
+                                  </div>
+                                );
+                              }}
+                              cursor={{ fill: "hsl(var(--muted) / 0.15)", radius: 4 }}
+                            />
+                            <Bar dataKey="orders" name="Orders" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} cursor="pointer" />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                    )}
+                  </div>
 
-      {/* Delivery */}
-      {zoneVisible("delivery") && (
-        <div>
-          <h3 className="text-sm font-semibold text-muted-foreground mb-3 flex items-center gap-2">
-            <Bike className="h-4 w-4" />
-            Delivery
-          </h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <StatTile
-              visible={tileVisible("active-deliveries")} interactive onClick={() => goToTile("active-deliveries")}
-              icon={Bike} title="Active Deliveries"
-              value={d?.deliveryActive ?? 0}
-            />
-          </div>
-        </div>
-      )}
+                  {/* Orders by Channel */}
+                  <div className="rounded-xl border border-border/50 bg-card/40 p-4">
+                    <p className="text-sm font-semibold text-foreground mb-3">Orders by Channel</p>
+                    {stChannelChartData.every((t) => t.dineIn === 0 && t.takeaway === 0 && t.delivery === 0) ? (
+                      <p className="text-xs text-muted-foreground py-8 text-center">No Dine In / Take Away / Delivery orders this period.</p>
+                    ) : (
+                      <div className="h-64">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart data={stChannelChartData} margin={{ top: 10, right: 10 }}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                            <XAxis dataKey="label" tick={{ fontSize: 10 }} axisLine={{ stroke: "hsl(var(--border))" }} tickLine={false} interval="preserveStartEnd" />
+                            <YAxis tick={{ fontSize: 12 }} axisLine={false} tickLine={false} allowDecimals={false} />
+                            <Tooltip content={<ChartTooltip />} cursor={{ fill: "hsl(var(--muted) / 0.15)", radius: 4 }} />
+                            <Legend wrapperStyle={{ fontSize: 11 }} />
+                            <Bar
+                              dataKey="dineIn" stackId="ch" name="Dine In" fill="hsl(var(--primary))" cursor="pointer"
+                              onClick={(p: any) => p?.date && goToSalesByChannelDay("Dine In", p.date)}
+                            />
+                            <Bar
+                              dataKey="takeaway" stackId="ch" name="Take Away" fill="hsl(var(--info))" cursor="pointer"
+                              onClick={(p: any) => p?.date && goToSalesByChannelDay("Take Away", p.date)}
+                            />
+                            <Bar
+                              dataKey="delivery" stackId="ch" name="Delivery" fill="hsl(var(--success))" radius={[4, 4, 0, 0]} cursor="pointer"
+                              onClick={(p: any) => p?.date && goToSalesByChannelDay("Delivery", p.date)}
+                            />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                    )}
+                  </div>
 
-      {/* Reservations */}
-      {zoneVisible("reservations") && (
-        <div>
-          <h3 className="text-sm font-semibold text-muted-foreground mb-3 flex items-center gap-2">
-            <CalendarCheck className="h-4 w-4" />
-            Reservations
-          </h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <StatTile
-              visible={tileVisible("reservations-today")} interactive onClick={() => goToTile("reservations-today")}
-              icon={CalendarCheck} title="Today's Reservations"
-              value={d?.reservationsToday ?? 0}
-            />
-          </div>
-        </div>
-      )}
-
-      {/* Cash Hub */}
-      {zoneVisible("cashHub") && (
-        <div>
-          <h3 className="text-sm font-semibold text-muted-foreground mb-3 flex items-center gap-2">
-            <Coins className="h-4 w-4" />
-            Cash Hub
-          </h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <StatTile
-              visible={tileVisible("unsettled-cash")} interactive onClick={() => goToTile("unsettled-cash")}
-              icon={Coins} title="Unsettled Cash"
-              value={`${currency} ${(d?.cashHub.totalUnsettled ?? 0).toLocaleString()}`}
-              sub={`${d?.cashHub.staffCount ?? 0} staff`}
-            />
-          </div>
-        </div>
+                  {/* Day-of-Week Performance */}
+                  <div className="rounded-xl border border-border/50 bg-card/40 p-4">
+                    <p className="text-sm font-semibold text-foreground mb-3">Day-of-Week Performance</p>
+                    {stTotalOrders === 0 ? (
+                      <p className="text-xs text-muted-foreground py-8 text-center">No orders this period.</p>
+                    ) : (
+                      <div className="h-56">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart data={st.dayOfWeek} margin={{ top: 10, right: 10 }}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                            <XAxis dataKey="label" tick={{ fontSize: 11 }} axisLine={{ stroke: "hsl(var(--border))" }} tickLine={false} />
+                            <YAxis tick={{ fontSize: 12 }} axisLine={false} tickLine={false} tickFormatter={(v) => `${currency}${(v / 1000).toFixed(0)}k`} />
+                            <Tooltip
+                              content={({ active, payload, label }) => {
+                                if (!active || !payload?.length) return null;
+                                const row = payload[0].payload as { orderCount: number; avgSales: number };
+                                return (
+                                  <div className="rounded-md border bg-popover px-3 py-2 text-xs shadow-sm">
+                                    <p className="font-medium mb-1">{label}</p>
+                                    <p className="text-muted-foreground">Avg order: {money(row.avgSales)}</p>
+                                    <p className="text-muted-foreground">{row.orderCount} orders</p>
+                                  </div>
+                                );
+                              }}
+                              cursor={{ fill: "hsl(var(--muted) / 0.15)", radius: 4 }}
+                            />
+                            <Bar dataKey="avgSales" name="Avg Sale" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </section>
       )}
     </div>
   );

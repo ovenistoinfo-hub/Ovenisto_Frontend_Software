@@ -52,12 +52,25 @@ function invalidateCacheForEvents(eventsList: string[]): void {
       api.clearCache("/purchases");
       api.clearCache("/reports");
     } else if (evt.startsWith("reservation:")) {
+      // Same /reports gap as the order:/purchase:/cancellationRequest: branches above — the
+      // Dashboard's Reservations Analytics section reads /reports/reservations.
       api.clearCache("/reservations");
+      api.clearCache("/reports");
     } else if (evt.startsWith("delivery:")) {
+      // Same /reports gap as every other branch above — the Dashboard's Delivery / Rider
+      // Performance section reads /reports/delivery.
       api.clearCache("/delivery/dashboard");
       api.clearCache("/delivery/my-assignments");
       api.clearCache("/delivery/my-stats");
       api.clearCache("/orders");
+      api.clearCache("/reports");
+    } else if (evt.startsWith("cashSettlement:")) {
+      // This branch didn't exist at all before — createSettlement emits
+      // "cashSettlement:created" but nothing here ever cleared any cache for it, so the
+      // Dashboard's new Cash Hub Settlement Trends section wouldn't have refreshed on a new
+      // settlement even with its own useModuleEvents subscription in place.
+      api.clearCache("/cash-settlements");
+      api.clearCache("/reports");
     }
   });
 }

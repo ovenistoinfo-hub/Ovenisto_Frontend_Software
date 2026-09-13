@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Coins,
@@ -72,10 +73,53 @@ const CashHub = () => {
   const [liveSearchQuery, setLiveSearchQuery] = useState("");
   const [liveRoleFilter, setLiveRoleFilter] = useState<string>("all");
 
-  // Filter state for Settlement History
+  // Filter state for Settlement History -- Dashboard-pill-style date range (Today/This
+  // Week/This Month presets + two DatePickers), same pattern as Expenses.tsx/StockAdjustments.tsx.
   const [searchQuery, setSearchQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState<string>("all");
-  const [dateFilter, setDateFilter] = useState<string>("");
+  const [rangeFrom, setRangeFrom] = useState("");
+  const [rangeTo, setRangeTo] = useState("");
+  const [historyPreset, setHistoryPreset] = useState<string | null>(null);
+
+  const toYmd = (d: Date): string => {
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  };
+  const applyHistoryPreset = (preset: "Today" | "This Week" | "This Month") => {
+    const now = new Date();
+    if (preset === "Today") {
+      setRangeFrom(toYmd(now)); setRangeTo(toYmd(now));
+    } else if (preset === "This Week") {
+      const from = new Date(now); from.setDate(from.getDate() - 7);
+      setRangeFrom(toYmd(from)); setRangeTo(toYmd(now));
+    } else {
+      setRangeFrom(toYmd(new Date(now.getFullYear(), now.getMonth(), 1))); setRangeTo(toYmd(now));
+    }
+    setHistoryPreset(preset);
+  };
+  const handleRangeFrom = (v: string) => { setRangeFrom(v); setHistoryPreset(null); };
+  const handleRangeTo = (v: string) => { setRangeTo(v); setHistoryPreset(null); };
+  const clearHistoryFilters = () => {
+    setSearchQuery(""); setRoleFilter("all"); setRangeFrom(""); setRangeTo(""); setHistoryPreset(null);
+  };
+
+  // Arriving from the Dashboard's "Cash Hub Settlement Trends" section switches to the Audit Log
+  // tab and pre-fills the date range (+ staff name into the free-text search, since this tab has
+  // no dedicated staffId dropdown). Re-seeds on every genuinely new navigation, not just first
+  // mount -- same useEffect-keyed-on-searchParams pattern used everywhere else this session.
+  const [searchParams] = useSearchParams();
+  useEffect(() => {
+    const from = searchParams.get("from");
+    const to = searchParams.get("to");
+    const staffName = searchParams.get("staffName");
+    if (from || to || staffName) {
+      setActiveTab("history");
+      if (from) setRangeFrom(from);
+      if (to) setRangeTo(to);
+      setHistoryPreset(null);
+      if (staffName) setSearchQuery(staffName);
+    }
+  }, [searchParams]);
 
   // Modal / Dialog state
   const [selectedStaffForSettlement, setSelectedStaffForSettlement] = useState<ActiveStaffBalance | null>(null);
@@ -116,12 +160,13 @@ const CashHub = () => {
     isLoading: isLoadingHistory,
     refetch: refetchHistory,
   } = useQuery({
-    queryKey: ["cash-settlement-history", roleFilter, dateFilter],
+    queryKey: ["cash-settlement-history", roleFilter, rangeFrom, rangeTo],
     queryFn: async () => {
       api.clearCache("/cash-settlements/history");
       return cashSettlementService.getHistory({
         role: roleFilter !== "all" ? roleFilter : undefined,
-        date: dateFilter || undefined,
+        from: rangeFrom || undefined,
+        to: rangeTo || undefined,
       });
     },
   });
@@ -691,7 +736,7 @@ const CashHub = () => {
 
         {/* Tab 2: Audit Log (History) */}
         <TabsContent value="history" className="space-y-4 mt-4">
-          <Card className="p-3.5 sm:p-4 border-border/80 bg-card/90 backdrop-blur-md rounded-2xl shadow-sm">
+          <Card className="p-3.5 sm:p-4 border-border/80 bg-card/90 backdrop-blur-md rounded-2xl shadow-sm space-y-3">
             <div className="flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between">
               <div className="relative flex-1 max-w-md">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -702,42 +747,56 @@ const CashHub = () => {
                   className="pl-9 h-9 text-xs rounded-xl bg-background"
                 />
               </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <Select value={roleFilter} onValueChange={setRoleFilter}>
-                  <SelectTrigger className="w-full sm:w-[150px] h-9 text-xs rounded-xl bg-background font-semibold">
-                    <SelectValue placeholder="All Roles" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Roles</SelectItem>
-                    <SelectItem value="Cashier">Cashiers</SelectItem>
-                    <SelectItem value="Waiter">Waiters</SelectItem>
-                    <SelectItem value="Delivery Rider">Delivery Riders</SelectItem>
-                  </SelectContent>
-                </Select>
+              <Select value={roleFilter} onValueChange={setRoleFilter}>
+                <SelectTrigger className="w-full sm:w-[150px] h-9 text-xs rounded-xl bg-background font-semibold">
+                  <SelectValue placeholder="All Roles" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Roles</SelectItem>
+                  <SelectItem value="Cashier">Cashiers</SelectItem>
+                  <SelectItem value="Waiter">Waiters</SelectItem>
+                  <SelectItem value="Delivery Rider">Delivery Riders</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
 
-                <DatePicker
-                  value={dateFilter}
-                  onChange={setDateFilter}
-                  clearable
-                  placeholder="Any date"
-                  className="w-full sm:w-[160px] h-9 text-xs rounded-xl font-semibold"
-                />
-
-                {(searchQuery || roleFilter !== "all" || dateFilter) && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      setSearchQuery("");
-                      setRoleFilter("all");
-                      setDateFilter("");
-                    }}
-                    className="h-9 text-xs font-semibold rounded-xl text-muted-foreground hover:text-foreground"
+            {/* Dashboard-pill-style date range -- same Today/This Week/This Month + paired
+                DatePickers pattern used on Expenses.tsx/StockAdjustments.tsx/Purchases.tsx. */}
+            <div className="flex items-center gap-2.5 flex-wrap pt-2 border-t border-border/40">
+              <div className="inline-flex items-center p-0.5 rounded-lg bg-muted/60 border border-border/60 shadow-sm">
+                {(["Today", "This Week", "This Month"] as const).map((p) => (
+                  <button
+                    key={p}
+                    type="button"
+                    onClick={() => applyHistoryPreset(p)}
+                    className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+                      historyPreset === p ? "bg-background text-foreground shadow-sm font-semibold" : "text-muted-foreground hover:text-foreground"
+                    }`}
                   >
-                    Clear Filters
-                  </Button>
-                )}
+                    {p}
+                  </button>
+                ))}
               </div>
+              <div className="inline-flex items-center gap-1.5">
+                <div className="w-36">
+                  <DatePicker value={rangeFrom} onChange={handleRangeFrom} placeholder="Start date" className="h-8 text-xs bg-background" />
+                </div>
+                <span className="text-xs text-muted-foreground/60 font-medium px-0.5">to</span>
+                <div className="w-36">
+                  <DatePicker value={rangeTo} onChange={handleRangeTo} min={rangeFrom || undefined} placeholder="End date" className="h-8 text-xs bg-background" />
+                </div>
+              </div>
+
+              {(searchQuery || roleFilter !== "all" || rangeFrom || rangeTo) && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={clearHistoryFilters}
+                  className="h-8 text-xs font-semibold rounded-xl text-muted-foreground hover:text-foreground"
+                >
+                  Clear Filters
+                </Button>
+              )}
             </div>
           </Card>
 

@@ -1,4 +1,5 @@
-import { useState, useMemo, Fragment } from "react";
+import { useState, useEffect, useMemo, Fragment } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Clock, FileText, Calendar, ChevronLeft, ChevronRight,
@@ -146,14 +147,33 @@ export default function AttendancePage() {
   const thirtyDaysAgo = new Date(Date.now() - 30 * 86_400_000).toISOString().split("T")[0];
 
   // Attendance filters
+  const [searchParams] = useSearchParams();
   const [attFrom, setAttFrom]         = useState(today);
   // "Jump to date" used to be a write-only uncontrolled input; the picker needs
   // a value, and showing the date that was jumped to is better anyway.
   const [jumpToDate, setJumpToDate]   = useState("");
   const [attTo, setAttTo]             = useState(today);
   const [attUserFilter, setAttUserFilter] = useState("all");
+  // Display name for a drill-down `userId` that isn't in `staffUsers` yet (fetch race) or ever
+  // (a deleted employee) — carried alongside `userId` so the <Select> trigger shows a real name
+  // instead of "Selected Employee", same convention as Sales.tsx's staffFilterName/dealName.
+  const [attUserFilterName, setAttUserFilterName] = useState("");
   const [editRow, setEditRow]         = useState<string | null>(null);
   const [editData, setEditData]       = useState({ clockIn: "", clockOut: "", status: "present", notes: "" });
+
+  // Arriving from the Dashboard's "Attendance / HR Analytics" section pre-fills the date range
+  // (+ userId/userName for a specific staff row/bar drill-down) via ?from=&to=&userId=&userName=.
+  // Re-seeds on every genuinely new navigation, not just first mount — the same useEffect-keyed-
+  // on-searchParams pattern Sales.tsx/CancellationRequests.tsx/Purchases.tsx use, so a second
+  // drill-down from the same open tab actually updates the filters.
+  useEffect(() => {
+    const from = searchParams.get("from");
+    const to = searchParams.get("to");
+    if (from) setAttFrom(from);
+    if (to) setAttTo(to);
+    setAttUserFilter(searchParams.get("userId") || "all");
+    setAttUserFilterName(searchParams.get("userName") || "");
+  }, [searchParams]);
 
   // Leave tab
   const [leaveFilter, setLeaveFilter] = useState("pending");
@@ -590,6 +610,9 @@ export default function AttendancePage() {
                 <SelectTrigger className="mt-1 w-48"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Employees</SelectItem>
+                  {attUserFilter !== "all" && !staffUsers.some(u => u.id === attUserFilter) && (
+                    <SelectItem value={attUserFilter}>{attUserFilterName || "Selected Employee"}</SelectItem>
+                  )}
                   {staffUsers.map(u => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}
                 </SelectContent>
               </Select>

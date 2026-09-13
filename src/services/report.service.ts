@@ -251,6 +251,161 @@ export interface AttendanceAnalyticsReport {
   trend: AttendanceTrendPoint[];
 }
 
+export interface ReservationStatusRow {
+  /** pending | confirmed | seated | completed | cancelled | noShow. */
+  status: string;
+  count: number;
+  guests: number;
+}
+
+export interface ReservationTrendPoint {
+  /** YYYY-MM-DD. */
+  date: string;
+  count: number;
+}
+
+export interface ReservationAnalyticsReport {
+  from: string | null;
+  to: string | null;
+  totalReservations: number;
+  totalGuests: number;
+  cancelledCount: number;
+  cancelRate: number;
+  noShowCount: number;
+  noShowRate: number;
+  /** Zero-filled against all six stored status values. Sorted by count desc. */
+  byStatus: ReservationStatusRow[];
+  /** One point per calendar day in range, zero-filled so the trend chart has no gaps. */
+  trend: ReservationTrendPoint[];
+}
+
+export interface DeliveryRiderRow {
+  riderId: string;
+  name: string;
+  deliveries: number;
+  /** Σ DeliveryAssignment.commissionEarned for this rider in range. */
+  commission: number;
+  avgMinutes: number;
+}
+
+export interface DeliveryTrendPoint {
+  /** YYYY-MM-DD, PKT calendar day. */
+  date: string;
+  count: number;
+}
+
+export interface DeliveryPerformanceReport {
+  from: string;
+  to: string;
+  totalDeliveries: number;
+  totalCommission: number;
+  avgDeliveryMinutes: number;
+  /** Failed/returned deliveries in range — a headline count only, no rider/trend breakdown. */
+  returnedCount: number;
+  /** Not capped server-side, sorted by deliveries desc. */
+  byRider: DeliveryRiderRow[];
+  /** One point per calendar day in range, zero-filled so the trend chart has no gaps. */
+  trend: DeliveryTrendPoint[];
+}
+
+export interface CashSettlementStaffRow {
+  staffId: string;
+  name: string;
+  count: number;
+  totalAmount: number;
+  /** Σ CashSettlement.cashDifference (actual − expected) for this staff member — negative
+   *  means a shortage, positive an overage. */
+  totalDifference: number;
+}
+
+export interface CashSettlementTrendPoint {
+  /** YYYY-MM-DD, PKT calendar day. */
+  date: string;
+  amount: number;
+}
+
+export interface CashSettlementTrendsReport {
+  from: string;
+  to: string;
+  totalSettlements: number;
+  totalAmount: number;
+  /** Σ CashSettlement.cashDifference across all settlements in range. */
+  totalDifference: number;
+  /** Not capped server-side, sorted by totalAmount desc. */
+  byStaff: CashSettlementStaffRow[];
+  /** One point per calendar day in range, zero-filled so the trend chart has no gaps. */
+  trend: CashSettlementTrendPoint[];
+}
+
+export interface CustomerAnalyticsTopRow {
+  customerId: string | null;
+  name: string;
+  orders: number;
+  spent: number;
+  /** True when this customer's very first-ever order falls inside the requested range. */
+  isNew: boolean;
+}
+
+export interface CustomerAnalyticsTrendPoint {
+  /** YYYY-MM-DD, PKT calendar day. */
+  date: string;
+  newCustomers: number;
+}
+
+export interface CustomerAnalyticsReport {
+  from: string;
+  to: string;
+  /** Distinct identifiable customers with at least one order in range. */
+  totalCustomersActive: number;
+  /** Active-in-range customers whose first-ever order also falls in range. */
+  newCustomers: number;
+  /** Active-in-range customers who already had an order before the range started. */
+  returningCustomers: number;
+  totalOrders: number;
+  totalRevenue: number;
+  avgOrderValue: number;
+  /** returningCustomers / totalCustomersActive, rounded. */
+  repeatRatePct: number;
+  /** Top 10 by spend in range. */
+  topCustomers: CustomerAnalyticsTopRow[];
+  /** One point per calendar day in range, zero-filled so the trend chart has no gaps. */
+  trend: CustomerAnalyticsTrendPoint[];
+}
+
+export interface PeakHourRow {
+  /** 0-23, PKT wall-clock hour. */
+  hour: number;
+  orders: number;
+  revenue: number;
+}
+
+export interface ChannelTrendPoint {
+  /** YYYY-MM-DD, PKT calendar day. */
+  date: string;
+  dineIn: number;
+  takeaway: number;
+  delivery: number;
+}
+
+export interface DayOfWeekRow {
+  /** Mon..Sun. */
+  label: string;
+  orderCount: number;
+  avgSales: number;
+}
+
+export interface SalesTimingReport {
+  from: string;
+  to: string;
+  /** 24 entries, zero-filled, all channels. */
+  peakHours: PeakHourRow[];
+  /** Mon..Sun, zero-filled, all channels. */
+  dayOfWeek: DayOfWeekRow[];
+  /** One point per calendar day in range, zero-filled. Dine In / Take Away / Delivery only
+   *  (Online/Foodpanda/Walk-in excluded, matching getSalesByChannel's own scope). */
+  byChannelTrend: ChannelTrendPoint[];
+}
+
 export interface SalesByCategoryReport {
   from: string;
   to: string;
@@ -417,7 +572,13 @@ export interface DashboardReport {
   deliveryActive: number;
   /** Pending order-cancellation requests in scope (branch, or chain-wide for Super Admin). */
   pendingCancellations: number;
-  cashHub: { totalUnsettled: number; staffCount: number };
+  cashHub: {
+    totalUnsettled: number;
+    staffCount: number;
+    totalSettledToday: number;
+    todayNetDifference: number;
+    topStaff: { staffId: string; staffName: string; staffRole: string; totalExpected: number }[];
+  };
   // --- Customer Intelligence (Phase 3) ---
   /** Order count/revenue by hour of day (0-23), current week. */
   peakHours: { hour: number; orders: number; revenue: number }[];
@@ -557,6 +718,65 @@ export const reportService = {
     if (params.outletId && params.outletId !== 'all') q.set('outletId', params.outletId);
     else q.set('outletId', 'all');
     const res = await api.get<{ success: boolean; data: AttendanceAnalyticsReport }>(`/reports/attendance?${q.toString()}`);
+    return res.data;
+  },
+  async getReservationAnalytics(params: {
+    outletId?: string;
+    from: string;
+    to: string;
+    /** Reservations.tsx-only — keeps its own analytics tiles in sync with its status dropdown.
+     *  The Dashboard section never sends this. */
+    status?: string;
+  }): Promise<ReservationAnalyticsReport> {
+    const q = new URLSearchParams({ from: params.from, to: params.to });
+    if (params.outletId && params.outletId !== 'all') q.set('outletId', params.outletId);
+    else q.set('outletId', 'all');
+    if (params.status) q.set('status', params.status);
+    const res = await api.get<{ success: boolean; data: ReservationAnalyticsReport }>(`/reports/reservations?${q.toString()}`);
+    return res.data;
+  },
+  async getDeliveryPerformance(params: {
+    outletId?: string;
+    from: string;
+    to: string;
+  }): Promise<DeliveryPerformanceReport> {
+    const q = new URLSearchParams({ from: params.from, to: params.to });
+    if (params.outletId && params.outletId !== 'all') q.set('outletId', params.outletId);
+    else q.set('outletId', 'all');
+    const res = await api.get<{ success: boolean; data: DeliveryPerformanceReport }>(`/reports/delivery?${q.toString()}`);
+    return res.data;
+  },
+  async getCashSettlementTrends(params: {
+    outletId?: string;
+    from: string;
+    to: string;
+  }): Promise<CashSettlementTrendsReport> {
+    const q = new URLSearchParams({ from: params.from, to: params.to });
+    if (params.outletId && params.outletId !== 'all') q.set('outletId', params.outletId);
+    else q.set('outletId', 'all');
+    const res = await api.get<{ success: boolean; data: CashSettlementTrendsReport }>(`/reports/cash-settlements?${q.toString()}`);
+    return res.data;
+  },
+  async getCustomerAnalytics(params: {
+    outletId?: string;
+    from: string;
+    to: string;
+  }): Promise<CustomerAnalyticsReport> {
+    const q = new URLSearchParams({ from: params.from, to: params.to });
+    if (params.outletId && params.outletId !== 'all') q.set('outletId', params.outletId);
+    else q.set('outletId', 'all');
+    const res = await api.get<{ success: boolean; data: CustomerAnalyticsReport }>(`/reports/customer-analytics?${q.toString()}`);
+    return res.data;
+  },
+  async getSalesTiming(params: {
+    outletId?: string;
+    from: string;
+    to: string;
+  }): Promise<SalesTimingReport> {
+    const q = new URLSearchParams({ from: params.from, to: params.to });
+    if (params.outletId && params.outletId !== 'all') q.set('outletId', params.outletId);
+    else q.set('outletId', 'all');
+    const res = await api.get<{ success: boolean; data: SalesTimingReport }>(`/reports/sales-timing?${q.toString()}`);
     return res.data;
   },
   async getSalesByCategory(params: {

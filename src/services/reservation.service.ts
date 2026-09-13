@@ -9,6 +9,16 @@ export interface PreOrderItem {
   discount?: number;
   modifiers?: string[];
   notes?: string;
+  // Deal identity, mirroring POS.tsx/WaiterPanel.tsx's CartItem — set only on a line added via
+  // the pre-order picker's Deals tab. dealLineId groups every line belonging to one redemption
+  // (a Fixed Bundle's several components, or a Buy X Get Y's buy+get sides) so they can be
+  // reasoned about as one unit; dealGroupId/dealRole are set on a Customizable/BOGO pick to
+  // identify which option group and BOGO side ("buy"/"get") it came from.
+  dealId?: string;
+  dealName?: string;
+  dealLineId?: string;
+  dealGroupId?: string;
+  dealRole?: "buy" | "get";
 }
 
 export interface Reservation {

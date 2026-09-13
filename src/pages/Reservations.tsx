@@ -2,15 +2,17 @@ import { useState, useMemo, useRef, useEffect } from "react";
 import {
   CalendarCheck, Plus, Pencil, Trash2, User, Phone, Users, CheckCircle2,
   Utensils, CreditCard, Banknote, Smartphone, ShoppingBag, ArrowRight, Truck, XCircle,
-  Search, AlertCircle, Clock, MapPin, Check, DollarSign, ListFilter, Sparkles, ChevronRight, X, Zap, Minus, ChefHat
+  Search, AlertCircle, Clock, MapPin, Check, DollarSign, ListFilter, Sparkles, ChevronRight, X, Zap, Minus, ChefHat, UserX,
+  Gift, Package, Layers, Percent
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
@@ -24,8 +26,14 @@ import { TimePicker } from "@/components/ui/time-picker";
 import { reservationService, type Reservation, type CreateReservationInput, type PreOrderItem } from "@/services/reservation.service";
 import { tableService } from "@/services/table.service";
 import { customerService, type CustomerRecord } from "@/services/customer.service";
-import { menuService, type MenuItemRecord, type CategoryRecord } from "@/services/menu.service";
+import { menuService, type MenuItemRecord, type MenuItemVariant, type CategoryRecord } from "@/services/menu.service";
 import { orderService } from "@/services/order.service";
+import { reportService } from "@/services/report.service";
+import { dealService, type DealRecord } from "@/services/deal.service";
+import {
+  isDealLive, isDealAvailableForChannel, dealChannelPrice, dealChannelPercent, allocateDealDiscount,
+  dealBogoSides, dealBogoSideMode, dealBogoOptionGroups, capFreeUnitPrice, type DealOptionItemForBogo,
+} from "@/lib/deals";
 import { toast } from "sonner";
 import { useOutletFilter } from "@/hooks/useOutletFilter";
 import { OutletFilterSelect } from "@/components/OutletFilterSelect";
@@ -69,6 +77,14 @@ const emptyForm = (): FormState => ({
   totalAmount: 0,
 });
 
+// Same lookup WaiterPanel.tsx/POS.tsx use for their deal-card grid.
+const dealFormatBadge: Record<Exclude<DealRecord["type"], "promo_code" | "min_spend">, { icon: typeof Package; label: string }> = {
+  combo: { icon: Package, label: "Fixed Bundle" },
+  option_combo: { icon: Layers, label: "Customizable" },
+  percentage: { icon: Percent, label: "% Discount" },
+  buy_x_get_y: { icon: Gift, label: "Buy X Get Y" },
+};
+
 const formatPhoneNumber = (val: string): string => {
   const digitsOnly = val.replace(/\D/g, "").slice(0, 11);
   if (digitsOnly.length > 4) {
@@ -95,6 +111,23 @@ const Reservations = () => {
   const [dateFilter, setDateFilter] = useState<"Today" | "Tomorrow" | "This Week" | "All" | "Custom">("Today");
   const [startDate, setStartDate] = useState<string>(new Date().toISOString().split("T")[0]);
   const [endDate, setEndDate] = useState<string>(new Date().toISOString().split("T")[0]);
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+
+  // Arriving from the Dashboard's "Reservations Analytics" section pre-fills the date range
+  // (+ status for a specific status row/bar drill-down) via ?from=&to=&status=. Re-seeds on
+  // every genuinely new navigation, not just first mount — same useEffect-keyed-on-searchParams
+  // pattern used by Sales.tsx/CancellationRequests.tsx/Purchases.tsx/Attendance.tsx.
+  const [searchParams] = useSearchParams();
+  useEffect(() => {
+    const from = searchParams.get("from");
+    const to = searchParams.get("to");
+    if (from || to) {
+      setDateFilter("Custom");
+      if (from) setStartDate(from);
+      if (to) setEndDate(to);
+    }
+    setStatusFilter(searchParams.get("status") || "all");
+  }, [searchParams]);
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
@@ -198,6 +231,46 @@ const Reservations = () => {
     enabled: showForm,
   });
 
+  // ── Deals — same real backend deals POS.tsx/WaiterPanel.tsx sell, priced at whichever
+  // channel this booking's own Order Type is (unlike WaiterPanel, which hardcodes Dine In,
+  // a pre-order can be Dine In/Take Away/Delivery). Order Discount (Promo Code/Min Spend)
+  // is excluded — not something picked from a menu grid. No stock-checking: a pre-order is
+  // fulfilled on a future date, so today's stock levels aren't meaningful here (matches this
+  // page's existing plain-item picker, which also doesn't stock-gate). ──
+  const { data: liveDeals = [] } = useQuery({
+    queryKey: ["deals", "reservations"],
+    queryFn: () => dealService.getDeals(),
+    staleTime: 60_000,
+    enabled: showForm,
+  });
+  const orderTypeForDeals = form.orderType || "Dine In";
+  const sellableDeals = useMemo(
+    () => liveDeals.filter(
+      (d) => d.type !== "promo_code" && d.type !== "min_spend" && isDealLive(d).valid && isDealAvailableForChannel(d, orderTypeForDeals)
+    ),
+    [liveDeals, orderTypeForDeals]
+  );
+  const isDealChannelBlocked = (deal: DealRecord): boolean => !isDealAvailableForChannel(deal, orderTypeForDeals);
+
+  const [showDealCustomize, setShowDealCustomize] = useState(false);
+  const [customizingDeal, setCustomizingDeal] = useState<DealRecord | null>(null);
+  const [customizingDealLineId, setCustomizingDealLineId] = useState<string | null>(null);
+  const [dealGroupSelections, setDealGroupSelections] = useState<Record<string, string[]>>({});
+  const customizeGroups = useMemo(() => {
+    if (!customizingDeal) return [];
+    if (customizingDeal.type === "option_combo") return customizingDeal.optionGroups;
+    return [
+      ...(dealBogoSideMode(customizingDeal, "BUY") === "customizable" ? dealBogoOptionGroups(customizingDeal, "BUY") : []),
+      ...(dealBogoSideMode(customizingDeal, "GET") === "customizable" ? dealBogoOptionGroups(customizingDeal, "GET") : []),
+    ];
+  }, [customizingDeal]);
+
+  const [showDealItemPicker, setShowDealItemPicker] = useState(false);
+  const [pickingDeal, setPickingDeal] = useState<DealRecord | null>(null);
+  const [pickedDealItemId, setPickedDealItemId] = useState("");
+  const [pickedDealVariantId, setPickedDealVariantId] = useState<string | null>(null);
+  const [pickedDealQty, setPickedDealQty] = useState(1);
+
   const filteredCustomerSuggestions = useMemo(() => {
     if (!form.customerName && !form.customerPhone) return customers.slice(0, 8);
     const searchName = (form.customerName || "").toLowerCase();
@@ -280,11 +353,44 @@ const Reservations = () => {
             toast.success("Reservation accepted & confirmed! Cards and POS / Waiter Panel updated.");
           } else if (status === "cancelled") {
             toast.success("Reservation declined / cancelled.");
+          } else if (status === "noShow") {
+            toast.success("Reservation marked as No-Show.");
           }
         },
       }
     );
   };
+
+  // Resolved from/to for the analytics tiles below -- mirrors dateFilteredReservations'
+  // own preset-to-range logic (this week's Monday-Sunday, etc.) so both stay in sync. "All"
+  // has no natural bound -- both left undefined, matching getReservationAnalytics' own
+  // "no from/to -> no date filter" convention.
+  const analyticsRange = useMemo((): { from?: string; to?: string } => {
+    if (dateFilter === "Today") return { from: today, to: today };
+    if (dateFilter === "Tomorrow") return { from: tomorrow, to: tomorrow };
+    if (dateFilter === "This Week") {
+      const now = new Date();
+      const currentDay = now.getDay();
+      const distanceToMonday = currentDay === 0 ? -6 : 1 - currentDay;
+      const monday = new Date(now);
+      monday.setDate(now.getDate() + distanceToMonday);
+      const sunday = new Date(monday);
+      sunday.setDate(monday.getDate() + 6);
+      return { from: monday.toISOString().split("T")[0], to: sunday.toISOString().split("T")[0] };
+    }
+    if (dateFilter === "Custom") return { from: startDate || undefined, to: endDate || undefined };
+    return {}; // "All"
+  }, [dateFilter, today, tomorrow, startDate, endDate]);
+
+  const { data: resAnalytics, isLoading: resAnalyticsLoading } = useQuery({
+    queryKey: ["reservation-analytics-page", selectedOutletId, analyticsRange.from, analyticsRange.to, statusFilter],
+    queryFn: () => reportService.getReservationAnalytics({
+      outletId: selectedOutletId !== "all" ? selectedOutletId : undefined,
+      from: analyticsRange.from ?? "",
+      to: analyticsRange.to ?? "",
+      status: statusFilter !== "all" ? statusFilter : undefined,
+    }),
+  });
 
   // Filters & Calculations
   const dateFilteredReservations = useMemo(() => {
@@ -316,9 +422,10 @@ const Reservations = () => {
     return dateFilteredReservations.filter(r => {
       const orderType = r.orderType || (r.bookingType === "future_order" ? "Take Away" : "Dine In");
       if (activeTab !== "all" && orderType !== activeTab) return false;
+      if (statusFilter !== "all" && r.status !== statusFilter) return false;
       return true;
     }).sort((a, b) => `${a.date}${a.time}`.localeCompare(`${b.date}${b.time}`));
-  }, [dateFilteredReservations, activeTab]);
+  }, [dateFilteredReservations, activeTab, statusFilter]);
 
   const stats = useMemo(() => {
     const activeSet = dateFilteredReservations.filter(r => r.status !== "cancelled" && r.status !== "noShow");
@@ -494,6 +601,285 @@ const Reservations = () => {
         totalAmount,
       };
     });
+  };
+
+  // Channel price for this booking's Order Type — mirrors WaiterPanel.tsx's variantDineInPrice/
+  // menuItemPrice, generalized from a hardcoded "Dine In" to whichever channel this pre-order
+  // actually is (a reservation can be Dine In/Take Away/Delivery, unlike a WaiterPanel order
+  // which is always Dine In).
+  const variantChannelPrice = (v: MenuItemVariant): number => {
+    if (orderTypeForDeals === "Take Away") return v.takeAwayPrice ?? v.price;
+    if (orderTypeForDeals === "Delivery") return v.deliveryPrice ?? v.price;
+    return v.dineInPrice ?? v.price;
+  };
+  const menuItemChannelPrice = (item: MenuItemRecord, variant?: MenuItemVariant | null): number => {
+    if (variant) return variantChannelPrice(variant);
+    if (orderTypeForDeals === "Take Away") return item.takeAwayPrice ?? item.price;
+    if (orderTypeForDeals === "Delivery") return item.deliveryPrice ?? item.price;
+    return item.dineInPrice ?? item.price;
+  };
+
+  /** Appends one or more lines (deal or plain) and recomputes subtotal/tax/total — the same
+   *  recompute handleAddPreOrderItem/handleUpdateItemQty above do, factored out since every
+   *  deal-add path below needs to append several lines at once. */
+  const appendPreOrderItems = (newItems: PreOrderItem[]) => {
+    setForm(prev => {
+      const updated = [...(prev.preOrderItems || []), ...newItems];
+      const subtotal = updated.reduce((sum, i) => sum + (i.price * i.qty), 0);
+      const tax = Math.round(subtotal * 0.16);
+      const totalAmount = subtotal + tax;
+      return { ...prev, preOrderItems: updated, subtotal, tax, totalAmount };
+    });
+  };
+
+  // ── Deals: add-to-cart — mirrors WaiterPanel.tsx's addDealToCart family, priced at this
+  // booking's Order Type throughout. Fixed Bundle and Buy X Get Y (fully Fixed) add their
+  // whole redemption in one click; Customizable opens a choice dialog; % Discount opens an
+  // eligible-item picker. ──
+  const addDealToCart = (deal: DealRecord) => {
+    if (isDealChannelBlocked(deal)) { toast.error(`"${deal.name}" is not available for ${orderTypeForDeals} orders`); return; }
+    if (deal.type === "combo") { addComboDealToCart(deal); return; }
+    if (deal.type === "buy_x_get_y") { addBogoDealToCart(deal); return; }
+    if (deal.type === "option_combo") { openDealCustomize(deal); return; }
+    if (deal.type === "percentage") { openDealItemPicker(deal); return; }
+  };
+
+  const addComboDealToCart = (deal: DealRecord) => {
+    if (deal.components.length === 0) { toast.error(`"${deal.name}" has no items configured`); return; }
+    const rows = deal.components.map((c) => {
+      const menuItem = menuItems.find((m) => m.id === c.menuItemId);
+      const variant = c.variantId ? menuItem?.variants?.find((v) => v.id === c.variantId) : undefined;
+      return { component: c, menuItem, variant, unitPrice: menuItem ? menuItemChannelPrice(menuItem, variant) : 0 };
+    });
+    if (rows.some((r) => !r.menuItem)) { toast.error(`A menu item in "${deal.name}" is no longer available`); return; }
+
+    const grossAmounts = rows.map((r) => r.unitPrice * r.component.qty);
+    const savings = Math.max(0, grossAmounts.reduce((s, v) => s + v, 0) - dealChannelPrice(deal, orderTypeForDeals));
+    const discounts = allocateDealDiscount(savings, grossAmounts);
+
+    const lineId = `deal-${deal.id}-${Date.now()}`;
+    const newItems: PreOrderItem[] = rows.map((r, idx) => ({
+      name: `${r.menuItem!.name}${r.variant ? ` (${r.variant.name})` : ""}`,
+      price: r.unitPrice, qty: r.component.qty, discount: discounts[idx], modifiers: [],
+      menuItemId: r.component.menuItemId, variantId: r.component.variantId ?? undefined,
+      dealId: deal.id, dealName: deal.name, dealLineId: lineId,
+    }));
+    appendPreOrderItems(newItems);
+    toast.success(`${deal.name} added to pre-order`);
+  };
+
+  /** Each side is independently "Fixed" or "Customizable" — mirrors WaiterPanel.tsx's
+   *  addBogoDealToCart exactly. */
+  const addBogoDealToCart = (deal: DealRecord) => {
+    const buyMode = dealBogoSideMode(deal, "BUY");
+    const getMode = dealBogoSideMode(deal, "GET");
+    const lineId = `deal-${deal.id}-${Date.now()}`;
+    const newItems: PreOrderItem[] = [];
+
+    if (buyMode === "fixed") {
+      const { buy } = dealBogoSides(deal);
+      if (buy.length === 0) { toast.error(`"${deal.name}" is not configured correctly`); return; }
+      for (const row of buy) {
+        const menuItem = menuItems.find((m) => m.id === row.menuItemId);
+        if (!menuItem) { toast.error(`A menu item in "${deal.name}" is no longer available`); return; }
+        const variant = row.variantId ? menuItem.variants?.find((v) => v.id === row.variantId) : undefined;
+        newItems.push({
+          name: `${menuItem.name}${variant ? ` (${variant.name})` : ""}`,
+          price: menuItemChannelPrice(menuItem, variant), qty: row.qty, discount: 0, modifiers: [],
+          menuItemId: row.menuItemId, variantId: row.variantId ?? undefined,
+          dealId: deal.id, dealName: deal.name, dealLineId: lineId, dealRole: "buy",
+        });
+      }
+    }
+    if (getMode === "fixed") {
+      const { get } = dealBogoSides(deal);
+      if (get.length === 0) { toast.error(`"${deal.name}" is not configured correctly`); return; }
+      for (const row of get) {
+        const menuItem = menuItems.find((m) => m.id === row.menuItemId);
+        if (!menuItem) { toast.error(`A menu item in "${deal.name}" is no longer available`); return; }
+        const variant = row.variantId ? menuItem.variants?.find((v) => v.id === row.variantId) : undefined;
+        const unitPrice = menuItemChannelPrice(menuItem, variant);
+        const variants = menuItem.variants ?? [];
+        const cheapest = variants.length === 0 ? unitPrice : Math.min(...variants.map((v) => variantChannelPrice(v)));
+        const cappedUnitPrice = capFreeUnitPrice(row.variantId, unitPrice, cheapest);
+        const coveragePercent = dealChannelPercent(deal, orderTypeForDeals, 100);
+        const freeUnitPrice = Math.round(cappedUnitPrice * (coveragePercent / 100) * 100) / 100;
+        newItems.push({
+          name: `${menuItem.name}${variant ? ` (${variant.name})` : ""}${freeUnitPrice <= 0 ? "" : freeUnitPrice >= unitPrice ? " (Free)" : " (Discounted)"}`,
+          price: unitPrice, qty: row.qty, discount: freeUnitPrice * row.qty, modifiers: [],
+          menuItemId: row.menuItemId, variantId: row.variantId ?? undefined,
+          dealId: deal.id, dealName: deal.name, dealLineId: lineId, dealRole: "get",
+        });
+      }
+    }
+
+    if (buyMode === "customizable" || getMode === "customizable") {
+      if (newItems.length > 0) appendPreOrderItems(newItems);
+      setCustomizingDeal(deal);
+      setCustomizingDealLineId(lineId);
+      const initial: Record<string, string[]> = {};
+      [
+        ...(buyMode === "customizable" ? dealBogoOptionGroups(deal, "BUY") : []),
+        ...(getMode === "customizable" ? dealBogoOptionGroups(deal, "GET") : []),
+      ].forEach((g) => { initial[g.id] = []; });
+      setDealGroupSelections(initial);
+      setShowDealCustomize(true);
+      return;
+    }
+
+    if (newItems.length === 0) { toast.error(`"${deal.name}" is not configured correctly`); return; }
+    appendPreOrderItems(newItems);
+    toast.success(`${deal.name} added to pre-order`);
+  };
+
+  const dealOptionKey = (menuItemId: string, variantId: string | null) => `${menuItemId}:${variantId ?? ""}`;
+
+  const openDealCustomize = (deal: DealRecord) => {
+    setCustomizingDeal(deal);
+    setCustomizingDealLineId(null);
+    const initial: Record<string, string[]> = {};
+    deal.optionGroups.forEach((g) => { initial[g.id] = []; });
+    setDealGroupSelections(initial);
+    setShowDealCustomize(true);
+  };
+
+  const toggleDealOption = (groupId: string, key: string, maxSelections: number) => {
+    setDealGroupSelections((prev) => {
+      const current = prev[groupId] || [];
+      if (current.includes(key)) return { ...prev, [groupId]: current.filter((k) => k !== key) };
+      if (current.length >= maxSelections) {
+        if (maxSelections === 1) return { ...prev, [groupId]: [key] };
+        toast.error(`Max ${maxSelections} selection(s) for this step`);
+        return prev;
+      }
+      return { ...prev, [groupId]: [...current, key] };
+    });
+  };
+
+  const confirmDealCustomize = () => {
+    if (!customizingDeal) return;
+    const deal = customizingDeal;
+    const groups = customizeGroups;
+    const incomplete = groups.find((g) => (dealGroupSelections[g.id]?.length || 0) < g.minSelections);
+    if (incomplete) { toast.error(`Select at least ${incomplete.minSelections} item(s) for "${incomplete.label}"`); return; }
+
+    const picks: { groupId: string; bogoSide: "BUY" | "GET" | null; option: DealOptionItemForBogo }[] = [];
+    for (const g of groups) {
+      for (const key of dealGroupSelections[g.id] || []) {
+        const option = g.options.find((o) => dealOptionKey(o.menuItemId, o.variantId) === key);
+        if (option) picks.push({ groupId: g.id, bogoSide: g.bogoSide ?? null, option });
+      }
+    }
+    if (picks.length === 0) { toast.error("Nothing selected"); return; }
+
+    if (deal.type === "buy_x_get_y") {
+      const lineId = customizingDealLineId ?? `deal-${deal.id}-${Date.now()}`;
+      const newItems: PreOrderItem[] = [];
+      for (const { groupId, bogoSide, option } of picks) {
+        const menuItem = menuItems.find((m) => m.id === option.menuItemId);
+        if (!menuItem) { toast.error(`A menu item in "${deal.name}" is no longer available`); return; }
+        const variant = option.variantId ? menuItem.variants?.find((v) => v.id === option.variantId) : undefined;
+        const unitPrice = menuItemChannelPrice(menuItem, variant) + (option.extraPrice || 0);
+        if (bogoSide === "GET") {
+          const coveragePercent = dealChannelPercent(deal, orderTypeForDeals, 100);
+          const freeUnitPrice = Math.round(unitPrice * (coveragePercent / 100) * 100) / 100;
+          newItems.push({
+            name: `${menuItem.name}${variant ? ` (${variant.name})` : ""}${freeUnitPrice <= 0 ? "" : freeUnitPrice >= unitPrice ? " (Free)" : " (Discounted)"}`,
+            price: unitPrice, qty: 1, discount: freeUnitPrice, modifiers: [],
+            menuItemId: option.menuItemId, variantId: option.variantId ?? undefined,
+            dealId: deal.id, dealName: deal.name, dealLineId: lineId, dealGroupId: groupId, dealRole: "get",
+          });
+        } else {
+          newItems.push({
+            name: `${menuItem.name}${variant ? ` (${variant.name})` : ""}`,
+            price: unitPrice, qty: 1, discount: 0, modifiers: [],
+            menuItemId: option.menuItemId, variantId: option.variantId ?? undefined,
+            dealId: deal.id, dealName: deal.name, dealLineId: lineId, dealGroupId: groupId, dealRole: "buy",
+          });
+        }
+      }
+      appendPreOrderItems(newItems);
+      setShowDealCustomize(false);
+      setCustomizingDeal(null);
+      setCustomizingDealLineId(null);
+      toast.success(`${deal.name} added to pre-order`);
+      return;
+    }
+
+    const rows = picks.map(({ groupId, option }) => {
+      const menuItem = menuItems.find((m) => m.id === option.menuItemId);
+      const variant = option.variantId ? menuItem?.variants?.find((v) => v.id === option.variantId) : undefined;
+      return { groupId, option, menuItem, variant, unitPrice: (menuItem ? menuItemChannelPrice(menuItem, variant) : 0) + (option.extraPrice || 0) };
+    });
+    if (rows.some((r) => !r.menuItem)) { toast.error(`A menu item in "${deal.name}" is no longer available`); return; }
+
+    const grossAmounts = rows.map((r) => r.unitPrice);
+    const savings = Math.max(0, grossAmounts.reduce((s, v) => s + v, 0) - dealChannelPrice(deal, orderTypeForDeals));
+    const discounts = allocateDealDiscount(savings, grossAmounts);
+
+    const lineId = `deal-${deal.id}-${Date.now()}`;
+    const newItems: PreOrderItem[] = rows.map((r, idx) => ({
+      name: `${r.menuItem!.name}${r.variant ? ` (${r.variant.name})` : ""}`,
+      price: r.unitPrice, qty: 1, discount: discounts[idx], modifiers: [],
+      menuItemId: r.option.menuItemId, variantId: r.option.variantId ?? undefined,
+      dealId: deal.id, dealName: deal.name, dealLineId: lineId, dealGroupId: r.groupId,
+    }));
+    appendPreOrderItems(newItems);
+    setShowDealCustomize(false);
+    setCustomizingDeal(null);
+    toast.success(`${deal.name} added to pre-order`);
+  };
+
+  const eligibleDealItems = useMemo(() => {
+    if (!pickingDeal) return [];
+    return menuItems.filter((m) =>
+      pickingDeal.applicableItems.includes(m.id) ||
+      (m.categoryId && pickingDeal.applicableCategories.includes(m.categoryId))
+    );
+  }, [pickingDeal, menuItems]);
+
+  const openDealItemPicker = (deal: DealRecord) => {
+    setPickingDeal(deal);
+    setPickedDealItemId("");
+    setPickedDealVariantId(null);
+    setPickedDealQty(1);
+    setShowDealItemPicker(true);
+  };
+
+  const confirmDealItemPick = () => {
+    if (!pickingDeal || !pickedDealItemId) return;
+    const deal = pickingDeal;
+    const menuItem = menuItems.find((m) => m.id === pickedDealItemId);
+    if (!menuItem) return;
+    const variant = pickedDealVariantId ? menuItem.variants?.find((v) => v.id === pickedDealVariantId) : undefined;
+    if ((menuItem.variants?.length ?? 0) > 0 && !variant) { toast.error("Pick a size"); return; }
+
+    const unitPrice = menuItemChannelPrice(menuItem, variant);
+    const percent = dealChannelPercent(deal, orderTypeForDeals, deal.discountPercent ?? 0);
+    const qty = Math.max(1, pickedDealQty);
+    const discount = Math.min(unitPrice * qty, unitPrice * qty * (percent / 100));
+
+    const newItem: PreOrderItem = {
+      name: `${menuItem.name}${variant ? ` (${variant.name})` : ""}`,
+      price: unitPrice, qty, discount, modifiers: [],
+      menuItemId: menuItem.id, variantId: variant?.id ?? undefined,
+      dealId: deal.id, dealName: deal.name, dealLineId: `deal-${deal.id}-${Date.now()}`,
+    };
+    appendPreOrderItems([newItem]);
+    setShowDealItemPicker(false);
+    setPickingDeal(null);
+    toast.success(`${deal.name} added to pre-order`);
+  };
+
+  const dealPriceLabel = (deal: DealRecord): string => {
+    if (deal.type === "combo" || deal.type === "option_combo") {
+      return `Rs. ${dealChannelPrice(deal, orderTypeForDeals).toLocaleString()}`;
+    }
+    if (deal.type === "percentage") {
+      return `${dealChannelPercent(deal, orderTypeForDeals, deal.discountPercent ?? 0)}% OFF`;
+    }
+    const coverage = dealChannelPercent(deal, orderTypeForDeals, 100);
+    return coverage >= 100 ? "Get item free" : `Get item ${coverage}% off`;
   };
 
   const getEffectiveStatus = (r: { date: string; time: string; status: string; orderType?: string; bookingType?: string; order?: any; orderId?: string | null }) => {
@@ -943,8 +1329,18 @@ const Reservations = () => {
                   {form.preOrderItems.map((item, idx) => (
                     <div key={idx} className="flex items-center justify-between p-2 rounded-lg bg-card border border-border text-xs">
                       <div>
-                        <p className="font-semibold text-foreground">{item.name}</p>
-                        <p className="text-[10px] text-muted-foreground">PKR {item.price.toLocaleString()} each</p>
+                        <p className="font-semibold text-foreground flex items-center gap-1.5">
+                          {item.name}
+                          {item.dealId && (
+                            <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 bg-primary/10 text-primary border-primary/20 gap-0.5">
+                              <Gift className="h-2.5 w-2.5" /> {item.dealName || "Deal"}
+                            </Badge>
+                          )}
+                        </p>
+                        <p className="text-[10px] text-muted-foreground">
+                          PKR {item.price.toLocaleString()} each
+                          {!!item.discount && item.discount > 0 && ` · Rs. ${item.discount.toLocaleString()} off`}
+                        </p>
                       </div>
                       <div className="flex items-center gap-2">
                         <div className="flex items-center gap-1 bg-muted rounded-md px-1.5 py-0.5">
@@ -1036,54 +1432,72 @@ const Reservations = () => {
         </Card>
       )}
 
-      {/* Top Level Date Filter Bar */}
-      <Card className="shadow-sm border-primary/20 bg-card/60 backdrop-blur">
-        <CardContent className="p-3 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="text-xs font-semibold text-muted-foreground mr-1 flex items-center gap-1">
-              <Clock className="h-3.5 w-3.5 text-primary" /> Date Filter:
-            </span>
+      {/* Top Level Date Filter Bar — Dashboard section filter-bar style (pill presets +
+          always-paired DatePicker range), same visual language as Dashboard.tsx's report
+          sections, while keeping this page's own preset set (Tomorrow/All are unique here). */}
+      <Card className="rounded-2xl border border-border/80 bg-card/40 backdrop-blur-md shadow-sm">
+        <CardContent className="p-4 flex flex-wrap items-center gap-2.5">
+          <div className="inline-flex items-center p-0.5 rounded-lg bg-muted/60 border border-border/60 shadow-sm">
             {(["Today", "Tomorrow", "This Week", "All", "Custom"] as const).map(s => (
-              <Button
+              <button
                 key={s}
-                variant={dateFilter === s ? "default" : "outline"}
-                size="sm"
+                type="button"
                 onClick={() => setDateFilter(s)}
                 className={cn(
-                  "text-xs font-semibold rounded-lg transition-all",
-                  dateFilter === s ? "gradient-primary text-primary-foreground shadow-sm" : "hover:bg-accent"
+                  "px-3 py-1.5 text-xs font-medium rounded-md transition-all",
+                  dateFilter === s
+                    ? "bg-background text-foreground shadow-sm font-semibold"
+                    : "text-muted-foreground hover:text-foreground"
                 )}
               >
                 {s}
-              </Button>
+              </button>
             ))}
           </div>
 
           {dateFilter === "Custom" && (
-            <div className="flex items-center gap-2 bg-muted/40 p-1.5 rounded-xl border border-primary/20 animate-in fade-in slide-in-from-top-1 duration-200">
-              <div className="flex items-center gap-1.5">
-                <Label className="text-[11px] font-semibold text-muted-foreground">From:</Label>
+            <div className="inline-flex items-center gap-1.5">
+              <div className="w-36">
                 <DatePicker
                   value={startDate}
                   onChange={setStartDate}
-                  className="h-8 text-xs w-36 rounded-lg border-primary/30"
+                  placeholder="Start date"
+                  className="h-8 text-xs bg-background"
                 />
               </div>
-              <div className="flex items-center gap-1.5">
-                <Label className="text-[11px] font-semibold text-muted-foreground">To:</Label>
+              <span className="text-xs text-muted-foreground/60 font-medium px-0.5">to</span>
+              <div className="w-36">
                 <DatePicker
                   value={endDate}
                   min={startDate}
                   onChange={setEndDate}
-                  className="h-8 text-xs w-36 rounded-lg border-primary/30"
+                  placeholder="End date"
+                  className="h-8 text-xs bg-background"
                 />
               </div>
             </div>
           )}
+
+          <div className="flex items-center gap-1.5">
+            <Label className="text-[11px] font-semibold text-muted-foreground">Status:</Label>
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="h-8 text-xs w-40 rounded-lg"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Statuses</SelectItem>
+                <SelectItem value="pending">Pending</SelectItem>
+                <SelectItem value="confirmed">Confirmed</SelectItem>
+                <SelectItem value="seated">Seated</SelectItem>
+                <SelectItem value="completed">Completed</SelectItem>
+                <SelectItem value="cancelled">Cancelled</SelectItem>
+                <SelectItem value="noShow">No-Show</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </CardContent>
       </Card>
 
-      {/* KPI Stats Cards */}
+      {/* Live Overview — the page's original 4 channel/deposit cards, kept as-is. */}
+      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Live Overview</p>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         {/* Dine In Card */}
         <Card className="shadow-sm border-primary/30 bg-card/60 backdrop-blur hover:border-primary/50 transition-all">
@@ -1141,6 +1555,37 @@ const Reservations = () => {
           </CardContent>
         </Card>
       </div>
+
+      {/* Booking Analytics — same 4-tile style as the Dashboard's "Reservations Analytics"
+          section (reportService.getReservationAnalytics), scoped to this page's own date +
+          status filters, so it always agrees with what the table below is showing. */}
+      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Booking Analytics</p>
+      {resAnalyticsLoading || !resAnalytics ? (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-20 rounded-lg" />)}
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="rounded-lg bg-background/70 border border-border/50 p-3.5">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Total Bookings</p>
+            <p className="text-xl font-bold tracking-tight text-foreground mt-0.5">{resAnalytics.totalReservations.toLocaleString()}</p>
+          </div>
+          <div className="rounded-lg bg-background/70 border border-border/50 p-3.5">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Total Guests</p>
+            <p className="text-xl font-bold tracking-tight text-foreground mt-0.5">{resAnalytics.totalGuests.toLocaleString()}</p>
+          </div>
+          <div className="rounded-lg bg-background/70 border border-border/50 p-3.5">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Cancelled</p>
+            <p className="text-xl font-bold tracking-tight text-destructive mt-0.5">{resAnalytics.cancelledCount.toLocaleString()}</p>
+            <p className="text-[11px] text-muted-foreground mt-0.5">{resAnalytics.cancelRate}% of bookings</p>
+          </div>
+          <div className="rounded-lg bg-background/70 border border-border/50 p-3.5">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">No-Show</p>
+            <p className="text-xl font-bold tracking-tight text-muted-foreground mt-0.5">{resAnalytics.noShowCount.toLocaleString()}</p>
+            <p className="text-[11px] text-muted-foreground mt-0.5">{resAnalytics.noShowRate}% of bookings</p>
+          </div>
+        </div>
+      )}
 
       {/* Category Filter Tabs */}
       <div className="flex flex-col sm:flex-row justify-between gap-3 items-start sm:items-center">
@@ -1342,6 +1787,18 @@ const Reservations = () => {
                             <XCircle className="h-3 w-3" /> Cancel
                           </Button>
                         )}
+                        {effStatus === "not_arrived" && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 text-xs font-semibold shadow-sm px-2.5 rounded-lg gap-1 text-muted-foreground border-muted-foreground/30 hover:bg-muted"
+                            onClick={() => changeStatus(r.id, "noShow")}
+                            disabled={updateMutation.isPending}
+                            title="Booking time has passed with no arrival"
+                          >
+                            <UserX className="h-3 w-3" /> No-Show
+                          </Button>
+                        )}
                         <Button variant="ghost" size="icon" className="h-7 w-7 rounded-lg" onClick={() => openEdit(r)}><Pencil className="h-3.5 w-3.5" /></Button>
                         <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive rounded-lg" onClick={() => setDeleteId(r.id)}><Trash2 className="h-3.5 w-3.5" /></Button>
                       </div>
@@ -1409,6 +1866,18 @@ const Reservations = () => {
             <div className="flex gap-1.5 overflow-x-auto pb-1 no-scrollbar scroll-smooth">
               <button
                 type="button"
+                onClick={() => setSelectedCatId("deals")}
+                className={cn(
+                  "px-3.5 py-1.5 text-xs rounded-full font-bold whitespace-nowrap transition-all border shrink-0 flex items-center gap-1.5",
+                  selectedCatId === "deals"
+                    ? "bg-primary text-primary-foreground border-primary shadow-sm"
+                    : "bg-background text-muted-foreground hover:text-foreground border-border/80 hover:bg-muted/50"
+                )}
+              >
+                <Gift className="h-3.5 w-3.5" /> Deals ({sellableDeals.length})
+              </button>
+              <button
+                type="button"
                 onClick={() => setSelectedCatId("all")}
                 className={cn(
                   "px-3.5 py-1.5 text-xs rounded-full font-bold whitespace-nowrap transition-all border shrink-0",
@@ -1443,9 +1912,50 @@ const Reservations = () => {
             </div>
           </div>
 
-          {/* Menu Items Grid (POS Food Tile Cards) */}
+          {/* Menu Items Grid (POS Food Tile Cards) — or the Deals grid when that pill is active */}
           <div className="flex-1 overflow-y-auto p-4 sm:p-5 bg-background/50">
-            {filteredMenuItems.length === 0 ? (
+            {selectedCatId === "deals" ? (
+              sellableDeals.length === 0 ? (
+                <div className="text-center py-16 text-muted-foreground">
+                  <Gift className="h-10 w-10 mx-auto opacity-20 mb-2 text-primary" />
+                  <p className="font-bold text-sm text-foreground">No deals running for {orderTypeForDeals}</p>
+                  <p className="text-xs mt-1">Switch Order Type above, or add plain menu items instead.</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3.5">
+                  {sellableDeals.map(deal => {
+                    const badge = dealFormatBadge[deal.type];
+                    const BadgeIcon = badge.icon;
+                    return (
+                      <button
+                        key={deal.id}
+                        type="button"
+                        onClick={() => addDealToCart(deal)}
+                        className="group bg-card rounded-2xl border border-border/80 p-2.5 transition-all duration-300 flex flex-col justify-between text-left hover:border-primary/50 hover:shadow-lg hover:-translate-y-0.5"
+                      >
+                        <div className="aspect-[4/3] rounded-xl overflow-hidden mb-2 relative bg-gradient-to-br from-amber-500/10 via-primary/10 to-orange-500/20 border border-border/40 flex items-center justify-center">
+                          <Gift className="h-8 w-8 text-primary" />
+                          <Badge className="absolute top-2 left-2 text-[9px] font-bold bg-background/85 backdrop-blur-md text-foreground border-none shadow-xs px-2 py-0.5 flex items-center gap-1">
+                            <BadgeIcon className="h-3 w-3" /> {badge.label}
+                          </Badge>
+                        </div>
+                        <div className="space-y-0.5">
+                          <h4 className="font-bold text-xs sm:text-sm text-foreground line-clamp-1 group-hover:text-primary transition-colors">
+                            {deal.name}
+                          </h4>
+                          <p className="text-xs font-black text-primary font-mono">{dealPriceLabel(deal)}</p>
+                        </div>
+                        <div className="pt-3">
+                          <span className="w-full inline-flex items-center justify-center h-8 text-xs font-extrabold gradient-primary text-primary-foreground rounded-xl shadow-xs gap-1">
+                            <Plus className="h-3.5 w-3.5" /> Add Deal
+                          </span>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )
+            ) : filteredMenuItems.length === 0 ? (
               <div className="text-center py-16 text-muted-foreground">
                 <Search className="h-10 w-10 mx-auto opacity-20 mb-2 text-primary" />
                 <p className="font-bold text-sm text-foreground">No menu items found</p>
@@ -1635,6 +2145,122 @@ const Reservations = () => {
               <Check className="h-4 w-4" /> Done Selecting ({form.preOrderItems?.length || 0} items)
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Customizable Deal (Option Combo / Customizable Buy X Get Y side) — choice dialog */}
+      <Dialog open={showDealCustomize} onOpenChange={(open) => { setShowDealCustomize(open); if (!open) { setCustomizingDeal(null); setCustomizingDealLineId(null); } }}>
+        <DialogContent className="max-w-xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Layers className="h-5 w-5 text-primary shrink-0" />
+              <span>{customizingDeal?.name}</span>
+            </DialogTitle>
+            <DialogDescription>Pick an item for each step below, then add the deal to the pre-order.</DialogDescription>
+          </DialogHeader>
+          {customizingDeal && (
+            <div className="space-y-5">
+              {customizeGroups.map((g, idx) => {
+                const selected = dealGroupSelections[g.id] || [];
+                const need = g.minSelections === g.maxSelections ? `${g.minSelections}` : `${g.minSelections}-${g.maxSelections}`;
+                return (
+                  <div key={g.id} className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <span className="h-5 w-5 rounded-full bg-primary/10 text-primary text-[11px] font-bold flex items-center justify-center shrink-0">{idx + 1}</span>
+                      <p className="text-sm font-bold text-foreground">{g.label}</p>
+                      <span className="text-[11px] text-muted-foreground font-medium ml-auto shrink-0">Pick {need}</span>
+                    </div>
+                    <div className="space-y-1.5">
+                      {g.options.map((o) => {
+                        const key = dealOptionKey(o.menuItemId, o.variantId);
+                        const menuItem = menuItems.find((m) => m.id === o.menuItemId);
+                        const variant = o.variantId ? menuItem?.variants?.find((v) => v.id === o.variantId) : undefined;
+                        const isChecked = selected.includes(key);
+                        return (
+                          <button
+                            key={key}
+                            type="button"
+                            onClick={() => toggleDealOption(g.id, key, g.maxSelections)}
+                            className={cn(
+                              "w-full flex items-start gap-3 p-3 rounded-xl border text-left text-sm transition-colors",
+                              isChecked ? "border-primary bg-primary/5" : "border-border hover:border-primary/40 hover:bg-muted/30"
+                            )}
+                          >
+                            <Checkbox checked={isChecked} className="mt-0.5 shrink-0 pointer-events-none" />
+                            <p className={cn("leading-snug break-words", isChecked ? "font-semibold text-primary" : "font-medium text-foreground")}>
+                              {menuItem?.name || "Item"}{variant ? ` (${variant.name})` : ""}
+                            </p>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDealCustomize(false)}>Cancel</Button>
+            <Button className="gradient-primary text-primary-foreground" onClick={confirmDealCustomize}>Add to Pre-Order</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* % Discount Deal — eligible item picker */}
+      <Dialog open={showDealItemPicker} onOpenChange={(open) => { setShowDealItemPicker(open); if (!open) setPickingDeal(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>{pickingDeal?.name}</DialogTitle>
+            <DialogDescription>Pick which item this {pickingDeal?.discountPercent}% discount applies to.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-foreground">Item</label>
+              <Select
+                value={pickedDealItemId}
+                onValueChange={(v) => { setPickedDealItemId(v); setPickedDealVariantId(null); }}
+              >
+                <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Select an item" /></SelectTrigger>
+                <SelectContent>
+                  {eligibleDealItems.map((m) => (
+                    <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {(() => {
+              const menuItem = eligibleDealItems.find((m) => m.id === pickedDealItemId);
+              const variants = menuItem?.variants || [];
+              if (variants.length === 0) return null;
+              return (
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-foreground">Size</label>
+                  <Select value={pickedDealVariantId || ""} onValueChange={setPickedDealVariantId}>
+                    <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Select a size" /></SelectTrigger>
+                    <SelectContent>
+                      {variants.map((v) => (
+                        <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              );
+            })()}
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-foreground">Quantity</label>
+              <Input
+                type="number"
+                min={1}
+                value={pickedDealQty}
+                onChange={(e) => setPickedDealQty(Math.max(1, Number(e.target.value) || 1))}
+                className="h-9 text-xs"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDealItemPicker(false)}>Cancel</Button>
+            <Button className="gradient-primary text-primary-foreground" disabled={!pickedDealItemId} onClick={confirmDealItemPick}>Add to Pre-Order</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

@@ -612,7 +612,10 @@ plus a body explaining _why_ the change was made when that is not obvious.
   width, no longer paired with the removed Payment Methods chart), "Growth vs Last Month",
   Customer Intelligence, and the six operational tile zones (Today's Operations/Inventory &
   Procurement/People/Delivery/Reservations/Cash Hub) — none of those overlap the 6 filterable
-  report sections.
+  report sections. **None of this "kept" call survived — see 2026-09-13 below**: "Day-wise Sales
+  (This Week)" and "Growth vs Last Month" were removed outright; the six operational tile zones
+  were removed outright; Customer Intelligence was promoted into a real filterable section
+  ("Order Timing & Patterns") rather than kept as a fixed-window zone.
 - **Dashboard "Deals Performance" section (`Dashboard.tsx`, 2026-09-11)** — the **sixth**
   filterable section, same date-range-only choice as Net Profit (own `dp*` state —
   `dpFromStr`/`dpToStr`/`dpPreset`, `setDpRange`; defaults to "This Month"). `reportService.
@@ -796,6 +799,94 @@ plus a body explaining _why_ the change was made when that is not obvious.
     emit no socket event at all (unlike orders/purchases/cancellation-requests), so only
     `api.ts`'s `MUTATION_DEPENDENCIES` could clear `/reports` after one. Fixed by adding
     `'/expenses': ['/reports']` and appending `'/reports'` to the existing `'/stock'` entry.
+- **Four more Dashboard sections completing the report catalog (2026-09-12/13)** — same shell
+  pattern as every section above (own `attSectionCollapsed`/`resSectionCollapsed`/
+  `dlvSectionCollapsed`/`cshSectionCollapsed` state block + `setXRange` + a `useQuery` on the
+  shared `refreshSalesSections`/`useOrderEvents` refresh):
+  - **Attendance / HR Analytics** — `reportService.getAttendanceAnalytics`, drills into
+    `/attendance`.
+  - **Reservations Analytics** — `reportService.getReservationAnalytics`, drills into
+    `/reservations?from=&to=[&status=]`. `Reservations.tsx` gained a `goToReservationsDay`
+    trend-click handler and reuses this same endpoint for its own tiles (see below).
+  - **Delivery / Rider Performance** — `reportService.getDeliveryPerformance`. Its row/bar
+    drill-down is a **plain `navigate("/delivery")`** with no query params — `Delivery.tsx` is a
+    live "today only" ops board with zero date-range/rider-filter capability, confirmed via
+    research before building this, so the section carries an explicit info-note footer explaining
+    why instead of pretending a filtered view exists there.
+  - **Cash Hub Settlement Trends** — `reportService.getCashSettlementTrends`, drills into
+    `/cash-hub?from=&to=[&staffName=]` (Audit Log tab — see below).
+- **Reservations.tsx overhaul (2026-09-12/13)** — four independent asks landed together:
+  1. **Mark No-Show** — a button shown when a booking's effective status is `not_arrived`, calls
+     `changeStatus(id, "noShow")`.
+  2. **Deals & Combos integrated into the pre-order picker** — the real Deals system
+     (`dealService`, `lib/deals.ts`'s pure helpers) is now sold here too, ported from
+     `WaiterPanel.tsx` minus stock-checking (a future pre-order's current stock level isn't
+     meaningful) and minus the cosmetic `dealCardPricing` preview (a simpler `dealPriceLabel`
+     instead) — the **fourth** independent deal-selling-UI implementation in this codebase
+     (POS/Waiter Panel/Self-Order are the other three; this app deliberately doesn't share that
+     UI, see the Deals & Combos section elsewhere in this guide). State: `showDealCustomize`/
+     `customizingDeal`/`dealGroupSelections`/`showDealItemPicker`/`pickingDeal` etc., mirroring
+     WaiterPanel's own naming. `PreOrderItem` (in `reservation.service.ts`) gained
+     `dealId`/`dealName`/`dealLineId`/`dealGroupId`/`dealRole`. **Known limitation**: individual
+     deal-line quantities in the pre-order cart can still be adjusted one at a time — no atomic
+     "remove whole deal" grouping was ported.
+  3. **Filter bar restyled to the Dashboard's pill style** (`inline-flex items-center p-0.5
+     rounded-lg bg-muted/60 border border-border/60 shadow-sm`), all 5 presets kept
+     (Today/Tomorrow/This Week/All/Custom), plus a new Status `<Select>`.
+  4. **A new "Booking Analytics" tile row** (Total Bookings/Total Guests/Cancelled/No-Show)
+     alongside the existing "Live Overview" tiles, via `reportService.getReservationAnalytics`
+     with the range resolved from whichever preset is active.
+- **`CashHub.tsx`'s Audit Log tab gained a real date-range filter (2026-09-13)** — previously an
+  exact-single-day `<DatePicker>` only (or, arriving from the Dashboard drill-down, an ad-hoc
+  read-only range `<Badge>` with no way to adjust it). Replaced with the same Today/This Week/
+  This Month pill + paired-`<DatePicker>` bar every other filterable page uses
+  (`applyHistoryPreset`/`historyPreset`/`rangeFrom`/`rangeTo` state, same shape as
+  `Expenses.tsx`'s `applyPreset`). `cashSettlementService.getHistory` gained optional `from`/`to`.
+- **Customer Analytics + Order Timing & Patterns sections; a real Customers.tsx bug fix
+  (2026-09-13)**:
+  - **Customer Analytics** section (`cust*` state) — `reportService.getCustomerAnalytics`, drills
+    into `/customers?from=&to=[&search=name]`. New vs Returning tiles, a daily new-customer trend,
+    a top-8-by-spend bar chart, and a Top 10 table with New/Returning badges.
+  - **Real bug found and fixed while wiring `Customers.tsx`'s new date-range filter**: the page
+    was independently re-fetching **every** order (`orderService.getOrders({ limit: 1000 })`,
+    capped) via a second `useQuery` and recomputing `totalOrders`/`totalSpent`/`outstandingDue`
+    itself client-side (with its own COD-aware `isPureUncollectedCod` check, keyed on name/phone
+    only, no `customerId` matching) — silently shadowing whatever the backend's own
+    `customerService.getCustomers()` response already sent — a duplicate-logic-drift bug (grep
+    for an existing "is this paid/what did they spend" check before writing a new one; this
+    exact failure mode has shipped real bugs elsewhere in this app too, e.g. Shifts.tsx/
+    OrderStatusBoard.tsx/CustomerDetail.tsx independently re-implementing Cash Hub's payment
+    classification and drifting from it). It would have made the new date filter a complete no-op — the table would keep
+    showing lifetime totals no matter what range was picked. Removed entirely (`allOrdersResp`/
+    `customerStatsMap`/the `orderService` import are all gone); the page now trusts the backend's
+    (now period-aware, via a new optional `from`/`to` on `customerService.getCustomers()`) figures
+    directly. Also gained the same Today/This Week/This Month pill filter bar as Expenses.tsx,
+    seeded from a Dashboard drill-down's `?from=&to=&search=`.
+  - **Order Timing & Patterns** (`st*` state) replaces the old "Customer Intelligence" zone
+    (Peak Hours/Order Type Trend/Day-of-Week Performance, all fixed-window, all read from
+    `getDashboard`'s `d?.peakHours`/`d?.orderTypeTrend`/`d?.dayOfWeekPerformance` — now dead code,
+    those derivations were deleted from `Dashboard.tsx`) with a real filterable section via
+    `reportService.getSalesTiming`. "Orders by Channel" replaced the old Online/Offline stacked
+    bar with Dine In/Take Away/Delivery (matching Sales By Channel's own taxonomy, per explicit
+    request) — each of the 3 `<Bar>`s has its own `onClick` drilling into
+    `/sales?status=completed&type=<channel>&from=<day>&to=<day>`; the Peak Hours bar's `onClick`
+    drills into `/sales?status=completed&from=&to=&fromTime=HH:00&toTime=HH:59` (Sales.tsx already
+    supported `fromTime`/`toTime`). Day-of-Week Performance has no drill-down (an aggregate across
+    the whole range, not one specific date), matching the original's behavior.
+- **Dashboard operational-tile-zone removal (2026-09-13) — supersedes the 2026-09-11 audit
+  entry above.** After seeing the six operational tile zones live (mostly showing zeros,
+  duplicating the real Cash Hub/Reservations/Delivery pages), all six (Today's
+  Operations/Inventory & Procurement/People/Delivery/Reservations/Cash Hub) were removed
+  entirely, along with "Growth vs Last Month" (3 fixed month-over-month % tiles — nothing to
+  date-filter). This deleted `src/lib/dashboardTiles.ts` (the file itself, confirmed unreferenced
+  elsewhere first), the `StatTile`/`ClickableCard` components, and the
+  `visibleTiles`/`tileVisible`/`zoneVisible`/`goToTile` helpers in `Dashboard.tsx`, plus 5
+  now-dead icon imports (`ChefHat`/`LayoutGrid`/`ClipboardList`/`ArrowLeftRight`/`CalendarOff`)
+  and the unused `user` destructure from `useAuth()`. "Dough / Short-Life Batches" was kept (a
+  live action list — waste a near-expiry batch — not a report) but promoted from a plain `<Card>`
+  into the same collapsible `<section>` chrome every filterable section uses, with no date
+  filter (nothing to filter — it's "what's expiring right now"). The Dashboard's filterable
+  section count is now **18** + one live non-filterable collapsible section (Dough).
 
 <!-- code-review-graph MCP tools -->
 ## MCP Tools: code-review-graph
