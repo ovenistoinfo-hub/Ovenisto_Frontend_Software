@@ -95,9 +95,10 @@ const navSections = [
 ];
 
 export function AppSidebar() {
-  const { state } = useSidebar();
+  const { state, setOpen } = useSidebar();
   const collapsed = state === "collapsed";
   const location = useLocation();
+  const isDashboard = location.pathname === "/" || location.pathname === "/dashboard";
   const { logout, hasPermission, user } = useAuth();
 
   const canReviewCancellations = hasPermission("cancellation-requests");
@@ -125,12 +126,16 @@ export function AppSidebar() {
   };
 
   return (
-    <Sidebar collapsible="icon" className="border-r border-border bg-card">
+    <Sidebar collapsible={isDashboard ? "offcanvas" : "icon"} className="border-r border-border bg-card">
       <SidebarHeader className={cn("sticky top-0 z-20 bg-card border-b border-border", collapsed ? "justify-center px-2 py-5" : "px-4 py-5")}>
-        <div className={cn("flex items-center gap-2", collapsed && "justify-center")}>
+        <Link
+          to="/"
+          onClick={() => setOpen(false)}
+          className={cn("flex items-center gap-2 cursor-pointer transition-opacity hover:opacity-90", collapsed && "justify-center")}
+        >
           <Flame className="h-7 w-7 text-primary shrink-0" />
           {!collapsed && <span className="text-xl font-bold text-primary tracking-tight">Ovenisto</span>}
-        </div>
+        </Link>
       </SidebarHeader>
 
       <SidebarContent className="overflow-y-auto">
@@ -156,7 +161,15 @@ export function AppSidebar() {
                           "transition-all rounded-md",
                           isActive(item.url) && "bg-sidebar-accent text-sidebar-accent-foreground font-medium border-l-[3px] border-primary"
                         )}>
-                          <Link to={item.url!} className="flex items-center gap-2">
+                          <Link
+                            to={item.url!}
+                            className="flex items-center gap-2"
+                            onClick={() => {
+                              if (item.url === "/" || item.url === "/dashboard") {
+                                setOpen(false);
+                              }
+                            }}
+                          >
                             <item.icon className="h-4 w-4 shrink-0" />
                             {!collapsed && <span className="flex-1">{item.title}</span>}
                             {item.url === "/cancellation-requests" && pendingCancelCount > 0 && !collapsed && (
