@@ -4,6 +4,7 @@ import {
   UserCheck, Bike, CalendarCheck, Coins, Calendar as CalendarIcon,
   UtensilsCrossed, Percent, X, Layers, CreditCard, Banknote, Smartphone, TrendingDown,
   Tag, Info, Building2, Receipt, Trash2, CalendarClock, Truck,
+  Flame, Sparkles, Menu, ChefHat, Sun, Moon, User, Settings, LogOut, ShoppingCart,
 } from "lucide-react";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Badge } from "@/components/ui/badge";
@@ -14,7 +15,7 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@
 import { XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, Cell, LabelList, CartesianGrid, LineChart, Line } from "recharts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { format } from "date-fns";
 import { reportService } from "@/services/report.service";
@@ -26,7 +27,13 @@ import { useOrderEvents } from "@/hooks/use-order-events";
 import { useModuleEvents } from "@/hooks/use-module-events";
 import { Button } from "@/components/ui/button";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { Separator } from "@/components/ui/separator";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/contexts/AuthContext";
+import { useTheme } from "@/hooks/use-theme";
+import { NavDrawer } from "@/components/layout/NavDrawer";
 import { cn } from "@/lib/utils";
 
 /**
@@ -56,7 +63,14 @@ function ChartTooltip({ active, payload, label }: {
 const Dashboard = () => {
   const { outletId, setOutletId, outlets, isSuperAdmin } = useOutletFilter();
   const navigate = useNavigate();
-  const { hasPermission } = useAuth();
+  const { hasPermission, user, logout } = useAuth();
+  const { theme, toggleTheme } = useTheme();
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [currentTime, setCurrentTime] = useState(new Date());
+  useEffect(() => {
+    const t = setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => clearInterval(t);
+  }, []);
   const queryClient = useQueryClient();
   const { data: d, isLoading: loading } = useQuery({
     queryKey: ["dashboard", outletId],
@@ -708,10 +722,20 @@ const Dashboard = () => {
   const wasteBatch = async (id: string) => { await stockService.wasteDoughBatch(id); refetchDough(); };
 
   if (loading) return (
-    <div className="space-y-6">
-      <Skeleton className="h-8 w-64" />
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-24" />)}</div>
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4"><Skeleton className="lg:col-span-2 h-72" /><Skeleton className="h-72" /></div>
+    <div className="min-h-screen bg-background flex flex-col font-sans">
+      <header className="h-14 bg-card border-b border-border/60 flex items-center justify-between px-4 sm:px-6 shrink-0 shadow-xs">
+        <div className="flex items-center gap-2.5">
+          <div className="h-8 w-8 rounded-lg gradient-primary flex items-center justify-center shadow-xs">
+            <Flame className="h-4 w-4 text-primary-foreground" />
+          </div>
+          <span className="text-sm font-extrabold text-foreground">Ovenisto Dashboard</span>
+        </div>
+      </header>
+      <main className="flex-1 p-4 sm:p-6 lg:p-8 space-y-6">
+        <Skeleton className="h-8 w-64" />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-24" />)}</div>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4"><Skeleton className="lg:col-span-2 h-72" /><Skeleton className="h-72" /></div>
+      </main>
     </div>
   );
 
@@ -1182,7 +1206,105 @@ const Dashboard = () => {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="min-h-screen bg-background flex flex-col font-sans">
+      <NavDrawer open={drawerOpen} onOpenChange={setDrawerOpen} />
+
+      {/* ════════════ HEADER BAR (ORDER MONITOR STYLE) ════════════ */}
+      <header className="h-14 bg-card border-b border-border/60 flex items-center justify-between px-4 sm:px-6 shrink-0 shadow-xs sticky top-0 z-30">
+        <div className="flex items-center gap-3">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 rounded-lg hover:bg-muted"
+            onClick={() => setDrawerOpen(true)}
+            title="Open Navigation Menu"
+          >
+            <Menu className="h-4 w-4 text-foreground" />
+          </Button>
+          <Separator orientation="vertical" className="h-6" />
+          <div className="flex items-center gap-2.5">
+            <div className="h-8 w-8 rounded-lg gradient-primary flex items-center justify-center shadow-xs">
+              <Flame className="h-4 w-4 text-primary-foreground" />
+            </div>
+            <div>
+              <h1 className="text-sm font-extrabold tracking-tight text-foreground flex items-center gap-2">
+                Ovenisto
+                <span className="text-muted-foreground font-semibold">Dashboard</span>
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold bg-primary/10 text-primary border border-primary/20">
+                  <Sparkles className="h-2.5 w-2.5 mr-1" /> Live
+                </span>
+              </h1>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2.5">
+          {/* Quick Portals */}
+          <div className="hidden lg:flex items-center gap-1 bg-muted/40 p-1 rounded-lg border border-border/50">
+            <Link to="/pos" className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold text-muted-foreground hover:text-foreground hover:bg-card rounded-md transition-colors">
+              <ShoppingCart className="h-3.5 w-3.5 text-primary" /> POS
+            </Link>
+            <Link to="/sales" className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold text-muted-foreground hover:text-foreground hover:bg-card rounded-md transition-colors">
+              <Truck className="h-3.5 w-3.5 text-sky-500" /> Orders
+            </Link>
+            <Link to="/kitchens" className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold text-muted-foreground hover:text-foreground hover:bg-card rounded-md transition-colors">
+              <ChefHat className="h-3.5 w-3.5 text-amber-500" /> Kitchen
+            </Link>
+            <Link to="/order-status" className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold text-muted-foreground hover:text-foreground hover:bg-card rounded-md transition-colors">
+              <BarChart3 className="h-3.5 w-3.5 text-emerald-500" /> Monitor
+            </Link>
+          </div>
+
+          {isSuperAdmin && (
+            <OutletFilterSelect outletId={outletId} setOutletId={setOutletId} outlets={outlets} isSuperAdmin={isSuperAdmin} />
+          )}
+
+          <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg hover:bg-muted" onClick={toggleTheme} title="Toggle theme">
+            {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+          </Button>
+
+          <div className="hidden sm:flex items-center gap-2 bg-card border border-border/80 rounded-lg px-2.5 py-1 shadow-xs">
+            <Clock className="h-3.5 w-3.5 text-primary" />
+            <span className="text-xs font-mono font-bold text-foreground tracking-tight">
+              {currentTime.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+            </span>
+          </div>
+
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="sm" className="h-8 gap-2 px-2 rounded-lg hover:bg-muted">
+                <div className="h-6 w-6 rounded-full bg-primary/20 text-primary flex items-center justify-center font-bold text-xs">
+                  {user?.name?.[0]?.toUpperCase() ?? "U"}
+                </div>
+                <span className="text-xs font-medium hidden sm:inline max-w-[100px] truncate">{user?.name ?? "User"}</span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <div className="p-2 border-b border-border/60">
+                <p className="text-sm font-semibold text-foreground">{user?.name}</p>
+                <p className="text-xs text-muted-foreground">{user?.role}</p>
+              </div>
+              <DropdownMenuItem asChild>
+                <Link to="/profile" className="flex items-center gap-2 cursor-pointer">
+                  <User className="h-4 w-4" /> Profile
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link to="/settings" className="flex items-center gap-2 cursor-pointer">
+                  <Settings className="h-4 w-4" /> Settings
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={logout} className="text-destructive focus:text-destructive cursor-pointer">
+                <LogOut className="h-4 w-4 mr-2" /> Logout
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </header>
+
+      {/* ════════════ MAIN CONTENT (FULL SCREEN EDGE-TO-EDGE) ════════════ */}
+      <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 space-y-6 w-full max-w-none">
       {/* Fallback header when Sales By Channel is not visible */}
       {!salesByChannelVisible && (
         <div className="flex items-center justify-between pb-3 border-b border-border/40">
@@ -6000,6 +6122,7 @@ const Dashboard = () => {
           )}
         </section>
       )}
+      </main>
     </div>
   );
 };

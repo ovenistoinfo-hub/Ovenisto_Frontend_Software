@@ -24,7 +24,7 @@ import { api } from "@/services/api";
 
 const CANCELLATION_REQUEST_EVENTS = ["cancellationRequest:created", "cancellationRequest:updated"] as const;
 
-const navSections = [
+export const navSections = [
   { label: "Common", items: [
     { title: "Dashboard", url: "/", icon: Home, module: "dashboard" },
     { title: "Warehouse Dashboard", url: "/warehouse-dashboard", icon: Package, module: "warehouse-dashboard" },
@@ -95,10 +95,9 @@ const navSections = [
 ];
 
 export function AppSidebar() {
-  const { state, setOpen } = useSidebar();
+  const { state } = useSidebar();
   const collapsed = state === "collapsed";
   const location = useLocation();
-  const isDashboard = location.pathname === "/" || location.pathname === "/dashboard";
   const { logout, hasPermission, user } = useAuth();
 
   const canReviewCancellations = hasPermission("cancellation-requests");
@@ -126,11 +125,10 @@ export function AppSidebar() {
   };
 
   return (
-    <Sidebar collapsible={isDashboard ? "offcanvas" : "icon"} className="border-r border-border bg-card">
+    <Sidebar collapsible="icon" className="border-r border-border bg-card">
       <SidebarHeader className={cn("sticky top-0 z-20 bg-card border-b border-border", collapsed ? "justify-center px-2 py-5" : "px-4 py-5")}>
         <Link
           to="/"
-          onClick={() => setOpen(false)}
           className={cn("flex items-center gap-2 cursor-pointer transition-opacity hover:opacity-90", collapsed && "justify-center")}
         >
           <Flame className="h-7 w-7 text-primary shrink-0" />
@@ -161,15 +159,7 @@ export function AppSidebar() {
                           "transition-all rounded-md",
                           isActive(item.url) && "bg-sidebar-accent text-sidebar-accent-foreground font-medium border-l-[3px] border-primary"
                         )}>
-                          <Link
-                            to={item.url!}
-                            className="flex items-center gap-2"
-                            onClick={() => {
-                              if (item.url === "/" || item.url === "/dashboard") {
-                                setOpen(false);
-                              }
-                            }}
-                          >
+                          <Link to={item.url!} className="flex items-center gap-2">
                             <item.icon className="h-4 w-4 shrink-0" />
                             {!collapsed && <span className="flex-1">{item.title}</span>}
                             {item.url === "/cancellation-requests" && pendingCancelCount > 0 && !collapsed && (

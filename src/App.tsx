@@ -126,6 +126,8 @@ function AppRoutes() {
     <Routes>
       <Route path="/login" element={isAuthenticated ? <Navigate to={getDefaultRouteForRole(user?.role)} replace /> : <Login />} />
       {/* Standalone routes (no AppLayout) */}
+      <Route path="/" element={<ProtectedRoute module="dashboard"><Dashboard /></ProtectedRoute>} />
+      <Route path="/dashboard" element={<Navigate to="/" replace />} />
       <Route path="/pos" element={<ProtectedRoute module="pos"><POS /></ProtectedRoute>} />
       <Route path="/kitchen-panel/:id" element={<ProtectedRoute module="kitchens"><KitchenPanel /></ProtectedRoute>} />
       <Route path="/customer-display" element={<ProtectedRoute module="customer-display"><CustomerDisplay /></ProtectedRoute>} />
@@ -133,8 +135,6 @@ function AppRoutes() {
       <Route path="/self-order" element={<SelfOrder />} />
 
       {/* AppLayout routes */}
-      <Route path="/" element={<ProtectedRoute module="dashboard"><AppLayout><Dashboard /></AppLayout></ProtectedRoute>} />
-      <Route path="/dashboard" element={<Navigate to="/" replace />} />
       <Route path="/warehouse-dashboard" element={<ProtectedRoute module="warehouse-dashboard"><AppLayout><WarehouseDashboard /></AppLayout></ProtectedRoute>} />
       <Route path="/kitchens" element={<ProtectedRoute module="kitchens"><AppLayout><Kitchens /></AppLayout></ProtectedRoute>} />
       <Route path="/waiter" element={<ProtectedRoute module="waiter"><AppLayout><WaiterPanel /></AppLayout></ProtectedRoute>} />
