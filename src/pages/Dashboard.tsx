@@ -2078,146 +2078,110 @@ const Dashboard = () => {
               </div>
           </div>
 
-          {/* Section Body: 4 Channel Rows nested inside this container */}
-            <div className="p-4 sm:p-5 space-y-4 bg-background/25">
+          {/* Section Body: Channel Breakdown Table & Charts */}
+            <div className="p-4 sm:p-5">
               {channelLoading ? (
-                <div className="space-y-4">
-                  {Array.from({ length: 4 }).map((_, r) => (
-                    <div key={r} className="rounded-xl border border-border/50 bg-card/40 p-4 space-y-3">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <Skeleton className="h-7 w-7 rounded-md" />
-                          <Skeleton className="h-5 w-28" />
-                        </div>
-                        <Skeleton className="h-5 w-20 rounded-full" />
-                      </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                        {Array.from({ length: 4 }).map((_, c) => (
-                          <Skeleton key={c} className="h-20 rounded-lg" />
-                        ))}
-                      </div>
-                    </div>
+                <div className="space-y-2">
+                  {Array.from({ length: 4 }).map((_, i) => (
+                    <Skeleton key={i} className="h-10 rounded-lg" />
                   ))}
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {channelRows.map((row) => {
-                    const ChannelIcon = row.icon;
-                    return (
-                      <div
-                        key={row.title}
-                        className={cn(
-                          "group/card rounded-xl border p-4 transition-all duration-200 space-y-3",
-                          row.isCombined
-                            ? "bg-emerald-500/[0.03] border-emerald-500/30 shadow-xs hover:border-emerald-500/50 hover:bg-emerald-500/[0.05]"
-                            : "bg-card/60 border-border/60 hover:border-border/90 hover:bg-card/80"
-                        )}
-                      >
-                        {/* Channel Title + Orders Row */}
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2.5">
-                            <div
-                              className={cn(
-                                "h-7 w-7 rounded-md flex items-center justify-center shrink-0 border shadow-2xs transition-transform duration-200 group-hover/card:scale-105",
-                                row.color
-                              )}
+                  <div className="overflow-x-auto -mx-1 px-1">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="bg-muted/50 hover:bg-muted/50">
+                          <TableHead>Channel</TableHead>
+                          <TableHead className="text-right">Orders</TableHead>
+                          <TableHead className="text-right">Sale</TableHead>
+                          <TableHead className="text-right">Cost</TableHead>
+                          <TableHead className="text-right">Profit</TableHead>
+                          <TableHead className="text-right">Margin</TableHead>
+                          <TableHead className="w-8" />
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {channelRows
+                          .filter((r) => !r.isCombined)
+                          .map((r) => {
+                            const ChannelIcon = r.icon;
+                            const empty = r.orders === 0 && r.sale === 0;
+                            return (
+                              <TableRow
+                                key={r.title}
+                                className={cn(
+                                  "cursor-pointer transition-colors group/row",
+                                  empty ? "opacity-60 hover:opacity-100 hover:bg-muted/40" : "hover:bg-primary/5"
+                                )}
+                                onClick={() => goToChannelSales(r.salesTypeParam)}
+                                title={`View ${r.title} orders`}
+                              >
+                                <TableCell className="font-medium">
+                                  <div className="flex items-center gap-2.5">
+                                    <div className={cn("h-7 w-7 rounded-md flex items-center justify-center shrink-0 border shadow-2xs", r.color)}>
+                                      <ChannelIcon className="h-3.5 w-3.5" />
+                                    </div>
+                                    <span className="font-semibold">{r.title}</span>
+                                    {empty && (
+                                      <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground/70">
+                                        no sales
+                                      </span>
+                                    )}
+                                  </div>
+                                </TableCell>
+                                <TableCell className="text-right text-muted-foreground font-medium">{r.orders}</TableCell>
+                                <TableCell className="text-right font-medium">{currency} {r.sale.toLocaleString()}</TableCell>
+                                <TableCell className="text-right">{currency} {r.cost.toLocaleString()}</TableCell>
+                                <TableCell className={cn("text-right font-medium", empty ? "text-muted-foreground" : r.profit >= 0 ? "text-emerald-500" : "text-destructive")}>
+                                  {currency} {r.profit.toLocaleString()}
+                                </TableCell>
+                                <TableCell className={cn("text-right", empty ? "text-muted-foreground" : r.marginPct >= 0 ? "text-emerald-500" : "text-destructive")}>
+                                  {empty ? "—" : `${r.marginPct}%`}
+                                </TableCell>
+                                <TableCell className="w-8">
+                                  <ChevronRight className="h-4 w-4 text-muted-foreground/40 transition-all group-hover/row:text-primary group-hover/row:translate-x-0.5" />
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
+                        {channelRows.find((r) => r.isCombined) && (() => {
+                          const combined = channelRows.find((r) => r.isCombined)!;
+                          return (
+                            <TableRow
+                              className="cursor-pointer border-t-2 border-emerald-500/30 bg-emerald-500/[0.04] hover:bg-emerald-500/[0.08] font-semibold group/row"
+                              onClick={() => goToChannelSales(combined.salesTypeParam)}
+                              title="View all completed channel orders"
                             >
-                              <ChannelIcon className="h-3.5 w-3.5" />
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <h4 className="text-sm font-semibold text-foreground tracking-tight">{row.title}</h4>
-                              {row.isCombined && (
-                                <span className="text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
-                                  Summary Total
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-2 shrink-0">
-                            <span className="text-xs text-muted-foreground font-medium bg-muted/60 px-2.5 py-0.5 rounded-full border border-border/50">
-                              {row.orders} {row.orders === 1 ? "order" : "orders"}
-                            </span>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => goToChannelSales(row.salesTypeParam)}
-                              className="h-7 px-2.5 text-xs font-medium gap-1 text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors rounded-lg"
-                            >
-                              <span>View Details</span>
-                              <ChevronRight className="h-3 w-3 transition-transform duration-200 group-hover/card:translate-x-0.5" />
-                            </Button>
-                          </div>
-                        </div>
-
-                        {/* 4 Metrics in Grid */}
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                          {/* Metric 1: Total Sales */}
-                          <div className="rounded-lg bg-background/70 border border-border/50 p-3.5 flex items-center justify-between">
-                            <div>
-                              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Total Sales</p>
-                              <p className="text-xl font-bold tracking-tight text-foreground mt-0.5">
-                                {currency} {row.sale.toLocaleString()}
-                              </p>
-                            </div>
-                            <div className="h-8 w-8 rounded-lg flex items-center justify-center bg-primary/10 text-primary border border-primary/20 shrink-0">
-                              <DollarSign className="h-4 w-4" />
-                            </div>
-                          </div>
-
-                          {/* Metric 2: Total Cost */}
-                          <div className="rounded-lg bg-background/70 border border-border/50 p-3.5 flex items-center justify-between">
-                            <div>
-                              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Total Cost</p>
-                              <p className="text-xl font-bold tracking-tight text-foreground mt-0.5">
-                                {currency} {row.cost.toLocaleString()}
-                              </p>
-                            </div>
-                            <div className="h-8 w-8 rounded-lg flex items-center justify-center bg-muted/80 text-muted-foreground border border-border/50 shrink-0">
-                              <Wallet className="h-4 w-4" />
-                            </div>
-                          </div>
-
-                          {/* Metric 3: Total Profit */}
-                          <div className="rounded-lg bg-background/70 border border-border/50 p-3.5 flex items-center justify-between">
-                            <div>
-                              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Total Profit</p>
-                              <p className={cn("text-xl font-bold tracking-tight mt-0.5", row.profit >= 0 ? "text-emerald-500" : "text-destructive")}>
-                                {currency} {row.profit.toLocaleString()}
-                              </p>
-                            </div>
-                            <div
-                              className={cn(
-                                "h-8 w-8 rounded-lg flex items-center justify-center shrink-0 border",
-                                row.profit >= 0 ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" : "bg-destructive/10 text-destructive border-destructive/20"
-                              )}
-                            >
-                              <Coins className="h-4 w-4" />
-                            </div>
-                          </div>
-
-                          {/* Metric 4: Profit Margin */}
-                          <div className="rounded-lg bg-background/70 border border-border/50 p-3.5 flex items-center justify-between">
-                            <div>
-                              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Profit Margin</p>
-                              <p className={cn("text-xl font-bold tracking-tight mt-0.5", row.marginPct >= 0 ? "text-emerald-500" : "text-destructive")}>
-                                {row.marginPct}%
-                              </p>
-                            </div>
-                            <div
-                              className={cn(
-                                "h-8 w-8 rounded-lg flex items-center justify-center shrink-0 border",
-                                row.marginPct >= 0 ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" : "bg-destructive/10 text-destructive border-destructive/20"
-                              )}
-                            >
-                              <Percent className="h-4 w-4" />
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-
+                              <TableCell className="font-bold">
+                                <div className="flex items-center gap-2.5">
+                                  <div className={cn("h-7 w-7 rounded-md flex items-center justify-center shrink-0 border shadow-2xs", combined.color)}>
+                                    <TrendingUp className="h-3.5 w-3.5" />
+                                  </div>
+                                  <span>Total</span>
+                                  <span className="text-[10px] font-semibold uppercase tracking-wider text-emerald-500 ml-1.5">
+                                    All Channels
+                                  </span>
+                                </div>
+                              </TableCell>
+                              <TableCell className="text-right">{combined.orders}</TableCell>
+                              <TableCell className="text-right">{currency} {combined.sale.toLocaleString()}</TableCell>
+                              <TableCell className="text-right">{currency} {combined.cost.toLocaleString()}</TableCell>
+                              <TableCell className={cn("text-right", combined.profit >= 0 ? "text-emerald-500" : "text-destructive")}>
+                                {currency} {combined.profit.toLocaleString()}
+                              </TableCell>
+                              <TableCell className={cn("text-right", combined.marginPct >= 0 ? "text-emerald-500" : "text-destructive")}>
+                                {combined.marginPct}%
+                              </TableCell>
+                              <TableCell className="w-8">
+                                <ChevronRight className="h-4 w-4 text-muted-foreground/40 transition-all group-hover/row:text-primary group-hover/row:translate-x-0.5" />
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })()}
+                      </TableBody>
+                    </Table>
+                  </div>
                   {/* Charts: Sale vs Cost (2 series, validated categorical pair) and Profit
                       (1 series, colored by sign -- a status signal, not identity, so it's
                       reinforced with direct value labels + a legend key rather than color
