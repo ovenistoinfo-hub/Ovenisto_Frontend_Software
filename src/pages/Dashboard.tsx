@@ -91,7 +91,6 @@ const Dashboard = () => {
   const [sectionSearch, setSectionSearch] = useState<string>("");
   const mainContentRef = useRef<HTMLDivElement>(null);
 
-  const [channelSectionCollapsed, setChannelSectionCollapsed] = useState<boolean>(false);
   const [channelPreset, setChannelPreset] = useState<string>("Today");
   const [channelFromStr, setChannelFromStr] = useState<string>(toYmd(new Date()));
   const [channelToStr, setChannelToStr] = useState<string>(toYmd(new Date()));
@@ -100,7 +99,6 @@ const Dashboard = () => {
 
   // Sales by Category — same filter model as Sales By Channel, its own independent state
   // (both sections are separately collapsible; a user may want a different window in each).
-  const [catSectionCollapsed, setCatSectionCollapsed] = useState<boolean>(false);
   const [catPreset, setCatPreset] = useState<string>("Today");
   const [catFromStr, setCatFromStr] = useState<string>(toYmd(new Date()));
   const [catToStr, setCatToStr] = useState<string>(toYmd(new Date()));
@@ -108,7 +106,6 @@ const Dashboard = () => {
   const [catTimeTo, setCatTimeTo] = useState<string>("");
 
   // Sales by Payment Method — same filter model again, its own state.
-  const [paySectionCollapsed, setPaySectionCollapsed] = useState<boolean>(false);
   const [payPreset, setPayPreset] = useState<string>("Today");
   const [payFromStr, setPayFromStr] = useState<string>(toYmd(new Date()));
   const [payToStr, setPayToStr] = useState<string>(toYmd(new Date()));
@@ -116,7 +113,6 @@ const Dashboard = () => {
   const [payTimeTo, setPayTimeTo] = useState<string>("");
 
   // Top & Bottom Items — same filter model, its own state.
-  const [itemsSectionCollapsed, setItemsSectionCollapsed] = useState<boolean>(false);
   const [itemsPreset, setItemsPreset] = useState<string>("Today");
   const [itemsFromStr, setItemsFromStr] = useState<string>(toYmd(new Date()));
   const [itemsToStr, setItemsToStr] = useState<string>(toYmd(new Date()));
@@ -125,20 +121,17 @@ const Dashboard = () => {
 
   // Net Profit — date range only (no time-of-day; expenses/waste aren't hourly). Defaults to
   // "This Month" since a P&L over a single day is rarely what you want.
-  const [npSectionCollapsed, setNpSectionCollapsed] = useState<boolean>(false);
   const [npPreset, setNpPreset] = useState<string>("This Month");
   const [npFromStr, setNpFromStr] = useState<string>(toYmd(new Date(new Date().getFullYear(), new Date().getMonth(), 1)));
   const [npToStr, setNpToStr] = useState<string>(toYmd(new Date()));
 
   // Deals Performance — same date-range-only choice as Net Profit (deal usage isn't hourly).
-  const [dpSectionCollapsed, setDpSectionCollapsed] = useState<boolean>(false);
   const [dpPreset, setDpPreset] = useState<string>("This Month");
   const [dpFromStr, setDpFromStr] = useState<string>(toYmd(new Date(new Date().getFullYear(), new Date().getMonth(), 1)));
   const [dpToStr, setDpToStr] = useState<string>(toYmd(new Date()));
 
   // Sales by Staff — same filter model as Sales By Channel (date + optional time-of-day; shift
   // analysis benefits from it), its own independent state.
-  const [staffSectionCollapsed, setStaffSectionCollapsed] = useState<boolean>(false);
   const [staffPreset, setStaffPreset] = useState<string>("Today");
   const [staffFromStr, setStaffFromStr] = useState<string>(toYmd(new Date()));
   const [staffToStr, setStaffToStr] = useState<string>(toYmd(new Date()));
@@ -147,64 +140,54 @@ const Dashboard = () => {
 
   // Sales by Outlet — chain-wide branch comparison, date-range only (same reasoning as Deals
   // Performance/Net Profit). Only meaningful for Super Admin viewing "All Outlets"; gated in JSX.
-  const [branchSectionCollapsed, setBranchSectionCollapsed] = useState<boolean>(false);
   const [branchPreset, setBranchPreset] = useState<string>("This Month");
   const [branchFromStr, setBranchFromStr] = useState<string>(toYmd(new Date(new Date().getFullYear(), new Date().getMonth(), 1)));
   const [branchToStr, setBranchToStr] = useState<string>(toYmd(new Date()));
 
   // Cancellation Requests — date-range only (a cancellation is a discrete event, not hourly).
-  const [crSectionCollapsed, setCrSectionCollapsed] = useState<boolean>(false);
   const [crPreset, setCrPreset] = useState<string>("This Month");
   const [crFromStr, setCrFromStr] = useState<string>(toYmd(new Date(new Date().getFullYear(), new Date().getMonth(), 1)));
   const [crToStr, setCrToStr] = useState<string>(toYmd(new Date()));
 
   // Purchases & Supplier Spend — date-range only (a purchase isn't hourly).
-  const [pSectionCollapsed, setPSectionCollapsed] = useState<boolean>(false);
   const [pPreset, setPPreset] = useState<string>("This Month");
   const [pFromStr, setPFromStr] = useState<string>(toYmd(new Date(new Date().getFullYear(), new Date().getMonth(), 1)));
   const [pToStr, setPToStr] = useState<string>(toYmd(new Date()));
 
   // Expenses Breakdown & Trends — date-range only, same reasoning as Net Profit/Purchases
   // (an expense is a discrete daily record, not hourly).
-  const [expSectionCollapsed, setExpSectionCollapsed] = useState<boolean>(false);
   const [expPreset, setExpPreset] = useState<string>("This Month");
   const [expFromStr, setExpFromStr] = useState<string>(toYmd(new Date(new Date().getFullYear(), new Date().getMonth(), 1)));
   const [expToStr, setExpToStr] = useState<string>(toYmd(new Date()));
 
   // Waste / Food Loss Trends — same date-range-only shape as Expenses Breakdown.
-  const [wasteSectionCollapsed, setWasteSectionCollapsed] = useState<boolean>(false);
   const [wastePreset, setWastePreset] = useState<string>("This Month");
   const [wasteFromStr, setWasteFromStr] = useState<string>(toYmd(new Date(new Date().getFullYear(), new Date().getMonth(), 1)));
   const [wasteToStr, setWasteToStr] = useState<string>(toYmd(new Date()));
 
   // Attendance / HR Analytics — date-range only (AttendanceRecord.date is day-granularity).
-  const [attSectionCollapsed, setAttSectionCollapsed] = useState<boolean>(false);
   const [attPreset, setAttPreset] = useState<string>("This Month");
   const [attFromStr, setAttFromStr] = useState<string>(toYmd(new Date(new Date().getFullYear(), new Date().getMonth(), 1)));
   const [attToStr, setAttToStr] = useState<string>(toYmd(new Date()));
 
   // Reservations Analytics — date-range only (Reservation.date is day-granularity).
-  const [resSectionCollapsed, setResSectionCollapsed] = useState<boolean>(false);
   const [resPreset, setResPreset] = useState<string>("This Month");
   const [resFromStr, setResFromStr] = useState<string>(toYmd(new Date(new Date().getFullYear(), new Date().getMonth(), 1)));
   const [resToStr, setResToStr] = useState<string>(toYmd(new Date()));
 
   // Delivery / Rider Performance — date range + time-of-day would need real timestamps either
   // way; kept date-only like every other non-Sales-derived section for consistency.
-  const [dlvSectionCollapsed, setDlvSectionCollapsed] = useState<boolean>(false);
   const [dlvPreset, setDlvPreset] = useState<string>("This Month");
   const [dlvFromStr, setDlvFromStr] = useState<string>(toYmd(new Date(new Date().getFullYear(), new Date().getMonth(), 1)));
   const [dlvToStr, setDlvToStr] = useState<string>(toYmd(new Date()));
 
   // Cash Hub Settlement Trends — date range only, same reasoning as every non-Sales section.
-  const [cshSectionCollapsed, setCshSectionCollapsed] = useState<boolean>(false);
   const [cshPreset, setCshPreset] = useState<string>("This Month");
   const [cshFromStr, setCshFromStr] = useState<string>(toYmd(new Date(new Date().getFullYear(), new Date().getMonth(), 1)));
   const [cshToStr, setCshToStr] = useState<string>(toYmd(new Date()));
 
   // Customer Analytics — date range only (customer acquisition isn't hourly), same reasoning as
   // Cash Hub Settlement Trends.
-  const [custSectionCollapsed, setCustSectionCollapsed] = useState<boolean>(false);
   const [custPreset, setCustPreset] = useState<string>("This Month");
   const [custFromStr, setCustFromStr] = useState<string>(toYmd(new Date(new Date().getFullYear(), new Date().getMonth(), 1)));
   const [custToStr, setCustToStr] = useState<string>(toYmd(new Date()));
@@ -213,12 +196,10 @@ const Dashboard = () => {
   // expiring), same reasoning as the Delivery Board note elsewhere on this page: no date
   // range makes sense for "what's expiring soon," so this only gets the collapsible section
   // chrome, not a filter bar.
-  const [doughSectionCollapsed, setDoughSectionCollapsed] = useState<boolean>(false);
 
   // Order Timing & Patterns — date range only (an hour-of-day/weekday pattern isn't meaningful
   // over a time-of-day sub-window). Promotes the old fixed-window "Customer Intelligence" charts
   // (Peak Hours/Order Type Trend/Day-of-Week Performance) into a real filterable section.
-  const [stSectionCollapsed, setStSectionCollapsed] = useState<boolean>(false);
   const [stPreset, setStPreset] = useState<string>("This Month");
   const [stFromStr, setStFromStr] = useState<string>(toYmd(new Date(new Date().getFullYear(), new Date().getMonth(), 1)));
   const [stToStr, setStToStr] = useState<string>(toYmd(new Date()));
@@ -1407,25 +1388,6 @@ const Dashboard = () => {
 
   const handleSelectSection = (id: string) => {
     setActiveSection(id);
-    if (id === "sales-by-channel") setChannelSectionCollapsed(false);
-    else if (id === "sales-by-category") setCatSectionCollapsed(false);
-    else if (id === "sales-by-payment-method") setPaySectionCollapsed(false);
-    else if (id === "top-bottom-items") setItemsSectionCollapsed(false);
-    else if (id === "net-profit") setNpSectionCollapsed(false);
-    else if (id === "expenses") setExpSectionCollapsed(false);
-    else if (id === "waste-loss") setWasteSectionCollapsed(false);
-    else if (id === "attendance") setAttSectionCollapsed(false);
-    else if (id === "reservations") setResSectionCollapsed(false);
-    else if (id === "delivery-performance") setDlvSectionCollapsed(false);
-    else if (id === "cash-settlement") setCshSectionCollapsed(false);
-    else if (id === "deals-performance") setDpSectionCollapsed(false);
-    else if (id === "sales-by-staff") setStaffSectionCollapsed(false);
-    else if (id === "sales-by-outlet") setBranchSectionCollapsed(false);
-    else if (id === "cancellation-requests") setCrSectionCollapsed(false);
-    else if (id === "purchases") setPSectionCollapsed(false);
-    else if (id === "dough-batches") setDoughSectionCollapsed(false);
-    else if (id === "customer-analytics") setCustSectionCollapsed(false);
-    else if (id === "order-timing") setStSectionCollapsed(false);
   };
 
   return (
@@ -1670,7 +1632,7 @@ const Dashboard = () => {
         </aside>
 
         {/* ════════════ MAIN CONTENT (INDEPENDENT SCROLL PANE) ════════════ */}
-        <main ref={mainContentRef} className="flex-1 h-full overflow-y-auto min-h-0 p-4 sm:p-6 lg:p-8 space-y-6 w-full max-w-none">
+        <main ref={mainContentRef} className="flex-1 h-full overflow-y-auto min-h-0 p-2 sm:p-3 space-y-3 w-full max-w-none">
           {/* Mobile section switcher bar */}
           <div className="md:hidden flex items-center justify-between gap-2 p-2.5 bg-card/80 backdrop-blur-md rounded-xl border border-border/70 shadow-xs">
             <div className="flex items-center gap-2 min-w-0">
@@ -1723,17 +1685,14 @@ const Dashboard = () => {
           className="rounded-2xl border border-border/80 bg-card/40 backdrop-blur-md shadow-sm overflow-hidden transition-all"
         >
           {/* Section Header & Filter Controls Container */}
-          <div className={cn("p-4 sm:p-5 space-y-4 bg-card/70", !channelSectionCollapsed && "border-b border-border/50")}>
+          <div className="p-4 sm:p-5 space-y-4 bg-card/70 border-b border-border/50">
             {/* Top row: Title + Collapse Arrow + Super Admin OutletFilter */}
             <div className="flex items-center justify-between gap-3">
-              <div
-                className="flex items-center gap-3 cursor-pointer select-none group"
-                onClick={() => setChannelSectionCollapsed((prev) => !prev)}
-              >
-                <div className="h-9 w-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center border border-primary/20 shrink-0 shadow-sm group-hover:bg-primary/20 transition-colors">
+              <div className="flex items-center gap-3">
+                <div className="h-9 w-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center border border-primary/20 shrink-0 shadow-sm">
                   <DollarSign className="h-4 w-4" />
                 </div>
-                <h2 className="text-lg sm:text-xl font-bold tracking-tight text-foreground group-hover:text-primary transition-colors whitespace-nowrap">
+                <h2 className="text-lg sm:text-xl font-bold tracking-tight text-foreground whitespace-nowrap">
                   Sales By Channel
                 </h2>
               </div>
@@ -1742,29 +1701,11 @@ const Dashboard = () => {
                 {isSuperAdmin && (
                   <OutletFilterSelect outletId={outletId} setOutletId={setOutletId} outlets={outlets} isSuperAdmin={isSuperAdmin} />
                 )}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setChannelSectionCollapsed((prev) => !prev)}
-                  className="h-8 px-2.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/70 gap-1.5 rounded-lg border border-border/50"
-                  title={channelSectionCollapsed ? "Expand Sales By Channel" : "Collapse Sales By Channel"}
-                  aria-label={channelSectionCollapsed ? "Expand Sales By Channel" : "Collapse Sales By Channel"}
-                >
-                  <span className="text-xs font-medium hidden sm:inline">
-                    {channelSectionCollapsed ? "Show" : "Hide"}
-                  </span>
-                  <ChevronDown
-                    className={cn(
-                      "h-4 w-4 transition-transform duration-200",
-                      channelSectionCollapsed ? "-rotate-90" : "rotate-0"
-                    )}
-                  />
-                </Button>
+                
               </div>
             </div>
 
             {/* Filter Bar Row (only shown when expanded) */}
-            {!channelSectionCollapsed && (
               <div className="flex items-center gap-2.5 flex-wrap pt-3 border-t border-border/40">
                 {/* Presets Segmented Control */}
                 <div className="inline-flex items-center p-0.5 rounded-lg bg-muted/60 border border-border/60 shadow-sm">
@@ -1929,11 +1870,9 @@ const Dashboard = () => {
                   )}
                 </div>
               </div>
-            )}
           </div>
 
           {/* Section Body: 4 Channel Rows nested inside this container */}
-          {!channelSectionCollapsed && (
             <div className="p-4 sm:p-5 space-y-4 bg-background/25">
               {channelLoading ? (
                 <div className="space-y-4">
@@ -2141,7 +2080,6 @@ const Dashboard = () => {
                 </div>
               )}
             </div>
-          )}
         </section>
       )}
 
@@ -2151,43 +2089,20 @@ const Dashboard = () => {
           aria-label="Sales by Category"
           className="rounded-2xl border border-border/80 bg-card/40 backdrop-blur-md shadow-sm overflow-hidden transition-all"
         >
-          <div className={cn("p-4 sm:p-5 space-y-4 bg-card/70", !catSectionCollapsed && "border-b border-border/50")}>
+          <div className="p-4 sm:p-5 space-y-4 bg-card/70 border-b border-border/50">
             <div className="flex items-center justify-between gap-3">
-              <div
-                className="flex items-center gap-3 cursor-pointer select-none group"
-                onClick={() => setCatSectionCollapsed((prev) => !prev)}
-              >
-                <div className="h-9 w-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center border border-primary/20 shrink-0 shadow-sm group-hover:bg-primary/20 transition-colors">
+              <div className="flex items-center gap-3">
+                <div className="h-9 w-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center border border-primary/20 shrink-0 shadow-sm">
                   <Layers className="h-4 w-4" />
                 </div>
-                <h2 className="text-lg sm:text-xl font-bold tracking-tight text-foreground group-hover:text-primary transition-colors whitespace-nowrap">
+                <h2 className="text-lg sm:text-xl font-bold tracking-tight text-foreground whitespace-nowrap">
                   Sales by Category
                 </h2>
               </div>
 
-              <div className="flex items-center gap-2 shrink-0">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setCatSectionCollapsed((prev) => !prev)}
-                  className="h-8 px-2.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/70 gap-1.5 rounded-lg border border-border/50"
-                  title={catSectionCollapsed ? "Expand Sales by Category" : "Collapse Sales by Category"}
-                  aria-label={catSectionCollapsed ? "Expand Sales by Category" : "Collapse Sales by Category"}
-                >
-                  <span className="text-xs font-medium hidden sm:inline">
-                    {catSectionCollapsed ? "Show" : "Hide"}
-                  </span>
-                  <ChevronDown
-                    className={cn(
-                      "h-4 w-4 transition-transform duration-200",
-                      catSectionCollapsed ? "-rotate-90" : "rotate-0"
-                    )}
-                  />
-                </Button>
-              </div>
+              <div className="flex items-center gap-2 shrink-0" />
             </div>
 
-            {!catSectionCollapsed && (
               <div className="flex items-center gap-2.5 flex-wrap pt-3 border-t border-border/40">
                 <div className="inline-flex items-center p-0.5 rounded-lg bg-muted/60 border border-border/60 shadow-sm">
                   {(["Today", "This Week", "This Month"] as const).map((p) => (
@@ -2332,10 +2247,8 @@ const Dashboard = () => {
                   )}
                 </div>
               </div>
-            )}
           </div>
 
-          {!catSectionCollapsed && (
             <div className="p-4 sm:p-5">
               {categoryLoading ? (
                 <div className="space-y-2">
@@ -2489,7 +2402,6 @@ const Dashboard = () => {
                 </div>
               )}
             </div>
-          )}
         </section>
       )}
 
@@ -2499,43 +2411,20 @@ const Dashboard = () => {
           aria-label="Sales by Payment Method"
           className="rounded-2xl border border-border/80 bg-card/40 backdrop-blur-md shadow-sm overflow-hidden transition-all"
         >
-          <div className={cn("p-4 sm:p-5 space-y-4 bg-card/70", !paySectionCollapsed && "border-b border-border/50")}>
+          <div className="p-4 sm:p-5 space-y-4 bg-card/70 border-b border-border/50">
             <div className="flex items-center justify-between gap-3">
-              <div
-                className="flex items-center gap-3 cursor-pointer select-none group"
-                onClick={() => setPaySectionCollapsed((prev) => !prev)}
-              >
-                <div className="h-9 w-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center border border-primary/20 shrink-0 shadow-sm group-hover:bg-primary/20 transition-colors">
+              <div className="flex items-center gap-3">
+                <div className="h-9 w-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center border border-primary/20 shrink-0 shadow-sm">
                   <CreditCard className="h-4 w-4" />
                 </div>
-                <h2 className="text-lg sm:text-xl font-bold tracking-tight text-foreground group-hover:text-primary transition-colors whitespace-nowrap">
+                <h2 className="text-lg sm:text-xl font-bold tracking-tight text-foreground whitespace-nowrap">
                   Sales by Payment Method
                 </h2>
               </div>
 
-              <div className="flex items-center gap-2 shrink-0">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setPaySectionCollapsed((prev) => !prev)}
-                  className="h-8 px-2.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/70 gap-1.5 rounded-lg border border-border/50"
-                  title={paySectionCollapsed ? "Expand Sales by Payment Method" : "Collapse Sales by Payment Method"}
-                  aria-label={paySectionCollapsed ? "Expand Sales by Payment Method" : "Collapse Sales by Payment Method"}
-                >
-                  <span className="text-xs font-medium hidden sm:inline">
-                    {paySectionCollapsed ? "Show" : "Hide"}
-                  </span>
-                  <ChevronDown
-                    className={cn(
-                      "h-4 w-4 transition-transform duration-200",
-                      paySectionCollapsed ? "-rotate-90" : "rotate-0"
-                    )}
-                  />
-                </Button>
-              </div>
+              <div className="flex items-center gap-2 shrink-0" />
             </div>
 
-            {!paySectionCollapsed && (
               <div className="flex items-center gap-2.5 flex-wrap pt-3 border-t border-border/40">
                 <div className="inline-flex items-center p-0.5 rounded-lg bg-muted/60 border border-border/60 shadow-sm">
                   {(["Today", "This Week", "This Month"] as const).map((p) => (
@@ -2680,10 +2569,8 @@ const Dashboard = () => {
                   )}
                 </div>
               </div>
-            )}
           </div>
 
-          {!paySectionCollapsed && (
             <div className="p-4 sm:p-5">
               {payLoading ? (
                 <div className="space-y-2">
@@ -2830,7 +2717,6 @@ const Dashboard = () => {
                 </div>
               )}
             </div>
-          )}
         </section>
       )}
 
@@ -2840,43 +2726,20 @@ const Dashboard = () => {
           aria-label="Top and Bottom Items"
           className="rounded-2xl border border-border/80 bg-card/40 backdrop-blur-md shadow-sm overflow-hidden transition-all"
         >
-          <div className={cn("p-4 sm:p-5 space-y-4 bg-card/70", !itemsSectionCollapsed && "border-b border-border/50")}>
+          <div className="p-4 sm:p-5 space-y-4 bg-card/70 border-b border-border/50">
             <div className="flex items-center justify-between gap-3">
-              <div
-                className="flex items-center gap-3 cursor-pointer select-none group"
-                onClick={() => setItemsSectionCollapsed((prev) => !prev)}
-              >
-                <div className="h-9 w-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center border border-primary/20 shrink-0 shadow-sm group-hover:bg-primary/20 transition-colors">
+              <div className="flex items-center gap-3">
+                <div className="h-9 w-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center border border-primary/20 shrink-0 shadow-sm">
                   <Trophy className="h-4 w-4" />
                 </div>
-                <h2 className="text-lg sm:text-xl font-bold tracking-tight text-foreground group-hover:text-primary transition-colors whitespace-nowrap">
+                <h2 className="text-lg sm:text-xl font-bold tracking-tight text-foreground whitespace-nowrap">
                   Top &amp; Bottom Items
                 </h2>
               </div>
 
-              <div className="flex items-center gap-2 shrink-0">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setItemsSectionCollapsed((prev) => !prev)}
-                  className="h-8 px-2.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/70 gap-1.5 rounded-lg border border-border/50"
-                  title={itemsSectionCollapsed ? "Expand Top & Bottom Items" : "Collapse Top & Bottom Items"}
-                  aria-label={itemsSectionCollapsed ? "Expand Top & Bottom Items" : "Collapse Top & Bottom Items"}
-                >
-                  <span className="text-xs font-medium hidden sm:inline">
-                    {itemsSectionCollapsed ? "Show" : "Hide"}
-                  </span>
-                  <ChevronDown
-                    className={cn(
-                      "h-4 w-4 transition-transform duration-200",
-                      itemsSectionCollapsed ? "-rotate-90" : "rotate-0"
-                    )}
-                  />
-                </Button>
-              </div>
+              <div className="flex items-center gap-2 shrink-0" />
             </div>
 
-            {!itemsSectionCollapsed && (
               <div className="flex items-center gap-2.5 flex-wrap pt-3 border-t border-border/40">
                 <div className="inline-flex items-center p-0.5 rounded-lg bg-muted/60 border border-border/60 shadow-sm">
                   {(["Today", "This Week", "This Month"] as const).map((p) => (
@@ -3021,10 +2884,8 @@ const Dashboard = () => {
                   )}
                 </div>
               </div>
-            )}
           </div>
 
-          {!itemsSectionCollapsed && (
             <div className="p-4 sm:p-5">
               {itemsLoading ? (
                 <div className="space-y-2">
@@ -3072,7 +2933,6 @@ const Dashboard = () => {
                 </div>
               )}
             </div>
-          )}
         </section>
       )}
 
@@ -3082,55 +2942,23 @@ const Dashboard = () => {
           aria-label="Net Profit"
           className="rounded-2xl border border-border/80 bg-card/40 backdrop-blur-md shadow-sm overflow-hidden transition-all"
         >
-          <div className={cn("p-4 sm:p-5 space-y-4 bg-card/70", !npSectionCollapsed && "border-b border-border/50")}>
+          <div className="p-4 sm:p-5 space-y-4 bg-card/70 border-b border-border/50">
             <div className="flex items-center justify-between gap-3">
-              <div
-                className="flex items-center gap-3 cursor-pointer select-none group"
-                onClick={() => setNpSectionCollapsed((prev) => !prev)}
-              >
-                <div className="h-9 w-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center border border-primary/20 shrink-0 shadow-sm group-hover:bg-primary/20 transition-colors">
+              <div className="flex items-center gap-3">
+                <div className="h-9 w-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center border border-primary/20 shrink-0 shadow-sm">
                   <Coins className="h-4 w-4" />
                 </div>
                 <div className="flex items-center gap-2">
-                  <h2 className="text-lg sm:text-xl font-bold tracking-tight text-foreground group-hover:text-primary transition-colors">
+                  <h2 className="text-lg sm:text-xl font-bold tracking-tight text-foreground">
                     Net Profit
                   </h2>
-                  {npSectionCollapsed && np && (
-                    <span
-                      className={cn(
-                        "text-xs font-semibold px-2.5 py-0.5 rounded-full border",
-                        np.netProfit >= 0
-                          ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20"
-                          : "bg-destructive/10 text-destructive border-destructive/20"
-                      )}
-                    >
-                      {np.netProfit < 0 ? "−" : ""}{money(np.netProfit)} • {np.netMarginPct}%
-                    </span>
-                  )}
+                  
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 shrink-0">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setNpSectionCollapsed((prev) => !prev)}
-                  className="h-8 px-2.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/70 gap-1.5 rounded-lg border border-border/50"
-                  title={npSectionCollapsed ? "Expand Net Profit" : "Collapse Net Profit"}
-                  aria-label={npSectionCollapsed ? "Expand Net Profit" : "Collapse Net Profit"}
-                >
-                  <span className="text-xs font-medium hidden sm:inline">{npSectionCollapsed ? "Show" : "Hide"}</span>
-                  <ChevronDown
-                    className={cn(
-                      "h-4 w-4 transition-transform duration-200",
-                      npSectionCollapsed ? "-rotate-90" : "rotate-0"
-                    )}
-                  />
-                </Button>
-              </div>
+              <div className="flex items-center gap-2 shrink-0" />
             </div>
 
-            {!npSectionCollapsed && (
               <div className="flex items-center gap-2.5 flex-wrap pt-3 border-t border-border/40">
                 <div className="inline-flex items-center p-0.5 rounded-lg bg-muted/60 border border-border/60 shadow-sm">
                   {(["Today", "This Week", "This Month"] as const).map((p) => (
@@ -3173,10 +3001,8 @@ const Dashboard = () => {
 
                 <span className="text-[11px] text-muted-foreground/70">No time-of-day filter — expenses &amp; waste aren't hourly.</span>
               </div>
-            )}
           </div>
 
-          {!npSectionCollapsed && (
             <div className="p-4 sm:p-5">
               {npLoading || !np ? (
                 <div className="space-y-3">
@@ -3380,7 +3206,6 @@ const Dashboard = () => {
                 </div>
               )}
             </div>
-          )}
         </section>
       )}
 
@@ -3390,48 +3215,23 @@ const Dashboard = () => {
           aria-label="Expenses Breakdown & Trends"
           className="rounded-2xl border border-border/80 bg-card/40 backdrop-blur-md shadow-sm overflow-hidden transition-all"
         >
-          <div className={cn("p-4 sm:p-5 space-y-4 bg-card/70", !expSectionCollapsed && "border-b border-border/50")}>
+          <div className="p-4 sm:p-5 space-y-4 bg-card/70 border-b border-border/50">
             <div className="flex items-center justify-between gap-3">
-              <div
-                className="flex items-center gap-3 cursor-pointer select-none group"
-                onClick={() => setExpSectionCollapsed((prev) => !prev)}
-              >
-                <div className="h-9 w-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center border border-primary/20 shrink-0 shadow-sm group-hover:bg-primary/20 transition-colors">
+              <div className="flex items-center gap-3">
+                <div className="h-9 w-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center border border-primary/20 shrink-0 shadow-sm">
                   <Receipt className="h-4 w-4" />
                 </div>
                 <div className="flex items-center gap-2">
-                  <h2 className="text-lg sm:text-xl font-bold tracking-tight text-foreground group-hover:text-primary transition-colors">
+                  <h2 className="text-lg sm:text-xl font-bold tracking-tight text-foreground">
                     Expenses Breakdown &amp; Trends
                   </h2>
-                  {expSectionCollapsed && exp && (
-                    <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full border bg-primary/10 text-primary border-primary/20">
-                      {money(exp.totalAmount)}
-                    </span>
-                  )}
+                  
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 shrink-0">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setExpSectionCollapsed((prev) => !prev)}
-                  className="h-8 px-2.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/70 gap-1.5 rounded-lg border border-border/50"
-                  title={expSectionCollapsed ? "Expand Expenses Breakdown & Trends" : "Collapse Expenses Breakdown & Trends"}
-                  aria-label={expSectionCollapsed ? "Expand Expenses Breakdown & Trends" : "Collapse Expenses Breakdown & Trends"}
-                >
-                  <span className="text-xs font-medium hidden sm:inline">{expSectionCollapsed ? "Show" : "Hide"}</span>
-                  <ChevronDown
-                    className={cn(
-                      "h-4 w-4 transition-transform duration-200",
-                      expSectionCollapsed ? "-rotate-90" : "rotate-0"
-                    )}
-                  />
-                </Button>
-              </div>
+              <div className="flex items-center gap-2 shrink-0" />
             </div>
 
-            {!expSectionCollapsed && (
               <div className="flex items-center gap-2.5 flex-wrap pt-3 border-t border-border/40">
                 <div className="inline-flex items-center p-0.5 rounded-lg bg-muted/60 border border-border/60 shadow-sm">
                   {(["Today", "This Week", "This Month"] as const).map((p) => (
@@ -3474,10 +3274,8 @@ const Dashboard = () => {
 
                 <span className="text-[11px] text-muted-foreground/70">No time-of-day filter — expenses aren't hourly.</span>
               </div>
-            )}
           </div>
 
-          {!expSectionCollapsed && (
             <div className="p-4 sm:p-5">
               {expLoading || !exp ? (
                 <div className="space-y-3">
@@ -3619,7 +3417,6 @@ const Dashboard = () => {
                 </div>
               )}
             </div>
-          )}
         </section>
       )}
 
@@ -3629,48 +3426,23 @@ const Dashboard = () => {
           aria-label="Waste / Food Loss Trends"
           className="rounded-2xl border border-border/80 bg-card/40 backdrop-blur-md shadow-sm overflow-hidden transition-all"
         >
-          <div className={cn("p-4 sm:p-5 space-y-4 bg-card/70", !wasteSectionCollapsed && "border-b border-border/50")}>
+          <div className="p-4 sm:p-5 space-y-4 bg-card/70 border-b border-border/50">
             <div className="flex items-center justify-between gap-3">
-              <div
-                className="flex items-center gap-3 cursor-pointer select-none group"
-                onClick={() => setWasteSectionCollapsed((prev) => !prev)}
-              >
-                <div className="h-9 w-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center border border-primary/20 shrink-0 shadow-sm group-hover:bg-primary/20 transition-colors">
+              <div className="flex items-center gap-3">
+                <div className="h-9 w-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center border border-primary/20 shrink-0 shadow-sm">
                   <Trash2 className="h-4 w-4" />
                 </div>
                 <div className="flex items-center gap-2">
-                  <h2 className="text-lg sm:text-xl font-bold tracking-tight text-foreground group-hover:text-primary transition-colors">
+                  <h2 className="text-lg sm:text-xl font-bold tracking-tight text-foreground">
                     Waste / Food Loss Trends
                   </h2>
-                  {wasteSectionCollapsed && waste && (
-                    <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full border bg-destructive/10 text-destructive border-destructive/20">
-                      {money(waste.totalAmount)}
-                    </span>
-                  )}
+                  
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 shrink-0">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setWasteSectionCollapsed((prev) => !prev)}
-                  className="h-8 px-2.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/70 gap-1.5 rounded-lg border border-border/50"
-                  title={wasteSectionCollapsed ? "Expand Waste / Food Loss Trends" : "Collapse Waste / Food Loss Trends"}
-                  aria-label={wasteSectionCollapsed ? "Expand Waste / Food Loss Trends" : "Collapse Waste / Food Loss Trends"}
-                >
-                  <span className="text-xs font-medium hidden sm:inline">{wasteSectionCollapsed ? "Show" : "Hide"}</span>
-                  <ChevronDown
-                    className={cn(
-                      "h-4 w-4 transition-transform duration-200",
-                      wasteSectionCollapsed ? "-rotate-90" : "rotate-0"
-                    )}
-                  />
-                </Button>
-              </div>
+              <div className="flex items-center gap-2 shrink-0" />
             </div>
 
-            {!wasteSectionCollapsed && (
               <div className="flex items-center gap-2.5 flex-wrap pt-3 border-t border-border/40">
                 <div className="inline-flex items-center p-0.5 rounded-lg bg-muted/60 border border-border/60 shadow-sm">
                   {(["Today", "This Week", "This Month"] as const).map((p) => (
@@ -3713,10 +3485,8 @@ const Dashboard = () => {
 
                 <span className="text-[11px] text-muted-foreground/70">No time-of-day filter — waste isn't hourly.</span>
               </div>
-            )}
           </div>
 
-          {!wasteSectionCollapsed && (
             <div className="p-4 sm:p-5">
               {wasteLoading || !waste ? (
                 <div className="space-y-3">
@@ -3857,7 +3627,6 @@ const Dashboard = () => {
                 </div>
               )}
             </div>
-          )}
         </section>
       )}
 
@@ -3867,48 +3636,23 @@ const Dashboard = () => {
           aria-label="Attendance / HR Analytics"
           className="rounded-2xl border border-border/80 bg-card/40 backdrop-blur-md shadow-sm overflow-hidden transition-all"
         >
-          <div className={cn("p-4 sm:p-5 space-y-4 bg-card/70", !attSectionCollapsed && "border-b border-border/50")}>
+          <div className="p-4 sm:p-5 space-y-4 bg-card/70 border-b border-border/50">
             <div className="flex items-center justify-between gap-3">
-              <div
-                className="flex items-center gap-3 cursor-pointer select-none group"
-                onClick={() => setAttSectionCollapsed((prev) => !prev)}
-              >
-                <div className="h-9 w-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center border border-primary/20 shrink-0 shadow-sm group-hover:bg-primary/20 transition-colors">
+              <div className="flex items-center gap-3">
+                <div className="h-9 w-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center border border-primary/20 shrink-0 shadow-sm">
                   <CalendarClock className="h-4 w-4" />
                 </div>
                 <div className="flex items-center gap-2">
-                  <h2 className="text-lg sm:text-xl font-bold tracking-tight text-foreground group-hover:text-primary transition-colors">
+                  <h2 className="text-lg sm:text-xl font-bold tracking-tight text-foreground">
                     Attendance / HR Analytics
                   </h2>
-                  {attSectionCollapsed && att && (
-                    <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full border bg-primary/10 text-primary border-primary/20">
-                      {att.attendanceRate}% attendance
-                    </span>
-                  )}
+                  
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 shrink-0">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setAttSectionCollapsed((prev) => !prev)}
-                  className="h-8 px-2.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/70 gap-1.5 rounded-lg border border-border/50"
-                  title={attSectionCollapsed ? "Expand Attendance / HR Analytics" : "Collapse Attendance / HR Analytics"}
-                  aria-label={attSectionCollapsed ? "Expand Attendance / HR Analytics" : "Collapse Attendance / HR Analytics"}
-                >
-                  <span className="text-xs font-medium hidden sm:inline">{attSectionCollapsed ? "Show" : "Hide"}</span>
-                  <ChevronDown
-                    className={cn(
-                      "h-4 w-4 transition-transform duration-200",
-                      attSectionCollapsed ? "-rotate-90" : "rotate-0"
-                    )}
-                  />
-                </Button>
-              </div>
+              <div className="flex items-center gap-2 shrink-0" />
             </div>
 
-            {!attSectionCollapsed && (
               <div className="flex items-center gap-2.5 flex-wrap pt-3 border-t border-border/40">
                 <div className="inline-flex items-center p-0.5 rounded-lg bg-muted/60 border border-border/60 shadow-sm">
                   {(["Today", "This Week", "This Month"] as const).map((p) => (
@@ -3951,10 +3695,8 @@ const Dashboard = () => {
 
                 <span className="text-[11px] text-muted-foreground/70">No time-of-day filter — attendance is per-day.</span>
               </div>
-            )}
           </div>
 
-          {!attSectionCollapsed && (
             <div className="p-4 sm:p-5">
               {attLoading || !att ? (
                 <div className="space-y-3">
@@ -4091,7 +3833,6 @@ const Dashboard = () => {
                 </div>
               )}
             </div>
-          )}
         </section>
       )}
 
@@ -4101,48 +3842,23 @@ const Dashboard = () => {
           aria-label="Reservations Analytics"
           className="rounded-2xl border border-border/80 bg-card/40 backdrop-blur-md shadow-sm overflow-hidden transition-all"
         >
-          <div className={cn("p-4 sm:p-5 space-y-4 bg-card/70", !resSectionCollapsed && "border-b border-border/50")}>
+          <div className="p-4 sm:p-5 space-y-4 bg-card/70 border-b border-border/50">
             <div className="flex items-center justify-between gap-3">
-              <div
-                className="flex items-center gap-3 cursor-pointer select-none group"
-                onClick={() => setResSectionCollapsed((prev) => !prev)}
-              >
-                <div className="h-9 w-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center border border-primary/20 shrink-0 shadow-sm group-hover:bg-primary/20 transition-colors">
+              <div className="flex items-center gap-3">
+                <div className="h-9 w-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center border border-primary/20 shrink-0 shadow-sm">
                   <CalendarCheck className="h-4 w-4" />
                 </div>
                 <div className="flex items-center gap-2">
-                  <h2 className="text-lg sm:text-xl font-bold tracking-tight text-foreground group-hover:text-primary transition-colors">
+                  <h2 className="text-lg sm:text-xl font-bold tracking-tight text-foreground">
                     Reservations Analytics
                   </h2>
-                  {resSectionCollapsed && res && (
-                    <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full border bg-primary/10 text-primary border-primary/20">
-                      {res.totalReservations} bookings
-                    </span>
-                  )}
+                  
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 shrink-0">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setResSectionCollapsed((prev) => !prev)}
-                  className="h-8 px-2.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/70 gap-1.5 rounded-lg border border-border/50"
-                  title={resSectionCollapsed ? "Expand Reservations Analytics" : "Collapse Reservations Analytics"}
-                  aria-label={resSectionCollapsed ? "Expand Reservations Analytics" : "Collapse Reservations Analytics"}
-                >
-                  <span className="text-xs font-medium hidden sm:inline">{resSectionCollapsed ? "Show" : "Hide"}</span>
-                  <ChevronDown
-                    className={cn(
-                      "h-4 w-4 transition-transform duration-200",
-                      resSectionCollapsed ? "-rotate-90" : "rotate-0"
-                    )}
-                  />
-                </Button>
-              </div>
+              <div className="flex items-center gap-2 shrink-0" />
             </div>
 
-            {!resSectionCollapsed && (
               <div className="flex items-center gap-2.5 flex-wrap pt-3 border-t border-border/40">
                 <div className="inline-flex items-center p-0.5 rounded-lg bg-muted/60 border border-border/60 shadow-sm">
                   {(["Today", "This Week", "This Month"] as const).map((p) => (
@@ -4185,10 +3901,8 @@ const Dashboard = () => {
 
                 <span className="text-[11px] text-muted-foreground/70">No time-of-day filter — bookings are per-day.</span>
               </div>
-            )}
           </div>
 
-          {!resSectionCollapsed && (
             <div className="p-4 sm:p-5">
               {resLoading || !res ? (
                 <div className="space-y-3">
@@ -4321,7 +4035,6 @@ const Dashboard = () => {
                 </div>
               )}
             </div>
-          )}
         </section>
       )}
 
@@ -4331,48 +4044,23 @@ const Dashboard = () => {
           aria-label="Delivery / Rider Performance"
           className="rounded-2xl border border-border/80 bg-card/40 backdrop-blur-md shadow-sm overflow-hidden transition-all"
         >
-          <div className={cn("p-4 sm:p-5 space-y-4 bg-card/70", !dlvSectionCollapsed && "border-b border-border/50")}>
+          <div className="p-4 sm:p-5 space-y-4 bg-card/70 border-b border-border/50">
             <div className="flex items-center justify-between gap-3">
-              <div
-                className="flex items-center gap-3 cursor-pointer select-none group"
-                onClick={() => setDlvSectionCollapsed((prev) => !prev)}
-              >
-                <div className="h-9 w-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center border border-primary/20 shrink-0 shadow-sm group-hover:bg-primary/20 transition-colors">
+              <div className="flex items-center gap-3">
+                <div className="h-9 w-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center border border-primary/20 shrink-0 shadow-sm">
                   <Truck className="h-4 w-4" />
                 </div>
                 <div className="flex items-center gap-2">
-                  <h2 className="text-lg sm:text-xl font-bold tracking-tight text-foreground group-hover:text-primary transition-colors">
+                  <h2 className="text-lg sm:text-xl font-bold tracking-tight text-foreground">
                     Delivery / Rider Performance
                   </h2>
-                  {dlvSectionCollapsed && dlv && (
-                    <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full border bg-primary/10 text-primary border-primary/20">
-                      {dlv.totalDeliveries} deliveries
-                    </span>
-                  )}
+                  
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 shrink-0">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setDlvSectionCollapsed((prev) => !prev)}
-                  className="h-8 px-2.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/70 gap-1.5 rounded-lg border border-border/50"
-                  title={dlvSectionCollapsed ? "Expand Delivery / Rider Performance" : "Collapse Delivery / Rider Performance"}
-                  aria-label={dlvSectionCollapsed ? "Expand Delivery / Rider Performance" : "Collapse Delivery / Rider Performance"}
-                >
-                  <span className="text-xs font-medium hidden sm:inline">{dlvSectionCollapsed ? "Show" : "Hide"}</span>
-                  <ChevronDown
-                    className={cn(
-                      "h-4 w-4 transition-transform duration-200",
-                      dlvSectionCollapsed ? "-rotate-90" : "rotate-0"
-                    )}
-                  />
-                </Button>
-              </div>
+              <div className="flex items-center gap-2 shrink-0" />
             </div>
 
-            {!dlvSectionCollapsed && (
               <div className="flex items-center gap-2.5 flex-wrap pt-3 border-t border-border/40">
                 <div className="inline-flex items-center p-0.5 rounded-lg bg-muted/60 border border-border/60 shadow-sm">
                   {(["Today", "This Week", "This Month"] as const).map((p) => (
@@ -4422,10 +4110,8 @@ const Dashboard = () => {
                   View Delivery Board <ChevronRight className="h-3.5 w-3.5" />
                 </Button>
               </div>
-            )}
           </div>
 
-          {!dlvSectionCollapsed && (
             <div className="p-4 sm:p-5">
               {dlvLoading || !dlv ? (
                 <div className="space-y-3">
@@ -4542,7 +4228,6 @@ const Dashboard = () => {
                 </div>
               )}
             </div>
-          )}
         </section>
       )}
 
@@ -4552,48 +4237,23 @@ const Dashboard = () => {
           aria-label="Cash Hub Settlement Trends"
           className="rounded-2xl border border-border/80 bg-card/40 backdrop-blur-md shadow-sm overflow-hidden transition-all"
         >
-          <div className={cn("p-4 sm:p-5 space-y-4 bg-card/70", !cshSectionCollapsed && "border-b border-border/50")}>
+          <div className="p-4 sm:p-5 space-y-4 bg-card/70 border-b border-border/50">
             <div className="flex items-center justify-between gap-3">
-              <div
-                className="flex items-center gap-3 cursor-pointer select-none group"
-                onClick={() => setCshSectionCollapsed((prev) => !prev)}
-              >
-                <div className="h-9 w-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center border border-primary/20 shrink-0 shadow-sm group-hover:bg-primary/20 transition-colors">
+              <div className="flex items-center gap-3">
+                <div className="h-9 w-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center border border-primary/20 shrink-0 shadow-sm">
                   <Wallet className="h-4 w-4" />
                 </div>
                 <div className="flex items-center gap-2">
-                  <h2 className="text-lg sm:text-xl font-bold tracking-tight text-foreground group-hover:text-primary transition-colors">
+                  <h2 className="text-lg sm:text-xl font-bold tracking-tight text-foreground">
                     Cash Hub Settlement Trends
                   </h2>
-                  {cshSectionCollapsed && csh && (
-                    <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full border bg-primary/10 text-primary border-primary/20">
-                      {money(csh.totalAmount)}
-                    </span>
-                  )}
+                  
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 shrink-0">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setCshSectionCollapsed((prev) => !prev)}
-                  className="h-8 px-2.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/70 gap-1.5 rounded-lg border border-border/50"
-                  title={cshSectionCollapsed ? "Expand Cash Hub Settlement Trends" : "Collapse Cash Hub Settlement Trends"}
-                  aria-label={cshSectionCollapsed ? "Expand Cash Hub Settlement Trends" : "Collapse Cash Hub Settlement Trends"}
-                >
-                  <span className="text-xs font-medium hidden sm:inline">{cshSectionCollapsed ? "Show" : "Hide"}</span>
-                  <ChevronDown
-                    className={cn(
-                      "h-4 w-4 transition-transform duration-200",
-                      cshSectionCollapsed ? "-rotate-90" : "rotate-0"
-                    )}
-                  />
-                </Button>
-              </div>
+              <div className="flex items-center gap-2 shrink-0" />
             </div>
 
-            {!cshSectionCollapsed && (
               <div className="flex items-center gap-2.5 flex-wrap pt-3 border-t border-border/40">
                 <div className="inline-flex items-center p-0.5 rounded-lg bg-muted/60 border border-border/60 shadow-sm">
                   {(["Today", "This Week", "This Month"] as const).map((p) => (
@@ -4636,10 +4296,8 @@ const Dashboard = () => {
 
                 <span className="text-[11px] text-muted-foreground/70">No time-of-day filter — settlements aren't hourly.</span>
               </div>
-            )}
           </div>
 
-          {!cshSectionCollapsed && (
             <div className="p-4 sm:p-5">
               {cshLoading || !csh ? (
                 <div className="space-y-3">
@@ -4770,7 +4428,6 @@ const Dashboard = () => {
                 </div>
               )}
             </div>
-          )}
         </section>
       )}
 
@@ -4780,48 +4437,23 @@ const Dashboard = () => {
           aria-label="Deals Performance"
           className="rounded-2xl border border-border/80 bg-card/40 backdrop-blur-md shadow-sm overflow-hidden transition-all"
         >
-          <div className={cn("p-4 sm:p-5 space-y-4 bg-card/70", !dpSectionCollapsed && "border-b border-border/50")}>
+          <div className="p-4 sm:p-5 space-y-4 bg-card/70 border-b border-border/50">
             <div className="flex items-center justify-between gap-3">
-              <div
-                className="flex items-center gap-3 cursor-pointer select-none group"
-                onClick={() => setDpSectionCollapsed((prev) => !prev)}
-              >
-                <div className="h-9 w-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center border border-primary/20 shrink-0 shadow-sm group-hover:bg-primary/20 transition-colors">
+              <div className="flex items-center gap-3">
+                <div className="h-9 w-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center border border-primary/20 shrink-0 shadow-sm">
                   <Tag className="h-4 w-4" />
                 </div>
                 <div className="flex items-center gap-2">
-                  <h2 className="text-lg sm:text-xl font-bold tracking-tight text-foreground group-hover:text-primary transition-colors">
+                  <h2 className="text-lg sm:text-xl font-bold tracking-tight text-foreground">
                     Deals Performance
                   </h2>
-                  {dpSectionCollapsed && dp && (
-                    <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full border bg-primary/10 text-primary border-primary/20">
-                      {dp.totalRedemptions} redemptions
-                    </span>
-                  )}
+                  
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 shrink-0">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setDpSectionCollapsed((prev) => !prev)}
-                  className="h-8 px-2.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/70 gap-1.5 rounded-lg border border-border/50"
-                  title={dpSectionCollapsed ? "Expand Deals Performance" : "Collapse Deals Performance"}
-                  aria-label={dpSectionCollapsed ? "Expand Deals Performance" : "Collapse Deals Performance"}
-                >
-                  <span className="text-xs font-medium hidden sm:inline">{dpSectionCollapsed ? "Show" : "Hide"}</span>
-                  <ChevronDown
-                    className={cn(
-                      "h-4 w-4 transition-transform duration-200",
-                      dpSectionCollapsed ? "-rotate-90" : "rotate-0"
-                    )}
-                  />
-                </Button>
-              </div>
+              <div className="flex items-center gap-2 shrink-0" />
             </div>
 
-            {!dpSectionCollapsed && (
               <div className="flex items-center gap-2.5 flex-wrap pt-3 border-t border-border/40">
                 <div className="inline-flex items-center p-0.5 rounded-lg bg-muted/60 border border-border/60 shadow-sm">
                   {(["Today", "This Week", "This Month"] as const).map((p) => (
@@ -4864,10 +4496,8 @@ const Dashboard = () => {
 
                 <span className="text-[11px] text-muted-foreground/70">No time-of-day filter — deal usage isn't hourly.</span>
               </div>
-            )}
           </div>
 
-          {!dpSectionCollapsed && (
             <div className="p-4 sm:p-5">
               {dpLoading || !dp ? (
                 <div className="space-y-3">
@@ -4979,7 +4609,6 @@ const Dashboard = () => {
                 </div>
               )}
             </div>
-          )}
         </section>
       )}
 
@@ -4989,43 +4618,20 @@ const Dashboard = () => {
           aria-label="Sales by Staff"
           className="rounded-2xl border border-border/80 bg-card/40 backdrop-blur-md shadow-sm overflow-hidden transition-all"
         >
-          <div className={cn("p-4 sm:p-5 space-y-4 bg-card/70", !staffSectionCollapsed && "border-b border-border/50")}>
+          <div className="p-4 sm:p-5 space-y-4 bg-card/70 border-b border-border/50">
             <div className="flex items-center justify-between gap-3">
-              <div
-                className="flex items-center gap-3 cursor-pointer select-none group"
-                onClick={() => setStaffSectionCollapsed((prev) => !prev)}
-              >
-                <div className="h-9 w-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center border border-primary/20 shrink-0 shadow-sm group-hover:bg-primary/20 transition-colors">
+              <div className="flex items-center gap-3">
+                <div className="h-9 w-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center border border-primary/20 shrink-0 shadow-sm">
                   <UserCheck className="h-4 w-4" />
                 </div>
-                <h2 className="text-lg sm:text-xl font-bold tracking-tight text-foreground group-hover:text-primary transition-colors whitespace-nowrap">
+                <h2 className="text-lg sm:text-xl font-bold tracking-tight text-foreground whitespace-nowrap">
                   Sales by Staff
                 </h2>
               </div>
 
-              <div className="flex items-center gap-2 shrink-0">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setStaffSectionCollapsed((prev) => !prev)}
-                  className="h-8 px-2.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/70 gap-1.5 rounded-lg border border-border/50"
-                  title={staffSectionCollapsed ? "Expand Sales by Staff" : "Collapse Sales by Staff"}
-                  aria-label={staffSectionCollapsed ? "Expand Sales by Staff" : "Collapse Sales by Staff"}
-                >
-                  <span className="text-xs font-medium hidden sm:inline">
-                    {staffSectionCollapsed ? "Show" : "Hide"}
-                  </span>
-                  <ChevronDown
-                    className={cn(
-                      "h-4 w-4 transition-transform duration-200",
-                      staffSectionCollapsed ? "-rotate-90" : "rotate-0"
-                    )}
-                  />
-                </Button>
-              </div>
+              <div className="flex items-center gap-2 shrink-0" />
             </div>
 
-            {!staffSectionCollapsed && (
               <div className="flex items-center gap-2.5 flex-wrap pt-3 border-t border-border/40">
                 <div className="inline-flex items-center p-0.5 rounded-lg bg-muted/60 border border-border/60 shadow-sm">
                   {(["Today", "This Week", "This Month"] as const).map((p) => (
@@ -5170,10 +4776,8 @@ const Dashboard = () => {
                   )}
                 </div>
               </div>
-            )}
           </div>
 
-          {!staffSectionCollapsed && (
             <div className="p-4 sm:p-5">
               {staffLoading ? (
                 <div className="space-y-2">
@@ -5315,7 +4919,6 @@ const Dashboard = () => {
                 </div>
               )}
             </div>
-          )}
         </section>
       )}
 
@@ -5327,43 +4930,20 @@ const Dashboard = () => {
           aria-label="Sales by Outlet"
           className="rounded-2xl border border-border/80 bg-card/40 backdrop-blur-md shadow-sm overflow-hidden transition-all"
         >
-          <div className={cn("p-4 sm:p-5 space-y-4 bg-card/70", !branchSectionCollapsed && "border-b border-border/50")}>
+          <div className="p-4 sm:p-5 space-y-4 bg-card/70 border-b border-border/50">
             <div className="flex items-center justify-between gap-3">
-              <div
-                className="flex items-center gap-3 cursor-pointer select-none group"
-                onClick={() => setBranchSectionCollapsed((prev) => !prev)}
-              >
-                <div className="h-9 w-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center border border-primary/20 shrink-0 shadow-sm group-hover:bg-primary/20 transition-colors">
+              <div className="flex items-center gap-3">
+                <div className="h-9 w-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center border border-primary/20 shrink-0 shadow-sm">
                   <Building2 className="h-4 w-4" />
                 </div>
-                <h2 className="text-lg sm:text-xl font-bold tracking-tight text-foreground group-hover:text-primary transition-colors whitespace-nowrap">
+                <h2 className="text-lg sm:text-xl font-bold tracking-tight text-foreground whitespace-nowrap">
                   Sales by Outlet
                 </h2>
               </div>
 
-              <div className="flex items-center gap-2 shrink-0">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setBranchSectionCollapsed((prev) => !prev)}
-                  className="h-8 px-2.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/70 gap-1.5 rounded-lg border border-border/50"
-                  title={branchSectionCollapsed ? "Expand Sales by Outlet" : "Collapse Sales by Outlet"}
-                  aria-label={branchSectionCollapsed ? "Expand Sales by Outlet" : "Collapse Sales by Outlet"}
-                >
-                  <span className="text-xs font-medium hidden sm:inline">
-                    {branchSectionCollapsed ? "Show" : "Hide"}
-                  </span>
-                  <ChevronDown
-                    className={cn(
-                      "h-4 w-4 transition-transform duration-200",
-                      branchSectionCollapsed ? "-rotate-90" : "rotate-0"
-                    )}
-                  />
-                </Button>
-              </div>
+              <div className="flex items-center gap-2 shrink-0" />
             </div>
 
-            {!branchSectionCollapsed && (
               <div className="flex items-center gap-2.5 flex-wrap pt-3 border-t border-border/40">
                 <div className="inline-flex items-center p-0.5 rounded-lg bg-muted/60 border border-border/60 shadow-sm">
                   {(["Today", "This Week", "This Month"] as const).map((p) => (
@@ -5406,10 +4986,8 @@ const Dashboard = () => {
 
                 <span className="text-[11px] text-muted-foreground/70">Click a branch to view its own Dashboard.</span>
               </div>
-            )}
           </div>
 
-          {!branchSectionCollapsed && (
             <div className="p-4 sm:p-5">
               {branchLoading ? (
                 <div className="space-y-2">
@@ -5545,7 +5123,6 @@ const Dashboard = () => {
                 </div>
               )}
             </div>
-          )}
         </section>
       )}
 
@@ -5555,48 +5132,23 @@ const Dashboard = () => {
           aria-label="Cancellation Requests"
           className="rounded-2xl border border-border/80 bg-card/40 backdrop-blur-md shadow-sm overflow-hidden transition-all"
         >
-          <div className={cn("p-4 sm:p-5 space-y-4 bg-card/70", !crSectionCollapsed && "border-b border-border/50")}>
+          <div className="p-4 sm:p-5 space-y-4 bg-card/70 border-b border-border/50">
             <div className="flex items-center justify-between gap-3">
-              <div
-                className="flex items-center gap-3 cursor-pointer select-none group"
-                onClick={() => setCrSectionCollapsed((prev) => !prev)}
-              >
-                <div className="h-9 w-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center border border-primary/20 shrink-0 shadow-sm group-hover:bg-primary/20 transition-colors">
+              <div className="flex items-center gap-3">
+                <div className="h-9 w-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center border border-primary/20 shrink-0 shadow-sm">
                   <Ban className="h-4 w-4" />
                 </div>
                 <div className="flex items-center gap-2">
-                  <h2 className="text-lg sm:text-xl font-bold tracking-tight text-foreground group-hover:text-primary transition-colors whitespace-nowrap">
+                  <h2 className="text-lg sm:text-xl font-bold tracking-tight text-foreground whitespace-nowrap">
                     Cancellation Requests
                   </h2>
-                  {crSectionCollapsed && crData && (
-                    <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full border bg-primary/10 text-primary border-primary/20">
-                      {crData.totalRequests} requests
-                    </span>
-                  )}
+                  
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 shrink-0">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setCrSectionCollapsed((prev) => !prev)}
-                  className="h-8 px-2.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/70 gap-1.5 rounded-lg border border-border/50"
-                  title={crSectionCollapsed ? "Expand Cancellation Requests" : "Collapse Cancellation Requests"}
-                  aria-label={crSectionCollapsed ? "Expand Cancellation Requests" : "Collapse Cancellation Requests"}
-                >
-                  <span className="text-xs font-medium hidden sm:inline">{crSectionCollapsed ? "Show" : "Hide"}</span>
-                  <ChevronDown
-                    className={cn(
-                      "h-4 w-4 transition-transform duration-200",
-                      crSectionCollapsed ? "-rotate-90" : "rotate-0"
-                    )}
-                  />
-                </Button>
-              </div>
+              <div className="flex items-center gap-2 shrink-0" />
             </div>
 
-            {!crSectionCollapsed && (
               <div className="flex items-center gap-2.5 flex-wrap pt-3 border-t border-border/40">
                 <div className="inline-flex items-center p-0.5 rounded-lg bg-muted/60 border border-border/60 shadow-sm">
                   {(["Today", "This Week", "This Month"] as const).map((p) => (
@@ -5639,10 +5191,8 @@ const Dashboard = () => {
 
                 <span className="text-[11px] text-muted-foreground/70">No time-of-day filter — cancellations aren't hourly.</span>
               </div>
-            )}
           </div>
 
-          {!crSectionCollapsed && (
             <div className="p-4 sm:p-5">
               {crLoading || !crData ? (
                 <div className="space-y-3">
@@ -5751,7 +5301,6 @@ const Dashboard = () => {
                 </div>
               )}
             </div>
-          )}
         </section>
       )}
 
@@ -5761,41 +5310,20 @@ const Dashboard = () => {
           aria-label="Purchases & Supplier Spend"
           className="rounded-2xl border border-border/80 bg-card/40 backdrop-blur-md shadow-sm overflow-hidden transition-all"
         >
-          <div className={cn("p-4 sm:p-5 space-y-4 bg-card/70", !pSectionCollapsed && "border-b border-border/50")}>
+          <div className="p-4 sm:p-5 space-y-4 bg-card/70 border-b border-border/50">
             <div className="flex items-center justify-between gap-3">
-              <div
-                className="flex items-center gap-3 cursor-pointer select-none group"
-                onClick={() => setPSectionCollapsed((prev) => !prev)}
-              >
-                <div className="h-9 w-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center border border-primary/20 shrink-0 shadow-sm group-hover:bg-primary/20 transition-colors">
+              <div className="flex items-center gap-3">
+                <div className="h-9 w-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center border border-primary/20 shrink-0 shadow-sm">
                   <ShoppingBag className="h-4 w-4" />
                 </div>
-                <h2 className="text-lg sm:text-xl font-bold tracking-tight text-foreground group-hover:text-primary transition-colors whitespace-nowrap">
+                <h2 className="text-lg sm:text-xl font-bold tracking-tight text-foreground whitespace-nowrap">
                   Purchases & Supplier Spend
                 </h2>
               </div>
 
-              <div className="flex items-center gap-2 shrink-0">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setPSectionCollapsed((prev) => !prev)}
-                  className="h-8 px-2.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/70 gap-1.5 rounded-lg border border-border/50"
-                  title={pSectionCollapsed ? "Expand Purchases & Supplier Spend" : "Collapse Purchases & Supplier Spend"}
-                  aria-label={pSectionCollapsed ? "Expand Purchases & Supplier Spend" : "Collapse Purchases & Supplier Spend"}
-                >
-                  <span className="text-xs font-medium hidden sm:inline">{pSectionCollapsed ? "Show" : "Hide"}</span>
-                  <ChevronDown
-                    className={cn(
-                      "h-4 w-4 transition-transform duration-200",
-                      pSectionCollapsed ? "-rotate-90" : "rotate-0"
-                    )}
-                  />
-                </Button>
-              </div>
+              <div className="flex items-center gap-2 shrink-0" />
             </div>
 
-            {!pSectionCollapsed && (
               <div className="flex items-center gap-2.5 flex-wrap pt-3 border-t border-border/40">
                 <div className="inline-flex items-center p-0.5 rounded-lg bg-muted/60 border border-border/60 shadow-sm">
                   {(["Today", "This Week", "This Month"] as const).map((p) => (
@@ -5838,10 +5366,8 @@ const Dashboard = () => {
 
                 <span className="text-[11px] text-muted-foreground/70">No time-of-day filter — purchases aren't hourly.</span>
               </div>
-            )}
           </div>
 
-          {!pSectionCollapsed && (
             <div className="p-4 sm:p-5">
               {pLoading || !pData ? (
                 <div className="space-y-3">
@@ -5959,7 +5485,6 @@ const Dashboard = () => {
                 </div>
               )}
             </div>
-          )}
         </section>
       )}
 
@@ -5969,49 +5494,24 @@ const Dashboard = () => {
           aria-label="Dough / Short-Life Batches"
         className="rounded-2xl border border-border/80 bg-card/40 backdrop-blur-md shadow-sm overflow-hidden transition-all"
       >
-        <div className={cn("p-4 sm:p-5 bg-card/70", !doughSectionCollapsed && "border-b border-border/50")}>
+        <div className="p-4 sm:p-5 bg-card/70 border-b border-border/50">
           <div className="flex items-center justify-between gap-3">
-            <div
-              className="flex items-center gap-3 cursor-pointer select-none group"
-              onClick={() => setDoughSectionCollapsed((prev) => !prev)}
-            >
-              <div className="h-9 w-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center border border-primary/20 shrink-0 shadow-sm group-hover:bg-primary/20 transition-colors">
+            <div className="flex items-center gap-3">
+              <div className="h-9 w-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center border border-primary/20 shrink-0 shadow-sm">
                 <Clock className="h-4 w-4" />
               </div>
               <div className="flex items-center gap-2">
-                <h2 className="text-lg sm:text-xl font-bold tracking-tight text-foreground group-hover:text-primary transition-colors">
+                <h2 className="text-lg sm:text-xl font-bold tracking-tight text-foreground">
                   Dough / Short-Life Batches
                 </h2>
-                {doughSectionCollapsed && (
-                  <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full border bg-primary/10 text-primary border-primary/20">
-                    {doughBatches.length} active
-                  </span>
-                )}
+                
               </div>
             </div>
 
-            <div className="flex items-center gap-2 shrink-0">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setDoughSectionCollapsed((prev) => !prev)}
-                className="h-8 px-2.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/70 gap-1.5 rounded-lg border border-border/50"
-                title={doughSectionCollapsed ? "Expand Dough / Short-Life Batches" : "Collapse Dough / Short-Life Batches"}
-                aria-label={doughSectionCollapsed ? "Expand Dough / Short-Life Batches" : "Collapse Dough / Short-Life Batches"}
-              >
-                <span className="text-xs font-medium hidden sm:inline">{doughSectionCollapsed ? "Show" : "Hide"}</span>
-                <ChevronDown
-                  className={cn(
-                    "h-4 w-4 transition-transform duration-200",
-                    doughSectionCollapsed ? "-rotate-90" : "rotate-0"
-                  )}
-                />
-              </Button>
-            </div>
+            <div className="flex items-center gap-2 shrink-0" />
           </div>
         </div>
 
-        {!doughSectionCollapsed && (
           <div className="p-4 sm:p-5">
             {doughBatches.length === 0 ? (
               <p className="text-sm text-muted-foreground py-4 text-center">No active dough batches</p>
@@ -6053,7 +5553,6 @@ const Dashboard = () => {
               </div>
             )}
           </div>
-        )}
         </section>
       )}
 
@@ -6063,48 +5562,23 @@ const Dashboard = () => {
           aria-label="Customer Analytics"
           className="rounded-2xl border border-border/80 bg-card/40 backdrop-blur-md shadow-sm overflow-hidden transition-all"
         >
-          <div className={cn("p-4 sm:p-5 space-y-4 bg-card/70", !custSectionCollapsed && "border-b border-border/50")}>
+          <div className="p-4 sm:p-5 space-y-4 bg-card/70 border-b border-border/50">
             <div className="flex items-center justify-between gap-3">
-              <div
-                className="flex items-center gap-3 cursor-pointer select-none group"
-                onClick={() => setCustSectionCollapsed((prev) => !prev)}
-              >
-                <div className="h-9 w-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center border border-primary/20 shrink-0 shadow-sm group-hover:bg-primary/20 transition-colors">
+              <div className="flex items-center gap-3">
+                <div className="h-9 w-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center border border-primary/20 shrink-0 shadow-sm">
                   <Users className="h-4 w-4" />
                 </div>
                 <div className="flex items-center gap-2">
-                  <h2 className="text-lg sm:text-xl font-bold tracking-tight text-foreground group-hover:text-primary transition-colors">
+                  <h2 className="text-lg sm:text-xl font-bold tracking-tight text-foreground">
                     Customer Analytics
                   </h2>
-                  {custSectionCollapsed && cust && (
-                    <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full border bg-primary/10 text-primary border-primary/20">
-                      {cust.newCustomers} new
-                    </span>
-                  )}
+                  
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 shrink-0">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setCustSectionCollapsed((prev) => !prev)}
-                  className="h-8 px-2.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/70 gap-1.5 rounded-lg border border-border/50"
-                  title={custSectionCollapsed ? "Expand Customer Analytics" : "Collapse Customer Analytics"}
-                  aria-label={custSectionCollapsed ? "Expand Customer Analytics" : "Collapse Customer Analytics"}
-                >
-                  <span className="text-xs font-medium hidden sm:inline">{custSectionCollapsed ? "Show" : "Hide"}</span>
-                  <ChevronDown
-                    className={cn(
-                      "h-4 w-4 transition-transform duration-200",
-                      custSectionCollapsed ? "-rotate-90" : "rotate-0"
-                    )}
-                  />
-                </Button>
-              </div>
+              <div className="flex items-center gap-2 shrink-0" />
             </div>
 
-            {!custSectionCollapsed && (
               <div className="flex items-center gap-2.5 flex-wrap pt-3 border-t border-border/40">
                 <div className="inline-flex items-center p-0.5 rounded-lg bg-muted/60 border border-border/60 shadow-sm">
                   {(["Today", "This Week", "This Month"] as const).map((p) => (
@@ -6147,10 +5621,8 @@ const Dashboard = () => {
 
                 <span className="text-[11px] text-muted-foreground/70">No time-of-day filter — customer acquisition isn't hourly.</span>
               </div>
-            )}
           </div>
 
-          {!custSectionCollapsed && (
             <div className="p-4 sm:p-5">
               {custLoading || !cust ? (
                 <div className="space-y-3">
@@ -6278,7 +5750,6 @@ const Dashboard = () => {
                 </div>
               )}
             </div>
-          )}
         </section>
       )}
 
@@ -6288,48 +5759,23 @@ const Dashboard = () => {
           aria-label="Order Timing & Patterns"
           className="rounded-2xl border border-border/80 bg-card/40 backdrop-blur-md shadow-sm overflow-hidden transition-all"
         >
-          <div className={cn("p-4 sm:p-5 space-y-4 bg-card/70", !stSectionCollapsed && "border-b border-border/50")}>
+          <div className="p-4 sm:p-5 space-y-4 bg-card/70 border-b border-border/50">
             <div className="flex items-center justify-between gap-3">
-              <div
-                className="flex items-center gap-3 cursor-pointer select-none group"
-                onClick={() => setStSectionCollapsed((prev) => !prev)}
-              >
-                <div className="h-9 w-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center border border-primary/20 shrink-0 shadow-sm group-hover:bg-primary/20 transition-colors">
+              <div className="flex items-center gap-3">
+                <div className="h-9 w-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center border border-primary/20 shrink-0 shadow-sm">
                   <Clock className="h-4 w-4" />
                 </div>
                 <div className="flex items-center gap-2">
-                  <h2 className="text-lg sm:text-xl font-bold tracking-tight text-foreground group-hover:text-primary transition-colors">
+                  <h2 className="text-lg sm:text-xl font-bold tracking-tight text-foreground">
                     Order Timing & Patterns
                   </h2>
-                  {stSectionCollapsed && stBusiestHour && (
-                    <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full border bg-primary/10 text-primary border-primary/20">
-                      Busiest: {stBusiestHour.hour}:00
-                    </span>
-                  )}
+                  
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 shrink-0">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setStSectionCollapsed((prev) => !prev)}
-                  className="h-8 px-2.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/70 gap-1.5 rounded-lg border border-border/50"
-                  title={stSectionCollapsed ? "Expand Order Timing & Patterns" : "Collapse Order Timing & Patterns"}
-                  aria-label={stSectionCollapsed ? "Expand Order Timing & Patterns" : "Collapse Order Timing & Patterns"}
-                >
-                  <span className="text-xs font-medium hidden sm:inline">{stSectionCollapsed ? "Show" : "Hide"}</span>
-                  <ChevronDown
-                    className={cn(
-                      "h-4 w-4 transition-transform duration-200",
-                      stSectionCollapsed ? "-rotate-90" : "rotate-0"
-                    )}
-                  />
-                </Button>
-              </div>
+              <div className="flex items-center gap-2 shrink-0" />
             </div>
 
-            {!stSectionCollapsed && (
               <div className="flex items-center gap-2.5 flex-wrap pt-3 border-t border-border/40">
                 <div className="inline-flex items-center p-0.5 rounded-lg bg-muted/60 border border-border/60 shadow-sm">
                   {(["Today", "This Week", "This Month"] as const).map((p) => (
@@ -6372,10 +5818,8 @@ const Dashboard = () => {
 
                 <span className="text-[11px] text-muted-foreground/70">Hours/weekdays shown are PKT wall-clock time.</span>
               </div>
-            )}
           </div>
 
-          {!stSectionCollapsed && (
             <div className="p-4 sm:p-5">
               {stLoading || !st ? (
                 <div className="space-y-3">
@@ -6517,7 +5961,6 @@ const Dashboard = () => {
                 </div>
               )}
             </div>
-          )}
         </section>
       )}
       </main>
