@@ -5,6 +5,7 @@ import {
   UtensilsCrossed, Percent, X, Layers, CreditCard, Banknote, Smartphone, TrendingDown,
   Tag, Info, Building2, Receipt, Trash2, CalendarClock, Truck,
   Flame, Sparkles, Menu, ChefHat, Sun, Moon, User, Settings, LogOut, ShoppingCart,
+  LayoutGrid, Search, PanelLeftClose, PanelLeftOpen,
 } from "lucide-react";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Badge } from "@/components/ui/badge";
@@ -14,7 +15,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, Cell, LabelList, CartesianGrid, LineChart, Line } from "recharts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { format } from "date-fns";
@@ -85,6 +86,11 @@ const Dashboard = () => {
 
   // Sales By Channel (Date & optional Time filtered, gated on "reports" permission)
   const salesByChannelVisible = hasPermission("reports");
+  const [activeSection, setActiveSection] = useState<string>(() => (hasPermission("reports") ? "sales-by-channel" : "dough-batches"));
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(false);
+  const [sectionSearch, setSectionSearch] = useState<string>("");
+  const mainContentRef = useRef<HTMLDivElement>(null);
+
   const [channelSectionCollapsed, setChannelSectionCollapsed] = useState<boolean>(false);
   const [channelPreset, setChannelPreset] = useState<string>("Today");
   const [channelFromStr, setChannelFromStr] = useState<string>(toYmd(new Date()));
@@ -1205,6 +1211,231 @@ const Dashboard = () => {
     navigate(`/purchases?${params.toString()}`);
   };
 
+  useEffect(() => {
+    mainContentRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+  }, [activeSection]);
+
+  useEffect(() => {
+    if (activeSection === "sales-by-outlet" && !branchSectionVisible) {
+      setActiveSection(salesByChannelVisible ? "sales-by-channel" : "dough-batches");
+    }
+  }, [activeSection, branchSectionVisible, salesByChannelVisible]);
+
+  interface DashboardSectionItem {
+    id: string;
+    label: string;
+    group: string;
+    icon: React.ComponentType<{ className?: string }>;
+    visible?: boolean;
+    description?: string;
+  }
+
+  const allSections: DashboardSectionItem[] = [
+    {
+      id: "all",
+      label: "All Sections (Full View)",
+      group: "Overview",
+      icon: LayoutGrid,
+      description: "View all dashboard sections in a continuous view",
+    },
+    // Sales & Revenue
+    {
+      id: "sales-by-channel",
+      label: "Sales By Channel",
+      group: "Sales & Revenue",
+      icon: DollarSign,
+      visible: salesByChannelVisible,
+      description: "Channel breakdown (Dine-In, Takeaway, Delivery, Website)",
+    },
+    {
+      id: "sales-by-category",
+      label: "Sales by Category",
+      group: "Sales & Revenue",
+      icon: Layers,
+      visible: salesByChannelVisible,
+      description: "Sales and revenue distribution by food category",
+    },
+    {
+      id: "sales-by-payment-method",
+      label: "Sales by Payment Method",
+      group: "Sales & Revenue",
+      icon: CreditCard,
+      visible: salesByChannelVisible,
+      description: "Cash, Card, Digital wallets & split transactions",
+    },
+    {
+      id: "top-bottom-items",
+      label: "Top & Bottom Items",
+      group: "Sales & Revenue",
+      icon: Trophy,
+      visible: salesByChannelVisible,
+      description: "Best and lowest selling menu items and volume",
+    },
+    {
+      id: "net-profit",
+      label: "Net Profit",
+      group: "Sales & Revenue",
+      icon: TrendingUp,
+      visible: salesByChannelVisible,
+      description: "Revenue, Food Cost, Net Margins & Profit analysis",
+    },
+    {
+      id: "deals-performance",
+      label: "Deals Performance",
+      group: "Sales & Revenue",
+      icon: Tag,
+      visible: salesByChannelVisible,
+      description: "Combos, discounts & deal voucher performance",
+    },
+    // Operations & Kitchen
+    {
+      id: "dough-batches",
+      label: "Dough / Short-Life Batches",
+      group: "Operations & Kitchen",
+      icon: Clock,
+      description: "Active dough and short-life batch expiration tracking",
+    },
+    {
+      id: "order-timing",
+      label: "Order Timing & Patterns",
+      group: "Operations & Kitchen",
+      icon: BarChart3,
+      visible: salesByChannelVisible,
+      description: "Peak hours analysis and day-of-week order patterns",
+    },
+    {
+      id: "delivery-performance",
+      label: "Delivery / Rider Performance",
+      group: "Operations & Kitchen",
+      icon: Truck,
+      visible: salesByChannelVisible,
+      description: "Delivery trip times, active riders and fulfillment",
+    },
+    {
+      id: "cash-settlement",
+      label: "Cash Hub Settlement Trends",
+      group: "Operations & Kitchen",
+      icon: Coins,
+      visible: salesByChannelVisible,
+      description: "Cashier, waiter & rider uncleared cash settlements",
+    },
+    {
+      id: "cancellation-requests",
+      label: "Cancellation Requests",
+      group: "Operations & Kitchen",
+      icon: Ban,
+      visible: salesByChannelVisible,
+      description: "Manager-authorized and pending cancelled orders",
+    },
+    // Cost & Procurement
+    {
+      id: "expenses",
+      label: "Expenses Breakdown & Trends",
+      group: "Cost & Procurement",
+      icon: Receipt,
+      visible: salesByChannelVisible,
+      description: "Operational, utility and recurring expenses",
+    },
+    {
+      id: "purchases",
+      label: "Purchases & Supplier Spend",
+      group: "Cost & Procurement",
+      icon: ShoppingBag,
+      visible: salesByChannelVisible,
+      description: "Vendor procurement, raw ingredient purchases",
+    },
+    {
+      id: "waste-loss",
+      label: "Waste / Food Loss Trends",
+      group: "Cost & Procurement",
+      icon: Trash2,
+      visible: salesByChannelVisible,
+      description: "Ingredient spoilage, kitchen waste and financial loss",
+    },
+    // People & Guests
+    {
+      id: "sales-by-staff",
+      label: "Sales by Staff",
+      group: "People & Guests",
+      icon: Users,
+      visible: salesByChannelVisible,
+      description: "Order taking and sales performance by staff member",
+    },
+    {
+      id: "customer-analytics",
+      label: "Customer Analytics",
+      group: "People & Guests",
+      icon: UserCheck,
+      visible: salesByChannelVisible,
+      description: "New vs returning guests, retention & guest frequency",
+    },
+    {
+      id: "reservations",
+      label: "Reservations Analytics",
+      group: "People & Guests",
+      icon: CalendarCheck,
+      visible: salesByChannelVisible,
+      description: "Table bookings, seating status and occupancy",
+    },
+    {
+      id: "attendance",
+      label: "Attendance / HR Analytics",
+      group: "People & Guests",
+      icon: CalendarClock,
+      visible: salesByChannelVisible,
+      description: "Staff clock-in/out, shifts, leaves and punctuality",
+    },
+    // Branches
+    {
+      id: "sales-by-outlet",
+      label: "Sales by Outlet",
+      group: "Multi-Branch",
+      icon: Building2,
+      visible: branchSectionVisible,
+      description: "Chain-wide multi-branch sales and revenue comparison",
+    },
+  ];
+
+  const visibleSections = allSections.filter((s) => s.visible !== false);
+  const sectionGroups = [
+    "Sales & Revenue",
+    "Operations & Kitchen",
+    "Cost & Procurement",
+    "People & Guests",
+    "Multi-Branch",
+  ];
+
+  const filteredSections = visibleSections.filter((s) =>
+    s.id === "all" ||
+    s.label.toLowerCase().includes(sectionSearch.toLowerCase()) ||
+    s.group.toLowerCase().includes(sectionSearch.toLowerCase())
+  );
+
+  const activeItem = visibleSections.find((s) => s.id === activeSection) ?? visibleSections[0];
+
+  const handleSelectSection = (id: string) => {
+    setActiveSection(id);
+    if (id === "sales-by-channel") setChannelSectionCollapsed(false);
+    else if (id === "sales-by-category") setCatSectionCollapsed(false);
+    else if (id === "sales-by-payment-method") setPaySectionCollapsed(false);
+    else if (id === "top-bottom-items") setItemsSectionCollapsed(false);
+    else if (id === "net-profit") setNpSectionCollapsed(false);
+    else if (id === "expenses") setExpSectionCollapsed(false);
+    else if (id === "waste-loss") setWasteSectionCollapsed(false);
+    else if (id === "attendance") setAttSectionCollapsed(false);
+    else if (id === "reservations") setResSectionCollapsed(false);
+    else if (id === "delivery-performance") setDlvSectionCollapsed(false);
+    else if (id === "cash-settlement") setCshSectionCollapsed(false);
+    else if (id === "deals-performance") setDpSectionCollapsed(false);
+    else if (id === "sales-by-staff") setStaffSectionCollapsed(false);
+    else if (id === "sales-by-outlet") setBranchSectionCollapsed(false);
+    else if (id === "cancellation-requests") setCrSectionCollapsed(false);
+    else if (id === "purchases") setPSectionCollapsed(false);
+    else if (id === "dough-batches") setDoughSectionCollapsed(false);
+    else if (id === "customer-analytics") setCustSectionCollapsed(false);
+    else if (id === "order-timing") setStSectionCollapsed(false);
+  };
+
   return (
     <div className="min-h-screen bg-background flex flex-col font-sans">
       <NavDrawer open={drawerOpen} onOpenChange={setDrawerOpen} />
@@ -1303,25 +1534,250 @@ const Dashboard = () => {
         </div>
       </header>
 
-      {/* ════════════ MAIN CONTENT (FULL SCREEN EDGE-TO-EDGE) ════════════ */}
-      <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 space-y-6 w-full max-w-none">
-      {/* Fallback header when Sales By Channel is not visible */}
-      {!salesByChannelVisible && (
-        <div className="flex items-center justify-between pb-3 border-b border-border/40">
-          <div>
-            <h2 className="text-lg font-bold tracking-tight text-foreground">Dashboard</h2>
-            <p className="text-xs text-muted-foreground">
-              {d?.branchName ?? "Welcome back, here's your overview"}
-            </p>
-          </div>
-          {isSuperAdmin && (
-            <OutletFilterSelect outletId={outletId} setOutletId={setOutletId} outlets={outlets} isSuperAdmin={isSuperAdmin} />
+      {/* ════════════ MASTER-DETAIL CONTAINER ════════════ */}
+      <div className="flex-1 flex overflow-hidden w-full">
+        {/* ──── Dedicated Dashboard Section Sidebar (Desktop) ──── */}
+        <aside
+          className={cn(
+            "bg-card/70 backdrop-blur-md border-r border-border/60 shrink-0 flex flex-col justify-between overflow-hidden transition-all duration-300 hidden md:flex",
+            sidebarCollapsed ? "w-16" : "w-64 xl:w-72"
           )}
-        </div>
-      )}
+        >
+          {/* Top section: Title, Search, Collapse Toggle */}
+          <div className="p-3 border-b border-border/50 flex flex-col gap-2 shrink-0">
+            <div className="flex items-center justify-between">
+              {!sidebarCollapsed ? (
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] font-extrabold uppercase tracking-wider text-muted-foreground">
+                    Dashboard Sections
+                  </span>
+                  <Badge variant="outline" className="text-[10px] font-mono px-1.5 py-0 h-4 bg-muted/60">
+                    {visibleSections.length - 1}
+                  </Badge>
+                </div>
+              ) : (
+                <span className="text-[10px] font-bold text-muted-foreground mx-auto">SECT</span>
+              )}
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground"
+                onClick={() => setSidebarCollapsed((prev) => !prev)}
+                title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+              >
+                {sidebarCollapsed ? <PanelLeftOpen className="h-3.5 w-3.5" /> : <PanelLeftClose className="h-3.5 w-3.5" />}
+              </Button>
+            </div>
 
-      {/* Sales By Channel (gated on "reports" permission) */}
-      {salesByChannelVisible && (
+            {!sidebarCollapsed && (
+              <div className="relative">
+                <Search className="h-3.5 w-3.5 absolute left-2.5 top-2.5 text-muted-foreground" />
+                <input
+                  type="text"
+                  placeholder="Filter sections..."
+                  value={sectionSearch}
+                  onChange={(e) => setSectionSearch(e.target.value)}
+                  className="w-full pl-8 pr-7 py-1 text-xs bg-muted/50 border border-border/70 rounded-md placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary text-foreground"
+                />
+                {sectionSearch && (
+                  <button
+                    onClick={() => setSectionSearch("")}
+                    className="absolute right-2 top-2 text-muted-foreground hover:text-foreground"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Middle: Scrollable list of sections */}
+          <div className="flex-1 overflow-y-auto p-2 space-y-1">
+            {!sidebarCollapsed ? (
+              <>
+                {/* All Sections Button */}
+                <button
+                  type="button"
+                  onClick={() => handleSelectSection("all")}
+                  className={cn(
+                    "w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all text-left",
+                    activeSection === "all"
+                      ? "bg-primary text-primary-foreground shadow-sm shadow-primary/25 font-bold"
+                      : "text-muted-foreground hover:text-foreground hover:bg-muted/70"
+                  )}
+                >
+                  <div
+                    className={cn(
+                      "h-6 w-6 rounded-lg flex items-center justify-center shrink-0 transition-colors",
+                      activeSection === "all"
+                        ? "bg-primary-foreground/20 text-primary-foreground"
+                        : "bg-primary/10 text-primary"
+                    )}
+                  >
+                    <LayoutGrid className="h-3.5 w-3.5" />
+                  </div>
+                  <span className="truncate flex-1">All Sections (Full View)</span>
+                  <Badge
+                    variant="secondary"
+                    className={cn(
+                      "text-[10px] font-mono px-1.5 py-0 h-4 shrink-0",
+                      activeSection === "all" ? "bg-primary-foreground/20 text-primary-foreground" : "bg-muted"
+                    )}
+                  >
+                    All
+                  </Badge>
+                </button>
+
+                {/* Section Groups */}
+                {sectionGroups.map((group) => {
+                  const groupItems = filteredSections.filter((s) => s.group === group && s.id !== "all");
+                  if (groupItems.length === 0) return null;
+                  return (
+                    <div key={group} className="pt-2.5">
+                      <div className="text-[10px] font-extrabold uppercase tracking-wider text-muted-foreground/70 px-2.5 pb-1 flex items-center justify-between">
+                        <span>{group}</span>
+                        <span className="text-[9px] font-normal text-muted-foreground/60">{groupItems.length}</span>
+                      </div>
+                      <div className="space-y-0.5">
+                        {groupItems.map((sec) => {
+                          const Icon = sec.icon;
+                          const isActive = activeSection === sec.id;
+                          return (
+                            <button
+                              key={sec.id}
+                              type="button"
+                              onClick={() => handleSelectSection(sec.id)}
+                              className={cn(
+                                "w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-xs transition-all text-left group",
+                                isActive
+                                  ? "bg-primary/15 text-primary font-bold shadow-xs border border-primary/25"
+                                  : "text-muted-foreground hover:text-foreground hover:bg-muted/60 font-medium"
+                              )}
+                            >
+                              <div
+                                className={cn(
+                                  "h-6 w-6 rounded-md flex items-center justify-center shrink-0 transition-colors",
+                                  isActive
+                                    ? "bg-primary text-primary-foreground"
+                                    : "bg-muted text-muted-foreground group-hover:text-foreground group-hover:bg-muted/80"
+                                )}
+                              >
+                                <Icon className="h-3.5 w-3.5" />
+                              </div>
+                              <span className="truncate flex-1">{sec.label}</span>
+                              {isActive && (
+                                <span className="h-1.5 w-1.5 rounded-full bg-primary shrink-0" />
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </>
+            ) : (
+              /* Collapsed Rail (Icons only) */
+              <div className="space-y-1">
+                <button
+                  type="button"
+                  onClick={() => handleSelectSection("all")}
+                  title="All Sections (Full View)"
+                  className={cn(
+                    "w-full flex items-center justify-center p-2 rounded-lg text-xs transition-all",
+                    activeSection === "all"
+                      ? "bg-primary text-primary-foreground shadow-sm font-bold"
+                      : "text-muted-foreground hover:text-foreground hover:bg-muted/70"
+                  )}
+                >
+                  <LayoutGrid className="h-4 w-4" />
+                </button>
+                <Separator className="my-1.5" />
+                {visibleSections
+                  .filter((s) => s.id !== "all")
+                  .map((sec) => {
+                    const Icon = sec.icon;
+                    const isActive = activeSection === sec.id;
+                    return (
+                      <button
+                        key={sec.id}
+                        type="button"
+                        onClick={() => handleSelectSection(sec.id)}
+                        title={sec.label}
+                        className={cn(
+                          "w-full flex items-center justify-center p-2 rounded-lg text-xs transition-all",
+                          isActive
+                            ? "bg-primary text-primary-foreground shadow-sm font-bold"
+                            : "text-muted-foreground hover:text-foreground hover:bg-muted/70"
+                        )}
+                      >
+                        <Icon className="h-4 w-4" />
+                      </button>
+                    );
+                  })}
+              </div>
+            )}
+          </div>
+
+          {/* Bottom Footer */}
+          {!sidebarCollapsed && (
+            <div className="p-2.5 border-t border-border/50 bg-muted/20 shrink-0 text-center">
+              <p className="text-[10px] text-muted-foreground truncate">
+                {isSuperAdmin && outletId === "all" ? "All Outlets View" : d?.branchName ?? "Active Branch"}
+              </p>
+            </div>
+          )}
+        </aside>
+
+        {/* ════════════ MAIN CONTENT (FULL SCREEN EDGE-TO-EDGE) ════════════ */}
+        <main ref={mainContentRef} className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 space-y-6 w-full max-w-none">
+          {/* Mobile section switcher bar */}
+          <div className="md:hidden flex items-center justify-between gap-2 p-2.5 bg-card/80 backdrop-blur-md rounded-xl border border-border/70 shadow-xs">
+            <div className="flex items-center gap-2 min-w-0">
+              {activeItem && (
+                <div className="h-7 w-7 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                  <activeItem.icon className="h-3.5 w-3.5" />
+                </div>
+              )}
+              <div className="min-w-0">
+                <span className="text-xs font-bold text-foreground truncate block">
+                  {activeItem?.label ?? "Select Section"}
+                </span>
+                <span className="text-[10px] text-muted-foreground truncate block">
+                  {activeItem?.group ?? "Dashboard"}
+                </span>
+              </div>
+            </div>
+            <select
+              value={activeSection}
+              onChange={(e) => handleSelectSection(e.target.value)}
+              className="text-xs bg-muted text-foreground border border-border rounded-lg px-2.5 py-1.5 font-medium focus:outline-none focus:ring-1 focus:ring-primary shrink-0"
+            >
+              {visibleSections.map((sec) => (
+                <option key={sec.id} value={sec.id}>
+                  {sec.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Fallback header when Sales By Channel is not visible */}
+          {!salesByChannelVisible && (
+            <div className="flex items-center justify-between pb-3 border-b border-border/40">
+              <div>
+                <h2 className="text-lg font-bold tracking-tight text-foreground">Dashboard</h2>
+                <p className="text-xs text-muted-foreground">
+                  {d?.branchName ?? "Welcome back, here's your overview"}
+                </p>
+              </div>
+              {isSuperAdmin && (
+                <OutletFilterSelect outletId={outletId} setOutletId={setOutletId} outlets={outlets} isSuperAdmin={isSuperAdmin} />
+              )}
+            </div>
+          )}
+
+          {/* Sales By Channel (gated on "reports" permission) */}
+          {(activeSection === "sales-by-channel" || activeSection === "all") && salesByChannelVisible && (
         <section
           aria-label="Sales By Channel"
           className="rounded-2xl border border-border/80 bg-card/40 backdrop-blur-md shadow-sm overflow-hidden transition-all"
@@ -1750,7 +2206,7 @@ const Dashboard = () => {
       )}
 
       {/* Sales by Category (same "reports" permission gate as Sales By Channel) */}
-      {salesByChannelVisible && (
+      {(activeSection === "sales-by-category" || activeSection === "all") && salesByChannelVisible && (
         <section
           aria-label="Sales by Category"
           className="rounded-2xl border border-border/80 bg-card/40 backdrop-blur-md shadow-sm overflow-hidden transition-all"
@@ -2098,7 +2554,7 @@ const Dashboard = () => {
       )}
 
       {/* Sales by Payment Method (same "reports" permission gate) */}
-      {salesByChannelVisible && (
+      {(activeSection === "sales-by-payment-method" || activeSection === "all") && salesByChannelVisible && (
         <section
           aria-label="Sales by Payment Method"
           className="rounded-2xl border border-border/80 bg-card/40 backdrop-blur-md shadow-sm overflow-hidden transition-all"
@@ -2439,7 +2895,7 @@ const Dashboard = () => {
       )}
 
       {/* Top & Bottom Items (same "reports" permission gate) */}
-      {salesByChannelVisible && (
+      {(activeSection === "top-bottom-items" || activeSection === "all") && salesByChannelVisible && (
         <section
           aria-label="Top and Bottom Items"
           className="rounded-2xl border border-border/80 bg-card/40 backdrop-blur-md shadow-sm overflow-hidden transition-all"
@@ -2681,7 +3137,7 @@ const Dashboard = () => {
       )}
 
       {/* Net Profit (same "reports" permission gate) */}
-      {salesByChannelVisible && (
+      {(activeSection === "net-profit" || activeSection === "all") && salesByChannelVisible && (
         <section
           aria-label="Net Profit"
           className="rounded-2xl border border-border/80 bg-card/40 backdrop-blur-md shadow-sm overflow-hidden transition-all"
@@ -2989,7 +3445,7 @@ const Dashboard = () => {
       )}
 
       {/* Expenses Breakdown & Trends (same "reports" permission gate) */}
-      {salesByChannelVisible && (
+      {(activeSection === "expenses" || activeSection === "all") && salesByChannelVisible && (
         <section
           aria-label="Expenses Breakdown & Trends"
           className="rounded-2xl border border-border/80 bg-card/40 backdrop-blur-md shadow-sm overflow-hidden transition-all"
@@ -3228,7 +3684,7 @@ const Dashboard = () => {
       )}
 
       {/* Waste / Food Loss Trends (same "reports" permission gate) */}
-      {salesByChannelVisible && (
+      {(activeSection === "waste-loss" || activeSection === "all") && salesByChannelVisible && (
         <section
           aria-label="Waste / Food Loss Trends"
           className="rounded-2xl border border-border/80 bg-card/40 backdrop-blur-md shadow-sm overflow-hidden transition-all"
@@ -3466,7 +3922,7 @@ const Dashboard = () => {
       )}
 
       {/* Attendance / HR Analytics (same "reports" permission gate) */}
-      {salesByChannelVisible && (
+      {(activeSection === "attendance" || activeSection === "all") && salesByChannelVisible && (
         <section
           aria-label="Attendance / HR Analytics"
           className="rounded-2xl border border-border/80 bg-card/40 backdrop-blur-md shadow-sm overflow-hidden transition-all"
@@ -3700,7 +4156,7 @@ const Dashboard = () => {
       )}
 
       {/* Reservations Analytics (same "reports" permission gate) */}
-      {salesByChannelVisible && (
+      {(activeSection === "reservations" || activeSection === "all") && salesByChannelVisible && (
         <section
           aria-label="Reservations Analytics"
           className="rounded-2xl border border-border/80 bg-card/40 backdrop-blur-md shadow-sm overflow-hidden transition-all"
@@ -3930,7 +4386,7 @@ const Dashboard = () => {
       )}
 
       {/* Delivery / Rider Performance (same "reports" permission gate) */}
-      {salesByChannelVisible && (
+      {(activeSection === "delivery-performance" || activeSection === "all") && salesByChannelVisible && (
         <section
           aria-label="Delivery / Rider Performance"
           className="rounded-2xl border border-border/80 bg-card/40 backdrop-blur-md shadow-sm overflow-hidden transition-all"
@@ -4151,7 +4607,7 @@ const Dashboard = () => {
       )}
 
       {/* Cash Hub Settlement Trends (same "reports" permission gate) */}
-      {salesByChannelVisible && (
+      {(activeSection === "cash-settlement" || activeSection === "all") && salesByChannelVisible && (
         <section
           aria-label="Cash Hub Settlement Trends"
           className="rounded-2xl border border-border/80 bg-card/40 backdrop-blur-md shadow-sm overflow-hidden transition-all"
@@ -4379,7 +4835,7 @@ const Dashboard = () => {
       )}
 
       {/* Deals Performance (same "reports" permission gate) */}
-      {salesByChannelVisible && (
+      {(activeSection === "deals-performance" || activeSection === "all") && salesByChannelVisible && (
         <section
           aria-label="Deals Performance"
           className="rounded-2xl border border-border/80 bg-card/40 backdrop-blur-md shadow-sm overflow-hidden transition-all"
@@ -4588,7 +5044,7 @@ const Dashboard = () => {
       )}
 
       {/* Sales by Staff (same "reports" permission gate) */}
-      {salesByChannelVisible && (
+      {(activeSection === "sales-by-staff" || activeSection === "all") && salesByChannelVisible && (
         <section
           aria-label="Sales by Staff"
           className="rounded-2xl border border-border/80 bg-card/40 backdrop-blur-md shadow-sm overflow-hidden transition-all"
@@ -4926,7 +5382,7 @@ const Dashboard = () => {
       {/* Sales by Outlet — Super Admin, chain-wide view only. A single-outlet scope always
           yields one row, which has no comparative value, so the section is hidden rather than
           shown half-useful. */}
-      {branchSectionVisible && (
+      {(activeSection === "sales-by-outlet" || activeSection === "all") && branchSectionVisible && (
         <section
           aria-label="Sales by Outlet"
           className="rounded-2xl border border-border/80 bg-card/40 backdrop-blur-md shadow-sm overflow-hidden transition-all"
@@ -5154,7 +5610,7 @@ const Dashboard = () => {
       )}
 
       {/* Cancellation Requests (same "reports" permission gate) */}
-      {salesByChannelVisible && (
+      {(activeSection === "cancellation-requests" || activeSection === "all") && salesByChannelVisible && (
         <section
           aria-label="Cancellation Requests"
           className="rounded-2xl border border-border/80 bg-card/40 backdrop-blur-md shadow-sm overflow-hidden transition-all"
@@ -5360,7 +5816,7 @@ const Dashboard = () => {
       )}
 
       {/* Purchases & Supplier Spend (same "reports" permission gate) */}
-      {salesByChannelVisible && (
+      {(activeSection === "purchases" || activeSection === "all") && salesByChannelVisible && (
         <section
           aria-label="Purchases & Supplier Spend"
           className="rounded-2xl border border-border/80 bg-card/40 backdrop-blur-md shadow-sm overflow-hidden transition-all"
@@ -5568,8 +6024,9 @@ const Dashboard = () => {
       )}
 
       {/* Dough / Short-Life Batches — a live view, no date filter (see state comment above) */}
-      <section
-        aria-label="Dough / Short-Life Batches"
+      {(activeSection === "dough-batches" || activeSection === "all") && (
+        <section
+          aria-label="Dough / Short-Life Batches"
         className="rounded-2xl border border-border/80 bg-card/40 backdrop-blur-md shadow-sm overflow-hidden transition-all"
       >
         <div className={cn("p-4 sm:p-5 bg-card/70", !doughSectionCollapsed && "border-b border-border/50")}>
@@ -5657,10 +6114,11 @@ const Dashboard = () => {
             )}
           </div>
         )}
-      </section>
+        </section>
+      )}
 
       {/* Customer Analytics (same "reports" permission gate) */}
-      {salesByChannelVisible && (
+      {(activeSection === "customer-analytics" || activeSection === "all") && salesByChannelVisible && (
         <section
           aria-label="Customer Analytics"
           className="rounded-2xl border border-border/80 bg-card/40 backdrop-blur-md shadow-sm overflow-hidden transition-all"
@@ -5885,7 +6343,7 @@ const Dashboard = () => {
       )}
 
       {/* Order Timing & Patterns (same "reports" permission gate) */}
-      {salesByChannelVisible && (
+      {(activeSection === "order-timing" || activeSection === "all") && salesByChannelVisible && (
         <section
           aria-label="Order Timing & Patterns"
           className="rounded-2xl border border-border/80 bg-card/40 backdrop-blur-md shadow-sm overflow-hidden transition-all"
@@ -6123,6 +6581,7 @@ const Dashboard = () => {
         </section>
       )}
       </main>
+      </div>
     </div>
   );
 };
