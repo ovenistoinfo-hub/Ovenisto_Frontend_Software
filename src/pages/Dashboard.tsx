@@ -86,7 +86,7 @@ const Dashboard = () => {
 
   // Sales By Channel (Date & optional Time filtered, gated on "reports" permission)
   const salesByChannelVisible = hasPermission("reports");
-  const [activeSection, setActiveSection] = useState<string>(() => (hasPermission("reports") ? "sales-by-channel" : "dough-batches"));
+  const [activeSection, setActiveSection] = useState<string>(() => (hasPermission("reports") && isSuperAdmin ? "sales-by-outlet" : hasPermission("reports") ? "sales-by-channel" : "dough-batches"));
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(false);
   const [sectionSearch, setSectionSearch] = useState<string>("");
   const mainContentRef = useRef<HTMLDivElement>(null);
@@ -594,9 +594,9 @@ const Dashboard = () => {
     enabled: salesByChannelVisible,
   });
 
-  const branchSectionVisible = salesByChannelVisible && isSuperAdmin && outletId === "all";
+  const branchSectionVisible = salesByChannelVisible && isSuperAdmin;
   const { data: branchData, isLoading: branchLoading } = useQuery({
-    queryKey: ["sales-by-outlet", branchFromStr, branchToStr],
+    queryKey: ["sales-by-outlet", outletId, branchFromStr, branchToStr],
     queryFn: () => reportService.getSalesByOutlet({ outletId, from: branchFromStr, to: branchToStr }),
     enabled: branchSectionVisible,
   });
@@ -707,6 +707,16 @@ const Dashboard = () => {
   const liveMins = (expiresAt: string) => { const ms = new Date(expiresAt).getTime() - Date.now(); return ms <= 0 ? 0 : Math.floor(ms / 60000); };
   const fmtLeft = (m: number) => `${Math.floor(m / 60)}h ${m % 60}m left`;
   const wasteBatch = async (id: string) => { await stockService.wasteDoughBatch(id); refetchDough(); };
+
+  useEffect(() => {
+    mainContentRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+  }, [activeSection]);
+
+  useEffect(() => {
+    if (activeSection === "sales-by-outlet" && !branchSectionVisible) {
+      setActiveSection(salesByChannelVisible ? "sales-by-channel" : "dough-batches");
+    }
+  }, [activeSection, branchSectionVisible, salesByChannelVisible]);
 
   if (loading) return (
     <div className="min-h-screen bg-background flex flex-col font-sans">
@@ -1192,16 +1202,6 @@ const Dashboard = () => {
     navigate(`/purchases?${params.toString()}`);
   };
 
-  useEffect(() => {
-    mainContentRef.current?.scrollTo({ top: 0, behavior: "smooth" });
-  }, [activeSection]);
-
-  useEffect(() => {
-    if (activeSection === "sales-by-outlet" && !branchSectionVisible) {
-      setActiveSection(salesByChannelVisible ? "sales-by-channel" : "dough-batches");
-    }
-  }, [activeSection, branchSectionVisible, salesByChannelVisible]);
-
   interface DashboardSectionItem {
     id: string;
     label: string;
@@ -1360,14 +1360,6 @@ const Dashboard = () => {
       description: "Staff clock-in/out, shifts, leaves and punctuality",
     },
     // Branches
-    {
-      id: "sales-by-outlet",
-      label: "Sales by Outlet",
-      group: "Multi-Branch",
-      icon: Building2,
-      visible: branchSectionVisible,
-      description: "Chain-wide multi-branch sales and revenue comparison",
-    },
   ];
 
   const visibleSections = allSections.filter((s) => s.visible !== false);
@@ -1376,7 +1368,6 @@ const Dashboard = () => {
     "Operations & Kitchen",
     "Cost & Procurement",
     "People & Guests",
-    "Multi-Branch",
   ];
 
   const filteredSections = visibleSections.filter((s) =>
@@ -1436,10 +1427,6 @@ const Dashboard = () => {
               <BarChart3 className="h-3.5 w-3.5 text-emerald-500" /> Monitor
             </Link>
           </div>
-
-          {isSuperAdmin && (
-            <OutletFilterSelect outletId={outletId} setOutletId={setOutletId} outlets={outlets} isSuperAdmin={isSuperAdmin} />
-          )}
 
           <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg hover:bg-muted" onClick={toggleTheme} title="Toggle theme">
             {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
@@ -1678,7 +1665,213 @@ const Dashboard = () => {
             </div>
           )}
 
-          {/* Sales By Channel (gated on "reports" permission) */}
+    
+
+      {/* Sales by Outlet — Super Admin, chain-wide view only. A single-outlet scope always
+          yields one row, which has no comparative value, so the section is hidden rather than
+          shown half-useful. */}
+      {activeSection === "sales-by-outlet" && branchSectionVisible && (
+        <section
+          aria-label="Sales by Outlet"
+          className="rounded-2xl border border-border/80 bg-card/40 backdrop-blur-md shadow-sm overflow-hidden transition-all"
+        >
+          <div className="p-4 sm:p-5 space-y-4 bg-card/70 border-b border-border/50">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="h-9 w-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center border border-primary/20 shrink-0 shadow-sm">
+                  <Building2 className="h-4 w-4" />
+                </div>
+                <h2 className="text-lg sm:text-xl font-bold tracking-tight text-foreground whitespace-nowrap">
+                  Sales by Outlet
+                </h2>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0" />
+            </div>
+
+              <div className="flex items-center gap-2.5 flex-wrap pt-3 border-t border-border/40">
+                <div className="inline-flex items-center p-0.5 rounded-lg bg-muted/60 border border-border/60 shadow-sm">
+                  {(["Today", "This Week", "This Month"] as const).map((p) => (
+                    <button
+                      key={p}
+                      type="button"
+                      onClick={() => setBranchRange(p)}
+                      className={cn(
+                        "px-3 py-1.5 text-xs font-medium rounded-md transition-all",
+                        branchPreset === p
+                          ? "bg-background text-foreground shadow-sm font-semibold"
+                          : "text-muted-foreground hover:text-foreground"
+                      )}
+                    >
+                      {p}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="inline-flex items-center gap-1.5">
+                  <div className="w-36">
+                    <DatePicker
+                      value={branchFromStr}
+                      onChange={(val) => { setBranchFromStr(val); setBranchPreset("Custom"); }}
+                      placeholder="Start date"
+                      className="h-8 text-xs bg-background"
+                    />
+                  </div>
+                  <span className="text-xs text-muted-foreground/60 font-medium px-0.5">to</span>
+                  <div className="w-36">
+                    <DatePicker
+                      value={branchToStr}
+                      onChange={(val) => { setBranchToStr(val); setBranchPreset("Custom"); }}
+                      min={branchFromStr}
+                      placeholder="End date"
+                      className="h-8 text-xs bg-background"
+                    />
+                  </div>
+                </div>
+
+                <span className="text-[11px] text-muted-foreground/70">Click a branch to view its own Dashboard.</span>
+              </div>
+          </div>
+
+            <div className="p-4 sm:p-5">
+              {branchLoading ? (
+                <div className="space-y-2">
+                  {Array.from({ length: 3 }).map((_, i) => (
+                    <Skeleton key={i} className="h-10 rounded-lg" />
+                  ))}
+                </div>
+              ) : (branchData?.rows ?? []).length === 0 ? (
+                <p className="text-sm text-muted-foreground py-8 text-center">No sales in this period.</p>
+              ) : (
+                <div className="space-y-4">
+                  <div className="overflow-x-auto -mx-1 px-1">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="bg-muted/50 hover:bg-muted/50">
+                          <TableHead>Outlet</TableHead>
+                          <TableHead className="text-right">Orders</TableHead>
+                          <TableHead className="text-right">Sale</TableHead>
+                          <TableHead className="text-right">Cost</TableHead>
+                          <TableHead className="text-right">Profit</TableHead>
+                          <TableHead className="text-right">Margin</TableHead>
+                          <TableHead className="w-8" />
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {(branchData?.rows ?? []).map((r) => (
+                          <TableRow
+                            key={r.outletId ?? r.name}
+                            className={cn(
+                              "transition-colors group/row",
+                              r.outletId ? "cursor-pointer hover:bg-primary/5" : "opacity-70"
+                            )}
+                            onClick={() => goToBranch(r.outletId)}
+                            title={r.outletId ? "View this branch's Dashboard" : "No outlet on these orders — can't drill down"}
+                          >
+                            <TableCell className="font-medium">{r.name}</TableCell>
+                            <TableCell className="text-right text-muted-foreground">{r.orders}</TableCell>
+                            <TableCell className="text-right font-medium">{currency} {r.sale.toLocaleString()}</TableCell>
+                            <TableCell className="text-right">{currency} {r.cost.toLocaleString()}</TableCell>
+                            <TableCell className={cn("text-right font-medium", r.profit >= 0 ? "text-emerald-500" : "text-destructive")}>
+                              {currency} {r.profit.toLocaleString()}
+                            </TableCell>
+                            <TableCell className={cn("text-right", r.marginPct >= 0 ? "text-emerald-500" : "text-destructive")}>
+                              {r.marginPct}%
+                            </TableCell>
+                            <TableCell className="w-8">
+                              {r.outletId && <ChevronRight className="h-4 w-4 text-muted-foreground/40 transition-all group-hover/row:text-primary group-hover/row:translate-x-0.5" />}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                        {branchData?.combined && (
+                          <TableRow className="border-t-2 border-emerald-500/30 bg-emerald-500/[0.04] font-semibold">
+                            <TableCell className="font-bold">Total</TableCell>
+                            <TableCell className="text-right">{branchData.combined.orders}</TableCell>
+                            <TableCell className="text-right">{currency} {branchData.combined.sale.toLocaleString()}</TableCell>
+                            <TableCell className="text-right">{currency} {branchData.combined.cost.toLocaleString()}</TableCell>
+                            <TableCell className={cn("text-right", branchData.combined.profit >= 0 ? "text-emerald-500" : "text-destructive")}>
+                              {currency} {branchData.combined.profit.toLocaleString()}
+                            </TableCell>
+                            <TableCell className={cn("text-right", branchData.combined.marginPct >= 0 ? "text-emerald-500" : "text-destructive")}>
+                              {branchData.combined.marginPct}%
+                            </TableCell>
+                            <TableCell className="w-8" />
+                          </TableRow>
+                        )}
+                      </TableBody>
+                    </Table>
+                  </div>
+
+                  {branchChartData.length > 0 && (
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    <div className="rounded-xl border border-border/50 bg-card/40 p-4">
+                      <p className="text-sm font-semibold text-foreground mb-3">Sale vs Cost by Outlet</p>
+                      <div className="h-64">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart data={branchChartData} barGap={4} barCategoryGap="24%">
+                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                            <XAxis dataKey="name" tick={{ fontSize: 11 }} axisLine={{ stroke: "hsl(var(--border))" }} tickLine={false} interval={0} angle={-20} textAnchor="end" height={54} />
+                            <YAxis tick={{ fontSize: 12 }} axisLine={false} tickLine={false} tickFormatter={(v) => `${currency}${(v / 1000).toFixed(0)}k`} />
+                            <Tooltip content={<ChartTooltip />} cursor={{ fill: "hsl(var(--muted) / 0.15)", radius: 4 }} />
+                            <Legend wrapperStyle={{ fontSize: 12 }} />
+                            <Bar
+                              dataKey="sale" name="Sale" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} maxBarSize={36}
+                              cursor="pointer"
+                              onClick={(data: any) => goToBranch(data?.outletId ?? null)}
+                            />
+                            <Bar
+                              dataKey="cost" name="Cost" fill="hsl(var(--info))" radius={[4, 4, 0, 0]} maxBarSize={36}
+                              cursor="pointer"
+                              onClick={(data: any) => goToBranch(data?.outletId ?? null)}
+                            />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
+
+                    <div className="rounded-xl border border-border/50 bg-card/40 p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <p className="text-sm font-semibold text-foreground">Profit by Outlet</p>
+                        <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
+                          <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-emerald-500" />Profit</span>
+                          <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-destructive" />Loss</span>
+                        </div>
+                      </div>
+                      <div className="h-64">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart data={branchChartData} barCategoryGap="30%" margin={{ top: 20 }}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                            <XAxis dataKey="name" tick={{ fontSize: 11 }} axisLine={{ stroke: "hsl(var(--border))" }} tickLine={false} interval={0} angle={-20} textAnchor="end" height={54} />
+                            <YAxis tick={{ fontSize: 12 }} axisLine={false} tickLine={false} tickFormatter={(v) => `${currency}${(v / 1000).toFixed(0)}k`} />
+                            <Tooltip content={<ChartTooltip />} cursor={{ fill: "hsl(var(--muted) / 0.15)", radius: 4 }} />
+                            <Bar
+                              dataKey="profit" name="Profit" radius={[4, 4, 0, 0]} maxBarSize={44}
+                              cursor="pointer"
+                              onClick={(data: any) => goToBranch(data?.outletId ?? null)}
+                            >
+                              {branchChartData.map((entry) => (
+                                <Cell key={entry.name} fill={entry.profit >= 0 ? "hsl(var(--success))" : "hsl(var(--destructive))"} />
+                              ))}
+                              <LabelList
+                                dataKey="profit"
+                                position="top"
+                                formatter={(v: number) => `${currency} ${v.toLocaleString()}`}
+                                style={{ fontSize: 10, fill: "hsl(var(--foreground))" }}
+                              />
+                            </Bar>
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
+                  </div>
+                  )}
+                </div>
+              )}
+            </div>
+        </section>
+      )}
+
+      {/* Sales By Channel (gated on "reports" permission) */}
           {activeSection === "sales-by-channel" && salesByChannelVisible && (
         <section
           aria-label="Sales By Channel"
@@ -1697,12 +1890,7 @@ const Dashboard = () => {
                 </h2>
               </div>
 
-              <div className="flex items-center gap-2 shrink-0">
-                {isSuperAdmin && (
-                  <OutletFilterSelect outletId={outletId} setOutletId={setOutletId} outlets={outlets} isSuperAdmin={isSuperAdmin} />
-                )}
-                
-              </div>
+              <div className="flex items-center gap-2 shrink-0" />
             </div>
 
             {/* Filter Bar Row (only shown when expanded) */}
@@ -4901,210 +5089,6 @@ const Dashboard = () => {
                               onClick={(data: any) => goToStaffSales(data?.staffId ?? null, data?.name)}
                             >
                               {staffChartData.map((entry) => (
-                                <Cell key={entry.name} fill={entry.profit >= 0 ? "hsl(var(--success))" : "hsl(var(--destructive))"} />
-                              ))}
-                              <LabelList
-                                dataKey="profit"
-                                position="top"
-                                formatter={(v: number) => `${currency} ${v.toLocaleString()}`}
-                                style={{ fontSize: 10, fill: "hsl(var(--foreground))" }}
-                              />
-                            </Bar>
-                          </BarChart>
-                        </ResponsiveContainer>
-                      </div>
-                    </div>
-                  </div>
-                  )}
-                </div>
-              )}
-            </div>
-        </section>
-      )}
-
-      {/* Sales by Outlet — Super Admin, chain-wide view only. A single-outlet scope always
-          yields one row, which has no comparative value, so the section is hidden rather than
-          shown half-useful. */}
-      {activeSection === "sales-by-outlet" && branchSectionVisible && (
-        <section
-          aria-label="Sales by Outlet"
-          className="rounded-2xl border border-border/80 bg-card/40 backdrop-blur-md shadow-sm overflow-hidden transition-all"
-        >
-          <div className="p-4 sm:p-5 space-y-4 bg-card/70 border-b border-border/50">
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-3">
-                <div className="h-9 w-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center border border-primary/20 shrink-0 shadow-sm">
-                  <Building2 className="h-4 w-4" />
-                </div>
-                <h2 className="text-lg sm:text-xl font-bold tracking-tight text-foreground whitespace-nowrap">
-                  Sales by Outlet
-                </h2>
-              </div>
-
-              <div className="flex items-center gap-2 shrink-0" />
-            </div>
-
-              <div className="flex items-center gap-2.5 flex-wrap pt-3 border-t border-border/40">
-                <div className="inline-flex items-center p-0.5 rounded-lg bg-muted/60 border border-border/60 shadow-sm">
-                  {(["Today", "This Week", "This Month"] as const).map((p) => (
-                    <button
-                      key={p}
-                      type="button"
-                      onClick={() => setBranchRange(p)}
-                      className={cn(
-                        "px-3 py-1.5 text-xs font-medium rounded-md transition-all",
-                        branchPreset === p
-                          ? "bg-background text-foreground shadow-sm font-semibold"
-                          : "text-muted-foreground hover:text-foreground"
-                      )}
-                    >
-                      {p}
-                    </button>
-                  ))}
-                </div>
-
-                <div className="inline-flex items-center gap-1.5">
-                  <div className="w-36">
-                    <DatePicker
-                      value={branchFromStr}
-                      onChange={(val) => { setBranchFromStr(val); setBranchPreset("Custom"); }}
-                      placeholder="Start date"
-                      className="h-8 text-xs bg-background"
-                    />
-                  </div>
-                  <span className="text-xs text-muted-foreground/60 font-medium px-0.5">to</span>
-                  <div className="w-36">
-                    <DatePicker
-                      value={branchToStr}
-                      onChange={(val) => { setBranchToStr(val); setBranchPreset("Custom"); }}
-                      min={branchFromStr}
-                      placeholder="End date"
-                      className="h-8 text-xs bg-background"
-                    />
-                  </div>
-                </div>
-
-                <span className="text-[11px] text-muted-foreground/70">Click a branch to view its own Dashboard.</span>
-              </div>
-          </div>
-
-            <div className="p-4 sm:p-5">
-              {branchLoading ? (
-                <div className="space-y-2">
-                  {Array.from({ length: 3 }).map((_, i) => (
-                    <Skeleton key={i} className="h-10 rounded-lg" />
-                  ))}
-                </div>
-              ) : (branchData?.rows ?? []).length === 0 ? (
-                <p className="text-sm text-muted-foreground py-8 text-center">No sales in this period.</p>
-              ) : (
-                <div className="space-y-4">
-                  <div className="overflow-x-auto -mx-1 px-1">
-                    <Table>
-                      <TableHeader>
-                        <TableRow className="bg-muted/50 hover:bg-muted/50">
-                          <TableHead>Outlet</TableHead>
-                          <TableHead className="text-right">Orders</TableHead>
-                          <TableHead className="text-right">Sale</TableHead>
-                          <TableHead className="text-right">Cost</TableHead>
-                          <TableHead className="text-right">Profit</TableHead>
-                          <TableHead className="text-right">Margin</TableHead>
-                          <TableHead className="w-8" />
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {(branchData?.rows ?? []).map((r) => (
-                          <TableRow
-                            key={r.outletId ?? r.name}
-                            className={cn(
-                              "transition-colors group/row",
-                              r.outletId ? "cursor-pointer hover:bg-primary/5" : "opacity-70"
-                            )}
-                            onClick={() => goToBranch(r.outletId)}
-                            title={r.outletId ? "View this branch's Dashboard" : "No outlet on these orders — can't drill down"}
-                          >
-                            <TableCell className="font-medium">{r.name}</TableCell>
-                            <TableCell className="text-right text-muted-foreground">{r.orders}</TableCell>
-                            <TableCell className="text-right font-medium">{currency} {r.sale.toLocaleString()}</TableCell>
-                            <TableCell className="text-right">{currency} {r.cost.toLocaleString()}</TableCell>
-                            <TableCell className={cn("text-right font-medium", r.profit >= 0 ? "text-emerald-500" : "text-destructive")}>
-                              {currency} {r.profit.toLocaleString()}
-                            </TableCell>
-                            <TableCell className={cn("text-right", r.marginPct >= 0 ? "text-emerald-500" : "text-destructive")}>
-                              {r.marginPct}%
-                            </TableCell>
-                            <TableCell className="w-8">
-                              {r.outletId && <ChevronRight className="h-4 w-4 text-muted-foreground/40 transition-all group-hover/row:text-primary group-hover/row:translate-x-0.5" />}
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                        {branchData?.combined && (
-                          <TableRow className="border-t-2 border-emerald-500/30 bg-emerald-500/[0.04] font-semibold">
-                            <TableCell className="font-bold">Total</TableCell>
-                            <TableCell className="text-right">{branchData.combined.orders}</TableCell>
-                            <TableCell className="text-right">{currency} {branchData.combined.sale.toLocaleString()}</TableCell>
-                            <TableCell className="text-right">{currency} {branchData.combined.cost.toLocaleString()}</TableCell>
-                            <TableCell className={cn("text-right", branchData.combined.profit >= 0 ? "text-emerald-500" : "text-destructive")}>
-                              {currency} {branchData.combined.profit.toLocaleString()}
-                            </TableCell>
-                            <TableCell className={cn("text-right", branchData.combined.marginPct >= 0 ? "text-emerald-500" : "text-destructive")}>
-                              {branchData.combined.marginPct}%
-                            </TableCell>
-                            <TableCell className="w-8" />
-                          </TableRow>
-                        )}
-                      </TableBody>
-                    </Table>
-                  </div>
-
-                  {branchChartData.length > 0 && (
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                    <div className="rounded-xl border border-border/50 bg-card/40 p-4">
-                      <p className="text-sm font-semibold text-foreground mb-3">Sale vs Cost by Outlet</p>
-                      <div className="h-64">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <BarChart data={branchChartData} barGap={4} barCategoryGap="24%">
-                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-                            <XAxis dataKey="name" tick={{ fontSize: 11 }} axisLine={{ stroke: "hsl(var(--border))" }} tickLine={false} interval={0} angle={-20} textAnchor="end" height={54} />
-                            <YAxis tick={{ fontSize: 12 }} axisLine={false} tickLine={false} tickFormatter={(v) => `${currency}${(v / 1000).toFixed(0)}k`} />
-                            <Tooltip content={<ChartTooltip />} cursor={{ fill: "hsl(var(--muted) / 0.15)", radius: 4 }} />
-                            <Legend wrapperStyle={{ fontSize: 12 }} />
-                            <Bar
-                              dataKey="sale" name="Sale" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} maxBarSize={36}
-                              cursor="pointer"
-                              onClick={(data: any) => goToBranch(data?.outletId ?? null)}
-                            />
-                            <Bar
-                              dataKey="cost" name="Cost" fill="hsl(var(--info))" radius={[4, 4, 0, 0]} maxBarSize={36}
-                              cursor="pointer"
-                              onClick={(data: any) => goToBranch(data?.outletId ?? null)}
-                            />
-                          </BarChart>
-                        </ResponsiveContainer>
-                      </div>
-                    </div>
-
-                    <div className="rounded-xl border border-border/50 bg-card/40 p-4">
-                      <div className="flex items-center justify-between mb-3">
-                        <p className="text-sm font-semibold text-foreground">Profit by Outlet</p>
-                        <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
-                          <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-emerald-500" />Profit</span>
-                          <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-destructive" />Loss</span>
-                        </div>
-                      </div>
-                      <div className="h-64">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <BarChart data={branchChartData} barCategoryGap="30%" margin={{ top: 20 }}>
-                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-                            <XAxis dataKey="name" tick={{ fontSize: 11 }} axisLine={{ stroke: "hsl(var(--border))" }} tickLine={false} interval={0} angle={-20} textAnchor="end" height={54} />
-                            <YAxis tick={{ fontSize: 12 }} axisLine={false} tickLine={false} tickFormatter={(v) => `${currency}${(v / 1000).toFixed(0)}k`} />
-                            <Tooltip content={<ChartTooltip />} cursor={{ fill: "hsl(var(--muted) / 0.15)", radius: 4 }} />
-                            <Bar
-                              dataKey="profit" name="Profit" radius={[4, 4, 0, 0]} maxBarSize={44}
-                              cursor="pointer"
-                              onClick={(data: any) => goToBranch(data?.outletId ?? null)}
-                            >
-                              {branchChartData.map((entry) => (
                                 <Cell key={entry.name} fill={entry.profit >= 0 ? "hsl(var(--success))" : "hsl(var(--destructive))"} />
                               ))}
                               <LabelList

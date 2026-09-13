@@ -12,11 +12,11 @@ export function OutletFilterSelect({ outletId, setOutletId, outlets, isSuperAdmi
   if (!isSuperAdmin) return null;
   return (
     <Select value={outletId} onValueChange={setOutletId}>
-      <SelectTrigger className="w-[180px] h-9 text-sm">
-        <SelectValue placeholder="Outlet" />
+      <SelectTrigger className="w-[180px] h-8 text-xs bg-card/80 border-border/70 font-medium hover:bg-card transition-colors">
+        <SelectValue placeholder="Select Outlet" />
       </SelectTrigger>
       <SelectContent>
-        <SelectItem value="none">Null</SelectItem>
+        <SelectItem value="all">All Outlets</SelectItem>
         {outlets.map((o) => (
           <SelectItem key={o.id} value={o.id}>{o.name}</SelectItem>
         ))}
