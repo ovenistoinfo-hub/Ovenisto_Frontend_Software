@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from "react";
 import { authService, type AuthUser } from "@/services/auth.service";
-import { getAccessToken, clearTokens } from "@/services/api";
+import { getAccessToken, clearTokens, ApiError } from "@/services/api";
 import { resetSocket } from "@/lib/socket";
 
 // Role-based permissions mapping.
@@ -109,11 +109,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setUser(authUser);
         localStorage.setItem("ovenisto_user", JSON.stringify(authUser));
       })
-      .catch(() => {
-        // Token invalid/expired and refresh failed — clear everything
-        clearTokens();
-        localStorage.removeItem("ovenisto_user");
-        setUser(null);
+      .catch((err) => {
+        // Only a genuine 401 (token invalid/expired and refresh failed) means the session is
+        // actually gone. A network-type error (offline — no connectivity to even ask the server)
+        // is NOT the same thing: force-logging out here would make the offline order queue
+        // unusable, since simply opening/reloading POS or Waiter Panel with no internet would
+        // sign the cashier out from underneath them. Keep the existing localStorage session in
+        // that case and let the app proceed — it re-validates next time a real API call
+        // succeeds (or genuinely 401s).
+        if (err instanceof ApiError && err.status === 401) {
+          clearTokens();
+          localStorage.removeItem("ovenisto_user");
+          setUser(null);
+        }
       })
       .finally(() => setIsLoading(false));
   }, []);

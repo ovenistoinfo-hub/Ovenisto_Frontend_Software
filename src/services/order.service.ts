@@ -2,7 +2,9 @@
  * Order Service - API calls for orders and kitchens
  */
 
-import { api } from './api';
+import { api, ApiError } from './api';
+import { outletStore } from './outletStore';
+import { addPendingOrder, type PendingOrder, type PendingOrderPostSync } from '@/lib/db/offlineOrdersDb';
 
 export interface OrderItemRecord {
   id: string;
@@ -76,6 +78,11 @@ export interface OrderRecord {
   customerType: string | null;
   orderSource: string | null;
   cashApproved?: boolean;
+  /** Set only on a client-side stub returned while offline (see order.service.ts's createOrder).
+   *  `orderNumber` is a provisional "OFFLINE-xxxx" label and `id` is a local placeholder — never
+   *  use either for a follow-up API call (reservation complete / table occupy / rider assign
+   *  etc.); those must be deferred until the real order exists after a successful sync. */
+  isQueuedOffline?: boolean;
   hasPendingCancellationRequest?: boolean;
   pendingCancellationRequest?: {
     id: string;
@@ -137,13 +144,24 @@ export interface CreateOrderInput {
   staffName?: string;
   items: {
     menuItemId?: string | null;
+    /** Only set when a specific size/variant was picked; omitted for a plain "no variant" line. */
+    variantId?: string | null;
     name: string;
     price: number;
     qty: number;
     discount?: number;
     modifiers?: string[];
+    /** Menu-item modifier ids, distinct from `modifiers` (their display names) — both are sent. */
+    modifierIds?: string[];
     cookingTime?: number | null;
     notes?: string | null;
+    /** Deal-tagged line fields — see deal.revalidate.ts's IncomingOrderItem on the backend, which
+     *  this mirrors. dealGroupId/dealRole are validation-only (never persisted server-side). */
+    dealId?: string | null;
+    dealName?: string | null;
+    dealLineId?: string | null;
+    dealGroupId?: string | null;
+    dealRole?: 'buy' | 'get' | null;
   }[];
   isFutureSale?: boolean;
   scheduledDate?: string;
@@ -157,6 +175,20 @@ export interface CreateOrderInput {
   /** Promo Code to apply to the whole order. Omit for a Minimum Spend deal —
    *  the backend auto-resolves that one on every order, code or not. */
   dealCode?: string | null;
+  /** Idempotency key for the offline order queue — set only when this order was queued and is
+   *  now being (re)sent by the sync engine. A resend with the same id returns the original order
+   *  instead of creating a duplicate (see order.controller.ts's createOrder). Never set by a
+   *  normal, online, non-queued create. */
+  clientRequestId?: string;
+}
+
+/** Passed to createOrder only from POS.tsx/WaiterPanel.tsx, only used if the order ends up
+ *  queued offline — tells the queue which screen created it and carries the online-only
+ *  side-effect inputs (table occupancy, reservation completion, rider assignment) that must be
+ *  deferred until the real order exists, rather than fired against a fake offline id. */
+export interface OfflineQueueMeta {
+  sourceScreen: 'pos' | 'waiter';
+  postSync?: PendingOrderPostSync;
 }
 
 /** An order-level discount (Promo Code, or an auto-applying Minimum Spend
@@ -167,6 +199,87 @@ export interface OrderCouponPreview {
   dealName: string;
   code: string | null;
   amount: number;
+}
+
+/** Builds an OrderRecord-shaped stub for a queued-offline order, from the same payload that
+ *  would have been POSTed. Only `orderNumber` (the provisional "OFFLINE-xxxx" label), `id`, and
+ *  `isQueuedOffline` are actually read by callers today (print/toast at the POS/WaiterPanel call
+ *  sites) — every other field is filled in only so this satisfies OrderRecord's required shape. */
+function buildOfflineOrderStub(row: PendingOrder): OrderRecord {
+  const data = row.payload;
+  const nowIso = new Date(row.createdAt).toISOString();
+  return {
+    id: `offline:${row.localId}`,
+    orderNumber: row.provisionalOrderNumber,
+    outletId: row.outletId,
+    customerId: data.customerId ?? null,
+    customerName: data.customerName ?? null,
+    phone: data.phone ?? null,
+    type: data.type,
+    subtotal: data.subtotal,
+    discount: data.discount,
+    tax: data.tax,
+    total: data.total,
+    status: data.isFutureSale ? 'scheduled' : 'pending',
+    paymentMethod: data.paymentMethod ?? null,
+    date: nowIso,
+    time: null,
+    staffId: null,
+    staffName: data.staffName ?? null,
+    tableNumber: data.tableNumber ?? null,
+    deliveryAddress: data.deliveryAddress ?? null,
+    riderId: data.riderId ?? null,
+    isFutureSale: data.isFutureSale ?? false,
+    scheduledDate: data.scheduledDate ?? null,
+    scheduledTime: data.scheduledTime ?? null,
+    futureNotes: data.futureNotes ?? null,
+    advancePayment: data.advancePayment ?? 0,
+    guestCount: null,
+    acceptedById: null,
+    acceptedByName: null,
+    rejectionReason: null,
+    isUrgent: data.isUrgent ?? false,
+    customerType: data.customerType ?? null,
+    orderSource: data.orderSource ?? null,
+    isQueuedOffline: true,
+    createdAt: nowIso,
+    items: data.items.map((item, idx) => ({
+      id: `${row.localId}-item-${idx}`,
+      orderId: `offline:${row.localId}`,
+      menuItemId: item.menuItemId ?? null,
+      name: item.name,
+      price: item.price,
+      qty: item.qty,
+      discount: item.discount ?? 0,
+      modifiers: item.modifiers ?? [],
+      cookingTime: item.cookingTime ?? null,
+      notes: item.notes ?? null,
+      categoryName: null,
+      status: 'active',
+      dealId: item.dealId ?? null,
+      dealName: item.dealName ?? null,
+      dealLineId: item.dealLineId ?? null,
+    })),
+  };
+}
+
+/** Raw, no-queueing POST /orders — the one real network attempt, shared by createOrder (which
+ *  queues on a network-type failure) and offlineOrderSync.ts's flush loop (which does its OWN
+ *  retry/stop bookkeeping around this and must not re-enter createOrder's queueing branch on a
+ *  failure). Throws ApiError on a genuine server rejection, or a TypeError/AbortError on a
+ *  network-type failure/timeout — callers decide what to do with each. */
+export async function postOrderDirect(data: CreateOrderInput): Promise<OrderRecord> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 10_000);
+  try {
+    const res = await api.post<{ success: boolean; data: OrderRecord }>('/orders', data, {
+      signal: controller.signal,
+      suppressAuthRedirect: true,
+    });
+    return res.data;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 export const orderService = {
@@ -268,9 +381,24 @@ export const orderService = {
     return res.data;
   },
 
-  async createOrder(data: CreateOrderInput): Promise<OrderRecord> {
-    const res = await api.post<{ success: boolean; data: OrderRecord }>('/orders', data);
-    return res.data;
+  /** `offlineMeta` is only consulted if this order ends up queued offline — see
+   *  OfflineQueueMeta. A 10s timeout guards against a hung connection (neither a clean success
+   *  nor a clean network error), since fetch itself has no timeout; `suppressAuthRedirect`
+   *  prevents an unrelated hard /login redirect from firing mid-checkout on a 401 here. */
+  async createOrder(data: CreateOrderInput, offlineMeta?: OfflineQueueMeta): Promise<OrderRecord> {
+    try {
+      return await postOrderDirect(data);
+    } catch (err) {
+      if (err instanceof ApiError) throw err; // a genuine rejection (stock/deal/validation) — unchanged behavior
+      // Network-type failure (fetch TypeError, or our own AbortController timeout) — queue it
+      // instead of surfacing an error; the sync engine resends it once connectivity returns.
+      const row = await addPendingOrder(data, {
+        sourceScreen: offlineMeta?.sourceScreen ?? 'pos',
+        outletId: outletStore.get(),
+        postSync: offlineMeta?.postSync,
+      });
+      return buildOfflineOrderStub(row);
+    }
   },
 
   /** Previews the order-level discount createOrder would apply to this cart,

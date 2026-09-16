@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import type { OrderItem, Order, OrderType, CustomerType, OrderModificationLog } from "@/data/mock-data";
 import { orderService, type OrderRecord, type OrderCouponPreview } from "@/services/order.service";
+import { isOnline, useIsOnline } from "@/lib/connectivity";
 import { cancellationRequestService, type CancellationRequestRecord } from "@/services/cancellationRequest.service";
 import { menuService, type RecipeIngredient } from "@/services/menu.service";
 import { calculateFoodAvailability, isFullyOutOfStock, DEFAULT_LOW_STOCK_ALERT } from "@/utils/foodAvailability";
@@ -43,7 +44,7 @@ import { TimePicker } from "@/components/ui/time-picker";
 import { toast } from "sonner";
 import { Link } from "react-router-dom";
 import { cn, formatPakistaniPhone, isValidPakistaniPhone } from "@/lib/utils";
-import { api } from "@/services/api";
+import { api, ApiError } from "@/services/api";
 import { generateInvoicePDF } from "@/lib/generate-invoice-pdf";
 import { useData } from "@/contexts/DataContext";
 import { useAuth } from "@/contexts/AuthContext";
@@ -2099,7 +2100,12 @@ const POS = () => {
   // what actually gets charged at checkout.
   useEffect(() => {
     const hasLineDeal = cart.some((c) => !!c.dealId);
-    if (itemsSubtotal <= 0 || hasLineDeal) { setDealPreview(null); return; }
+    // Also skipped while offline — this is a real round trip (the discount rule lives
+    // server-side, not something cached client-side like a line-item deal's price), so it would
+    // just fail-and-swallow to null anyway. Skipping outright avoids a doomed request every 400ms
+    // of cart editing, and dealPreviewUnavailableOffline (rendered near the totals) tells staff
+    // why no Promo/Min-Spend discount is showing instead of it silently vanishing.
+    if (itemsSubtotal <= 0 || hasLineDeal || !isOnline()) { setDealPreview(null); return; }
     let cancelled = false;
     const timer = setTimeout(() => {
       orderService
@@ -2109,6 +2115,7 @@ const POS = () => {
     }, 400);
     return () => { cancelled = true; clearTimeout(timer); };
   }, [itemsSubtotal, orderType, cart]);
+  const dealPreviewUnavailableOffline = !useIsOnline() && itemsSubtotal > 0 && !cart.some((c) => !!c.dealId);
 
   const entriesTotal = Math.round(paymentEntries.reduce((s, e) => s + e.amount, 0));
   const totalPaid = entriesTotal;
@@ -2412,35 +2419,67 @@ const POS = () => {
         finalOrderNumber = updated.orderNumber || (allOrdersData as any[]).find((x) => x.id === loadedOrderId)?.orderNumber || "Updated";
         toast.success(`Order ${finalOrderNumber} updated!`);
       } else {
-        const created = await orderService.createOrder(orderPayload);
-        finalOrderNumber = created.orderNumber;
-        setApiOrders(prev => [normalizeApiOrder(created), ...prev]);
-        if (loadedReservationId) {
-          reservationService.update(loadedReservationId, { status: "completed", orderId: created.id }).catch(() => {});
-          setLoadedReservationId(null);
-        }
+        // Precompute the online-only side-effect inputs BEFORE the network call — needed either
+        // way (fire immediately if online, or deferred into the offline queue's postSync if not),
+        // so this table lookup only happens once regardless of which path createOrder takes.
+        let targetTable: (typeof backendTables)[number] | undefined;
+        let tableGuests = 0;
+        let tableWasAlreadyOccupied = false;
         if (orderType === "Dine In" && tableNumber) {
-          const targetTable = backendTables.find((t) => Number(t.number) === tableNumber);
+          targetTable = backendTables.find((t) => Number(t.number) === tableNumber);
           if (targetTable) {
-            const guests = dineInGuests || targetTable.capacity || 2;
-            const wasAlreadyOccupied = targetTable.status === "occupied";
+            tableGuests = dineInGuests || targetTable.capacity || 2;
+            tableWasAlreadyOccupied = targetTable.status === "occupied";
+          }
+        }
+
+        const created = await orderService.createOrder(orderPayload, {
+          sourceScreen: "pos",
+          postSync: {
+            ...(loadedReservationId ? { completeReservationId: loadedReservationId } : {}),
+            ...(targetTable
+              ? {
+                  occupyTable: { tableId: targetTable.id, guests: tableGuests },
+                  // Only clear self-order state when this order newly occupies the table (a new
+                  // sitting) — not on a 2nd/3rd order rung in during an already-occupied,
+                  // possibly self-order-active sitting.
+                  ...(!tableWasAlreadyOccupied ? { endSelfOrderSessionForTableId: targetTable.id } : {}),
+                }
+              : {}),
+            ...(orderType === "Delivery" && selectedRiderId
+              ? { assignRider: { riderId: selectedRiderId, estimatedTime: 30 } }
+              : {}),
+          },
+        });
+        finalOrderNumber = created.orderNumber;
+
+        if (created.isQueuedOffline) {
+          // The three side effects above are deferred (via postSync) until the sync engine
+          // replays them against the real order id — firing them now against a fake offline id
+          // would just harmlessly 404 and never actually happen.
+          toast.warning(`Offline — order ${created.orderNumber} queued, will sync automatically`);
+          setLoadedReservationId(null);
+        } else {
+          setApiOrders(prev => [normalizeApiOrder(created), ...prev]);
+          if (loadedReservationId) {
+            reservationService.update(loadedReservationId, { status: "completed", orderId: created.id }).catch(() => {});
+            setLoadedReservationId(null);
+          }
+          if (targetTable) {
             tableService.updateTable(targetTable.id, {
               status: "occupied",
-              currentOrderId: `${Date.now()}:${guests}`
+              currentOrderId: `${Date.now()}:${tableGuests}`
             }).catch(() => {});
-            // Only clear self-order state when this order newly occupies the
-            // table (a new sitting) — not on a 2nd/3rd order rung in during an
-            // already-occupied, possibly self-order-active sitting.
-            if (!wasAlreadyOccupied) {
+            if (!tableWasAlreadyOccupied) {
               tableService.notifySelfOrderSessionEnded(targetTable.id).catch(() => {});
             }
           }
+          if (orderType === "Delivery" && selectedRiderId) {
+            deliveryService.assignRider({ orderId: created.id, riderId: selectedRiderId, estimatedTime: 30 })
+              .catch(() => {});
+          }
+          toast.success(`Order ${finalOrderNumber} placed! Net Payable: Rs. ${netPayable.toLocaleString()}`);
         }
-        if (orderType === "Delivery" && selectedRiderId) {
-          deliveryService.assignRider({ orderId: created.id, riderId: selectedRiderId, estimatedTime: 30 })
-            .catch(() => {});
-        }
-        toast.success(`Order ${finalOrderNumber} placed! Net Payable: Rs. ${netPayable.toLocaleString()}`);
       }
     } catch (err: any) {
       toast.error(err?.message || "Failed to save order");
@@ -2548,9 +2587,13 @@ const POS = () => {
         futureNotes,
         advancePayment: futureAdvancePayment,
         orderSource: "pos",
-      });
-      setApiOrders(prev => [normalizeApiOrder(created), ...prev]);
-      toast.success(`Future order ${created.orderNumber} booked for ${futureScheduledDate} at ${futureScheduledTime}`);
+      }, { sourceScreen: "pos" });
+      if (created.isQueuedOffline) {
+        toast.warning(`Offline — future order ${created.orderNumber} queued, will sync automatically`);
+      } else {
+        setApiOrders(prev => [normalizeApiOrder(created), ...prev]);
+        toast.success(`Future order ${created.orderNumber} booked for ${futureScheduledDate} at ${futureScheduledTime}`);
+      }
     } catch (err: any) {
       toast.error(err?.message || "Failed to create future order");
       return;
@@ -3317,6 +3360,11 @@ const POS = () => {
                   <span className="truncate">{dealPreview.code ? `${dealPreview.dealName} (${dealPreview.code})` : dealPreview.dealName}</span>
                 </span>
                 <span className="font-mono shrink-0">-Rs. {dealDiscount.toLocaleString()}</span>
+              </div>
+            )}
+            {dealPreviewUnavailableOffline && (
+              <div className="text-[11px] text-muted-foreground italic">
+                Promo/Min-Spend discount unavailable offline
               </div>
             )}
             <div className="flex justify-between text-xs text-muted-foreground">
@@ -5957,7 +6005,15 @@ const POS = () => {
                 setShowRegisterOpen(false);
                 toast.success(`Register opened — Shift ${shift.shiftNumber}`);
               } catch (err: any) {
-                toast.error(err?.message || "Failed to open register");
+                // Opening a register can't be queued offline like an order — it needs a
+                // server-assigned shift number and a real opening-cash record — so this is a
+                // genuine dead end until connectivity returns. Say so plainly instead of
+                // surfacing the raw "Failed to fetch" browser error.
+                if (!isOnline() || !(err instanceof ApiError)) {
+                  toast.error("You're offline — connect to the internet to open the register.");
+                } else {
+                  toast.error(err?.message || "Failed to open register");
+                }
               }
             }}>Open Register</Button>
           </DialogFooter>

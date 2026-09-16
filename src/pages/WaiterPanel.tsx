@@ -31,6 +31,7 @@ import { useReservationEvents } from "@/hooks/use-reservation-events";
 import { useSelfMutationGuard } from "@/hooks/use-self-mutation-guard";
 import { getSocket } from "@/lib/socket";
 import { orderService, type OrderRecord, type OrderCouponPreview } from "@/services/order.service";
+import { isOnline, useIsOnline } from "@/lib/connectivity";
 import { menuService, type MenuItemRecord, type CategoryRecord, type ModifierRecord, type MenuItemVariant } from "@/services/menu.service";
 import { tableService, type TableRecord } from "@/services/table.service";
 import { reservationService, type Reservation } from "@/services/reservation.service";
@@ -763,7 +764,9 @@ const WaiterPanel = () => {
   // lower than what actually gets charged at checkout. Mirrors POS.tsx's identical guard.
   useEffect(() => {
     const hasLineDeal = cartItems.some((c) => !!c.dealId);
-    if (cartTotal <= 0 || hasLineDeal) { setDealPreview(null); return; }
+    // Also skipped while offline — a real round trip (the discount rule lives server-side), so
+    // it would just fail-and-swallow to null anyway. Mirrors POS.tsx's identical guard.
+    if (cartTotal <= 0 || hasLineDeal || !isOnline()) { setDealPreview(null); return; }
     let cancelled = false;
     const timer = setTimeout(() => {
       orderService
@@ -773,6 +776,7 @@ const WaiterPanel = () => {
     }, 400);
     return () => { cancelled = true; clearTimeout(timer); };
   }, [cartTotal, cartItems]);
+  const dealPreviewUnavailableOffline = !useIsOnline() && cartTotal > 0 && !cartItems.some((c) => !!c.dealId);
   // The earliest order's timestamp for the seating timer in the sidebar
   const oldest = activeTableOrders.length > 0
     ? activeTableOrders[activeTableOrders.length - 1].createdAt
@@ -1574,7 +1578,12 @@ const WaiterPanel = () => {
     const total    = taxable + tax;
     try {
       markMine();
-      await orderService.createOrder({
+      // Precompute the table-occupy input BEFORE the network call — needed either way (fire
+      // immediately if online, or deferred into the offline queue's postSync if not).
+      const occupyTarget = (selectedTable && selectedTable.status !== "occupied") ? selectedTable : undefined;
+      const occupyGuests = occupyTarget ? (guestsInput || occupyTarget.capacity) : 0;
+
+      const created = await orderService.createOrder({
         type: "Dine In",
         tableNumber: selectedTableNum,
         customerName: selectedCustomerData?.name || "Walk-in",
@@ -1591,24 +1600,61 @@ const WaiterPanel = () => {
           dealId: i.dealId || null, dealName: i.dealName || null, dealLineId: i.dealLineId || null,
           dealGroupId: i.dealGroupId || null, dealRole: i.dealRole || null,
         })),
+      }, {
+        sourceScreen: "waiter",
+        postSync: occupyTarget
+          ? {
+              occupyTable: { tableId: occupyTarget.id, guests: occupyGuests },
+              // A new sitting starts here — any self-order session left over from a previous,
+              // improperly-ended visit to this table must not leak into it.
+              endSelfOrderSessionForTableId: occupyTarget.id,
+            }
+          : undefined,
       });
-      if (selectedTable && selectedTable.status !== "occupied") {
-        const tbl = selectedTable;
-        const guests = guestsInput || tbl.capacity;
-        // Don't hold the spinner on the table write — update local state
-        // optimistically and let the request settle in the background
-        // (useOrderEvents + the 180s poll reconcile it).
-        tableService.updateTable(tbl.id, {
-          status: "occupied",
-          currentOrderId: `${Date.now()}:${guests}`
-        })
-          .then(updated => setTables(prev => prev.map(t => t.id === tbl.id ? updated : t)))
-          .catch(() => {});
-        // A new sitting starts here — any self-order session left over from a
-        // previous, improperly-ended visit to this table must not leak into it.
-        tableService.notifySelfOrderSessionEnded(tbl.id).catch(() => {});
+
+      if (created.isQueuedOffline) {
+        toast.warning(`Offline — order ${created.orderNumber} queued, will sync automatically`);
+        // Print immediately, same as POS — the kitchen shouldn't wait on connectivity for a
+        // ticket. The table-occupy side effect above is replayed by the sync engine once the
+        // real order exists; firing it now against a fake offline id would just harmlessly 404.
+        setPlacedOrderSlip({
+          orderNumber: created.orderNumber,
+          orderType: "Dine In",
+          tableNumber: selectedTableNum,
+          customerName: selectedCustomerData?.name || "Walk-in",
+          customerPhone: selectedCustomerData?.phone || undefined,
+          staffName: user?.name || "Waiter",
+          items: cartItems.map((i) => ({
+            name: i.name, qty: i.qty, price: i.price, discount: i.discount || 0,
+            modifiers: i.modifiers ?? [], dealName: i.dealName || null,
+          })),
+          subtotal, discount: 0, tax, total,
+          advancePayment: currentAdvancePayment > 0 ? currentAdvancePayment : undefined,
+          netPayable: Math.max(0, total - currentAdvancePayment),
+          paymentMethod: "Pending",
+          dateStr: new Date().toLocaleDateString(),
+          timeStr: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          restaurantName: settings?.restaurantName || "OVENISTO",
+          restaurantAddress: settings?.address,
+          restaurantPhone: settings?.phone,
+          currency: currency || "Rs.",
+        });
+        setShowOrderPlacedModal(true);
+      } else {
+        if (occupyTarget) {
+          // Don't hold the spinner on the table write — update local state
+          // optimistically and let the request settle in the background
+          // (useOrderEvents + the 180s poll reconcile it).
+          tableService.updateTable(occupyTarget.id, {
+            status: "occupied",
+            currentOrderId: `${Date.now()}:${occupyGuests}`
+          })
+            .then(updated => setTables(prev => prev.map(t => t.id === occupyTarget.id ? updated : t)))
+            .catch(() => {});
+          tableService.notifySelfOrderSessionEnded(occupyTarget.id).catch(() => {});
+        }
+        toast.success("Order sent to kitchen!");
       }
-      toast.success("Order sent to kitchen!");
       setCartItems([]);
       setIsOrderingMode(false);
       // Fire-and-forget: createOrder already emitted order:created, which
@@ -2564,6 +2610,11 @@ const WaiterPanel = () => {
                   <span className="font-mono shrink-0">-{currency} {Math.round(dealDiscount).toLocaleString()}</span>
                 </div>
               </>
+            )}
+            {dealPreviewUnavailableOffline && (
+              <div className="text-[11px] text-muted-foreground italic">
+                Promo/Min-Spend discount unavailable offline
+              </div>
             )}
             <div className="flex justify-between items-center text-xs">
               <span className="text-muted-foreground font-semibold">Total Amount</span>

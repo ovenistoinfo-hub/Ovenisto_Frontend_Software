@@ -11,6 +11,8 @@ import { OutletProvider } from "@/contexts/OutletContext";
 import { DataProvider } from "@/contexts/DataContext";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { OfflineSyncManager } from "@/components/offline/OfflineSyncManager";
+import { OfflineIndicator } from "@/components/offline/OfflineIndicator";
 
 // Login stays eager — it's the first screen, so we don't want to lazy-load it.
 import Login from "./pages/Login";
@@ -197,6 +199,11 @@ const App = () => (
             <ErrorBoundary>
               <Toaster />
               <Sonner />
+              {/* Non-visual (owns the offline order queue's sync triggers) + the visual "Offline
+                  — N queued" pill. Mounted here, not inside AppHeader/AppLayout, so both render
+                  on POS.tsx too — it's a standalone route with no AppHeader. */}
+              <OfflineSyncManager />
+              <OfflineIndicator />
               <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
                 <Suspense fallback={<div className="flex h-screen items-center justify-center text-sm text-muted-foreground">Loading…</div>}>
                   <AppRoutes />

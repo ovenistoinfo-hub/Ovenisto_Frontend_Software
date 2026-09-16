@@ -1,4 +1,27 @@
-import { api } from './api';
+import { api, ApiError } from './api';
+
+const ACTIVE_SHIFT_CACHE_KEY = 'ovenisto_active_shift_cache';
+
+// Best-effort — a cashier who is already mid-shift when they lose connectivity (or hard-reload
+// while offline) must still see their open register instead of being stuck at "Open Cash
+// Register" forever (that dialog's own submit requires a live POST, so it's a dead end offline).
+// Not a source of truth: the next successful online fetch always overwrites it.
+function cacheActiveShift(shift: ShiftRecord | null) {
+  try {
+    localStorage.setItem(ACTIVE_SHIFT_CACHE_KEY, JSON.stringify(shift));
+  } catch {
+    /* storage unavailable — offline fallback simply won't work this session */
+  }
+}
+
+function readCachedActiveShift(): ShiftRecord | null {
+  try {
+    const raw = localStorage.getItem(ACTIVE_SHIFT_CACHE_KEY);
+    return raw ? (JSON.parse(raw) as ShiftRecord | null) : null;
+  } catch {
+    return null;
+  }
+}
 
 export interface ShiftRecord {
   id: string;
@@ -24,12 +47,21 @@ export interface ShiftRecord {
 
 export const shiftService = {
   async getActiveShift(): Promise<ShiftRecord | null> {
-    const res = await api.get<{ success: boolean; data: ShiftRecord | null }>('/shifts/active');
-    return res.data;
+    try {
+      const res = await api.get<{ success: boolean; data: ShiftRecord | null }>('/shifts/active');
+      cacheActiveShift(res.data);
+      return res.data;
+    } catch (err) {
+      if (err instanceof ApiError) throw err;
+      // Network failure — fall back to the last confirmed state instead of forcing
+      // "Open Cash Register" on a cashier who is already mid-shift.
+      return readCachedActiveShift();
+    }
   },
 
   async openShift(data: { openingCash: number; notes?: string }): Promise<ShiftRecord> {
     const res = await api.post<{ success: boolean; data: ShiftRecord }>('/shifts', data);
+    cacheActiveShift(res.data);
     return res.data;
   },
 
@@ -45,6 +77,7 @@ export const shiftService = {
     notes?: string;
   }): Promise<ShiftRecord> {
     const res = await api.put<{ success: boolean; data: ShiftRecord }>(`/shifts/${id}/close`, data);
+    cacheActiveShift(null);
     return res.data;
   },
 

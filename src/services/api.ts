@@ -46,21 +46,31 @@ export class ApiError extends Error {
 
 // --- Core request function ---
 
+/** `suppressAuthRedirect` opts a caller out of the hard `/login` redirect below on an
+ *  unrecoverable 401 — used by the offline order sync engine so a background flush running
+ *  while the cashier is mid-shift on another screen can't yank them off it; that 401 is treated
+ *  as "can't authenticate right now" (stays queued), not a rejection of that specific request.
+ *  `signal` is plain `RequestInit`, forwarded to `fetch` as-is (a real, cancellable timeout). */
+export interface RequestOptions extends RequestInit {
+  suppressAuthRedirect?: boolean;
+}
+
 async function request<T = unknown>(
   endpoint: string,
-  options: RequestInit = {}
+  options: RequestOptions = {}
 ): Promise<T> {
+  const { suppressAuthRedirect, ...fetchOptions } = options;
   const token = getAccessToken();
   const outletId = outletStore.get();
   const outletHeader = outletId && outletId !== 'all' ? { 'X-Outlet-Id': outletId } : {};
 
   const res = await fetch(`${API_BASE}${endpoint}`, {
-    ...options,
+    ...fetchOptions,
     headers: {
       'Content-Type': 'application/json',
       ...outletHeader,
       ...(token && { Authorization: `Bearer ${token}` }),
-      ...options.headers,
+      ...fetchOptions.headers,
     },
   });
 
@@ -71,22 +81,25 @@ async function request<T = unknown>(
       // Retry original request with new token
       const newToken = getAccessToken();
       const retryRes = await fetch(`${API_BASE}${endpoint}`, {
-        ...options,
+        ...fetchOptions,
         headers: {
           'Content-Type': 'application/json',
           ...outletHeader,
           ...(newToken && { Authorization: `Bearer ${newToken}` }),
-          ...options.headers,
+          ...fetchOptions.headers,
         },
       });
       if (retryRes.ok) {
         return retryRes.status === 204 ? (null as T) : retryRes.json();
       }
     }
-    // Refresh failed - clear tokens and redirect to login
-    clearTokens();
-    localStorage.removeItem('ovenisto_user');
-    window.location.href = '/login';
+    // Refresh failed - clear tokens and redirect to login, unless the caller opted out
+    // (a background offline-sync retry shouldn't yank a mid-shift cashier to the login screen).
+    if (!suppressAuthRedirect) {
+      clearTokens();
+      localStorage.removeItem('ovenisto_user');
+      window.location.href = '/login';
+    }
     throw new ApiError('Session expired. Please login again.', 401);
   }
 
@@ -268,9 +281,10 @@ export const api = {
     return cachedGet<T>(endpoint);
   },
 
-  post: <T = unknown>(endpoint: string, data?: unknown) => {
+  post: <T = unknown>(endpoint: string, data?: unknown, options?: RequestOptions) => {
     invalidateCache(endpoint);
     return request<T>(endpoint, {
+      ...options,
       method: 'POST',
       body: data ? JSON.stringify(data) : undefined,
     });
