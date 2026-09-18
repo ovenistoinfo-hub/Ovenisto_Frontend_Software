@@ -10,22 +10,18 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Plus, Search, ExternalLink, Pencil, Trash2, ChefHat, Loader2 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
-import { useNavigate } from "react-router-dom";
-import { useData } from "@/contexts/DataContext";
+import { Link } from "react-router-dom";
 import { PageHeader } from "@/components/ui/page-header";
 import { orderService, type KitchenRecord } from "@/services/order.service";
 import { menuService } from "@/services/menu.service";
 
 const Kitchens = () => {
-  const navigate = useNavigate();
-  const { settings: _settings } = useData();
-
   const [kitchenList, setKitchenList] = useState<KitchenRecord[]>([]);
   const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  const [showDialog, setShowDialog] = useState(false);
+  const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [form, setForm] = useState({ name: "", assignedCategories: [] as string[] });
@@ -53,13 +49,13 @@ const Kitchens = () => {
   const openAdd = () => {
     setEditingId(null);
     setForm({ name: "", assignedCategories: [] });
-    setShowDialog(true);
+    setShowForm(true);
   };
 
   const openEdit = (k: KitchenRecord) => {
     setEditingId(k.id);
     setForm({ name: k.name, assignedCategories: [...k.assignedCategories] });
-    setShowDialog(true);
+    setShowForm(true);
   };
 
   const toggleCategory = (cat: string) => {
@@ -84,7 +80,7 @@ const Kitchens = () => {
         setKitchenList(prev => [...prev, created]);
         toast.success("Kitchen added");
       }
-      setShowDialog(false);
+      setShowForm(false);
       setEditingId(null);
       setForm({ name: "", assignedCategories: [] });
     } catch (err: any) {
@@ -155,9 +151,10 @@ const Kitchens = () => {
                         <TableCell>{i + 1}</TableCell>
                         <TableCell className="font-medium">{k.name}</TableCell>
                         <TableCell>
-                          <Button variant="outline" size="sm" className="text-primary border-primary/30"
-                            onClick={() => navigate(`/kitchen-panel/${k.id}`)}>
-                            <ExternalLink className="h-3 w-3 mr-1" />Open Panel
+                          <Button asChild variant="outline" size="sm" className="text-primary border-primary/30">
+                            <Link to={`/kitchen-panel/${k.id}`}>
+                              <ExternalLink className="h-4 w-4 mr-1.5" />Open Panel
+                            </Link>
                           </Button>
                         </TableCell>
                         <TableCell>
@@ -168,10 +165,10 @@ const Kitchens = () => {
                         </TableCell>
                         <TableCell>
                           <div className="flex gap-1">
-                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(k)}><Pencil className="h-3 w-3" /></Button>
+                            <Button variant="ghost" size="icon" className="h-9 w-9" aria-label="Edit kitchen" title="Edit kitchen" onClick={() => openEdit(k)}><Pencil className="h-4 w-4" /></Button>
                             <AlertDialog>
                               <AlertDialogTrigger asChild>
-                                <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"><Trash2 className="h-4 w-4" /></Button>
+                                <Button variant="ghost" size="icon" className="h-9 w-9 text-destructive hover:text-destructive hover:bg-destructive/10" aria-label="Delete kitchen" title="Delete kitchen"><Trash2 className="h-4 w-4" /></Button>
                               </AlertDialogTrigger>
                               <AlertDialogContent>
                                 <AlertDialogHeader>
@@ -196,36 +193,37 @@ const Kitchens = () => {
         </CardContent>
       </Card>
 
-      {showDialog && (
+      {showForm && (
         <Card className="shadow-sm border-primary/30">
           <CardHeader className="pb-3"><CardTitle className="text-base">{editingId ? "Edit" : "Add"} Kitchen</CardTitle></CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-1.5">
-              <Label>Kitchen Name</Label>
-              <Input value={form.name} onChange={(e) => setForm(p => ({ ...p, name: e.target.value }))} placeholder="Enter kitchen name" />
+              <Label htmlFor="kitchen-name">Kitchen Name</Label>
+              <Input id="kitchen-name" value={form.name} onChange={(e) => setForm(p => ({ ...p, name: e.target.value }))} placeholder="Enter kitchen name" />
             </div>
-            <div>
-              <Label className="mb-2 block">Assigned Categories</Label>
+            <div role="group" aria-labelledby="kitchen-categories-label">
+              <Label id="kitchen-categories-label" className="mb-2 block">Assigned Categories</Label>
               <div className="grid grid-cols-2 gap-2">
                 {categories.map(c => (
-                  <label key={c.id} className="flex items-center gap-2 text-sm cursor-pointer">
+                  <div key={c.id} className="flex items-center gap-2">
                     <Checkbox
+                      id={`kitchen-cat-${c.id}`}
                       checked={form.assignedCategories.includes(c.name)}
                       onCheckedChange={() => toggleCategory(c.name)}
                     />
-                    {c.name}
-                  </label>
+                    <Label htmlFor={`kitchen-cat-${c.id}`} className="text-sm font-normal cursor-pointer">{c.name}</Label>
+                  </div>
                 ))}
               </div>
             </div>
-          <div className="flex justify-end gap-2 pt-1">
-            <Button variant="outline" onClick={() => setShowDialog(false)} disabled={saving}>Cancel</Button>
-            <Button className="gradient-primary text-primary-foreground" onClick={handleSave} disabled={saving}>
-              {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}Save
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+            <div className="flex justify-end gap-2 pt-1">
+              <Button variant="outline" onClick={() => setShowForm(false)} disabled={saving}>Cancel</Button>
+              <Button className="gradient-primary text-primary-foreground" onClick={handleSave} disabled={saving}>
+                {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}Save
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
       )}
     </div>
   );

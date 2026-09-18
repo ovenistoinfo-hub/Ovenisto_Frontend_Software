@@ -10,20 +10,23 @@ import {
   TrendingDown,
   Clock,
   UserCheck,
-  Banknote,
-  CreditCard,
-  Globe,
   FileText,
   RefreshCw,
   Check,
-  X,
   Eye,
   Wallet,
+  History,
+  Store,
+  ConciergeBell,
+  QrCode,
+  Bike,
+  type LucideIcon,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Dialog,
   DialogContent,
@@ -51,9 +54,66 @@ import { useData } from "@/contexts/DataContext";
 import { useModuleEvents } from "@/hooks/use-module-events";
 import { useVisiblePolling } from "@/hooks/use-visible-polling";
 import { api } from "@/services/api";
+import { cn } from "@/lib/utils";
 
 import { useOrderEvents } from "@/hooks/use-order-events";
 import { useDeliveryEvents } from "@/hooks/use-delivery-events";
+
+// Single source of truth for how a settlement difference (actual - expected) is toned and
+// labelled. Every place that renders the metric (stat card, Audit Log row, live settlement
+// modal, History Detail) goes through DiffBadge so the four can never drift apart again.
+type DiffKind = "excess" | "exact" | "shortage";
+const getDiffTone = (
+  diff: number
+): { kind: DiffKind; label: string; Icon: LucideIcon; className: string } => {
+  if (diff > 0) {
+    return { kind: "excess", label: "Excess", Icon: TrendingUp, className: "bg-success/10 text-success border-success/30" };
+  }
+  if (diff < 0) {
+    return { kind: "shortage", label: "Shortage", Icon: AlertTriangle, className: "bg-destructive/10 text-destructive border-destructive/30" };
+  }
+  return { kind: "exact", label: "Exact Match", Icon: Check, className: "bg-muted text-muted-foreground border-border" };
+};
+
+// variant: "label" -> "Excess"; "amount" -> "+Rs. 500"; "full" -> "Excess: +Rs. 500"
+const DiffBadge = ({
+  diff,
+  currency,
+  variant = "label",
+  className,
+}: {
+  diff: number;
+  currency: string;
+  variant?: "label" | "amount" | "full";
+  className?: string;
+}) => {
+  const tone = getDiffTone(diff);
+  const sign = tone.kind === "excess" ? "+" : tone.kind === "shortage" ? "-" : "";
+  const amount = tone.kind === "exact" ? `${currency} 0` : `${sign}${currency} ${Math.abs(diff).toLocaleString()}`;
+  const text =
+    variant === "label"
+      ? tone.label
+      : variant === "amount"
+      ? amount
+      : tone.kind === "exact"
+      ? `${tone.label} (${amount})`
+      : `${tone.label}: ${amount}`;
+  return (
+    <Badge variant="outline" className={cn("font-bold", tone.className, className)}>
+      <tone.Icon className="h-3 w-3 mr-1" />
+      {text}
+    </Badge>
+  );
+};
+
+// The four cash-collection channels a balance order can come from. Each has its own icon,
+// label text and token color so they read apart without relying on color alone.
+const CHANNEL_STYLES: Record<string, { Icon: LucideIcon; className: string }> = {
+  "POS Counter": { Icon: Store, className: "bg-primary/10 text-primary border-primary/30" },
+  "Waiter Panel": { Icon: ConciergeBell, className: "bg-info/10 text-info border-info/30" },
+  "Self-Order (QR)": { Icon: QrCode, className: "bg-warning/10 text-warning border-warning/30" },
+  "Delivery Rider (COD)": { Icon: Bike, className: "bg-success/10 text-success border-success/30" },
+};
 
 const CashHub = () => {
   const { user } = useAuth();
@@ -338,17 +398,17 @@ const CashHub = () => {
           </CardContent>
         </Card>
 
-        <Card className="bg-card/90 border border-emerald-500/20 border-l-4 border-l-emerald-500 shadow-sm hover:shadow-md transition-all">
+        <Card className="bg-card/90 border border-success/20 border-l-4 border-l-success shadow-sm hover:shadow-md transition-all">
           <CardHeader className="flex flex-row items-center justify-between pb-1.5 pt-4">
             <CardTitle className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
               Total Settled Today
             </CardTitle>
-            <div className="h-8 w-8 rounded-xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center shrink-0">
+            <div className="h-8 w-8 rounded-xl bg-success/10 text-success flex items-center justify-center shrink-0">
               <CheckCircle2 className="h-4 w-4" />
             </div>
           </CardHeader>
           <CardContent className="pb-4">
-            <div className="text-2xl sm:text-3xl font-black text-emerald-500 font-mono">
+            <div className="text-2xl sm:text-3xl font-black text-success font-mono">
               {currency} {totalCashSettledToday.toLocaleString()}
             </div>
             <p className="text-[11px] text-muted-foreground mt-1 font-medium">
@@ -364,9 +424,9 @@ const CashHub = () => {
             </CardTitle>
             <div className="h-8 w-8 rounded-xl bg-indigo-500/10 text-indigo-500 flex items-center justify-center shrink-0">
               {todayNetDifference >= 0 ? (
-                <TrendingUp className="h-4 w-4 text-emerald-500" />
+                <TrendingUp className="h-4 w-4 text-success" />
               ) : (
-                <TrendingDown className="h-4 w-4 text-rose-500" />
+                <TrendingDown className="h-4 w-4 text-destructive" />
               )}
             </div>
           </CardHeader>
@@ -379,19 +439,7 @@ const CashHub = () => {
                 : `${currency} 0`}
             </div>
             <div className="mt-1">
-              {todayNetDifference < 0 ? (
-                <Badge variant="outline" className="bg-destructive/10 text-destructive border-destructive/30 text-[10px] font-bold">
-                  <AlertTriangle className="h-3 w-3 mr-1" /> Shortage
-                </Badge>
-              ) : todayNetDifference > 0 ? (
-                <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 text-[10px] font-bold">
-                  <Check className="h-3 w-3 mr-1" /> Excess
-                </Badge>
-              ) : (
-                <Badge variant="outline" className="bg-muted text-muted-foreground text-[10px] font-bold">
-                  Exact Match
-                </Badge>
-              )}
+              <DiffBadge diff={todayNetDifference} currency={currency} variant="label" className="text-[10px]" />
             </div>
           </CardContent>
         </Card>
@@ -449,8 +497,9 @@ const CashHub = () => {
                 variant="ghost"
                 size="sm"
                 onClick={() => refetchAll()}
-                className="h-8 w-8 p-0 rounded-lg hover:bg-muted"
+                className="h-9 w-9 p-0 rounded-lg hover:bg-muted"
                 title="Refresh Live Balances"
+                aria-label="Refresh"
               >
                 <RefreshCw className="h-3.5 w-3.5" />
               </Button>
@@ -468,7 +517,7 @@ const CashHub = () => {
           ) : filteredActiveBalances.length === 0 ? (
             <Card className="p-12 text-center border-dashed">
               <CardContent className="space-y-3 pt-6">
-                <CheckCircle2 className="h-12 w-12 text-emerald-500 mx-auto" />
+                <CheckCircle2 className="h-12 w-12 text-success mx-auto" />
                 <h3 className="text-lg font-bold text-foreground">
                   {activeBalances.length === 0 ? "All Clear!" : "No Matching Staff Found"}
                 </h3>
@@ -580,7 +629,7 @@ const CashHub = () => {
                           size="sm"
                           onClick={() => handleOpenSettlement(item)}
                           disabled={!item.accountLinked}
-                          className="w-full text-xs font-extrabold gap-1.5 rounded-xl bg-amber-500 text-black hover:bg-amber-600 shadow-sm h-9"
+                          className="w-full text-xs font-extrabold gap-1.5 rounded-xl gradient-primary text-primary-foreground shadow-sm h-9"
                         >
                           <Coins className="h-3.5 w-3.5" />
                           Settle
@@ -595,7 +644,7 @@ const CashHub = () => {
               <div className="hidden md:block border border-border/80 bg-card/90 backdrop-blur-md rounded-2xl overflow-hidden shadow-sm">
                 <div className="overflow-x-auto">
                   <Table>
-                    <TableHeader className="bg-muted/40">
+                    <TableHeader className="bg-muted/50">
                       <TableRow className="hover:bg-transparent border-b border-border/60">
                         <TableHead className="font-extrabold text-xs uppercase tracking-wider py-3.5">Staff Member</TableHead>
                         <TableHead className="font-extrabold text-xs uppercase tracking-wider py-3.5 text-center">Orders</TableHead>
@@ -702,7 +751,7 @@ const CashHub = () => {
                                   variant="outline"
                                   size="sm"
                                   onClick={() => setSelectedStaffForOrders(item)}
-                                  className="h-8 text-xs font-semibold gap-1.5 rounded-xl hover:bg-muted"
+                                  className="h-9 text-xs font-semibold gap-1.5 rounded-xl hover:bg-muted"
                                 >
                                   <Eye className="h-3.5 w-3.5 text-muted-foreground" />
                                   Orders
@@ -716,7 +765,7 @@ const CashHub = () => {
                                       ? undefined
                                       : "This staff member has no linked login account — link one before settling their cash"
                                   }
-                                  className="h-8 text-xs font-extrabold gap-1.5 rounded-xl bg-amber-500 text-black hover:bg-amber-600 shadow-sm active:scale-95 transition-all"
+                                  className="h-9 text-xs font-extrabold gap-1.5 rounded-xl gradient-primary text-primary-foreground shadow-sm active:scale-95 transition-all"
                                 >
                                   <Coins className="h-3.5 w-3.5" />
                                   Settle
@@ -792,7 +841,7 @@ const CashHub = () => {
                   variant="ghost"
                   size="sm"
                   onClick={clearHistoryFilters}
-                  className="h-8 text-xs font-semibold rounded-xl text-muted-foreground hover:text-foreground"
+                  className="h-9 text-xs font-semibold rounded-xl text-muted-foreground hover:text-foreground"
                 >
                   Clear Filters
                 </Button>
@@ -808,13 +857,17 @@ const CashHub = () => {
                 ))}
               </div>
             ) : filteredHistory.length === 0 ? (
-              <div className="p-12 text-center text-muted-foreground text-xs font-semibold">
-                No settlement records found matching criteria.
+              <div className="p-12 text-center space-y-3">
+                <History className="h-12 w-12 text-muted-foreground/50 mx-auto" />
+                <h3 className="text-lg font-bold text-foreground">No settlement records</h3>
+                <p className="text-xs text-muted-foreground max-w-sm mx-auto">
+                  Try adjusting the date range or filters.
+                </p>
               </div>
             ) : (
               <div className="overflow-x-auto">
                 <Table>
-                  <TableHeader className="bg-muted/40 border-b border-border/60">
+                  <TableHeader className="bg-muted/50 border-b border-border/60">
                     <TableRow className="hover:bg-transparent">
                       <TableHead className="font-extrabold text-xs uppercase tracking-wider py-3.5">Settlement #</TableHead>
                       <TableHead className="font-extrabold text-xs uppercase tracking-wider py-3.5">Date & Time</TableHead>
@@ -855,26 +908,14 @@ const CashHub = () => {
                             {currency} {Number(item.totalActual).toLocaleString()}
                           </TableCell>
                           <TableCell className="text-center py-3.5">
-                            {diff < 0 ? (
-                              <Badge variant="outline" className="bg-destructive/10 text-destructive border-destructive/30 text-[10px] font-bold">
-                                -{currency} {Math.abs(diff).toLocaleString()}
-                              </Badge>
-                            ) : diff > 0 ? (
-                              <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 text-[10px] font-bold">
-                                +{currency} {diff.toLocaleString()}
-                              </Badge>
-                            ) : (
-                              <Badge variant="outline" className="bg-muted text-muted-foreground text-[10px] font-bold">
-                                {currency} 0
-                              </Badge>
-                            )}
+                            <DiffBadge diff={diff} currency={currency} variant="amount" className="text-[10px]" />
                           </TableCell>
                           <TableCell className="text-right pr-6">
                             <Button
                               variant="ghost"
                               size="sm"
                               onClick={() => setViewHistoryRecord(item)}
-                              className="h-8 text-xs font-semibold gap-1 rounded-xl hover:bg-muted"
+                              className="h-9 text-xs font-semibold gap-1 rounded-xl hover:bg-muted"
                             >
                               <Eye className="h-3.5 w-3.5 text-muted-foreground" />
                               Details
@@ -949,8 +990,9 @@ const CashHub = () => {
                 <div className="grid grid-cols-2 gap-2">
                   {configuredMethods.map((m) => (
                     <div key={m}>
-                      <label className="text-xs font-medium block mb-1 truncate">{m}</label>
+                      <Label htmlFor={`actual-${m.replace(/\s+/g, "-").toLowerCase()}`} className="text-xs font-medium block mb-1 truncate">{m}</Label>
                       <Input
+                        id={`actual-${m.replace(/\s+/g, "-").toLowerCase()}`}
                         type="number"
                         min="0"
                         value={actualByMethodInput[m] ?? "0"}
@@ -974,26 +1016,15 @@ const CashHub = () => {
                   <span className="font-bold text-sm">{currency} {modalTotalActual.toLocaleString()}</span>
                 </div>
                 <div>
-                  {modalDiff === 0 ? (
-                    <Badge className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 px-3 py-1">
-                      <Check className="h-3.5 w-3.5 mr-1" /> Exact Match ({currency} 0)
-                    </Badge>
-                  ) : modalDiff < 0 ? (
-                    <Badge className="bg-destructive/10 text-destructive border-destructive/30 px-3 py-1">
-                      <AlertTriangle className="h-3.5 w-3.5 mr-1" /> Shortage: -{currency} {Math.abs(modalDiff).toLocaleString()}
-                    </Badge>
-                  ) : (
-                    <Badge className="bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30 px-3 py-1">
-                      <TrendingUp className="h-3.5 w-3.5 mr-1" /> Excess: +{currency} {modalDiff.toLocaleString()}
-                    </Badge>
-                  )}
+                  <DiffBadge diff={modalDiff} currency={currency} variant="full" className="text-xs px-3 py-1" />
                 </div>
               </div>
 
               {/* Notes */}
               <div>
-                <label className="text-xs font-medium block mb-1">Discrepancy / Settlement Notes</label>
+                <Label htmlFor="settlement-notes" className="text-xs font-medium block mb-1">Discrepancy / Settlement Notes</Label>
                 <Textarea
+                  id="settlement-notes"
                   placeholder="Optional notes or reason for discrepancy..."
                   value={settlementNotes}
                   onChange={(e) => setSettlementNotes(e.target.value)}
@@ -1015,7 +1046,7 @@ const CashHub = () => {
             <Button
               onClick={handleSubmitSettlement}
               disabled={isSubmitting}
-              className="bg-amber-500 hover:bg-amber-600 text-black font-bold"
+              className="gradient-primary text-primary-foreground font-bold"
             >
               {isSubmitting ? "Approving..." : "Approve & Clear Settlement"}
             </Button>
@@ -1049,7 +1080,7 @@ const CashHub = () => {
                 </div>
               ) : (
                 <Table>
-                  <TableHeader>
+                  <TableHeader className="bg-muted/50">
                     <TableRow>
                       <TableHead>Order #</TableHead>
                       <TableHead>Source</TableHead>
@@ -1059,37 +1090,38 @@ const CashHub = () => {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {selectedStaffForOrders.orders.map((ord: any, idx: number) => (
-                      <TableRow key={ord.id || idx}>
-                        <TableCell className="font-mono text-xs font-semibold">
-                          #{ord.orderNo || ord.orderNumber || ord.id?.substring(0, 8)}
-                        </TableCell>
-                        <TableCell className="text-xs">
-                          <Badge
-                            variant="outline"
-                            className={
-                              "text-[10px] font-semibold " +
-                              (ord.channel === "Delivery Rider (COD)"
-                                ? "bg-blue-500/10 text-blue-500 border-blue-500/30"
-                                : ord.channel === "Waiter Panel"
-                                ? "bg-purple-500/10 text-purple-500 border-purple-500/30"
-                                : "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30")
-                            }
-                          >
-                            {ord.channel || ord.type || ord.orderType || "POS Counter"}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-xs">
-                          {ord.customerName || ord.customer?.name || "Walk-in"}
-                        </TableCell>
-                        <TableCell className="text-xs font-medium">
-                          {ord.paymentMethod || "Cash"}
-                        </TableCell>
-                        <TableCell className="text-right font-semibold text-xs">
-                          {currency} {(Number(ord.staffAmount ?? ord.totalAmount ?? ord.total ?? 0)).toLocaleString()}
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                    {selectedStaffForOrders.orders.map((ord: any, idx: number) => {
+                      const channelLabel: string = ord.channel || ord.type || ord.orderType || "POS Counter";
+                      const channelStyle = CHANNEL_STYLES[channelLabel];
+                      return (
+                        <TableRow key={ord.id || idx}>
+                          <TableCell className="font-mono text-xs font-semibold">
+                            #{ord.orderNo || ord.orderNumber || ord.id?.substring(0, 8)}
+                          </TableCell>
+                          <TableCell className="text-xs">
+                            <Badge
+                              variant="outline"
+                              className={cn(
+                                "text-[10px] font-semibold",
+                                channelStyle?.className ?? "bg-muted text-muted-foreground border-border"
+                              )}
+                            >
+                              {channelStyle && <channelStyle.Icon className="h-3 w-3 mr-1" />}
+                              {channelLabel}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-xs">
+                            {ord.customerName || ord.customer?.name || "Walk-in"}
+                          </TableCell>
+                          <TableCell className="text-xs font-medium">
+                            {ord.paymentMethod || "Cash"}
+                          </TableCell>
+                          <TableCell className="text-right font-semibold text-xs">
+                            {currency} {(Number(ord.staffAmount ?? ord.totalAmount ?? ord.total ?? 0)).toLocaleString()}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
                   </TableBody>
                 </Table>
               )}
@@ -1141,8 +1173,8 @@ const CashHub = () => {
               {/* Table of Expected vs Actual */}
               <div className="border rounded-lg overflow-hidden">
                 <Table>
-                  <TableHeader>
-                    <TableRow className="bg-muted/50">
+                  <TableHeader className="bg-muted/50">
+                    <TableRow>
                       <TableHead className="text-xs">Category</TableHead>
                       <TableHead className="text-right text-xs">Expected</TableHead>
                       <TableHead className="text-right text-xs">Actual</TableHead>
@@ -1174,19 +1206,12 @@ const CashHub = () => {
               {/* Net Difference */}
               <div className="flex justify-between items-center p-3 border rounded-lg bg-card">
                 <span className="font-semibold text-muted-foreground">Net Difference:</span>
-                {Number(viewHistoryRecord.cashDifference) < 0 ? (
-                  <Badge variant="outline" className="bg-destructive/10 text-destructive border-destructive/30 text-xs px-2.5 py-0.5">
-                    Shortage: -{currency} {Math.abs(Number(viewHistoryRecord.cashDifference)).toLocaleString()}
-                  </Badge>
-                ) : Number(viewHistoryRecord.cashDifference) > 0 ? (
-                  <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 text-xs px-2.5 py-0.5">
-                    Excess: +{currency} {Number(viewHistoryRecord.cashDifference).toLocaleString()}
-                  </Badge>
-                ) : (
-                  <Badge variant="outline" className="bg-muted text-muted-foreground text-xs px-2.5 py-0.5">
-                    Exact Match ({currency} 0)
-                  </Badge>
-                )}
+                <DiffBadge
+                  diff={Number(viewHistoryRecord.cashDifference) || 0}
+                  currency={currency}
+                  variant="full"
+                  className="text-xs px-2.5 py-0.5"
+                />
               </div>
 
               {/* Notes */}
@@ -1209,8 +1234,8 @@ const CashHub = () => {
                 ) : (
                   <div className="max-h-56 overflow-y-auto border rounded-lg">
                     <Table>
-                      <TableHeader>
-                        <TableRow className="bg-muted/50">
+                      <TableHeader className="bg-muted/50">
+                        <TableRow>
                           <TableHead className="text-xs">Order #</TableHead>
                           <TableHead className="text-xs">Type</TableHead>
                           <TableHead className="text-xs">Customer</TableHead>

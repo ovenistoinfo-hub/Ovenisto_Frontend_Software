@@ -1,5 +1,12 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef, Fragment } from "react";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { statusTone } from "@/lib/statusTone";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -14,7 +21,7 @@ import {
   Receipt, CircleDot, ChevronDown, ChevronUp, Bell, Check, Loader2, Trash2,
   Play, Power, Eye, CreditCard, Percent, CornerUpRight, Printer, ArrowLeft, Search,
   Coins, Wallet, Smartphone, BookOpen, User, UserCheck, History, Building2, Crown, Phone, MapPin, Calendar, Timer, DollarSign, CalendarCheck,
-  AlertCircle, XCircle, CheckCircle2, Utensils, Info, Gift, Package, Layers, Tag
+  AlertCircle, XCircle, CheckCircle2, Utensils, Info, Gift, Package, Layers, Tag, FileText
 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
@@ -412,6 +419,10 @@ const WaiterPanel = () => {
   const [splitAmount2, setSplitAmount2] = useState(0);
   const [startingSitting, setStartingSitting] = useState(false);
   const [endingSitting, setEndingSitting] = useState(false);
+  const [showEndSittingConfirm, setShowEndSittingConfirm] = useState(false);
+  // Self-order decline: replaces window.prompt — holds the order being declined + the typed reason
+  const [rejectTarget, setRejectTarget] = useState<OrderRecord | null>(null);
+  const [rejectReason, setRejectReason] = useState("");
   const [settlingBillingState, setSettlingBillingState] = useState(false);
   const [movingTable, setMovingTable] = useState(false);
 
@@ -924,9 +935,17 @@ const WaiterPanel = () => {
     }
   };
 
-  const rejectSelfOrder = async (order: OrderRecord) => {
-    const rawReason = window.prompt("Reason for declining (optional):");
-    if (rawReason === null) return; // user clicked Cancel — abort, don't reject anything
+  // Opens the themed decline dialog; Cancel there aborts, nothing is rejected.
+  const rejectSelfOrder = (order: OrderRecord) => {
+    setRejectReason("");
+    setRejectTarget(order);
+  };
+
+  const confirmRejectSelfOrder = async () => {
+    const order = rejectTarget;
+    if (!order) return;
+    const rawReason = rejectReason;
+    setRejectTarget(null);
     setRejectingId(order.id);
     try {
       markMine();
@@ -2034,8 +2053,21 @@ const WaiterPanel = () => {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      <div className="flex flex-col lg:flex-row gap-4 lg:gap-5 min-h-[calc(100vh-6.5rem)] min-w-0" aria-busy="true">
+        <div className="w-full lg:w-80 xl:w-96 shrink-0 rounded-2xl border border-border bg-card p-4 space-y-3">
+          <Skeleton className="h-6 w-32" />
+          <Skeleton className="h-4 w-20" />
+          <Skeleton className="h-16 w-full rounded-xl" />
+          <Skeleton className="h-10 w-full rounded-xl" />
+        </div>
+        <div className="flex-1 min-w-0 space-y-4">
+          <Skeleton className="h-14 w-full rounded-xl" />
+          <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">
+            {Array.from({ length: 8 }).map((_, i) => (
+              <Skeleton key={i} className="h-32 w-full rounded-2xl" />
+            ))}
+          </div>
+        </div>
       </div>
     );
   }
@@ -2046,7 +2078,7 @@ const WaiterPanel = () => {
       {/* ── LEFT COLUMN: Selected Table Panel OR Cart Selection (Top-to-Bottom Fixed) ── */}
       {!isOrderingMode ? (
         <div className={cn(
-          "w-full lg:w-80 xl:w-96 shrink-0 flex flex-col h-full bg-zinc-50 border border-zinc-200 dark:bg-zinc-900/30 dark:border-zinc-800/80 rounded-2xl p-4 lg:p-4.5 select-none transition-all shadow-xs overflow-hidden",
+          "w-full lg:w-80 xl:w-96 shrink-0 flex flex-col h-full bg-card border border-border rounded-2xl p-4 lg:p-4.5 select-none transition-all shadow-xs overflow-hidden",
           !selectedTable && "hidden lg:flex"
         )}>
           {!selectedTable ? (
@@ -2064,7 +2096,7 @@ const WaiterPanel = () => {
               <div className="space-y-2.5 min-h-0 flex flex-col flex-1 overflow-hidden">
                 
                 {/* Header info */}
-                <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 pb-2.5 shrink-0">
+                <div className="flex items-center justify-between border-b border-border pb-2.5 shrink-0">
                   <div className="space-y-0.5">
                     <h3 className="font-extrabold text-base text-foreground tracking-tight">Table {selectedTable.number}</h3>
                     <p className="text-[10px] text-muted-foreground/60 font-semibold uppercase tracking-wider">{selectedTable.floor || "Main Hall"}</p>
@@ -2078,7 +2110,7 @@ const WaiterPanel = () => {
                     <Badge variant="secondary" className={cn(
                       "text-[9px] px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider leading-none border-none",
                       tableStatus === "available" && "bg-success/10 text-success hover:bg-success/10",
-                      tableStatus === "occupied" && "bg-destructive/10 text-destructive hover:bg-destructive/10",
+                      tableStatus === "occupied" && "bg-accent/10 text-accent hover:bg-accent/10",
                       tableStatus === "bill-requested" && "bg-destructive/20 text-destructive hover:bg-destructive/20 animate-pulse",
                       tableStatus === "reserved" && "bg-warning/10 text-warning hover:bg-warning/10",
                       tableStatus === "maintenance" && "bg-muted text-muted-foreground hover:bg-muted",
@@ -2088,7 +2120,7 @@ const WaiterPanel = () => {
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="h-8 w-8 rounded-full lg:hidden flex items-center justify-center border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950/20"
+                      className="h-9 w-9 rounded-full lg:hidden flex items-center justify-center border border-border bg-card"
                       onClick={() => setSelectedTableId(null)}
                     >
                       <X className="h-4 w-4 text-muted-foreground" />
@@ -2097,13 +2129,13 @@ const WaiterPanel = () => {
                 </div>
 
                 {/* Customer Association */}
-                <div className="bg-zinc-100/70 dark:bg-zinc-950/30 rounded-xl p-2.5 border border-zinc-200 dark:border-zinc-800/80 space-y-1.5 shrink-0">
+                <div className="bg-muted/50 rounded-xl p-2.5 border border-border space-y-1.5 shrink-0">
                   <div className="flex items-center justify-between">
                     <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Customer Association</span>
                   </div>
                   <div className="flex items-center gap-1.5">
                     <Select value={selectedCustomerId || "walk-in"} onValueChange={(val) => handleSelectCustomerForTable(val === "walk-in" ? "" : val)}>
-                      <SelectTrigger className="flex-1 h-8 text-xs font-semibold rounded-lg bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
+                      <SelectTrigger className="flex-1 h-9 text-xs font-semibold rounded-lg bg-card border-border">
                         <User className="h-3.5 w-3.5 mr-1.5 shrink-0 text-muted-foreground" />
                         <SelectValue placeholder="Walk-in Customer" />
                       </SelectTrigger>
@@ -2116,11 +2148,11 @@ const WaiterPanel = () => {
                         ))}
                       </SelectContent>
                     </Select>
-                    <Button variant="outline" size="icon" className="h-8 w-8 shrink-0 rounded-lg bg-white dark:bg-zinc-900" onClick={() => setShowCustomerAddDialog(true)} title="Add New Customer">
+                    <Button variant="outline" size="icon" className="h-9 w-9 shrink-0 rounded-lg bg-card" onClick={() => setShowCustomerAddDialog(true)} title="Add New Customer" aria-label="Add New Customer">
                       <Plus className="h-3.5 w-3.5" />
                     </Button>
                     {selectedCustomerId && (
-                      <Button variant="outline" size="icon" className="h-8 w-8 shrink-0 rounded-lg bg-white dark:bg-zinc-900" onClick={() => setShowCustomerHistoryDialog(true)} title="View Customer History">
+                      <Button variant="outline" size="icon" className="h-9 w-9 shrink-0 rounded-lg bg-card" onClick={() => setShowCustomerHistoryDialog(true)} title="View Customer History" aria-label="View Customer History">
                         <History className="h-3.5 w-3.5" />
                       </Button>
                     )}
@@ -2141,10 +2173,89 @@ const WaiterPanel = () => {
                   )}
                 </div>
 
+                {/* Add New Customer — inline card (replaces the seating details while open) */}
+                {showCustomerAddDialog && (
+                  <Card className="shadow-sm border-primary/30 min-h-0 flex-1 overflow-y-auto">
+                    <CardHeader className="p-3 pb-2">
+                      <CardTitle className="flex items-center gap-2 text-sm">
+                        <User className="h-4 w-4 text-primary" />
+                        Add New Customer
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-2.5 p-3 pt-0">
+                      <div className="space-y-1">
+                        <Label htmlFor="wp-new-customer-name" className="text-xs font-semibold">Customer Name *</Label>
+                        <Input
+                          id="wp-new-customer-name"
+                          value={newCustomerForm.name}
+                          onChange={(e) => setNewCustomerForm(prev => ({ ...prev, name: e.target.value }))}
+                          placeholder="Enter customer name"
+                          className="h-10 text-xs rounded-xl"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label htmlFor="wp-new-customer-phone" className="text-xs font-semibold">Phone Number (11 Digits) *</Label>
+                        <Input
+                          id="wp-new-customer-phone"
+                          value={newCustomerForm.phone}
+                          onChange={(e) => setNewCustomerForm(prev => ({ ...prev, phone: formatPhoneNumber(e.target.value) }))}
+                          placeholder="0300-1234567"
+                          maxLength={12}
+                          className="h-10 text-xs rounded-xl"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label htmlFor="wp-new-customer-email" className="text-xs font-semibold">Email Address (Optional)</Label>
+                        <Input
+                          id="wp-new-customer-email"
+                          type="email"
+                          value={newCustomerForm.email}
+                          onChange={(e) => setNewCustomerForm(prev => ({ ...prev, email: e.target.value }))}
+                          placeholder="customer@email.com"
+                          className="h-10 text-xs rounded-xl"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label htmlFor="wp-new-customer-address" className="text-xs font-semibold">Address (Optional)</Label>
+                        <Input
+                          id="wp-new-customer-address"
+                          value={newCustomerForm.address}
+                          onChange={(e) => setNewCustomerForm(prev => ({ ...prev, address: e.target.value }))}
+                          placeholder="Address..."
+                          className="h-10 text-xs rounded-xl"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label htmlFor="wp-new-customer-type" className="text-xs font-semibold">Customer Type</Label>
+                        <Select
+                          value={newCustomerForm.customerType}
+                          onValueChange={(val) => setNewCustomerForm(prev => ({ ...prev, customerType: val }))}
+                        >
+                          <SelectTrigger id="wp-new-customer-type" className="h-10 text-xs rounded-xl">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="walk-in">Standard / Walk-in</SelectItem>
+                            <SelectItem value="corporate">Corporate</SelectItem>
+                            <SelectItem value="vip">VIP</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="flex justify-end gap-2 pt-1">
+                        <Button variant="outline" onClick={() => setShowCustomerAddDialog(false)} className="h-10 rounded-xl">Cancel</Button>
+                        <Button className="gradient-primary text-primary-foreground font-bold rounded-xl h-10" onClick={handleAddCustomerSubmit} disabled={creatingCustomer}>
+                          {creatingCustomer ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Plus className="h-4 w-4 mr-1" />}
+                          Save Customer
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+
                 {/* Seating Details */}
-                {tableStatus === "available" ? (
+                {showCustomerAddDialog ? null : tableStatus === "available" ? (
                   <div className="space-y-4 py-3 flex-1 flex flex-col justify-center">
-                    <div className="bg-zinc-100/50 dark:bg-zinc-950/20 rounded-xl p-4 border border-zinc-200 dark:border-zinc-800/80 text-center space-y-1">
+                    <div className="bg-muted/50 rounded-xl p-4 border border-border text-center space-y-1">
                       <p className="text-xs text-muted-foreground">This table is currently free.</p>
                       <p className="text-xs font-bold text-foreground">Capacity: {selectedTable.capacity} Seats</p>
                     </div>
@@ -2167,7 +2278,7 @@ const WaiterPanel = () => {
                 ) : (
                   <div className="space-y-2 min-h-0 flex-1 flex flex-col overflow-hidden">
                     {/* Seating stats */}
-                    <div className="bg-zinc-100/50 dark:bg-zinc-950/25 rounded-xl p-2.5 border border-zinc-200 dark:border-zinc-800/80 space-y-1.5 text-xs shrink-0">
+                    <div className="bg-muted/50 rounded-xl p-2.5 border border-border space-y-1.5 text-xs shrink-0">
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">Active Session:</span>
                         <strong className="text-foreground">#{activeTableOrders[0]?.orderNumber || "Session Active"}</strong>
@@ -2210,15 +2321,14 @@ const WaiterPanel = () => {
                             const countdownText = remainingSec === 0 ? "Overdue" : `${Math.floor(remainingSec / 60)}:${String(remainingSec % 60).padStart(2, "0")} left`;
 
                             return (
-                              <div key={o.id} className="bg-zinc-100/50 dark:bg-zinc-950/20 border border-zinc-200 dark:border-zinc-800/60 rounded-xl p-2 space-y-1 text-xs">
+                              <div key={o.id} className="bg-muted/50 border border-border rounded-xl p-2 space-y-1 text-xs">
                                 <div className="flex justify-between items-center">
                                   <span className="font-bold text-foreground">Order #{o.orderNumber}</span>
-                                  <Badge className={cn(
-                                    "text-[9px] px-1.5 py-0.2 rounded-full font-bold uppercase border-none text-zinc-950",
-                                    o.status === "pending" && "bg-amber-500",
-                                    o.status === "preparing" && "bg-sky-500",
-                                    o.status === "ready" && "bg-green-500 animate-pulse",
-                                    o.status === "completed" && "bg-emerald-600 text-white font-black",
+                                  <Badge variant="outline" className={cn(
+                                    "text-[9px] px-1.5 py-0.2 rounded-full font-bold uppercase",
+                                    statusTone(o.status).badge,
+                                    o.status === "ready" && "animate-pulse",
+                                    o.status === "completed" && "font-black",
                                   )}>
                                     {o.status === "completed" ? "SERVED" : o.status}
                                   </Badge>
@@ -2234,20 +2344,20 @@ const WaiterPanel = () => {
                                 {o.status === "preparing" && (
                                   <div className="flex justify-between text-[11px] text-muted-foreground">
                                     <span>Remaining:</span>
-                                    <span className={cn("font-semibold", remainingSec < 120 ? "text-red-500" : "text-emerald-500")}>
+                                    <span className={cn("font-semibold", remainingSec < 120 ? "text-destructive" : "text-success")}>
                                       {countdownText}
                                     </span>
                                   </div>
                                 )}
                                 
                                 {o.status === "ready" && (
-                                  <p className="text-[11px] font-bold text-green-500 flex items-center gap-1">
+                                  <p className="text-[11px] font-bold text-success flex items-center gap-1">
                                     <Check className="h-3 w-3" /> Ready to serve
                                   </p>
                                 )}
 
                                 {o.status === "completed" && (
-                                  <p className="text-[11px] font-bold text-emerald-500 flex items-center gap-1">
+                                  <p className="text-[11px] font-bold text-success flex items-center gap-1">
                                     <CheckCircle2 className="h-3 w-3" /> Food served to table
                                   </p>
                                 )}
@@ -2262,11 +2372,11 @@ const WaiterPanel = () => {
                       const grandTotal = activeTableOrders.reduce((s, o) => s + Number(o.total), 0);
                       const netDue = Math.max(0, grandTotal - currentAdvancePayment);
                       return (
-                        <div className="bg-amber-500/10 border border-amber-500/20 text-amber-500 rounded-xl p-2 text-center text-xs font-bold flex flex-col items-center justify-center gap-0.5 select-none shrink-0">
+                        <div className="bg-warning/10 border border-warning/20 text-warning rounded-xl p-2 text-center text-xs font-bold flex flex-col items-center justify-center gap-0.5 select-none shrink-0">
                           <div className="flex items-center gap-1.5 font-extrabold text-[11px]">
                             <CreditCard className="h-3.5 w-3.5" /> Advance Paid: {currency} {currentAdvancePayment.toLocaleString()}
                           </div>
-                          <span className="text-[10px] font-medium text-amber-400/90">
+                          <span className="text-[10px] font-medium text-warning/90">
                             Remaining Due: {currency} {netDue.toLocaleString()} (Pay bill when food ready)
                           </span>
                         </div>
@@ -2276,15 +2386,15 @@ const WaiterPanel = () => {
                     {isSessionPaid && (() => {
                       const hasUnservedFood = activeTableOrders.some(o => o.status === "pending" || o.status === "preparing");
                       return (
-                        <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 rounded-xl p-2 text-center text-xs font-extrabold flex items-center justify-center gap-1.5 select-none animate-pulse shrink-0">
+                        <div className="bg-success/10 border border-success/20 text-success rounded-xl p-2 text-center text-xs font-extrabold flex items-center justify-center gap-1.5 select-none animate-pulse shrink-0">
                           <Check className="h-3.5 w-3.5" /> {hasUnservedFood ? "Billing Paid" : "Billing Paid — Awaiting End Sitting"}
                         </div>
                       );
                     })()}
 
                     {hasPendingCancellationOnTable && (
-                      <div className="bg-amber-500/15 border border-amber-500/30 text-amber-500 rounded-xl p-2 text-center text-[11px] font-extrabold flex items-center justify-center gap-1.5 select-none shrink-0 animate-pulse">
-                        <Clock className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+                      <div className="bg-warning/15 border border-warning/30 text-warning rounded-xl p-2 text-center text-[11px] font-extrabold flex items-center justify-center gap-1.5 select-none shrink-0 animate-pulse">
+                        <Clock className="h-3.5 w-3.5 text-warning shrink-0" />
                         Cancellation Pending Approval — Bill Locked
                       </div>
                     )}
@@ -2294,12 +2404,12 @@ const WaiterPanel = () => {
 
               {/* Bottom Action Grid & Financial Summary */}
               {tableStatus !== "available" && (
-                <div className="space-y-2.5 shrink-0 pt-2 border-t border-zinc-200 dark:border-zinc-800/80">
+                <div className="space-y-2.5 shrink-0 pt-2 border-t border-border">
                   {/* Actions Grid */}
-                  <div className="grid grid-cols-2 gap-1.5">
-                    <Button 
-                      onClick={() => setIsOrderingMode(true)} 
-                      className="gradient-primary text-primary-foreground font-bold rounded-xl h-9 w-full flex items-center justify-center gap-1.5 shadow-sm text-xs transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button
+                      onClick={() => setIsOrderingMode(true)}
+                      className="gradient-primary text-primary-foreground font-bold rounded-xl h-10 w-full flex items-center justify-center gap-1.5 shadow-sm text-xs transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
                     >
                       <ShoppingCart className="h-3.5 w-3.5" /> Place Order
                     </Button>
@@ -2314,7 +2424,7 @@ const WaiterPanel = () => {
                         setShowPayBillDialog(true);
                       }} 
                       disabled={!canPayBill || settlingBillingState} 
-                      className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-bold rounded-xl h-9 w-full flex items-center justify-center gap-1.5 shadow-[0_4px_12px_rgba(16,185,129,0.25)] hover:shadow-[0_4px_16px_rgba(16,185,129,0.4)] transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] text-xs border-none"
+                      className="bg-success hover:bg-success/90 disabled:opacity-50 text-success-foreground font-bold rounded-xl h-10 w-full flex items-center justify-center gap-1.5 shadow-sm transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] text-xs border-none"
                     >
                       {settlingBillingState ? (
                         <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -2324,25 +2434,25 @@ const WaiterPanel = () => {
                       Pay Bill
                     </Button>
                     <Button 
-                      onClick={() => setShowOrdersDialog(true)} 
-                      variant="outline" 
-                      className="font-bold border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950/30 hover:bg-zinc-100 dark:hover:bg-zinc-900 rounded-xl h-9 w-full flex items-center justify-center gap-1.5 text-xs transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
+                      onClick={() => setShowOrdersDialog(true)}
+                      variant="outline"
+                      className="font-bold border-border bg-card hover:bg-muted rounded-xl h-10 w-full flex items-center justify-center gap-1.5 text-xs transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
                     >
                       <Eye className="h-3.5 w-3.5" /> View Order
                     </Button>
                     <Button 
                       onClick={() => setShowBillDialog(true)} 
-                      disabled={activeTableOrders.length === 0} 
-                      variant="outline" 
-                      className="font-bold border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950/30 hover:bg-zinc-100 dark:hover:bg-zinc-900 rounded-xl h-9 w-full flex items-center justify-center gap-1.5 text-xs transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
+                      disabled={activeTableOrders.length === 0}
+                      variant="outline"
+                      className="font-bold border-border bg-card hover:bg-muted rounded-xl h-10 w-full flex items-center justify-center gap-1.5 text-xs transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
                     >
                       <Receipt className="h-3.5 w-3.5" /> View Bill
                     </Button>
                     <Button 
                       onClick={() => setShowMoveDialog(true)} 
                       disabled={movingTable}
-                      variant="outline" 
-                      className="font-bold border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950/30 hover:bg-zinc-100 dark:hover:bg-zinc-900 rounded-xl h-9 w-full flex items-center justify-center gap-1.5 text-xs transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
+                      variant="outline"
+                      className="font-bold border-border bg-card hover:bg-muted rounded-xl h-10 w-full flex items-center justify-center gap-1.5 text-xs transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
                     >
                       {movingTable ? (
                         <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -2352,10 +2462,10 @@ const WaiterPanel = () => {
                       Move
                     </Button>
                     <Button 
-                      onClick={endSitting} 
+                      onClick={() => setShowEndSittingConfirm(true)}
                       disabled={endingSitting}
-                      variant="destructive" 
-                      className="font-bold rounded-xl h-9 w-full flex items-center justify-center gap-1.5 shadow-sm text-xs transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
+                      variant="destructive"
+                      className="font-bold rounded-xl h-10 w-full flex items-center justify-center gap-1.5 shadow-sm text-xs transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
                     >
                       {endingSitting ? (
                         <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -2375,7 +2485,7 @@ const WaiterPanel = () => {
                     const netPayable = Math.max(0, totalSum - advanceSum);
 
                     return (
-                      <div className="border-t border-zinc-200 dark:border-zinc-800/80 pt-2 space-y-1 select-none">
+                      <div className="border-t border-border pt-2 space-y-1 select-none">
                         <div className="flex justify-between text-[11px] text-muted-foreground">
                           <span>Price</span>
                           <span>{currency} {subtotalSum.toLocaleString()}</span>
@@ -2385,12 +2495,12 @@ const WaiterPanel = () => {
                           <span>{currency} {taxSum.toLocaleString()}</span>
                         </div>
                         {advanceSum > 0 && (
-                          <div className="flex justify-between text-[11px] text-emerald-400 font-semibold">
+                          <div className="flex justify-between text-[11px] text-success font-semibold">
                             <span>Advance Paid Credit</span>
                             <span>- {currency} {advanceSum.toLocaleString()}</span>
                           </div>
                         )}
-                        <Separator className="bg-zinc-200 dark:bg-zinc-800 my-1" />
+                        <Separator className="bg-border my-1" />
                         <div className="flex justify-between text-xs font-extrabold text-foreground">
                           <span>{advanceSum > 0 ? "Net Amount Due" : "Grand Total"}</span>
                           <span className="text-primary font-black text-sm">
@@ -2465,7 +2575,7 @@ const WaiterPanel = () => {
                                 <Gift className="h-2.5 w-2.5" /> Deal
                               </Badge>
                               {discount > 0 && (
-                                <span className="text-[9px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-1.5 py-0 rounded border border-emerald-500/20">
+                                <span className="text-[9px] font-bold text-success bg-success/10 px-1.5 py-0 rounded border border-success/20">
                                   Save {currency} {Math.round(discount).toLocaleString()}
                                 </span>
                               )}
@@ -2488,8 +2598,9 @@ const WaiterPanel = () => {
                             </div>
                             <button
                               onClick={() => removeDealGroup(row.dealLineId)}
-                              className="text-muted-foreground/60 hover:text-destructive hover:bg-destructive/10 p-1 rounded-md transition-colors"
+                              className="h-9 w-9 flex items-center justify-center text-muted-foreground/60 hover:text-destructive hover:bg-destructive/10 rounded-md transition-colors"
                               title="Remove Deal"
+                              aria-label="Remove Deal"
                             >
                               <X className="h-3.5 w-3.5" />
                             </button>
@@ -2551,8 +2662,9 @@ const WaiterPanel = () => {
                           </div>
                           <button
                             onClick={() => removeCartItem(item.id)}
-                            className="text-muted-foreground/60 hover:text-destructive hover:bg-destructive/10 p-1 rounded-md transition-colors"
+                            className="h-9 w-9 flex items-center justify-center text-muted-foreground/60 hover:text-destructive hover:bg-destructive/10 rounded-md transition-colors"
                             title="Remove Item"
+                            aria-label="Remove Item"
                           >
                             <X className="h-3.5 w-3.5" />
                           </button>
@@ -2565,21 +2677,23 @@ const WaiterPanel = () => {
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="h-6 w-6 rounded-md hover:bg-background shadow-xs text-foreground"
+                            className="h-10 w-10 rounded-md hover:bg-background shadow-xs text-foreground"
                             onClick={() => updateQty(item.id, -1)}
+                            aria-label="Decrease quantity"
                           >
-                            <Minus className="h-3 w-3" />
+                            <Minus className="h-4 w-4" />
                           </Button>
-                          <span className="w-5 text-center font-bold text-xs font-mono">
+                          <span className="w-7 text-center font-bold text-sm font-mono">
                             {item.qty}
                           </span>
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="h-6 w-6 rounded-md hover:bg-background shadow-xs text-foreground"
+                            className="h-10 w-10 rounded-md hover:bg-background shadow-xs text-foreground"
                             onClick={() => updateQty(item.id, 1)}
+                            aria-label="Increase quantity"
                           >
-                            <Plus className="h-3 w-3" />
+                            <Plus className="h-4 w-4" />
                           </Button>
                         </div>
 
@@ -2602,7 +2716,7 @@ const WaiterPanel = () => {
                   <span className="text-muted-foreground">Subtotal</span>
                   <span className="font-mono text-muted-foreground">{currency} {Math.round(cartTotal).toLocaleString()}</span>
                 </div>
-                <div className="flex justify-between items-center text-xs text-emerald-600 dark:text-emerald-400 font-semibold">
+                <div className="flex justify-between items-center text-xs text-success font-semibold">
                   <span className="flex items-center gap-1 min-w-0">
                     <Tag className="h-3 w-3 shrink-0" />
                     <span className="truncate">{dealPreview.code ? `${dealPreview.dealName} (${dealPreview.code})` : dealPreview.dealName}</span>
@@ -2642,11 +2756,11 @@ const WaiterPanel = () => {
         {!isOrderingMode && (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 w-full shrink-0">
             {[
-              { key: "my_collection", count: `${currency} ${(myActiveCash?.totalExpected || 0).toLocaleString()}`, label: "My Collection", color: "text-emerald-500", bg: "bg-emerald-500/10", border: "border-emerald-500/30", Icon: Wallet },
-              { key: "available",     count: stats.available,                              label: "Available",          color: "text-emerald-500", bg: "bg-emerald-500/10", border: "border-emerald-500/30", Icon: CircleDot },
-              { key: "occupied",      count: stats.occupied,                               label: "Occupied",           color: "text-orange-500",  bg: "bg-orange-500/10",  border: "border-orange-500/30",  Icon: Users },
-              { key: "capacity_pax",  count: `${totalFloorCapacity} / ${totalOccupiedPax}`, label: "Total / Seated Pax", color: "text-amber-400",   bg: "bg-amber-500/10",   border: "border-amber-500/30",   Icon: UserCheck },
-              { key: "reservations",  count: todayReservationsCount,                       label: "Today Reservations", color: "text-sky-400",     bg: "bg-sky-500/10",     border: "border-sky-500/30",     Icon: BookOpen },
+              { key: "my_collection", count: `${currency} ${(myActiveCash?.totalExpected || 0).toLocaleString()}`, label: "My Collection", color: "text-success", bg: "bg-success/10", border: "border-success/30", Icon: Wallet },
+              { key: "available",     count: stats.available,                              label: "Available",          color: "text-success",  bg: "bg-success/10",  border: "border-success/30",  Icon: CircleDot },
+              { key: "occupied",      count: stats.occupied,                               label: "Occupied",           color: "text-accent",   bg: "bg-accent/10",   border: "border-accent/30",   Icon: Users },
+              { key: "capacity_pax",  count: `${totalFloorCapacity} / ${totalOccupiedPax}`, label: "Total / Seated Pax", color: "text-info",     bg: "bg-info/10",     border: "border-info/30",     Icon: UserCheck },
+              { key: "reservations",  count: todayReservationsCount,                       label: "Today Reservations", color: "text-warning",  bg: "bg-warning/10",  border: "border-warning/30",  Icon: BookOpen },
             ].map(({ key, count, label, color, bg, border, Icon }) => {
               const isActive = statusFilter === key;
               return (
@@ -2667,8 +2781,8 @@ const WaiterPanel = () => {
                     setStatusFilter(prev => prev === key ? "all" : (key as any));
                   }}
                   className={cn(
-                    "border bg-white dark:bg-zinc-900/40 rounded-xl shadow-xs cursor-pointer transition-all duration-200 hover:scale-[1.02] select-none",
-                    isActive ? `ring-2 ring-primary ${border}` : "border-zinc-200 dark:border-zinc-800/80 hover:border-zinc-300 dark:hover:border-zinc-700"
+                    "border bg-card rounded-xl shadow-xs cursor-pointer transition-all duration-200 hover:scale-[1.02] select-none",
+                    isActive ? `ring-2 ring-primary ${border}` : "border-border hover:border-muted-foreground/40"
                   )}
                 >
                   <CardContent className="p-2.5 flex items-center gap-2.5">
@@ -2688,16 +2802,16 @@ const WaiterPanel = () => {
 
         {/* ── Self-Order Pending Requests Card ── */}
         {!isOrderingMode && pendingSelfOrders.length > 0 && (
-          <div className="bg-gradient-to-r from-amber-500/15 via-amber-500/5 to-card border border-amber-500/30 rounded-2xl p-3.5 shadow-xl space-y-3 animate-fadeInUp shrink-0">
+          <div className="bg-gradient-to-r from-warning/15 via-warning/5 to-card border border-warning/30 rounded-2xl p-3.5 shadow-xl space-y-3 animate-fadeInUp shrink-0">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2.5">
-                <div className="h-8 w-8 rounded-xl bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center font-bold shadow-xs animate-bounce">
+                <div className="h-8 w-8 rounded-xl bg-warning/20 text-warning flex items-center justify-center font-bold shadow-xs animate-bounce">
                   <Bell className="h-4 w-4" />
                 </div>
                 <div>
                   <h3 className="font-extrabold text-foreground text-sm leading-tight flex items-center gap-2">
                     Self-Order Customer Requests
-                    <span className="bg-amber-500 text-white font-extrabold text-[10px] px-2 py-0.5 rounded-full shadow-xs">
+                    <span className="bg-warning text-warning-foreground font-extrabold text-[10px] px-2 py-0.5 rounded-full shadow-xs">
                       {pendingSelfOrders.length} New
                     </span>
                   </h3>
@@ -2712,7 +2826,7 @@ const WaiterPanel = () => {
               {pendingSelfOrders.map((order) => (
                 <div
                   key={order.id}
-                  className="bg-card rounded-xl p-3 border border-border/80 hover:border-amber-500/40 transition-all shadow-xs flex flex-col justify-between gap-2.5"
+                  className="bg-card rounded-xl p-3 border border-border/80 hover:border-warning/40 transition-all shadow-xs flex flex-col justify-between gap-2.5"
                 >
                   <div className="space-y-1.5">
                     <div className="flex items-center justify-between">
@@ -2755,7 +2869,7 @@ const WaiterPanel = () => {
 
                     {/* Special Instructions Note if present */}
                     {((order as any).specialInstructions || order.futureNotes) && (
-                      <div className="text-[10px] bg-amber-500/10 text-amber-700 dark:text-amber-400 p-1.5 rounded-lg font-medium border border-amber-500/20 flex items-start gap-1">
+                      <div className="text-[10px] bg-warning/10 text-warning p-1.5 rounded-lg font-medium border border-warning/20 flex items-start gap-1">
                         <FileText className="h-3 w-3 shrink-0 mt-0.5" />
                         <span><span className="font-bold">Note:</span> {(order as any).specialInstructions || order.futureNotes}</span>
                       </div>
@@ -2766,7 +2880,7 @@ const WaiterPanel = () => {
                     <Button
                       size="sm"
                       variant="outline"
-                      className="flex-1 border-destructive/30 text-destructive hover:bg-destructive/10 text-xs rounded-xl h-8 font-semibold"
+                      className="flex-1 border-destructive/30 text-destructive hover:bg-destructive/10 text-xs rounded-xl h-10 font-semibold"
                       disabled={rejectingId === order.id || acceptingId === order.id}
                       onClick={() => rejectSelfOrder(order)}
                     >
@@ -2778,7 +2892,7 @@ const WaiterPanel = () => {
                     </Button>
                     <Button
                       size="sm"
-                      className="flex-1 gradient-primary text-primary-foreground text-xs font-bold rounded-xl h-8 shadow-md shadow-primary/20 hover:opacity-95"
+                      className="flex-1 gradient-primary text-primary-foreground text-xs font-bold rounded-xl h-10 shadow-md shadow-primary/20 hover:opacity-95"
                       disabled={acceptingId === order.id || rejectingId === order.id}
                       onClick={() => acceptSelfOrder(order)}
                     >
@@ -2812,7 +2926,7 @@ const WaiterPanel = () => {
                       "px-3 py-1 rounded-full text-xs font-bold transition-all shrink-0 border",
                       floorFilter === "all"
                         ? "bg-primary text-primary-foreground border-primary shadow-xs"
-                        : "bg-white dark:bg-zinc-900/40 border-zinc-200 dark:border-zinc-800 text-muted-foreground hover:text-foreground"
+                        : "bg-card border-border text-muted-foreground hover:text-foreground"
                     )}
                   >
                     All Floors
@@ -2825,7 +2939,7 @@ const WaiterPanel = () => {
                         "px-3 py-1 rounded-full text-xs font-bold transition-all shrink-0 border",
                         floorFilter === fl
                           ? "bg-primary text-primary-foreground border-primary shadow-xs"
-                          : "bg-white dark:bg-zinc-900/40 border-zinc-200 dark:border-zinc-800 text-muted-foreground hover:text-foreground"
+                          : "bg-card border-border text-muted-foreground hover:text-foreground"
                       )}
                     >
                       {fl}
@@ -2866,24 +2980,31 @@ const WaiterPanel = () => {
                       (o) => o.status === "ready" || o.kitchenStatus === "ready" || (o.items && o.items.some((i: any) => i.status === "ready" || i.kitchenStatus === "ready"))
                     );
 
+                    // Table-status mapping (same as statusConfig): available=success, occupied=accent,
+                    // bill-requested=destructive, reserved=warning, maintenance=muted.
                     const statusDotColor =
-                      status === "bill-requested" ? "bg-destructive animate-ping shadow-[0_0_8px_rgba(239,68,68,0.8)]" :
-                      isTablePaid ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)]" :
-                      status === "available" ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)]" :
-                      status === "occupied" ? (hasFoodReady ? "bg-orange-400 animate-ping shadow-[0_0_8px_rgba(249,115,22,0.8)]" : "bg-orange-500 shadow-[0_0_8px_rgba(249,115,22,0.6)]") :
-                      "bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.6)]";
+                      status === "bill-requested" ? "bg-destructive animate-ping shadow-[0_0_8px_hsl(var(--destructive)/0.8)]" :
+                      isTablePaid ? "bg-success shadow-[0_0_8px_hsl(var(--success)/0.6)]" :
+                      status === "available" ? "bg-success shadow-[0_0_8px_hsl(var(--success)/0.6)]" :
+                      status === "occupied" ? (hasFoodReady ? "bg-accent animate-ping shadow-[0_0_8px_hsl(var(--accent)/0.8)]" : "bg-accent shadow-[0_0_8px_hsl(var(--accent)/0.6)]") :
+                      status === "maintenance" ? "bg-muted-foreground" :
+                      "bg-warning shadow-[0_0_8px_hsl(var(--warning)/0.6)]";
 
                     const cardStatusClass =
                       status === "bill-requested"
-                        ? "border-destructive/80 bg-destructive/10 hover:border-destructive animate-pulse ring-2 ring-destructive/40 shadow-[0_0_16px_rgba(239,68,68,0.4)]"
+                        ? "border-destructive/80 bg-destructive/10 hover:border-destructive animate-pulse ring-2 ring-destructive/40 shadow-[0_0_16px_hsl(var(--destructive)/0.4)]"
                         : isTablePaid
-                        ? "border-emerald-500/50 bg-emerald-500/[0.04] dark:bg-emerald-500/[0.06] hover:border-emerald-500/80 ring-1 ring-emerald-500/30 shadow-[0_0_12px_rgba(16,185,129,0.15)]"
+                        ? "border-success/50 bg-success/[0.04] hover:border-success/80 ring-1 ring-success/30 shadow-[0_0_12px_hsl(var(--success)/0.15)]"
                         : isOccupiedState
                         ? cn(
-                            "border-orange-500/40 bg-orange-500/[0.03] dark:bg-orange-500/[0.05] hover:border-orange-500/80",
-                            hasFoodReady && "animate-pulse ring-2 ring-orange-500/80 shadow-[0_0_18px_rgba(249,115,22,0.4)]"
+                            "border-accent/40 bg-accent/[0.04] hover:border-accent/80",
+                            hasFoodReady && "animate-pulse ring-2 ring-accent/80 shadow-[0_0_18px_hsl(var(--accent)/0.4)]"
                           )
-                        : "border-emerald-500/40 bg-emerald-500/[0.03] dark:bg-emerald-500/[0.05] hover:border-emerald-500/80";
+                        : status === "reserved"
+                        ? "border-warning/40 bg-warning/[0.04] hover:border-warning/80"
+                        : status === "maintenance"
+                        ? "border-border bg-muted/30 hover:border-muted-foreground/50"
+                        : "border-success/40 bg-success/[0.04] hover:border-success/80";
 
                     const elapsedStr = isOccupiedState && oldest ? getElapsed(oldest) : "";
 
@@ -2913,9 +3034,9 @@ const WaiterPanel = () => {
                         <Card
                           onClick={() => handleTableClick(t)}
                           className={cn(
-                            "shadow-md bg-white dark:bg-zinc-900/50 border rounded-2xl flex flex-col justify-between p-3 min-h-[160px] w-full cursor-pointer transition-all duration-300 relative hover:scale-[1.02]",
+                            "shadow-md bg-card border rounded-2xl flex flex-col justify-between p-3 min-h-[160px] w-full cursor-pointer transition-all duration-300 relative hover:scale-[1.02]",
                             cardStatusClass,
-                            selectedTableId === t.id && "ring-2 ring-orange-500 ring-offset-2 dark:ring-offset-zinc-950 shadow-lg border-orange-500"
+                            selectedTableId === t.id && "ring-2 ring-primary ring-offset-2 ring-offset-background shadow-lg border-primary"
                           )}
                         >
                           {/* Top Bar: Table Label, Status Dot & Capacity/Pax Pill / Print Button */}
@@ -2937,8 +3058,9 @@ const WaiterPanel = () => {
                                 <Button
                                   variant="ghost"
                                   size="icon"
-                                  className="h-6 w-6 rounded-lg text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 hover:bg-emerald-500/20 bg-emerald-500/10 border border-emerald-500/30 transition-all p-0 shadow-2xs cursor-pointer"
+                                  className="h-9 w-9 rounded-lg text-success hover:text-success hover:bg-success/20 bg-success/10 border border-success/30 transition-all p-0 shadow-2xs cursor-pointer"
                                   title="Print Slip (Receipt / Bill)"
+                                  aria-label="Print Slip (Receipt / Bill)"
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     openTableSlipFor(t, tOrders);
@@ -2946,24 +3068,24 @@ const WaiterPanel = () => {
                                 >
                                   <Printer className="h-3.5 w-3.5" />
                                 </Button>
-                                <div className="flex items-center gap-1 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
-                                  <Users className="h-3 w-3 text-emerald-500 shrink-0" />
+                                <div className="flex items-center gap-1 text-[10px] font-bold text-success bg-success/10 px-2 py-0.5 rounded-full border border-success/20">
+                                  <Users className="h-3 w-3 text-success shrink-0" />
                                   <span>{getGuestsCount(t)} Pax</span>
                                 </div>
                               </div>
                             ) : isOccupiedState ? (
-                              <div className="flex items-center gap-1 text-[10px] font-bold text-orange-500 bg-orange-500/10 px-2 py-0.5 rounded-full border border-orange-500/20">
-                                <Users className="h-3 w-3 text-orange-500 shrink-0" />
+                              <div className="flex items-center gap-1 text-[10px] font-bold text-accent bg-accent/10 px-2 py-0.5 rounded-full border border-accent/20">
+                                <Users className="h-3 w-3 text-accent shrink-0" />
                                 <span>{getGuestsCount(t)} Pax</span>
                               </div>
                             ) : status === "reserved" ? (
-                              <div className="flex items-center gap-1 text-[10px] font-bold text-amber-500 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/20">
-                                <BookOpen className="h-3 w-3 text-amber-500 shrink-0" />
+                              <div className="flex items-center gap-1 text-[10px] font-bold text-warning bg-warning/10 px-2 py-0.5 rounded-full border border-warning/20">
+                                <BookOpen className="h-3 w-3 text-warning shrink-0" />
                                 <span>Reserved</span>
                               </div>
                             ) : (
-                              <div className="flex items-center gap-1 text-[10px] font-semibold text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
-                                <Users className="h-3 w-3 text-emerald-500 shrink-0" />
+                              <div className="flex items-center gap-1 text-[10px] font-semibold text-success bg-success/10 px-2 py-0.5 rounded-full border border-success/20">
+                                <Users className="h-3 w-3 text-success shrink-0" />
                                 <span>{t.capacity} Seats</span>
                               </div>
                             )}
@@ -2973,15 +3095,14 @@ const WaiterPanel = () => {
                           <div className="flex-1 flex flex-col justify-center my-1.5 w-full select-none">
                             {isOccupiedState && latestOrder ? (
                               <div className="space-y-1.5 w-full">
-                                <div className="bg-zinc-100/80 dark:bg-zinc-950/70 rounded-xl p-2.5 border border-zinc-200/90 dark:border-zinc-800/80 shadow-2xs space-y-1.5">
+                                <div className="bg-muted/50 rounded-xl p-2.5 border border-border shadow-2xs space-y-1.5">
                                   <div className="flex items-center justify-between">
                                     <span className="font-bold text-xs text-foreground tracking-tight">Order #{latestOrder.orderNumber}</span>
-                                    <Badge className={cn(
-                                      "text-[9px] px-1.5 py-0.2 rounded-md font-extrabold uppercase border-none text-zinc-950",
-                                      latestOrder.status === "pending" && "bg-amber-500",
-                                      latestOrder.status === "preparing" && "bg-sky-500 text-white",
-                                      latestOrder.status === "ready" && "bg-emerald-500 text-white animate-pulse",
-                                      latestOrder.status === "completed" && "bg-emerald-600 text-white font-black",
+                                    <Badge variant="outline" className={cn(
+                                      "text-[9px] px-1.5 py-0.2 rounded-md font-extrabold uppercase",
+                                      statusTone(latestOrder.status).badge,
+                                      latestOrder.status === "ready" && "animate-pulse",
+                                      latestOrder.status === "completed" && "font-black",
                                     )}>
                                       {latestOrder.status === "completed" ? "SERVED" : latestOrder.status}
                                     </Badge>
@@ -2997,14 +3118,14 @@ const WaiterPanel = () => {
                                   {latestOrder.status === "preparing" && (
                                     <div className="flex justify-between items-center text-[10px] text-muted-foreground">
                                       <span>Remaining:</span>
-                                      <span className={cn("font-bold font-mono", remainingSec < 120 ? "text-red-500" : "text-emerald-500")}>
+                                      <span className={cn("font-bold font-mono", remainingSec < 120 ? "text-destructive" : "text-success")}>
                                         {countdownText}
                                       </span>
                                     </div>
                                   )}
 
                                   {latestOrder.status === "ready" && (
-                                    <div className="flex items-center gap-1 text-[10px] font-bold text-emerald-500">
+                                    <div className="flex items-center gap-1 text-[10px] font-bold text-success">
                                       <Check className="h-3 w-3" /> Ready to serve
                                     </div>
                                   )}
@@ -3021,8 +3142,8 @@ const WaiterPanel = () => {
                               </div>
                             ) : isOccupiedState ? (
                               <div className="space-y-1.5 w-full">
-                                <div className="bg-zinc-100/80 dark:bg-zinc-950/70 rounded-xl p-2.5 border border-zinc-200/90 dark:border-zinc-800/80 shadow-2xs text-center">
-                                  <span className="text-xs font-bold text-orange-500">Sitting Active</span>
+                                <div className="bg-muted/50 rounded-xl p-2.5 border border-border shadow-2xs text-center">
+                                  <span className="text-xs font-bold text-accent">Sitting Active</span>
                                   <p className="text-[10px] text-muted-foreground">Awaiting Order</p>
                                 </div>
                                 {elapsedStr && (
@@ -3036,27 +3157,27 @@ const WaiterPanel = () => {
                               </div>
                             ) : (
                               <div className="flex flex-col items-center justify-center py-2 text-center text-muted-foreground select-none">
-                                <div className="h-7 w-7 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-500 mb-1">
+                                <div className="h-7 w-7 rounded-full bg-success/10 border border-success/20 flex items-center justify-center text-success mb-1">
                                   <UtensilsCrossed className="h-3.5 w-3.5" />
                                 </div>
-                                <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">Available</span>
+                                <span className="text-xs font-bold text-success">Available</span>
                                 <span className="text-[10px] text-muted-foreground">Ready for seating</span>
                               </div>
                             )}
                           </div>
 
                           {/* Bottom Bar: Floor Name and Status Badge */}
-                          <div className="flex items-center justify-between w-full pt-1.5 shrink-0 select-none border-t border-zinc-200/60 dark:border-zinc-800/60 text-xs">
+                          <div className="flex items-center justify-between w-full pt-1.5 shrink-0 select-none border-t border-border text-xs">
                             <span className="text-muted-foreground font-semibold truncate text-[11px]" title={t.floor || "Ground Floor"}>
                               {t.floor || "Ground Floor"}
                             </span>
                             <span className={cn(
                               "text-[10px] font-bold uppercase tracking-wider flex items-center gap-1",
                               status === "bill-requested" ? "text-destructive" :
-                              isTablePaid ? "text-emerald-600 dark:text-emerald-400 font-extrabold" :
-                              isOccupiedState ? "text-orange-500" :
-                              status === "reserved" ? "text-amber-500" :
-                              "text-emerald-500"
+                              isTablePaid ? "text-success font-extrabold" :
+                              isOccupiedState ? "text-accent" :
+                              status === "reserved" ? "text-warning" :
+                              "text-success"
                             )}>
                               {status === "bill-requested" ? "Bill Req" :
                                isTablePaid ? <><Check className="h-3 w-3" /> Paid</> :
@@ -3084,33 +3205,33 @@ const WaiterPanel = () => {
                     placeholder="Search food items..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-9 h-9 text-xs rounded-xl bg-white dark:bg-zinc-900/60 border-zinc-200 dark:border-zinc-800 focus:border-primary/40 focus:bg-background transition-colors text-foreground"
+                    className="pl-9 h-10 text-xs rounded-xl bg-card border-border focus:border-primary/40 focus:bg-background transition-colors text-foreground"
                   />
                 </div>
                 <Button
                   onClick={() => { setIsOrderingMode(false); setCartItems([]); resetExpansion(); }}
-                  className="gradient-primary text-primary-foreground hover:opacity-95 font-bold h-9 px-4 rounded-xl shadow-md gap-1.5 shrink-0 text-xs transition-opacity"
+                  className="gradient-primary text-primary-foreground hover:opacity-95 font-bold h-10 px-4 rounded-xl shadow-md gap-1.5 shrink-0 text-xs transition-opacity"
                 >
                   <ArrowLeft className="h-4 w-4" /> Back to Floor Plan
                 </Button>
               </div>
 
               {/* Row 2: Complete Categories horizontal bar with counts */}
-              <div className="flex items-center gap-1.5 border-b border-zinc-200 dark:border-zinc-800/60 pb-2 overflow-x-auto scrollbar-none shrink-0">
+              <div className="flex items-center gap-1.5 border-b border-border pb-2 overflow-x-auto scrollbar-none shrink-0">
                 <button
                   onClick={() => { setMenuCategory("__deals__"); resetExpansion(); }}
                   className={cn(
                     "px-3 py-1.5 text-xs rounded-xl whitespace-nowrap font-medium transition-all flex items-center gap-1.5 shrink-0",
                     menuCategory === "__deals__"
                       ? "gradient-primary text-primary-foreground shadow-md font-bold"
-                      : "bg-white dark:bg-card border border-zinc-200 dark:border-zinc-800 text-muted-foreground hover:text-foreground hover:bg-muted/50 hover:border-zinc-300 dark:hover:border-zinc-700"
+                      : "bg-card border border-border text-muted-foreground hover:text-foreground hover:bg-muted/50 hover:border-muted-foreground/40"
                   )}
                 >
                   <Gift className="h-3.5 w-3.5" />
                   <span>Deals</span>
                   <span className={cn(
                     "text-[10px] px-1.5 py-0.2 rounded-full font-bold",
-                    menuCategory === "__deals__" ? "bg-black/20 text-white" : "bg-muted text-muted-foreground"
+                    menuCategory === "__deals__" ? "bg-primary-foreground/20 text-primary-foreground" : "bg-muted text-muted-foreground"
                   )}>
                     {sellableDeals.length}
                   </span>
@@ -3127,13 +3248,13 @@ const WaiterPanel = () => {
                         "px-3 py-1.5 text-xs rounded-xl whitespace-nowrap font-medium transition-all flex items-center gap-1.5 shrink-0",
                         menuCategory === cat
                           ? "gradient-primary text-primary-foreground shadow-md font-bold"
-                          : "bg-white dark:bg-card border border-zinc-200 dark:border-zinc-800 text-muted-foreground hover:text-foreground hover:bg-muted/50 hover:border-zinc-300 dark:hover:border-zinc-700"
+                          : "bg-card border border-border text-muted-foreground hover:text-foreground hover:bg-muted/50 hover:border-muted-foreground/40"
                       )}
                     >
                       <span>{cat}</span>
                       <span className={cn(
                         "text-[10px] px-1.5 py-0.2 rounded-full font-bold",
-                        menuCategory === cat ? "bg-black/20 text-white" : "bg-muted text-muted-foreground"
+                        menuCategory === cat ? "bg-primary-foreground/20 text-primary-foreground" : "bg-muted text-muted-foreground"
                       )}>
                         {count}
                       </span>
@@ -3165,11 +3286,11 @@ const WaiterPanel = () => {
                               disabled={outOfStock}
                               onClick={() => addDealToCart(deal)}
                               className={cn(
-                                "bg-white dark:bg-card rounded-2xl border border-zinc-200 dark:border-zinc-800/80 overflow-hidden hover:shadow-xl hover:border-primary/40 transition-all duration-200 text-left group relative flex flex-col justify-between hover:-translate-y-0.5 shadow-xs min-h-[290px]",
-                                outOfStock && "opacity-60 hover:shadow-none hover:border-zinc-200 dark:hover:border-zinc-800 hover:translate-y-0 cursor-not-allowed"
+                                "bg-card rounded-2xl border border-border overflow-hidden hover:shadow-xl hover:border-primary/40 transition-all duration-200 text-left group relative flex flex-col justify-between hover:-translate-y-0.5 shadow-xs min-h-[290px]",
+                                outOfStock && "opacity-60 hover:shadow-none hover:border-border hover:translate-y-0 cursor-not-allowed"
                               )}
                             >
-                              <div className="aspect-[16/9] w-full relative overflow-hidden border-b border-zinc-200 dark:border-zinc-800/40 bg-muted/40">
+                              <div className="aspect-[16/9] w-full relative overflow-hidden border-b border-border bg-muted/40">
                                 {deal.image ? (
                                   <img src={deal.image} alt={deal.name} className={cn("w-full h-full object-cover group-hover:scale-105 transition-transform duration-300", outOfStock && "grayscale")} />
                                 ) : (
@@ -3200,14 +3321,14 @@ const WaiterPanel = () => {
                                     <p className="text-[10px] text-muted-foreground line-clamp-1">{deal.description}</p>
                                   )}
                                   {pricing.lines.length > 0 && (
-                                    <div className="bg-muted/50 border border-zinc-200 dark:border-zinc-800/60 rounded-lg px-2 py-1.5 space-y-0.5 max-h-24 overflow-y-auto scrollbar-none">
+                                    <div className="bg-muted/50 border border-border rounded-lg px-2 py-1.5 space-y-0.5 max-h-24 overflow-y-auto scrollbar-none">
                                       {pricing.lines.map((line, i) => (
                                         <p key={i} className="text-[10px] text-foreground/95 font-medium truncate">• {line}</p>
                                       ))}
                                     </div>
                                   )}
                                 </div>
-                                <div className="mt-auto pt-2 border-t border-zinc-200 dark:border-zinc-800/40 flex items-end justify-between gap-1.5">
+                                <div className="mt-auto pt-2 border-t border-border flex items-end justify-between gap-1.5">
                                   <div>
                                     {pricing.regularLabel && (
                                       <span className={cn("text-[9px] text-muted-foreground font-mono block", pricing.regularStrike && "line-through")}>
@@ -3217,7 +3338,7 @@ const WaiterPanel = () => {
                                     <span className="font-mono font-extrabold text-xs sm:text-sm text-primary">{pricing.priceLabel}</span>
                                   </div>
                                   {pricing.savingsPercent > 0 && (
-                                    <span className="text-[9px] font-extrabold text-emerald-500 bg-emerald-500/10 border border-emerald-500/30 px-1.5 py-0.5 rounded shrink-0 shadow-2xs">
+                                    <span className="text-[9px] font-extrabold text-success bg-success/10 border border-success/30 px-1.5 py-0.5 rounded shrink-0 shadow-2xs">
                                       SAVE {pricing.savingsPercent}%
                                     </span>
                                   )}
@@ -3252,12 +3373,12 @@ const WaiterPanel = () => {
                               disabled={outOfStock}
                               onClick={() => addToOrder(item)}
                               className={cn(
-                                "bg-white dark:bg-card rounded-2xl border border-zinc-200 dark:border-zinc-800/80 p-2 hover:shadow-xl hover:border-primary/40 transition-all duration-200 text-left group relative flex flex-col justify-between hover:-translate-y-0.5 shadow-xs",
+                                "bg-card rounded-2xl border border-border p-2 hover:shadow-xl hover:border-primary/40 transition-all duration-200 text-left group relative flex flex-col justify-between hover:-translate-y-0.5 shadow-xs",
                                 isExpanded && "ring-2 ring-primary border-primary bg-primary/5 shadow-md",
-                                outOfStock && "opacity-60 hover:shadow-none hover:border-zinc-200 dark:hover:border-zinc-800 hover:translate-y-0 cursor-not-allowed"
+                                outOfStock && "opacity-60 hover:shadow-none hover:border-border hover:translate-y-0 cursor-not-allowed"
                               )}
                             >
-                              <div className="aspect-[4/3] rounded-xl overflow-hidden mb-2 relative border border-zinc-200 dark:border-zinc-800/60 w-full bg-muted/40">
+                              <div className="aspect-[4/3] rounded-xl overflow-hidden mb-2 relative border border-border w-full bg-muted/40">
                                 {item.image ? (
                                   <img src={item.image} alt={item.name} className={cn("w-full h-full object-cover group-hover:scale-105 transition-transform duration-300", outOfStock && "grayscale")} />
                                 ) : (
@@ -3274,7 +3395,7 @@ const WaiterPanel = () => {
                                   </div>
                                 ) : variantsCount > 0 ? (
                                   <div className="absolute top-1.5 right-1.5">
-                                    <span className="text-[9px] px-1.5 py-0.5 bg-background/85 backdrop-blur-xs text-foreground font-semibold rounded-md border border-zinc-200 dark:border-zinc-800 shadow-2xs">
+                                    <span className="text-[9px] px-1.5 py-0.5 bg-background/85 backdrop-blur-xs text-foreground font-semibold rounded-md border border-border shadow-2xs">
                                       {variantsCount} Sizes
                                     </span>
                                   </div>
@@ -3300,8 +3421,8 @@ const WaiterPanel = () => {
 
                             {/* Expanded options drawer inside the grid */}
                             {isExpanded && (
-                              <div className="col-span-full bg-white dark:bg-card border border-primary/30 rounded-2xl p-3.5 shadow-lg animate-in slide-in-from-top-2 space-y-3">
-                                <div className="flex items-center gap-3 pb-2 border-b border-zinc-200 dark:border-zinc-800/60">
+                              <div className="col-span-full bg-card border border-primary/30 rounded-2xl p-3.5 shadow-lg animate-in slide-in-from-top-2 space-y-3">
+                                <div className="flex items-center gap-3 pb-2 border-b border-border">
                                   {item.image ? (
                                     <img src={item.image} alt={item.name} className="h-12 w-12 rounded-xl object-cover" />
                                   ) : (
@@ -3334,10 +3455,10 @@ const WaiterPanel = () => {
                                             className={cn(
                                               "px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all flex items-center gap-1",
                                               vOutOfStock
-                                                ? "opacity-50 cursor-not-allowed line-through bg-muted/40 border-zinc-200 dark:border-zinc-800 text-muted-foreground"
+                                                ? "opacity-50 cursor-not-allowed line-through bg-muted/40 border-border text-muted-foreground"
                                                 : selectedVariant?.id === v.id
                                                 ? "gradient-primary text-primary-foreground border-transparent shadow-sm font-bold"
-                                                : "bg-card border-zinc-200 dark:border-zinc-800 text-foreground hover:border-zinc-300 dark:hover:border-zinc-700"
+                                                : "bg-card border-border text-foreground hover:border-muted-foreground/40"
                                             )}
                                           >
                                             <span>{v.name}</span>
@@ -3366,7 +3487,7 @@ const WaiterPanel = () => {
                                               "flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs border transition-all select-none",
                                               isSelected
                                                 ? "bg-primary/10 border-primary/50 text-primary font-bold ring-1 ring-primary/40"
-                                                : "bg-card border-zinc-200 dark:border-zinc-800 text-muted-foreground hover:border-zinc-300 dark:hover:border-zinc-700 hover:text-foreground"
+                                                : "bg-card border-border text-muted-foreground hover:border-muted-foreground/40 hover:text-foreground"
                                             )}
                                           >
                                             <button
@@ -3404,11 +3525,12 @@ const WaiterPanel = () => {
                                                       return { ...prev, [modId]: curr - 1 };
                                                     });
                                                   }}
-                                                  className="h-4 w-4 rounded bg-primary/20 hover:bg-primary/30 flex items-center justify-center text-primary font-bold text-[11px]"
+                                                  className="h-9 w-9 rounded-lg bg-primary/20 hover:bg-primary/30 flex items-center justify-center text-primary font-bold text-sm"
+                                                  aria-label={`Decrease ${mod.name} quantity`}
                                                 >
-                                                  -
+                                                  <Minus className="h-4 w-4" />
                                                 </button>
-                                                <span className="w-3 text-center font-bold text-[11px]">{qty}</span>
+                                                <span className="w-5 text-center font-bold text-xs">{qty}</span>
                                                 <button
                                                   type="button"
                                                   onClick={(e) => {
@@ -3418,9 +3540,10 @@ const WaiterPanel = () => {
                                                       [modId]: (prev[modId] || 0) + 1,
                                                     }));
                                                   }}
-                                                  className="h-4 w-4 rounded bg-primary/20 hover:bg-primary/30 flex items-center justify-center text-primary font-bold text-[11px]"
+                                                  className="h-9 w-9 rounded-lg bg-primary/20 hover:bg-primary/30 flex items-center justify-center text-primary font-bold text-sm"
+                                                  aria-label={`Increase ${mod.name} quantity`}
                                                 >
-                                                  +
+                                                  <Plus className="h-4 w-4" />
                                                 </button>
                                               </div>
                                             )}
@@ -3440,7 +3563,7 @@ const WaiterPanel = () => {
                                     <Plus className="h-3.5 w-3.5 mr-1" /> Add to Cart
                                   </Button>
                                   {hasModifiers && (
-                                    <Button size="sm" variant="outline" className="h-9 text-xs rounded-xl border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/30 font-semibold" onClick={() => addWithoutExtras(item)}>
+                                    <Button size="sm" variant="outline" className="h-9 text-xs rounded-xl border-border bg-card font-semibold" onClick={() => addWithoutExtras(item)}>
                                       No Extras
                                     </Button>
                                   )}
@@ -3533,12 +3656,12 @@ const WaiterPanel = () => {
           </DialogHeader>
           <div className="space-y-3">
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-foreground">Item</label>
+              <Label htmlFor="wp-deal-pick-item" className="text-xs font-semibold text-foreground">Item</Label>
               <Select
                 value={pickedDealItemId}
                 onValueChange={(v) => { setPickedDealItemId(v); setPickedDealVariantId(null); }}
               >
-                <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Select an item" /></SelectTrigger>
+                <SelectTrigger id="wp-deal-pick-item" className="h-9 text-xs"><SelectValue placeholder="Select an item" /></SelectTrigger>
                 <SelectContent>
                   {eligibleDealItems.map((m: any) => {
                     const itemVariants = m.variants || [];
@@ -3560,9 +3683,9 @@ const WaiterPanel = () => {
               if (variants.length === 0) return null;
               return (
                 <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-foreground">Size</label>
+                  <Label htmlFor="wp-deal-pick-size" className="text-xs font-semibold text-foreground">Size</Label>
                   <Select value={pickedDealVariantId || ""} onValueChange={setPickedDealVariantId}>
-                    <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Select a size" /></SelectTrigger>
+                    <SelectTrigger id="wp-deal-pick-size" className="h-9 text-xs"><SelectValue placeholder="Select a size" /></SelectTrigger>
                     <SelectContent>
                       {variants.map((v: any) => {
                         const variantOutOfStock = isMenuItemOutOfStock(menuItem.id, v.id);
@@ -3578,8 +3701,9 @@ const WaiterPanel = () => {
               );
             })()}
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-foreground">Quantity</label>
+              <Label htmlFor="wp-deal-pick-qty" className="text-xs font-semibold text-foreground">Quantity</Label>
               <Input
+                id="wp-deal-pick-qty"
                 type="number"
                 min={1}
                 value={pickedDealQty}
@@ -3603,9 +3727,9 @@ const WaiterPanel = () => {
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label>Target Table</Label>
+              <Label htmlFor="wp-move-target-table">Target Table</Label>
               <Select value={targetMoveTableId || ""} onValueChange={setTargetMoveTableId}>
-                <SelectTrigger className="rounded-xl">
+                <SelectTrigger id="wp-move-target-table" className="rounded-xl">
                   <SelectValue placeholder="Choose an available table" />
                 </SelectTrigger>
                 <SelectContent>
@@ -3622,7 +3746,7 @@ const WaiterPanel = () => {
             </div>
           </div>
           <DialogFooter className="flex gap-2">
-            <Button variant="outline" onClick={() => setShowMoveDialog(false)} className="rounded-xl flex-1 border-zinc-800 transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]">Cancel</Button>
+            <Button variant="outline" onClick={() => setShowMoveDialog(false)} className="rounded-xl flex-1 border-border transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]">Cancel</Button>
             <Button 
               disabled={!targetMoveTableId || movingTable}
               onClick={() => targetMoveTableId && moveTableSession(targetMoveTableId)} 
@@ -3634,6 +3758,53 @@ const WaiterPanel = () => {
         </DialogContent>
       </Dialog>
 
+
+      {/* ── End Sitting confirmation (irreversible: completes paid orders + releases the table) ── */}
+      <AlertDialog open={showEndSittingConfirm} onOpenChange={setShowEndSittingConfirm}>
+        <AlertDialogContent className="w-[90vw] max-w-[420px] rounded-2xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>End sitting for Table {selectedTable?.number}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              All paid orders at this table will be marked completed and the table will be released for the next guests.
+              Every order must already be paid and ready. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="flex gap-2">
+            <AlertDialogCancel className="rounded-xl flex-1 h-10">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => { void endSitting(); }}
+              className="rounded-xl flex-1 h-10 bg-destructive text-destructive-foreground hover:bg-destructive/90 font-bold"
+            >
+              End Sitting
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* ── Decline self-order dialog (replaces window.prompt) ── */}
+      <Dialog open={rejectTarget !== null} onOpenChange={(open) => { if (!open) setRejectTarget(null); }}>
+        <DialogContent className="w-[90vw] max-w-[420px] rounded-2xl">
+          <DialogHeader>
+            <DialogTitle>Decline order{rejectTarget ? ` for Table ${rejectTarget.tableNumber}` : ""}?</DialogTitle>
+            <DialogDescription>The guest will be told their order was declined. A reason is optional.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 py-1">
+            <Label htmlFor="wp-decline-reason" className="text-xs font-semibold">Reason for declining (optional)</Label>
+            <Textarea
+              id="wp-decline-reason"
+              value={rejectReason}
+              onChange={(e) => setRejectReason(e.target.value)}
+              placeholder="e.g. Item unavailable"
+              rows={3}
+              className="rounded-xl text-sm resize-none"
+            />
+          </div>
+          <DialogFooter className="flex gap-2">
+            <Button variant="outline" onClick={() => setRejectTarget(null)} className="rounded-xl flex-1 h-10">Cancel</Button>
+            <Button variant="destructive" onClick={confirmRejectSelfOrder} className="rounded-xl flex-1 h-10 font-bold">Decline</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* ── View Orders Dialog (POS-Aligned High-Craft Modal) ── */}
       <Dialog open={showOrdersDialog} onOpenChange={setShowOrdersDialog}>
@@ -3669,11 +3840,11 @@ const WaiterPanel = () => {
                       Order #{o.orderNumber}
                     </span>
                     {isPaid ? (
-                      <Badge className="bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 text-[10px] font-bold uppercase px-2 py-0.5 rounded-full">
+                      <Badge variant="outline" className="bg-success/10 text-success border border-success/20 text-[10px] font-bold uppercase px-2 py-0.5 rounded-full">
                         Paid
                       </Badge>
                     ) : (
-                      <Badge variant="outline" className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full border-amber-500/30 text-amber-500 bg-amber-500/10">
+                      <Badge variant="outline" className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full border-warning/30 text-warning bg-warning/10">
                         Unpaid
                       </Badge>
                     )}
@@ -3686,13 +3857,10 @@ const WaiterPanel = () => {
                 </div>
 
                 <Badge
+                  variant="outline"
                   className={cn(
-                    "text-[10px] font-extrabold uppercase tracking-wider px-2.5 py-1 rounded-full border shadow-2xs",
-                    o.status === "ready"
-                      ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/30"
-                      : o.status === "preparing"
-                      ? "bg-blue-500/10 text-blue-500 border-blue-500/30"
-                      : "bg-amber-500/10 text-amber-500 border-amber-500/30"
+                    "text-[10px] font-extrabold uppercase tracking-wider px-2.5 py-1 rounded-full shadow-2xs",
+                    statusTone(o.status).badge
                   )}
                 >
                   {o.status}
@@ -3798,7 +3966,7 @@ const WaiterPanel = () => {
               setWaiterPaymentEntries([]);
               setShowPayBillDialog(true);
             }}
-            className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl flex-1 gap-1.5 shadow-sm"
+            className="bg-success hover:bg-success/90 text-success-foreground font-bold rounded-xl flex-1 gap-1.5 shadow-sm"
           >
             <CreditCard className="h-3.5 w-3.5" /> Pay Table Bill
           </Button>
@@ -3826,15 +3994,15 @@ const WaiterPanel = () => {
               </p>
             </div>
 
-            <Separator className="bg-zinc-200 dark:bg-zinc-850" />
+            <Separator className="bg-border" />
 
             {/* Session meta */}
-            <div className="grid grid-cols-2 gap-y-1.5 gap-x-4 bg-zinc-50 dark:bg-zinc-900/40 p-3 rounded-xl border border-zinc-200 dark:border-zinc-800/80 text-muted-foreground">
+            <div className="grid grid-cols-2 gap-y-1.5 gap-x-4 bg-muted/50 p-3 rounded-xl border border-border text-muted-foreground">
               <div>Table: <strong className="text-foreground">#{selectedTable?.number}</strong></div>
               <div className="text-right">Server: <strong className="text-foreground">{user?.name || "Waiter"}</strong></div>
               <div>Date: <strong className="text-foreground">{new Date().toLocaleDateString()}</strong></div>
               <div className="text-right">Time: <strong className="text-foreground">{new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</strong></div>
-              <div className="col-span-2 border-t border-zinc-200 dark:border-zinc-800/80 pt-1.5 flex justify-between items-center text-foreground font-semibold">
+              <div className="col-span-2 border-t border-border pt-1.5 flex justify-between items-center text-foreground font-semibold">
                 <span>Customer: <strong>{selectedCustomerData?.name || activeTableOrders.find(o => o.customerName && o.customerName !== "Walk-in")?.customerName || "Walk-in"}</strong></span>
                 {(selectedCustomerData?.phone || activeTableOrders.find(o => o.phone)?.phone) && (
                   <span className="text-muted-foreground font-medium">({selectedCustomerData?.phone || activeTableOrders.find(o => o.phone)?.phone})</span>
@@ -3842,13 +4010,13 @@ const WaiterPanel = () => {
               </div>
             </div>
 
-            <Separator className="bg-zinc-200 dark:bg-zinc-850" />
+            <Separator className="bg-border" />
 
             {/* Items table */}
-            <div className="border border-zinc-200 dark:border-zinc-800/80 rounded-xl overflow-hidden bg-zinc-50 dark:bg-zinc-950/20 max-h-[220px] overflow-y-auto pr-0.5">
+            <div className="border border-border rounded-xl overflow-hidden bg-muted/30 max-h-[220px] overflow-y-auto pr-0.5">
               <Table>
-                <TableHeader className="bg-zinc-100 dark:bg-zinc-900/50">
-                  <TableRow className="hover:bg-transparent border-zinc-200 dark:border-zinc-850">
+                <TableHeader className="bg-muted/50">
+                  <TableRow className="hover:bg-transparent border-border">
                     <TableHead className="text-muted-foreground font-bold h-8 text-[11px] py-1">Item</TableHead>
                     <TableHead className="text-muted-foreground font-bold h-8 text-[11px] text-center w-12 py-1">Qty</TableHead>
                     <TableHead className="text-muted-foreground font-bold h-8 text-[11px] text-right w-20 py-1">Total</TableHead>
@@ -3858,7 +4026,7 @@ const WaiterPanel = () => {
                   {activeTableOrders.flatMap((o) => o.items).map((item, idx) => {
                     const itemTotal = item.price * item.qty;
                     return (
-                      <TableRow key={idx} className="hover:bg-zinc-100 dark:hover:bg-zinc-900/30 border-zinc-200 dark:border-zinc-850">
+                      <TableRow key={idx} className="hover:bg-muted/50 border-border">
                         <TableCell className="font-semibold text-foreground py-2 text-[11px]">
                           {item.name}
                           {item.modifiers && item.modifiers.length > 0 && (
@@ -3874,16 +4042,16 @@ const WaiterPanel = () => {
               </Table>
             </div>
 
-            <Separator className="bg-zinc-200 dark:bg-zinc-850" />
+            <Separator className="bg-border" />
 
             {/* Totals Summary */}
-            <div className="bg-zinc-50 dark:bg-zinc-900/30 rounded-xl p-3 border border-zinc-200 dark:border-zinc-800/80 space-y-1.5">
+            <div className="bg-muted/50 rounded-xl p-3 border border-border space-y-1.5">
               <div className="flex justify-between text-muted-foreground">
                 <span>Subtotal</span>
                 <span className="font-semibold text-foreground">{currency} {activeTableOrders.reduce((s, o) => s + Number(o.subtotal), 0).toLocaleString()}</span>
               </div>
               {activeTableDiscount > 0 && (
-                <div className="flex justify-between text-emerald-600 dark:text-emerald-400 font-medium">
+                <div className="flex justify-between text-success font-medium">
                   <span className="truncate pr-2">{activeTableDealName ?? "Discount"}</span>
                   <span className="shrink-0">- {currency} {activeTableDiscount.toLocaleString()}</span>
                 </div>
@@ -3892,7 +4060,7 @@ const WaiterPanel = () => {
                 <span>Tax ({taxRate}%)</span>
                 <span className="font-semibold text-foreground">{currency} {activeTableOrders.reduce((s, o) => s + Number(o.tax), 0).toLocaleString()}</span>
               </div>
-              <Separator className="bg-zinc-200 dark:bg-zinc-800 my-1" />
+              <Separator className="bg-border my-1" />
               <div className="flex justify-between font-extrabold text-sm text-foreground">
                 <span>Grand Total</span>
                 <span className={currentAdvancePayment > 0 ? "text-foreground font-bold" : "text-primary"}>
@@ -3901,11 +4069,11 @@ const WaiterPanel = () => {
               </div>
               {currentAdvancePayment > 0 && (
                 <>
-                  <div className="flex justify-between items-center text-xs font-bold text-emerald-600 dark:text-emerald-400 pt-1">
+                  <div className="flex justify-between items-center text-xs font-bold text-success pt-1">
                     <span>Advance Paid Credit</span>
                     <span>- {currency} {currentAdvancePayment.toLocaleString()}</span>
                   </div>
-                  <Separator className="bg-zinc-200 dark:bg-zinc-800 my-1" />
+                  <Separator className="bg-border my-1" />
                   <div className="flex justify-between font-extrabold text-sm text-foreground">
                     <span>Net Payable</span>
                     <span className="text-primary font-black text-base">
@@ -3917,8 +4085,8 @@ const WaiterPanel = () => {
             </div>
 
             {isSessionPaid && (
-              <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-xl p-3 text-center space-y-1">
-                <p className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">Payment Details</p>
+              <div className="bg-success/5 border border-success/20 rounded-xl p-3 text-center space-y-1">
+                <p className="text-[10px] font-bold text-success uppercase tracking-wider">Payment Details</p>
                 <p className="font-extrabold text-foreground text-xs">
                   Settled via {activeTableOrders[0]?.paymentMethod || "Settle Completed"}
                 </p>
@@ -3931,7 +4099,7 @@ const WaiterPanel = () => {
             </div>
           </div>
           <DialogFooter className="flex gap-2 mt-2">
-            <Button variant="outline" onClick={() => setShowBillDialog(false)} className="rounded-xl flex-1 border-zinc-200 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-900 text-muted-foreground hover:text-foreground">Close</Button>
+            <Button variant="outline" onClick={() => setShowBillDialog(false)} className="rounded-xl flex-1 border-border hover:bg-muted text-muted-foreground hover:text-foreground">Close</Button>
             <Button onClick={() => { printActiveBill(); setShowBillDialog(false); }} className="gradient-primary text-primary-foreground font-bold rounded-xl flex-1 flex items-center justify-center gap-1.5 shadow-md">
               <Printer className="h-4 w-4" /> Print Receipt
             </Button>
@@ -3946,7 +4114,7 @@ const WaiterPanel = () => {
           {/* Modal Header with Icon Badge */}
           <div className="flex items-center justify-between pb-3 border-b border-border/40">
             <div className="flex items-center gap-2.5">
-              <div className="h-9 w-9 rounded-xl bg-orange-500/10 border border-orange-500/20 flex items-center justify-center text-orange-500 shadow-inner">
+              <div className="h-9 w-9 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary shadow-inner">
                 <Receipt className="h-4 w-4" />
               </div>
               <div>
@@ -3954,7 +4122,7 @@ const WaiterPanel = () => {
                 <DialogDescription className="text-[11px] text-muted-foreground">Settle Table {selectedTable?.number} billing</DialogDescription>
               </div>
             </div>
-            <Badge variant="outline" className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 border-orange-500/40 text-orange-500 bg-orange-500/10 rounded-full">
+            <Badge variant="outline" className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 border-primary/40 text-primary bg-primary/10 rounded-full">
               Table {selectedTable?.number}{selectedTable?.floorName ? ` · ${selectedTable.floorName}` : ""}
             </Badge>
           </div>
@@ -3967,7 +4135,7 @@ const WaiterPanel = () => {
                 {/* Customer Info Header */}
                 <div className="flex items-center justify-between pb-2 border-b border-border/50">
                   <div className="flex items-center gap-2 min-w-0">
-                    <div className="h-7 w-7 rounded-lg bg-orange-500/10 text-orange-500 flex items-center justify-center shrink-0">
+                    <div className="h-7 w-7 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
                       <User className="h-3.5 w-3.5" />
                     </div>
                     <div className="min-w-0">
@@ -4065,7 +4233,7 @@ const WaiterPanel = () => {
                       <span className="font-mono tabular-nums">{currency} {subtotalSum.toLocaleString()}</span>
                     </div>
                     {activeTableDiscount > 0 && (
-                      <div className="flex justify-between text-emerald-500 text-[11px]">
+                      <div className="flex justify-between text-success text-[11px]">
                         <span>{activeTableDealName ?? "Discount"}</span>
                         <span className="font-mono tabular-nums">-{currency} {Math.round(activeTableDiscount).toLocaleString()}</span>
                       </div>
@@ -4075,7 +4243,7 @@ const WaiterPanel = () => {
                       <span className="font-mono tabular-nums">{currency} {taxSum.toLocaleString()}</span>
                     </div>
                     {currentAdvancePayment > 0 && (
-                      <div className="flex justify-between text-emerald-500 font-semibold text-[11px]">
+                      <div className="flex justify-between text-success font-semibold text-[11px]">
                         <span>Advance Paid Credit</span>
                         <span className="font-mono tabular-nums">-{currency} {Math.round(currentAdvancePayment).toLocaleString()}</span>
                       </div>
@@ -4083,7 +4251,7 @@ const WaiterPanel = () => {
 
                     <div className="flex justify-between items-center pt-2 border-t border-border/60 font-bold">
                       <span className="uppercase tracking-wider text-[11px] text-muted-foreground">Order Total</span>
-                      <span className="text-2xl lg:text-3xl font-black text-amber-500 dark:text-amber-400 font-mono tracking-tight tabular-nums">
+                      <span className="text-2xl lg:text-3xl font-black text-primary font-mono tracking-tight tabular-nums">
                         {currency} {netAmountDue.toLocaleString()}
                       </span>
                     </div>
@@ -4108,9 +4276,9 @@ const WaiterPanel = () => {
                       <span className="font-mono text-muted-foreground text-[11px]">
                         {waiterPaymentEntries.length > 0 ? (
                           waiterTotalPaid > netAmountDue ? (
-                            <span className="text-emerald-500 font-bold">Change: {currency} {(waiterTotalPaid - netAmountDue).toLocaleString()}</span>
+                            <span className="text-success font-bold">Change: {currency} {(waiterTotalPaid - netAmountDue).toLocaleString()}</span>
                           ) : (
-                            <>Remaining: <strong className={cn(waiterTotalDue > 0 ? "text-amber-500 font-bold" : "text-emerald-500 font-bold")}>{currency} {waiterTotalDue.toLocaleString()}</strong></>
+                            <>Remaining: <strong className={cn(waiterTotalDue > 0 ? "text-warning font-bold" : "text-success font-bold")}>{currency} {waiterTotalDue.toLocaleString()}</strong></>
                           )
                         ) : (
                           <>Due: <strong className="text-foreground font-bold">{currency} {netAmountDue.toLocaleString()}</strong></>
@@ -4131,7 +4299,7 @@ const WaiterPanel = () => {
                             className={cn(
                               "flex items-center justify-center gap-2 h-10 rounded-xl border text-xs font-semibold transition-all cursor-pointer",
                               isSelected
-                                ? "border-2 border-orange-500 bg-orange-500/10 text-orange-500 font-bold shadow-xs"
+                                ? "border-2 border-primary bg-primary/10 text-primary font-bold shadow-xs"
                                 : "border-border/60 text-muted-foreground hover:text-foreground hover:bg-muted/50"
                             )}
                           >
@@ -4155,13 +4323,13 @@ const WaiterPanel = () => {
                             const val = e.target.value;
                             setWaiterGivenAmount(val === "" ? 0 : Math.round(Number(val)) || 0);
                           }}
-                          className="h-10 pl-9 text-sm font-mono font-bold rounded-xl border-border/70 focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
+                          className="h-10 pl-9 text-sm font-mono font-bold rounded-xl border-border/70 focus:border-primary focus:ring-1 focus:ring-primary"
                         />
                       </div>
                       <Button
                         type="button"
                         size="sm"
-                        className="h-10 px-4 shrink-0 gap-1.5 bg-orange-600 hover:bg-orange-500 text-white font-bold rounded-xl shadow-xs"
+                        className="h-10 px-4 shrink-0 gap-1.5 gradient-primary text-primary-foreground font-bold rounded-xl shadow-xs"
                         onClick={() => {
                           const amt = Math.round(waiterGivenAmount > 0 ? waiterGivenAmount : waiterTotalDue);
                           if (amt <= 0) { toast.error("Enter a valid payment amount"); return; }
@@ -4181,7 +4349,7 @@ const WaiterPanel = () => {
                           <div key={e.id} className="flex items-center justify-between text-xs bg-muted/40 border border-border/40 rounded-xl px-3 py-2">
                             <span className="font-semibold text-foreground">{e.method}</span>
                             <div className="flex items-center gap-2">
-                              <span className="font-mono font-bold text-emerald-500 tabular-nums">{currency} {e.amount.toLocaleString()}</span>
+                              <span className="font-mono font-bold text-success tabular-nums">{currency} {e.amount.toLocaleString()}</span>
                               <button
                                 onClick={() => {
                                   setWaiterPaymentEntries(prev => {
@@ -4191,9 +4359,10 @@ const WaiterPanel = () => {
                                     return updated;
                                   });
                                 }}
-                                className="text-destructive/70 hover:text-destructive transition-colors cursor-pointer"
+                                className="h-9 w-9 flex items-center justify-center text-destructive/70 hover:text-destructive transition-colors cursor-pointer"
+                                aria-label="Remove payment entry"
                               >
-                                <X className="h-3.5 w-3.5" />
+                                <X className="h-4 w-4" />
                               </button>
                             </div>
                           </div>
@@ -4201,7 +4370,7 @@ const WaiterPanel = () => {
 
                         <div className="flex justify-between items-center pt-2 border-t border-border/40 text-xs">
                           <span className="text-muted-foreground font-medium">Total Settled:</span>
-                          <span className={cn("font-mono font-bold tabular-nums", waiterTotalPaid >= netAmountDue ? "text-emerald-500" : "text-amber-500")}>
+                          <span className={cn("font-mono font-bold tabular-nums", waiterTotalPaid >= netAmountDue ? "text-success" : "text-warning")}>
                             {currency} {waiterTotalPaid.toLocaleString()} / {currency} {netAmountDue.toLocaleString()}
                           </span>
                         </div>
@@ -4210,9 +4379,9 @@ const WaiterPanel = () => {
 
                     {/* Change Return Banner when customer overpays */}
                     {waiterTotalPaid > netAmountDue && (
-                      <div className="flex items-center justify-between p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-xs font-bold transition-all animate-in fade-in">
+                      <div className="flex items-center justify-between p-2.5 rounded-xl bg-success/10 border border-success/30 text-success text-xs font-bold transition-all animate-in fade-in">
                         <span className="flex items-center gap-1.5">
-                          <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                          <CheckCircle2 className="h-4 w-4 text-success" />
                           <span>Change Return:</span>
                         </span>
                         <span className="font-mono text-sm tabular-nums">{currency} {(waiterTotalPaid - netAmountDue).toLocaleString()}</span>
@@ -4235,7 +4404,7 @@ const WaiterPanel = () => {
                       className={cn(
                         "w-full h-11 text-xs font-bold rounded-xl gap-2 transition-all active:scale-[0.99] shadow-md",
                         isReady && !settlingBillingState
-                          ? "bg-orange-600 hover:bg-orange-500 text-white font-bold shadow-orange-500/20"
+                          ? "gradient-primary text-primary-foreground font-bold shadow-primary/20"
                           : "bg-muted text-muted-foreground opacity-50 cursor-not-allowed"
                       )}
                       onClick={() => {
@@ -4278,7 +4447,7 @@ const WaiterPanel = () => {
               <Button
                 variant="outline"
                 size="icon"
-                className="h-10 w-10 rounded-full border-zinc-200 dark:border-zinc-800 transition-all duration-200 hover:scale-105 active:scale-95"
+                className="h-10 w-10 rounded-full border-border transition-all duration-200 hover:scale-105 active:scale-95"
                 onClick={() => setGuestsCount(prev => Math.max(1, prev - 1))}
               >
                 <Minus className="h-4 w-4" />
@@ -4292,7 +4461,7 @@ const WaiterPanel = () => {
               <Button
                 variant="outline"
                 size="icon"
-                className="h-10 w-10 rounded-full border-zinc-200 dark:border-zinc-800 transition-all duration-200 hover:scale-105 active:scale-95"
+                className="h-10 w-10 rounded-full border-border transition-all duration-200 hover:scale-105 active:scale-95"
                 onClick={() => setGuestsCount(prev => Math.min(50, prev + 1))}
               >
                 <Plus className="h-4 w-4" />
@@ -4306,8 +4475,8 @@ const WaiterPanel = () => {
                     <BookOpen className="h-4 w-4" /> Link Today's Booking / Reservation
                   </Label>
                   {selectedReservationForSitting && (
-                    <Badge variant="outline" className="text-[10px] bg-amber-500/10 text-amber-500 border-amber-500/30 font-bold px-2 py-0.5">
-                      ✓ Linked
+                    <Badge variant="outline" className="text-[10px] bg-amber-500/10 text-amber-500 border-amber-500/30 font-bold px-2 py-0.5 gap-1">
+                      <Check className="h-3 w-3" /> Linked
                     </Badge>
                   )}
                 </div>
@@ -4443,7 +4612,7 @@ const WaiterPanel = () => {
             <Button
               variant="outline"
               onClick={() => setShowGuestsDialog(false)}
-              className="rounded-xl flex-1 border-zinc-200 dark:border-zinc-800 transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
+              className="rounded-xl flex-1 border-border transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
             >
               Cancel
             </Button>
@@ -4461,81 +4630,6 @@ const WaiterPanel = () => {
                   <Check className="h-4 w-4" /> {guestsActionType === "start-sitting" ? "Start Sitting" : "Confirm Order"}
                 </>
               )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* ── Add New Customer Dialog ── */}
-      <Dialog open={showCustomerAddDialog} onOpenChange={setShowCustomerAddDialog}>
-        <DialogContent className="max-w-md rounded-2xl">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <User className="h-5 w-5 text-primary" />
-              Add New Customer
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3 py-2">
-            <div>
-              <Label className="text-xs font-semibold">Customer Name *</Label>
-              <Input
-                value={newCustomerForm.name}
-                onChange={(e) => setNewCustomerForm(prev => ({ ...prev, name: e.target.value }))}
-                placeholder="Enter customer name"
-                className="mt-1 h-9 text-xs rounded-xl"
-              />
-            </div>
-            <div>
-              <Label className="text-xs font-semibold">Phone Number (11 Digits) *</Label>
-              <Input
-                value={newCustomerForm.phone}
-                onChange={(e) => setNewCustomerForm(prev => ({ ...prev, phone: formatPhoneNumber(e.target.value) }))}
-                placeholder="0300-1234567"
-                maxLength={12}
-                className="mt-1 h-9 text-xs rounded-xl"
-              />
-            </div>
-            <div>
-              <Label className="text-xs font-semibold">Email Address (Optional)</Label>
-              <Input
-                type="email"
-                value={newCustomerForm.email}
-                onChange={(e) => setNewCustomerForm(prev => ({ ...prev, email: e.target.value }))}
-                placeholder="customer@email.com"
-                className="mt-1 h-9 text-xs rounded-xl"
-              />
-            </div>
-            <div>
-              <Label className="text-xs font-semibold">Address (Optional)</Label>
-              <Input
-                value={newCustomerForm.address}
-                onChange={(e) => setNewCustomerForm(prev => ({ ...prev, address: e.target.value }))}
-                placeholder="Address..."
-                className="mt-1 h-9 text-xs rounded-xl"
-              />
-            </div>
-            <div>
-              <Label className="text-xs font-semibold">Customer Type</Label>
-              <Select
-                value={newCustomerForm.customerType}
-                onValueChange={(val) => setNewCustomerForm(prev => ({ ...prev, customerType: val }))}
-              >
-                <SelectTrigger className="mt-1 h-9 text-xs rounded-xl">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="walk-in">Standard / Walk-in</SelectItem>
-                  <SelectItem value="corporate">Corporate</SelectItem>
-                  <SelectItem value="vip">VIP</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setShowCustomerAddDialog(false)} className="rounded-xl">Cancel</Button>
-            <Button className="gradient-primary text-primary-foreground font-bold rounded-xl" onClick={handleAddCustomerSubmit} disabled={creatingCustomer}>
-              {creatingCustomer ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Plus className="h-4 w-4 mr-1" />}
-              Save Customer
             </Button>
           </DialogFooter>
         </DialogContent>

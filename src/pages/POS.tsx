@@ -24,9 +24,11 @@ import { useQuery } from "@tanstack/react-query";
 import { cashSettlementService } from "@/services/cashSettlement.service";
 import { getSocket } from "@/lib/socket";
 import { useModuleEvents } from "@/hooks/use-module-events";
-import { Search, Plus, Minus, X, ShoppingCart, FileText, Printer, ArrowLeft, Trash2, User, Users, MapPin, Phone, Flame, Check, CreditCard, Banknote, Smartphone, RotateCcw, Download, ClipboardList, AlertTriangle, UtensilsCrossed, CalendarClock, Calendar, Timer, ChefHat, Tag, Zap, History, Monitor, BookOpen, StickyNote, Eye, Building2, Crown, CircleAlert, Bell, DollarSign, Package, Ban, Truck, ShoppingBag, Utensils, AlertCircle, CheckCircle2, Clock, Loader2, Wallet, Info, Coins, Layers, Gift, Percent, Receipt } from "lucide-react";
+import { Search, Plus, Minus, X, ShoppingCart, FileText, Printer, ArrowLeft, Trash2, User, Users, MapPin, Phone, Flame, Check, CreditCard, Banknote, Smartphone, RotateCcw, Download, ClipboardList, AlertTriangle, UtensilsCrossed, CalendarClock, Calendar, Timer, ChefHat, Tag, Zap, History, Monitor, BookOpen, StickyNote, Eye, Building2, Crown, CircleAlert, Bell, DollarSign, Package, Ban, Truck, ShoppingBag, Utensils, AlertCircle, CheckCircle2, Clock, Loader2, Wallet, Info, Coins, Layers, Gift, Percent, Receipt, Wrench } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { statusTone } from "@/lib/statusTone";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
@@ -102,6 +104,45 @@ function resolvePrice(target: any, orderType: string): number {
   const key = map[orderType];
   if (key && target[key] != null) return Number(target[key]);
   return Number(target.price ?? 0);
+}
+
+type StatusTileKey = "pending" | "preparing" | "ready" | "completed";
+
+// Hover tint per status, kept literal so Tailwind picks the classes up. The active look comes from statusTone().tile.
+const STATUS_TILE_HOVER: Record<StatusTileKey, string> = {
+  pending: "hover:bg-warning/10 hover:text-warning",
+  preparing: "hover:bg-info/10 hover:text-info",
+  ready: "hover:bg-success/10 hover:text-success",
+  completed: "hover:bg-success/10 hover:text-success",
+};
+
+/** Status filter tile shared by the Order Status and Kitchen Display sheets, so both stay on the canonical status colors. */
+function StatusFilterTile({ status, label, icon: Icon, count, active, onClick }: {
+  status: StatusTileKey;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+  count: number;
+  active: boolean;
+  onClick: () => void;
+}) {
+  const tone = statusTone(status);
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "p-3 rounded-2xl border text-center transition-all cursor-pointer flex flex-col items-center justify-center gap-1.5 font-bold",
+        active
+          ? cn(tone.tile, "font-extrabold ring-1 ring-current shadow-md scale-[1.02]")
+          : cn("bg-muted/40 border-border/70 text-muted-foreground", STATUS_TILE_HOVER[status])
+      )}
+    >
+      <div className={cn("flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wider", tone.text)}>
+        <Icon className="h-3.5 w-3.5" /> {label}
+      </div>
+      <span className={cn("text-xl font-black", tone.text)}>{count}</span>
+    </button>
+  );
 }
 
 interface DraftOrder {
@@ -597,7 +638,7 @@ const POS = () => {
   const handleApproveCash = async (orderId: string, orderNumber: string) => {
     const targetOrder = (apiOrders as any[]).find(o => o.id === orderId) || (localOrdersData as any[]).find(o => o.id === orderId);
     if (targetOrder?.hasPendingCancellationRequest) {
-      toast.error("Cannot approve cash while a cancellation request is pending approval.");
+      toast.error("Cannot approve cash while a cancellation request is pending approval");
       return;
     }
     setApprovingCashId(orderId);
@@ -605,7 +646,7 @@ const POS = () => {
       markMine();
       const nowIso = new Date().toISOString();
       await orderService.updateOrder(orderId, { cashApproved: true });
-      toast.success(`Cash approved for Order ${orderNumber}!`);
+      toast.success(`Cash approved for Order ${orderNumber}`);
       setApiOrders(prev => prev.map(o => o.id === orderId ? { ...o, cashApproved: true, updatedAt: nowIso } : o));
       await loadApiOrders();
       const localMatch = localOrdersData.find(o => o.id === orderId);
@@ -1875,7 +1916,7 @@ const POS = () => {
     if (!hasVariants && !hasModifiers) {
       const avail = calculateFoodAvailability((item as any).recipes || [], null, ingredientStockMap, productionStockMap);
       if (avail.isRestricted && avail.availableQuantity === 0) {
-        toast.error(`Cannot add ${item.name} - Out of stock based on ingredient stock`);
+        toast.error(`Cannot add ${item.name} — out of stock based on ingredient stock`);
         return;
       }
       const itemPrice = resolvePrice(item, orderType);
@@ -2148,7 +2189,7 @@ const POS = () => {
 
   const loadRunningOrder = (orderId: string) => {
     if (myPendingCancelOrderIds.has(orderId)) {
-      toast.error("This order has a pending cancellation request and cannot be modified.");
+      toast.error("This order has a pending cancellation request and cannot be modified");
       return;
     }
     // Clicking a different order (or a plain cart's worth of items) would
@@ -2224,7 +2265,7 @@ const POS = () => {
     // running, billing the customer twice for the same food.
     if (loadedOrderId) {
       const orderNo = (allOrdersData as any[]).find((o) => o.id === loadedOrderId)?.orderNumber || "This order";
-      toast.error(`${orderNo} is already placed — use Update Order instead. Drafts are for orders that haven't been sent to the kitchen yet.`);
+      toast.error(`${orderNo} is already placed — use Update Order instead. Drafts are for orders that haven't been sent to the kitchen yet`);
       return;
     }
     const draft: DraftOrder = {
@@ -2251,15 +2292,15 @@ const POS = () => {
     if (orderType === "Delivery") {
       const activePhone = (selectedCustomerData as any)?.phone || deliveryPhone;
       if (!deliveryAddress || !deliveryAddress.trim()) {
-        toast.error("Delivery address is required!");
+        toast.error("Delivery address is required");
         return false;
       }
       if (!activePhone || !activePhone.trim()) {
-        toast.error("Customer phone number is required!");
+        toast.error("Customer phone number is required");
         return false;
       }
       if (!isValidPakistaniPhone(activePhone)) {
-        toast.error("Customer phone number must be 11 digits (03XX-XXXXXXX)!");
+        toast.error("Customer phone number must be 11 digits (03XX-XXXXXXX)");
         return false;
       }
     }
@@ -2320,15 +2361,15 @@ const POS = () => {
     if (orderType === "Delivery") {
       const activePhone = (selectedCustomerData as any)?.phone || deliveryPhone;
       if (!deliveryAddress || !deliveryAddress.trim()) {
-        toast.error("Delivery address is required!");
+        toast.error("Delivery address is required");
         return;
       }
       if (!activePhone || !activePhone.trim()) {
-        toast.error("Customer phone number is required!");
+        toast.error("Customer phone number is required");
         return;
       }
       if (!isValidPakistaniPhone(activePhone)) {
-        toast.error("Customer phone number must be 11 digits (03XX-XXXXXXX)!");
+        toast.error("Customer phone number must be 11 digits (03XX-XXXXXXX)");
         return;
       }
     }
@@ -2339,11 +2380,11 @@ const POS = () => {
         return;
       }
       if (advanceTotal >= total) {
-        toast.error("Advance cannot equal or exceed the total. Use Full Prepaid instead.");
+        toast.error("Advance cannot equal or exceed the total. Use Full Prepaid instead");
         return;
       }
     } else if (orderType !== "Delivery" && totalPaid < netPayable) {
-      toast.error(`Full payment required (Rs. ${netPayable.toLocaleString()}). Remaining balance must be 0.`);
+      toast.error(`Full payment required (Rs. ${netPayable.toLocaleString()}). Remaining balance must be 0`);
       return;
     }
 
@@ -2382,7 +2423,7 @@ const POS = () => {
     if (loadedOrderId) {
       const loadedOrder = (allOrdersData as any[]).find((o) => o.id === loadedOrderId);
       if (loadedOrder?.hasPendingCancellationRequest) {
-        toast.error("Cannot pay for or update order while a cancellation request is pending approval.");
+        toast.error("Cannot pay for or update order while a cancellation request is pending approval");
         return;
       }
     }
@@ -2417,7 +2458,7 @@ const POS = () => {
       if (loadedOrderId) {
         const updated = await orderService.updateOrder(loadedOrderId, orderPayload);
         finalOrderNumber = updated.orderNumber || (allOrdersData as any[]).find((x) => x.id === loadedOrderId)?.orderNumber || "Updated";
-        toast.success(`Order ${finalOrderNumber} updated!`);
+        toast.success(`Order ${finalOrderNumber} updated`);
       } else {
         // Precompute the online-only side-effect inputs BEFORE the network call — needed either
         // way (fire immediately if online, or deferred into the offline queue's postSync if not),
@@ -2478,7 +2519,7 @@ const POS = () => {
             deliveryService.assignRider({ orderId: created.id, riderId: selectedRiderId, estimatedTime: 30 })
               .catch(() => {});
           }
-          toast.success(`Order ${finalOrderNumber} placed! Net Payable: Rs. ${netPayable.toLocaleString()}`);
+          toast.success(`Order ${finalOrderNumber} placed. Net payable: Rs. ${netPayable.toLocaleString()}`);
         }
       }
     } catch (err: any) {
@@ -2634,7 +2675,7 @@ const POS = () => {
     handleOrderStatusUpdate(order.id, "pending");
 
     setShowFutureSale(false);
-    toast.success(`Future order ${order.orderNumber} loaded \u2014 Advance paid: Rs.${order.advancePayment || 0}`);
+    toast.success(`Future order ${order.orderNumber} loaded \u2014 advance paid: Rs.${order.advancePayment || 0}`);
   };
 
   const loadReservationToPOSCart = (res: ReservationRecord) => {
@@ -2681,7 +2722,7 @@ const POS = () => {
     }
 
     setShowReservations(false);
-    toast.success(`Loaded ${res.orderType || "Reservation"} for ${res.customerName} into POS cart!`);
+    toast.success(`Loaded ${res.orderType || "Reservation"} for ${res.customerName} into POS cart`);
   };
 
   const formatPhoneNumber = (val: string): string => {
@@ -2850,24 +2891,20 @@ const POS = () => {
                   className={cn(
                     "p-2.5 rounded-2xl border transition-all duration-200 cursor-pointer text-xs space-y-2 group shadow-2xs relative",
                     selectedRunningOrder === o.id
-                      ? "bg-orange-500/10 border-orange-500/80 shadow-sm ring-1 ring-orange-500/30"
+                      ? "bg-primary/10 border-primary/80 shadow-sm ring-1 ring-primary/30"
                       : "bg-muted/20 hover:bg-muted/40 border-border/60 hover:border-border/90"
                   )}
                 >
                   {/* Top Line: Order Number, Status Badge & Print Icon */}
                   <div className="flex items-center justify-between gap-1">
-                    <span className="font-mono font-black text-xs tracking-tight text-foreground group-hover:text-orange-500 transition-colors">
+                    <span className="font-mono font-black text-xs tracking-tight text-foreground group-hover:text-primary transition-colors">
                       #{o.orderNumber}
                     </span>
                     <div className="flex items-center gap-1 shrink-0">
                       <span
                         className={cn(
                           "text-[9px] px-1.5 py-0.5 rounded-full capitalize font-bold flex items-center gap-1",
-                          o.status === "preparing"
-                            ? "bg-orange-500/10 text-orange-500 border border-orange-500/30"
-                            : o.status === "ready"
-                            ? "bg-emerald-500/10 text-emerald-500 border border-emerald-500/30"
-                            : "bg-amber-500/10 text-amber-500 border border-amber-500/30"
+                          statusTone(o.status === "preparing" || o.status === "ready" ? o.status : "pending").badge
                         )}
                       >
                         {o.status === "preparing" ? (
@@ -2883,7 +2920,7 @@ const POS = () => {
                         type="button"
                         variant="ghost"
                         size="icon"
-                        className="h-6 w-6 rounded-lg text-muted-foreground hover:text-orange-500 hover:bg-orange-500/10 transition-colors p-0"
+                        className="h-9 w-9 rounded-lg text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors p-0"
                         title="Print Slip (KOT / Bill)"
                         onClick={(e) => {
                           e.stopPropagation();
@@ -3012,15 +3049,15 @@ const POS = () => {
                   key={t}
                   onClick={() => handleOrderTypeChange(t)}
                   className={cn(
-                    "inline-flex items-center justify-center gap-1.5 h-7 flex-1 rounded-[10px] text-xs font-semibold transition-all select-none",
+                    "inline-flex items-center justify-center gap-1.5 h-10 flex-1 rounded-[10px] text-xs font-semibold transition-all select-none",
                     orderType === t
                       ? "gradient-primary text-primary-foreground shadow-sm"
                       : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
                   )}
                 >
-                  {t === "Dine In" && <UtensilsCrossed className="h-3 w-3 shrink-0" />}
-                  {t === "Take Away" && <ShoppingBag className="h-3 w-3 shrink-0" />}
-                  {t === "Delivery" && <Truck className="h-3 w-3 shrink-0" />}
+                  {t === "Dine In" && <UtensilsCrossed className="h-3.5 w-3.5 shrink-0" />}
+                  {t === "Take Away" && <ShoppingBag className="h-3.5 w-3.5 shrink-0" />}
+                  {t === "Delivery" && <Truck className="h-3.5 w-3.5 shrink-0" />}
                   {t}
                 </button>
               ))}
@@ -3056,14 +3093,18 @@ const POS = () => {
                   {backendTables.length > 0
                     ? backendTables.map((t) => (
                         <SelectItem key={t.id} value={String(Number(t.number))} disabled={t.status === "occupied" || t.status === "bill-requested"}>
-                          {t.status === "available" && "🟢 "}
-                          {t.status === "occupied" && "🔴 "}
-                          {t.status === "bill-requested" && "🧾 "}
-                          {t.status === "reserved" && "🟡 "}
-                          {t.status === "maintenance" && "🔧 "}
-                          Table {t.number}
-                          {t.floor ? ` · ${t.floor}` : ""}
-                          {t.status && ` · ${t.status === 'bill-requested' ? 'Bill Req' : t.status.charAt(0).toUpperCase() + t.status.slice(1)}`}
+                          <span className="inline-flex items-center gap-1.5">
+                            {t.status === "available" && <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-success" />}
+                            {t.status === "occupied" && <Users className="h-3.5 w-3.5 shrink-0 text-destructive" />}
+                            {t.status === "bill-requested" && <Receipt className="h-3.5 w-3.5 shrink-0 text-info" />}
+                            {t.status === "reserved" && <Clock className="h-3.5 w-3.5 shrink-0 text-warning" />}
+                            {t.status === "maintenance" && <Wrench className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />}
+                            <span>
+                              Table {t.number}
+                              {t.floor ? ` · ${t.floor}` : ""}
+                              {t.status && ` · ${t.status === 'bill-requested' ? 'Bill Req' : t.status.charAt(0).toUpperCase() + t.status.slice(1)}`}
+                            </span>
+                          </span>
                         </SelectItem>
                       ))
                     : Array.from({ length: 12 }, (_, i) => i + 1).map((t) => (
@@ -3108,7 +3149,7 @@ const POS = () => {
                   value={deliveryAddress}
                   onChange={(e) => setDeliveryAddress(e.target.value)}
                   placeholder="Delivery address *"
-                  className={cn("h-8 text-xs", !deliveryAddress.trim() && "border-amber-500/40 focus:border-amber-500")}
+                  className={cn("h-8 text-xs", !deliveryAddress.trim() && "border-warning/40 focus:border-warning")}
                 />
               </div>
               {/* Phone + Rider */}
@@ -3119,7 +3160,7 @@ const POS = () => {
                   maxLength={12}
                   onChange={(e) => setDeliveryPhone(formatPakistaniPhone(e.target.value))}
                   placeholder="Phone *"
-                  className={cn("h-8 text-xs flex-1 font-mono", !((selectedCustomerData as any)?.phone || deliveryPhone.trim()) && "border-amber-500/40 focus:border-amber-500")}
+                  className={cn("h-8 text-xs flex-1 font-mono", !((selectedCustomerData as any)?.phone || deliveryPhone.trim()) && "border-warning/40 focus:border-warning")}
                 />
                 <Select value={selectedRiderId || "none"} onValueChange={val => {
                   if (val === "none") { setSelectedRiderId(""); setRider("Unassigned"); return; }
@@ -3177,7 +3218,7 @@ const POS = () => {
                                 <Gift className="h-2.5 w-2.5" /> Deal
                               </Badge>
                               {discount > 0 && (
-                                <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-1.5 py-0 rounded border border-emerald-500/20">
+                                <span className="text-[10px] font-bold text-success bg-success/10 px-1.5 py-0 rounded border border-success/20">
                                   Save Rs. {discount.toLocaleString()}
                                 </span>
                               )}
@@ -3198,13 +3239,16 @@ const POS = () => {
                                 </span>
                               )}
                             </div>
-                            <button
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
                               onClick={() => removeDealGroup(row.dealLineId)}
-                              className="text-muted-foreground/60 hover:text-destructive hover:bg-destructive/10 p-1 rounded-md transition-colors print:hidden"
+                              className="h-10 w-10 rounded-md text-muted-foreground/60 hover:text-destructive hover:bg-destructive/10 transition-colors print:hidden"
                               title="Remove Deal"
                             >
-                              <X className="h-3.5 w-3.5" />
-                            </button>
+                              <X className="h-4 w-4" />
+                            </Button>
                           </div>
                         </div>
 
@@ -3249,7 +3293,7 @@ const POS = () => {
                             </p>
                           )}
                           {item.notes && (
-                            <div className="inline-flex items-center gap-1 text-[10px] text-amber-600 dark:text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20 font-medium italic mt-0.5">
+                            <div className="inline-flex items-center gap-1 text-[10px] text-warning bg-warning/10 px-1.5 py-0.5 rounded border border-warning/20 font-medium italic mt-0.5">
                               <StickyNote className="h-2.5 w-2.5 shrink-0" />
                               <span className="truncate max-w-[170px]">{item.notes}</span>
                             </div>
@@ -3267,40 +3311,43 @@ const POS = () => {
                               </span>
                             )}
                           </div>
-                          <button
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
                             onClick={() => removeItem(item.id)}
-                            className="text-muted-foreground/60 hover:text-destructive hover:bg-destructive/10 p-1 rounded-md transition-colors print:hidden"
+                            className="h-10 w-10 rounded-md text-muted-foreground/60 hover:text-destructive hover:bg-destructive/10 transition-colors print:hidden"
                             title="Remove Item"
                           >
-                            <X className="h-3.5 w-3.5" />
-                          </button>
+                            <X className="h-4 w-4" />
+                          </Button>
                         </div>
                       </div>
 
                       {/* Bottom Controls Bar: Qty Stepper, Unit Price, Notes & Discount */}
-                      <div className="flex items-center justify-between gap-2 pt-1 border-t border-border/40 text-xs">
+                      <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-border/40 text-xs">
                         {/* Quantity Stepper */}
                         <div className="flex items-center gap-1 bg-muted/40 p-0.5 rounded-lg border border-border/50 shrink-0">
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="h-6 w-6 rounded-md hover:bg-background shadow-xs text-foreground"
+                            className="h-10 w-10 rounded-md hover:bg-background shadow-xs text-foreground"
                             onClick={() => updateQty(item.id, -1)}
                             title="Decrease quantity"
                           >
-                            <Minus className="h-2.5 w-2.5" />
+                            <Minus className="h-4 w-4" />
                           </Button>
-                          <span className="w-6 text-center font-bold text-xs text-foreground font-mono">
+                          <span className="w-8 text-center font-bold text-sm text-foreground font-mono">
                             {item.qty}
                           </span>
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="h-6 w-6 rounded-md hover:bg-background shadow-xs text-foreground"
+                            className="h-10 w-10 rounded-md hover:bg-background shadow-xs text-foreground"
                             onClick={() => updateQty(item.id, 1)}
                             title="Increase quantity"
                           >
-                            <Plus className="h-2.5 w-2.5" />
+                            <Plus className="h-4 w-4" />
                           </Button>
                         </div>
 
@@ -3354,7 +3401,7 @@ const POS = () => {
               </div>
             )}
             {dealDiscount > 0 && dealPreview && (
-              <div className="flex justify-between text-xs text-emerald-600 dark:text-emerald-400 font-medium">
+              <div className="flex justify-between text-xs text-success font-medium">
                 <span className="flex items-center gap-1 min-w-0">
                   <Tag className="h-3 w-3 shrink-0" />
                   <span className="truncate">{dealPreview.code ? `${dealPreview.dealName} (${dealPreview.code})` : dealPreview.dealName}</span>
@@ -3405,14 +3452,14 @@ const POS = () => {
                 ><Trash2 className="h-3 w-3 mr-1" />Clear</Button>
                 <Button
                   variant="outline"
-                  className="text-amber-500 border-amber-500/30 text-[10px] h-8 rounded-lg hover:bg-amber-500/10 font-semibold"
+                  className="text-warning border-warning/30 text-[10px] h-8 rounded-lg hover:bg-warning/10 font-semibold"
                   onClick={saveDraft}
                   disabled={cart.length === 0 || !!loadedOrderId}
                   title={loadedOrderId ? "Already-placed orders can't be drafted — use Update Order" : "Park this cart as a draft"}
                 ><FileText className="h-3 w-3 mr-1" />Draft</Button>
                 <Button
                   variant="outline"
-                  className="text-blue-500 border-blue-500/30 text-[10px] h-8 rounded-lg hover:bg-blue-500/10 font-semibold"
+                  className="text-info border-info/30 text-[10px] h-8 rounded-lg hover:bg-info/10 font-semibold"
                   onClick={() => setShowQuotation(true)}
                   disabled={cart.length === 0}
                 ><FileText className="h-3 w-3 mr-1" />Quote</Button>
@@ -3483,14 +3530,14 @@ const POS = () => {
                     "group inline-flex items-center gap-1.5 h-8 px-3 rounded-lg border bg-card/80 hover:bg-card transition-all text-xs font-medium text-foreground/80 hover:text-foreground shrink-0 select-none",
                     (foodOutOfStockCount + ingOutOfStockCount) > 0
                       ? "border-destructive/40 hover:border-destructive/60"
-                      : "border-border/60 hover:border-amber-500/40"
+                      : "border-border/60 hover:border-warning/40"
                   )}
                 >
-                  <AlertTriangle className={cn("h-3.5 w-3.5 shrink-0", (foodOutOfStockCount + ingOutOfStockCount) > 0 ? "text-destructive animate-pulse" : "text-amber-500")} />
+                  <AlertTriangle className={cn("h-3.5 w-3.5 shrink-0", (foodOutOfStockCount + ingOutOfStockCount) > 0 ? "text-destructive animate-pulse" : "text-warning")} />
                   <span className="hidden sm:inline">Stock Alerts</span>
                   <span className={cn(
                     "inline-flex items-center justify-center h-5 min-w-[20px] px-1.5 rounded-full text-[10px] font-bold leading-none",
-                    (foodOutOfStockCount + ingOutOfStockCount) > 0 ? "bg-destructive text-white" : "bg-amber-500 text-white"
+                    (foodOutOfStockCount + ingOutOfStockCount) > 0 ? "bg-destructive text-destructive-foreground" : "bg-warning text-warning-foreground"
                   )}>
                     {ingredientAlerts.length + lowStockFoodItems.length}
                   </span>
@@ -3500,12 +3547,12 @@ const POS = () => {
               {/* 3 · Reservations */}
               <button
                 onClick={() => setShowReservations(true)}
-                className="group inline-flex items-center gap-1.5 h-8 px-3 rounded-lg border border-border/60 bg-card/80 hover:bg-card hover:border-blue-400/40 transition-all text-xs font-medium text-foreground/80 hover:text-foreground shrink-0 select-none"
+                className="group inline-flex items-center gap-1.5 h-8 px-3 rounded-lg border border-border/60 bg-card/80 hover:bg-card hover:border-info/40 transition-all text-xs font-medium text-foreground/80 hover:text-foreground shrink-0 select-none"
               >
-                <CalendarClock className="h-3.5 w-3.5 text-blue-400 shrink-0" />
+                <CalendarClock className="h-3.5 w-3.5 text-info shrink-0" />
                 <span className="hidden sm:inline">Reservations</span>
                 {todayReservations.length > 0 && (
-                  <span className="inline-flex items-center justify-center h-5 min-w-[20px] px-1.5 rounded-full text-[10px] font-bold bg-blue-500 text-white leading-none">
+                  <span className="inline-flex items-center justify-center h-5 min-w-[20px] px-1.5 rounded-full text-[10px] font-bold bg-info text-info-foreground leading-none">
                     {todayReservations.length}
                   </span>
                 )}
@@ -3514,18 +3561,18 @@ const POS = () => {
               {/* 4 · Cash Register */}
               <button
                 onClick={() => activeShift ? setShowRegisterClose(true) : setShowRegisterOpen(true)}
-                className="group inline-flex items-center gap-1.5 h-8 px-3 rounded-lg border border-border/60 bg-card/80 hover:bg-card hover:border-emerald-500/40 transition-all text-xs font-medium text-foreground/80 hover:text-foreground shrink-0 select-none"
+                className="group inline-flex items-center gap-1.5 h-8 px-3 rounded-lg border border-border/60 bg-card/80 hover:bg-card hover:border-success/40 transition-all text-xs font-medium text-foreground/80 hover:text-foreground shrink-0 select-none"
               >
-                <DollarSign className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+                <DollarSign className="h-3.5 w-3.5 text-success shrink-0" />
                 <span className="hidden md:inline">{activeShift ? "Cash Register" : "Open Register"}</span>
-                <span className={cn("h-2 w-2 rounded-full shrink-0", activeShift ? "bg-emerald-500 shadow-[0_0_6px_rgba(34,197,94,0.6)]" : "bg-border")} />
+                <span className={cn("h-2 w-2 rounded-full shrink-0", activeShift ? "bg-success shadow-[0_0_6px_hsl(var(--success)/0.6)]" : "bg-border")} />
               </button>
 
               {/* 5 · My Collection (conditional) */}
               {(myActiveCash?.totalExpected ?? 0) > 0 && (
                 <button
                   onClick={() => setShowCashHeldDialog(true)}
-                  className="group inline-flex items-center gap-1.5 h-8 px-3 rounded-lg border border-emerald-500/25 bg-emerald-500/8 hover:bg-emerald-500/15 hover:border-emerald-500/50 transition-all text-xs font-medium text-emerald-600 dark:text-emerald-400 shrink-0 select-none"
+                  className="group inline-flex items-center gap-1.5 h-8 px-3 rounded-lg border border-success/25 bg-success/10 hover:bg-success/15 hover:border-success/50 transition-all text-xs font-medium text-success shrink-0 select-none"
                 >
                   <Wallet className="h-3.5 w-3.5 shrink-0" />
                   <span className="hidden lg:inline font-semibold">My Collection</span>
@@ -3558,7 +3605,7 @@ const POS = () => {
               <span>Deals</span>
               <span className={cn(
                 "text-[10px] px-1.5 py-0.2 rounded-full font-bold",
-                activeCategory === "__deals__" ? "bg-black/20 text-white" : "bg-muted text-muted-foreground"
+                activeCategory === "__deals__" ? "bg-primary-foreground/20 text-primary-foreground" : "bg-muted text-muted-foreground"
               )}>
                 {sellableDeals.length}
               </span>
@@ -3581,7 +3628,7 @@ const POS = () => {
                   <span>{cat}</span>
                   <span className={cn(
                     "text-[10px] px-1.5 py-0.2 rounded-full font-bold",
-                    activeCategory === cat ? "bg-black/20 text-white" : "bg-muted text-muted-foreground"
+                    activeCategory === cat ? "bg-primary-foreground/20 text-primary-foreground" : "bg-muted text-muted-foreground"
                   )}>
                     {count}
                   </span>
@@ -3665,7 +3712,7 @@ const POS = () => {
                             <span className="font-mono font-extrabold text-xs sm:text-sm text-primary">{pricing.priceLabel}</span>
                           </div>
                           {pricing.savingsPercent > 0 && (
-                            <span className="text-[9px] font-extrabold text-emerald-500 bg-emerald-500/10 border border-emerald-500/30 px-1.5 py-0.5 rounded shrink-0 shadow-2xs">
+                            <span className="text-[9px] font-extrabold text-success bg-success/10 border border-success/30 px-1.5 py-0.5 rounded shrink-0 shadow-2xs">
                               SAVE {pricing.savingsPercent}%
                             </span>
                           )}
@@ -4028,12 +4075,12 @@ const POS = () => {
           </DialogHeader>
           <div className="space-y-3">
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-foreground">Item</label>
+              <Label htmlFor="deal-picker-item" className="text-xs font-semibold text-foreground">Item</Label>
               <Select
                 value={pickedDealItemId}
                 onValueChange={(v) => { setPickedDealItemId(v); setPickedDealVariantId(null); }}
               >
-                <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Select an item" /></SelectTrigger>
+                <SelectTrigger id="deal-picker-item" className="h-9 text-xs"><SelectValue placeholder="Select an item" /></SelectTrigger>
                 <SelectContent>
                   {eligibleDealItems.map((m: any) => {
                     const itemVariants = m.variants || [];
@@ -4055,9 +4102,9 @@ const POS = () => {
               if (variants.length === 0) return null;
               return (
                 <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-foreground">Size</label>
+                  <Label htmlFor="deal-picker-size" className="text-xs font-semibold text-foreground">Size</Label>
                   <Select value={pickedDealVariantId || ""} onValueChange={setPickedDealVariantId}>
-                    <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Select a size" /></SelectTrigger>
+                    <SelectTrigger id="deal-picker-size" className="h-9 text-xs"><SelectValue placeholder="Select a size" /></SelectTrigger>
                     <SelectContent>
                       {variants.map((v: any) => {
                         const variantOutOfStock = isMenuItemOutOfStock(menuItem.id, v.id);
@@ -4073,8 +4120,9 @@ const POS = () => {
               );
             })()}
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-foreground">Quantity</label>
+              <Label htmlFor="deal-picker-qty" className="text-xs font-semibold text-foreground">Quantity</Label>
               <Input
+                id="deal-picker-qty"
                 type="number"
                 min={1}
                 value={pickedDealQty}
@@ -4157,7 +4205,7 @@ const POS = () => {
                 {loadedAdvancePayment > 0 ? (
                   <div className="bg-muted/60 p-3 rounded-xl border border-border/60 space-y-1.5 text-xs text-foreground mt-2">
                     <div className="flex justify-between"><span>Gross Order Total:</span><span className="font-mono font-bold">Rs. {total.toLocaleString()}</span></div>
-                    <div className="flex justify-between text-emerald-600 dark:text-emerald-400 font-semibold"><span>Advance Deposit Paid ({loadedAdvanceMethod}):</span><span className="font-mono">- Rs. {loadedAdvancePayment.toLocaleString()}</span></div>
+                    <div className="flex justify-between text-success font-semibold"><span>Advance Deposit Paid ({loadedAdvanceMethod}):</span><span className="font-mono">- Rs. {loadedAdvancePayment.toLocaleString()}</span></div>
                     <div className="flex justify-between font-extrabold text-sm pt-1.5 border-t border-border text-primary"><span>Net Payable:</span><span className="font-mono">Rs. {netPayable.toLocaleString()}</span></div>
                   </div>
                 ) : (
@@ -4177,7 +4225,7 @@ const POS = () => {
 
       {/* Finalize Sale Dialog — High-craft unified checkout */}
       <Dialog open={showFinalizeSale} onOpenChange={setShowFinalizeSale}>
-        <DialogContent className="max-w-[95vw] md:max-w-4xl lg:max-w-5xl p-4 sm:p-6 gap-0 overflow-hidden rounded-3xl bg-card/95 backdrop-blur-xl border border-border/80 shadow-2xl shadow-black/40">
+        <DialogContent className="max-w-[95vw] md:max-w-4xl lg:max-w-5xl p-4 sm:p-6 gap-0 overflow-hidden">
 
           {/* Modal Header with Icon Badge */}
           <div className="flex items-center justify-between pb-3 border-b border-border/40">
@@ -4290,7 +4338,7 @@ const POS = () => {
                   </div>
                 )}
                 {dealDiscount > 0 && dealPreview && (
-                  <div className="flex justify-between text-emerald-600 dark:text-emerald-400 font-medium text-[11px]">
+                  <div className="flex justify-between text-success font-medium text-[11px]">
                     <span className="flex items-center gap-1">
                       <Tag className="h-3 w-3" />
                       {dealPreview.dealName}
@@ -4303,7 +4351,7 @@ const POS = () => {
                   <span className="font-mono tabular-nums">Rs. {tax.toLocaleString()}</span>
                 </div>
                 {loadedAdvancePayment > 0 && (
-                  <div className="flex justify-between text-emerald-600 dark:text-emerald-400 font-semibold text-[11px]">
+                  <div className="flex justify-between text-success font-semibold text-[11px]">
                     <span>Advance Deposit Paid ({loadedAdvanceMethod})</span>
                     <span className="font-mono tabular-nums">-Rs. {loadedAdvancePayment.toLocaleString()}</span>
                   </div>
@@ -4345,7 +4393,7 @@ const POS = () => {
                     ))}
                   </div>
                   {deliveryPayMode === "cod" && (
-                    <p className="text-[11px] text-amber-500 mt-1 flex items-center gap-1.5 bg-amber-500/10 border border-amber-500/20 rounded-xl p-2 font-medium">
+                    <p className="text-[11px] text-warning mt-1 flex items-center gap-1.5 bg-warning/10 border border-warning/20 rounded-xl p-2 font-medium">
                       <Truck className="h-4 w-4 shrink-0" />Rider will collect <strong>Rs. {total.toLocaleString()}</strong> at doorstep
                     </p>
                   )}
@@ -4396,7 +4444,7 @@ const POS = () => {
                     </div>
                     <Button
                       size="sm"
-                      className="h-10 px-4 shrink-0 gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground font-bold rounded-xl shadow-xs"
+                      className="h-10 px-4 shrink-0 gap-1.5 gradient-primary text-primary-foreground font-bold rounded-xl shadow-xs"
                       onClick={() => {
                         if (advanceAmount <= 0) { toast.error("Enter advance amount"); return; }
                         if (advanceAmount >= total) {
@@ -4415,18 +4463,18 @@ const POS = () => {
                     </Button>
                   </div>
                   {advanceEntries.map(e => (
-                    <div key={e.id} className="flex items-center justify-between text-xs bg-muted/40 border border-border/40 rounded-xl px-3 py-2">
+                    <div key={e.id} className="flex items-center justify-between text-xs bg-muted/40 border border-border/40 rounded-xl pl-3 pr-1 py-1">
                       <span className="font-semibold text-foreground">{e.method}</span>
                       <div className="flex items-center gap-2">
-                        <span className="font-mono font-bold text-emerald-500 tabular-nums">Rs. {e.amount.toLocaleString()}</span>
-                        <button onClick={() => setAdvanceEntries(prev => prev.filter(x => x.id !== e.id))} className="text-destructive/70 hover:text-destructive transition-colors">
-                          <X className="h-3.5 w-3.5" />
-                        </button>
+                        <span className="font-mono font-bold text-success tabular-nums">Rs. {e.amount.toLocaleString()}</span>
+                        <Button type="button" variant="ghost" size="icon" onClick={() => setAdvanceEntries(prev => prev.filter(x => x.id !== e.id))} className="h-9 w-9 text-destructive/70 hover:text-destructive hover:bg-destructive/10 transition-colors" title="Remove payment entry">
+                          <X className="h-4 w-4" />
+                        </Button>
                       </div>
                     </div>
                   ))}
                   {advanceEntries.length > 0 && (
-                    <div className="text-xs bg-amber-500/10 border border-amber-500/20 rounded-xl px-3 py-2 flex justify-between font-bold text-amber-500">
+                    <div className="text-xs bg-warning/10 border border-warning/20 rounded-xl px-3 py-2 flex justify-between font-bold text-warning">
                       <span>Rider Collects at Doorstep:</span>
                       <span className="font-mono tabular-nums">Rs. {deliveryBalance.toLocaleString()}</span>
                     </div>
@@ -4442,9 +4490,9 @@ const POS = () => {
                     <span className="font-mono text-muted-foreground text-[11px]">
                       {paymentEntries.length > 0 ? (
                         totalPaid > netPayable ? (
-                          <span className="text-emerald-500 font-bold">Change: Rs. {(totalPaid - netPayable).toLocaleString()}</span>
+                          <span className="text-success font-bold">Change: Rs. {(totalPaid - netPayable).toLocaleString()}</span>
                         ) : (
-                          <>Remaining: <strong className={cn(totalDue > 0 ? "text-amber-500 font-bold" : "text-emerald-500 font-bold")}>Rs. {totalDue.toLocaleString()}</strong></>
+                          <>Remaining: <strong className={cn(totalDue > 0 ? "text-warning font-bold" : "text-success font-bold")}>Rs. {totalDue.toLocaleString()}</strong></>
                         )
                       ) : (
                         <>Due: <strong className="text-foreground font-bold">Rs. {netPayable.toLocaleString()}</strong></>
@@ -4497,7 +4545,7 @@ const POS = () => {
                     <Button
                       type="button"
                       size="sm"
-                      className="h-10 px-4 shrink-0 gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground font-bold rounded-xl shadow-xs"
+                      className="h-10 px-4 shrink-0 gap-1.5 gradient-primary text-primary-foreground font-bold rounded-xl shadow-xs"
                       onClick={addPaymentEntry}
                     >
                       <Plus className="h-4 w-4" />Add
@@ -4508,20 +4556,20 @@ const POS = () => {
                   {paymentEntries.length > 0 && (
                     <div className="space-y-1.5 pt-0.5">
                       {paymentEntries.map(e => (
-                        <div key={e.id} className="flex items-center justify-between text-xs bg-muted/40 border border-border/40 rounded-xl px-3 py-2">
+                        <div key={e.id} className="flex items-center justify-between text-xs bg-muted/40 border border-border/40 rounded-xl pl-3 pr-1 py-1">
                           <span className="font-semibold text-foreground">{e.method}</span>
                           <div className="flex items-center gap-2">
-                            <span className="font-mono font-bold text-emerald-500 tabular-nums">Rs. {e.amount.toLocaleString()}</span>
-                            <button onClick={() => removePaymentEntry(e.id)} className="text-destructive/70 hover:text-destructive transition-colors">
-                              <X className="h-3.5 w-3.5" />
-                            </button>
+                            <span className="font-mono font-bold text-success tabular-nums">Rs. {e.amount.toLocaleString()}</span>
+                            <Button type="button" variant="ghost" size="icon" onClick={() => removePaymentEntry(e.id)} className="h-9 w-9 text-destructive/70 hover:text-destructive hover:bg-destructive/10 transition-colors" title="Remove payment entry">
+                              <X className="h-4 w-4" />
+                            </Button>
                           </div>
                         </div>
                       ))}
 
                       <div className="flex justify-between items-center pt-2 border-t border-border/40 text-xs">
                         <span className="text-muted-foreground font-medium">Total Settled:</span>
-                        <span className={cn("font-mono font-bold tabular-nums", totalPaid >= netPayable ? "text-emerald-500" : "text-amber-500")}>
+                        <span className={cn("font-mono font-bold tabular-nums", totalPaid >= netPayable ? "text-success" : "text-warning")}>
                           Rs. {totalPaid.toLocaleString()} / Rs. {netPayable.toLocaleString()}
                         </span>
                       </div>
@@ -4530,9 +4578,9 @@ const POS = () => {
 
                   {/* Change Return Banner when customer overpays */}
                   {totalPaid > netPayable && (
-                    <div className="flex items-center justify-between p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-xs font-bold transition-all animate-in fade-in">
+                    <div className="flex items-center justify-between p-2.5 rounded-xl bg-success/10 border border-success/30 text-success text-xs font-bold transition-all animate-in fade-in">
                       <span className="flex items-center gap-1.5">
-                        <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                        <CheckCircle2 className="h-4 w-4 text-success" />
                         <span>Change Return:</span>
                       </span>
                       <span className="font-mono text-sm tabular-nums">Rs. {(totalPaid - netPayable).toLocaleString()}</span>
@@ -4555,7 +4603,7 @@ const POS = () => {
                       className={cn(
                         "w-full h-12 text-sm font-bold rounded-2xl gap-2 transition-all active:scale-[0.99] shadow-md",
                         isReady && !isSubmitting
-                          ? "bg-primary hover:bg-primary/90 text-primary-foreground font-extrabold shadow-primary/20"
+                          ? "gradient-primary text-primary-foreground font-extrabold shadow-primary/20"
                           : "bg-muted text-muted-foreground opacity-50 cursor-not-allowed"
                       )}
                       onClick={handleFinalizeSubmit}
@@ -4615,13 +4663,13 @@ const POS = () => {
             <div className="space-y-1 text-xs">
               <div className="flex justify-between"><span>Subtotal</span><span>Rs. {itemsSubtotal.toLocaleString()}</span></div>
               {orderDiscount > 0 && <div className="flex justify-between"><span>Discount</span><span className="text-destructive">-Rs. {orderDiscount.toLocaleString()}</span></div>}
-              {dealDiscount > 0 && dealPreview && <div className="flex justify-between"><span className="truncate pr-2">{dealPreview.code ? `${dealPreview.dealName} (${dealPreview.code})` : dealPreview.dealName}</span><span className="text-emerald-600 dark:text-emerald-400 shrink-0">-Rs. {dealDiscount.toLocaleString()}</span></div>}
+              {dealDiscount > 0 && dealPreview && <div className="flex justify-between"><span className="truncate pr-2">{dealPreview.code ? `${dealPreview.dealName} (${dealPreview.code})` : dealPreview.dealName}</span><span className="text-success shrink-0">-Rs. {dealDiscount.toLocaleString()}</span></div>}
               <div className="flex justify-between"><span>Tax</span><span>Rs. {tax.toLocaleString()}</span></div>
               <Separator />
               <div className="flex justify-between font-bold text-sm"><span>Gross Total</span><span>Rs. {total.toLocaleString()}</span></div>
               {loadedAdvancePayment > 0 && (
                 <>
-                  <div className="flex justify-between text-emerald-600 dark:text-emerald-400 font-semibold"><span>Advance Deposit ({loadedAdvanceMethod})</span><span>- Rs. {loadedAdvancePayment.toLocaleString()}</span></div>
+                  <div className="flex justify-between text-success font-semibold"><span>Advance Deposit ({loadedAdvanceMethod})</span><span>- Rs. {loadedAdvancePayment.toLocaleString()}</span></div>
                   <Separator />
                   <div className="flex justify-between font-extrabold text-base"><span>Net Payable / Balance</span><span className="text-primary">Rs. {netPayable.toLocaleString()}</span></div>
                 </>
@@ -4745,69 +4793,10 @@ const POS = () => {
 
             {/* Clickable Status Filter Cards — Pending, Preparing, Ready, Completed */}
             <div className="grid grid-cols-4 gap-2">
-              <button
-                type="button"
-                onClick={() => setOrderStatusTab("pending")}
-                className={cn(
-                  "p-3 rounded-2xl border text-center transition-all cursor-pointer flex flex-col items-center justify-center gap-1.5 font-bold",
-                  orderStatusTab === "pending"
-                    ? "bg-amber-500/20 border-amber-500 text-amber-600 dark:text-amber-400 font-extrabold ring-2 ring-amber-500/40 shadow-md scale-[1.02]"
-                    : "bg-muted/40 border-border/70 text-muted-foreground hover:bg-warning/10 hover:text-warning"
-                )}
-              >
-                <div className="flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wider text-amber-600 dark:text-amber-400">
-                  <Clock className="h-3.5 w-3.5" /> Pending
-                </div>
-                <span className="text-xl font-black text-amber-600 dark:text-amber-400">{ordersByStatus.pending.length}</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setOrderStatusTab("preparing")}
-                className={cn(
-                  "p-3 rounded-2xl border text-center transition-all cursor-pointer flex flex-col items-center justify-center gap-1.5 font-bold",
-                  orderStatusTab === "preparing"
-                    ? "bg-info/20 border-info text-info font-extrabold ring-2 ring-info/40 shadow-md scale-[1.02]"
-                    : "bg-muted/40 border-border/70 text-muted-foreground hover:bg-info/10 hover:text-info"
-                )}
-              >
-                <div className="flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wider text-info">
-                  <ChefHat className="h-3.5 w-3.5" /> Preparing
-                </div>
-                <span className="text-xl font-black text-info">{ordersByStatus.preparing.length}</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setOrderStatusTab("ready")}
-                className={cn(
-                  "p-3 rounded-2xl border text-center transition-all cursor-pointer flex flex-col items-center justify-center gap-1.5 font-bold",
-                  orderStatusTab === "ready"
-                    ? "bg-emerald-500/20 border-emerald-500 text-emerald-600 dark:text-emerald-400 font-extrabold ring-2 ring-emerald-500/40 shadow-md scale-[1.02]"
-                    : "bg-muted/40 border-border/70 text-muted-foreground hover:bg-emerald-500/10 hover:text-emerald-500"
-                )}
-              >
-                <div className="flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
-                  <CheckCircle2 className="h-3.5 w-3.5" /> Ready
-                </div>
-                <span className="text-xl font-black text-emerald-600 dark:text-emerald-400">{ordersByStatus.ready.length}</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setOrderStatusTab("completed")}
-                className={cn(
-                  "p-3 rounded-2xl border text-center transition-all cursor-pointer flex flex-col items-center justify-center gap-1.5 font-bold",
-                  orderStatusTab === "completed"
-                    ? "bg-purple-500/20 border-purple-500 text-purple-600 dark:text-purple-400 font-extrabold ring-2 ring-purple-500/40 shadow-md scale-[1.02]"
-                    : "bg-muted/40 border-border/70 text-muted-foreground hover:bg-purple-500/10 hover:text-purple-500"
-                )}
-              >
-                <div className="flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wider text-purple-600 dark:text-purple-400">
-                  <CheckCircle2 className="h-3.5 w-3.5" /> Completed
-                </div>
-                <span className="text-xl font-black text-purple-600 dark:text-purple-400">{ordersByStatus.completed.length}</span>
-              </button>
+              <StatusFilterTile status="pending" label="Pending" icon={Clock} count={ordersByStatus.pending.length} active={orderStatusTab === "pending"} onClick={() => setOrderStatusTab("pending")} />
+              <StatusFilterTile status="preparing" label="Preparing" icon={ChefHat} count={ordersByStatus.preparing.length} active={orderStatusTab === "preparing"} onClick={() => setOrderStatusTab("preparing")} />
+              <StatusFilterTile status="ready" label="Ready" icon={CheckCircle2} count={ordersByStatus.ready.length} active={orderStatusTab === "ready"} onClick={() => setOrderStatusTab("ready")} />
+              <StatusFilterTile status="completed" label="Completed" icon={CheckCircle2} count={ordersByStatus.completed.length} active={orderStatusTab === "completed"} onClick={() => setOrderStatusTab("completed")} />
             </div>
 
             {/* Order Type Sub-Filters Bar: All, Dine In, Take Away, Delivery, Self Order */}
@@ -4883,20 +4872,16 @@ const POS = () => {
                   <div className="space-y-3">
                     {currentList.map(order => (
                         <Card key={order.id} className={cn(
-                          "p-4 text-xs border-l-4 rounded-2xl transition-all duration-200 hover:shadow-md bg-card space-y-3",
-                          status === "pending" ? "border-l-warning border-border/70" :
-                          status === "preparing" ? "border-l-info border-border/70" :
-                          status === "ready" ? "border-l-emerald-500 border-border/70" : "border-l-purple-500 border-border/70"
+                          "p-4 text-xs border-l-4 rounded-2xl transition-all duration-200 hover:shadow-md bg-card space-y-3 border-border/70",
+                          statusTone(status).borderL
                         )}>
                           <div className="flex justify-between items-start border-b border-border/40 pb-2.5">
                             <div>
                               <span className="font-extrabold text-base text-foreground">{order.orderNumber}</span>
                               <span className="text-muted-foreground text-xs ml-2 font-medium">{order.time}</span>
                             </div>
-                            <Badge variant="outline" className={cn("text-xs font-extrabold capitalize px-2.5 py-0.5 rounded-xl border flex items-center gap-1",
-                              status === "pending" ? "bg-warning/15 text-warning border-warning/30" :
-                              status === "preparing" ? "bg-info/15 text-info border-info/30" :
-                              status === "ready" ? "bg-emerald-500/15 text-emerald-500 border-emerald-500/30" : "bg-purple-500/15 text-purple-500 border-purple-500/30"
+                            <Badge variant="outline" className={cn("text-xs font-extrabold capitalize px-2.5 py-0.5 rounded-xl flex items-center gap-1",
+                              statusTone(status).badge
                             )}>
                               {status === "pending" ? <Clock className="h-3 w-3" /> :
                                status === "preparing" ? <ChefHat className="h-3 w-3" /> : <CheckCircle2 className="h-3 w-3" />}
@@ -4916,12 +4901,12 @@ const POS = () => {
                           </div>
 
                            {order.tableNumber && (
-                            <div className="bg-amber-500/10 p-2.5 rounded-xl border border-amber-500/20 flex items-center justify-between font-semibold">
+                            <div className="bg-primary/10 p-2.5 rounded-xl border border-primary/20 flex items-center justify-between font-semibold">
                               <span className="flex items-center gap-1.5 text-foreground">
-                                <Utensils className="h-4 w-4 text-amber-500" />
-                                Table: <strong className="text-amber-500 font-extrabold">Table {order.tableNumber}</strong>
+                                <Utensils className="h-4 w-4 text-primary" />
+                                Table: <strong className="text-primary font-extrabold">Table {order.tableNumber}</strong>
                               </span>
-                              <Badge variant="secondary" className="text-[10px] font-bold bg-amber-500/20 text-amber-600 dark:text-amber-400 border-amber-500/30">{order.type || "Dine In"}</Badge>
+                              <Badge variant="secondary" className="text-[10px] font-bold bg-primary/20 text-primary border-primary/30">{order.type || "Dine In"}</Badge>
                             </div>
                           )}
 
@@ -4963,9 +4948,9 @@ const POS = () => {
 
                             if (status === "pending") {
                               return (
-                                <div className="flex items-center gap-2 bg-amber-500/10 border border-amber-500/20 p-2 rounded-xl text-xs">
-                                  <Timer className="h-4 w-4 shrink-0 text-amber-500" />
-                                  <span className="font-bold text-amber-500">
+                                <div className="flex items-center gap-2 bg-warning/10 border border-warning/20 p-2 rounded-xl text-xs">
+                                  <Timer className="h-4 w-4 shrink-0 text-warning" />
+                                  <span className="font-bold text-warning">
                                     Waiting for kitchen · {cookTime} min est.
                                   </span>
                                 </div>
@@ -4985,8 +4970,8 @@ const POS = () => {
                             const overSec = (elapsedSec - totalSec) % 60;
                             return (
                               <div className={cn("flex items-center gap-2 p-2 rounded-xl text-xs font-bold border",
-                                isOverdue ? "bg-rose-500/10 border-rose-500/30 text-rose-500" :
-                                remainSec <= 120 ? "bg-amber-500/10 border-amber-500/30 text-amber-500" : "bg-info/10 border-info/30 text-info"
+                                isOverdue ? "bg-destructive/10 border-destructive/30 text-destructive" :
+                                remainSec <= 120 ? "bg-warning/10 border-warning/30 text-warning" : "bg-info/10 border-info/30 text-info"
                               )}>
                                 <Timer className="h-4 w-4 shrink-0" />
                                 <span className="tabular-nums font-mono">
@@ -5000,14 +4985,14 @@ const POS = () => {
 
                           {status === "completed" ? (
                             <div className="pt-1">
-                              <Badge variant="secondary" className="w-full py-1 text-center justify-center font-bold text-xs bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20">
-                                ✔ Order Completed & Settled
+                              <Badge variant="outline" className={cn("w-full py-1 text-center justify-center gap-1.5 font-bold text-xs", statusTone("completed").badge)}>
+                                <CheckCircle2 className="h-3.5 w-3.5" /> Order Completed & Settled
                               </Badge>
                             </div>
                           ) : (
                             <div className="space-y-2 pt-1">
                               {status === "ready" && order.type === "Take Away" && (
-                                <div className="w-full flex items-center justify-center gap-1.5 text-xs text-emerald-500 font-bold bg-emerald-500/10 border border-emerald-500/20 py-2 rounded-xl">
+                                <div className={cn("w-full flex items-center justify-center gap-1.5 text-xs font-bold py-2 rounded-xl", statusTone("ready").badge)}>
                                   <CheckCircle2 className="h-4 w-4" /> Ready — Complete via Order Monitor
                                 </div>
                               )}
@@ -5050,8 +5035,8 @@ const POS = () => {
           <div className="p-4 border-b bg-card">
             <div className="flex items-center">
               <div>
-                <h2 className="font-bold text-lg flex items-center gap-2">
-                  <CalendarClock className="h-5 w-5 text-info" />
+                <h2 className="font-bold text-xl flex items-center gap-2">
+                  <CalendarClock className="h-6 w-6 text-info" />
                   Future Sale
                 </h2>
                 <p className="text-xs text-muted-foreground">{futureOrders.length} scheduled orders</p>
@@ -5211,8 +5196,8 @@ const POS = () => {
 
               {/* Customer Info */}
               {!selectedCustomer && (
-                <div className="bg-warning/10 border border-warning/30 rounded-lg p-2 text-xs text-warning font-medium">
-                  ⚠ Please select a customer from the billing panel before booking
+                <div className="bg-warning/10 border border-warning/30 rounded-lg p-2 text-xs text-warning font-medium flex items-center gap-1.5">
+                  <AlertTriangle className="h-4 w-4 shrink-0" /> Please select a customer from the billing panel before booking
                 </div>
               )}
 
@@ -5329,8 +5314,8 @@ const POS = () => {
                 <span className="h-2 w-2 rounded-full bg-destructive animate-pulse" />
                 <span>{foodOutOfStockCount + ingOutOfStockCount} Out of Stock</span>
               </div>
-              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/25 shadow-2xs">
-                <span className="h-2 w-2 rounded-full bg-amber-500" />
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-semibold bg-warning/10 text-warning border border-warning/25 shadow-2xs">
+                <span className="h-2 w-2 rounded-full bg-warning" />
                 <span>{foodLowStockCount + ingLowStockCount} Low Stock</span>
               </div>
               <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-medium bg-muted/60 text-muted-foreground border border-border/50 ml-auto">
@@ -5414,11 +5399,11 @@ const POS = () => {
                     className={cn(
                       "px-2 py-1 text-[10px] font-bold rounded-md transition-all flex items-center gap-1",
                       stockStatusFilter === "low"
-                        ? "bg-amber-500 text-white shadow-2xs"
-                        : "text-muted-foreground hover:text-amber-500"
+                        ? "bg-warning text-warning-foreground shadow-2xs"
+                        : "text-muted-foreground hover:text-warning"
                     )}
                   >
-                    <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                    <span className="h-1.5 w-1.5 rounded-full bg-warning" />
                     Low
                   </button>
                 </div>
@@ -5429,7 +5414,7 @@ const POS = () => {
             <TabsContent value="food" className="flex-1 p-4 space-y-2.5 overflow-y-auto m-0 focus-visible:outline-none">
               {lowStockFoodItems.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-14 text-center space-y-3">
-                  <div className="h-14 w-14 rounded-3xl bg-emerald-500/10 border border-emerald-500/25 flex items-center justify-center text-emerald-500 shadow-inner">
+                  <div className="h-14 w-14 rounded-3xl bg-success/10 border border-success/25 flex items-center justify-center text-success shadow-inner">
                     <CheckCircle2 className="h-7 w-7" />
                   </div>
                   <div>
@@ -5453,7 +5438,7 @@ const POS = () => {
                       "p-3.5 rounded-2xl border transition-all duration-150 shadow-2xs space-y-2.5",
                       item.status === 'out_of_stock'
                         ? "border-destructive/30 bg-destructive/[0.03] hover:border-destructive/60 hover:bg-destructive/[0.06]"
-                        : "border-amber-500/30 bg-amber-500/[0.03] hover:border-amber-500/60 hover:bg-amber-500/[0.06]"
+                        : "border-warning/30 bg-warning/[0.03] hover:border-warning/60 hover:bg-warning/[0.06]"
                     )}
                   >
                     {/* Top Row: Name + Status Badge */}
@@ -5476,10 +5461,10 @@ const POS = () => {
                           "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wide shrink-0",
                           item.status === 'out_of_stock'
                             ? "bg-destructive/15 text-destructive border border-destructive/30"
-                            : "bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30"
+                            : "bg-warning/15 text-warning border border-warning/30"
                         )}
                       >
-                        <span className={cn("h-1.5 w-1.5 rounded-full", item.status === 'out_of_stock' ? "bg-destructive animate-pulse" : "bg-amber-500")} />
+                        <span className={cn("h-1.5 w-1.5 rounded-full", item.status === 'out_of_stock' ? "bg-destructive animate-pulse" : "bg-warning")} />
                         {item.status === 'out_of_stock' ? 'Out of Stock' : 'Low Stock'}
                       </span>
                     </div>
@@ -5493,7 +5478,7 @@ const POS = () => {
                             "font-mono font-extrabold px-2 py-0.5 rounded-lg text-xs",
                             item.status === 'out_of_stock'
                               ? "bg-destructive/15 text-destructive border border-destructive/20"
-                              : "bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/20"
+                              : "bg-warning/15 text-warning border border-warning/20"
                           )}
                         >
                           {item.availableQuantity} {item.availableQuantity === 1 ? 'portion' : 'portions'}
@@ -5505,7 +5490,7 @@ const POS = () => {
                           className="flex items-center gap-1.5 text-[11px] text-muted-foreground font-medium bg-background/80 px-2 py-1 rounded-lg border border-border/60 max-w-[220px] shrink-0"
                           title={`Depleted ingredient: ${item.limitingIngredient}`}
                         >
-                          <AlertCircle className={cn("h-3.5 w-3.5 shrink-0", item.status === 'out_of_stock' ? "text-destructive" : "text-amber-500")} />
+                          <AlertCircle className={cn("h-3.5 w-3.5 shrink-0", item.status === 'out_of_stock' ? "text-destructive" : "text-warning")} />
                           <span className="truncate">
                             Depleted: <strong className="text-foreground">{item.limitingIngredient}</strong>
                           </span>
@@ -5521,7 +5506,7 @@ const POS = () => {
             <TabsContent value="ingredients" className="flex-1 p-4 space-y-2.5 overflow-y-auto m-0 focus-visible:outline-none">
               {ingredientAlerts.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-14 text-center space-y-3">
-                  <div className="h-14 w-14 rounded-3xl bg-emerald-500/10 border border-emerald-500/25 flex items-center justify-center text-emerald-500 shadow-inner">
+                  <div className="h-14 w-14 rounded-3xl bg-success/10 border border-success/25 flex items-center justify-center text-success shadow-inner">
                     <CheckCircle2 className="h-7 w-7" />
                   </div>
                   <div>
@@ -5551,7 +5536,7 @@ const POS = () => {
                         "p-3.5 rounded-2xl border transition-all duration-150 shadow-2xs space-y-2.5",
                         isOutOfStock
                           ? "border-destructive/30 bg-destructive/[0.03] hover:border-destructive/60 hover:bg-destructive/[0.06]"
-                          : "border-amber-500/30 bg-amber-500/[0.03] hover:border-amber-500/60 hover:bg-amber-500/[0.06]"
+                          : "border-warning/30 bg-warning/[0.03] hover:border-warning/60 hover:bg-warning/[0.06]"
                       )}
                     >
                       {/* Top Row: Name + Category & Status Badge */}
@@ -5577,10 +5562,10 @@ const POS = () => {
                             "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wide shrink-0",
                             isOutOfStock
                               ? "bg-destructive/15 text-destructive border border-destructive/30"
-                              : "bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30"
+                              : "bg-warning/15 text-warning border border-warning/30"
                           )}
                         >
-                          <span className={cn("h-1.5 w-1.5 rounded-full", isOutOfStock ? "bg-destructive animate-pulse" : "bg-amber-500")} />
+                          <span className={cn("h-1.5 w-1.5 rounded-full", isOutOfStock ? "bg-destructive animate-pulse" : "bg-warning")} />
                           {isOutOfStock ? "Out of Stock" : "Low Stock"}
                         </span>
                       </div>
@@ -5589,7 +5574,7 @@ const POS = () => {
                       <div className="grid grid-cols-3 gap-2 bg-background/70 p-2 rounded-xl border border-border/50 text-center">
                         <div>
                           <p className="text-[10px] text-muted-foreground font-medium">Current Stock</p>
-                          <p className={cn("text-xs font-mono font-extrabold mt-0.5", isOutOfStock ? "text-destructive" : "text-amber-600 dark:text-amber-400")}>
+                          <p className={cn("text-xs font-mono font-extrabold mt-0.5", isOutOfStock ? "text-destructive" : "text-warning")}>
                             {curr} <span className="text-[10px] font-normal text-muted-foreground">{item.unit}</span>
                           </p>
                         </div>
@@ -5601,7 +5586,7 @@ const POS = () => {
                         </div>
                         <div>
                           <p className="text-[10px] text-muted-foreground font-medium">Capacity</p>
-                          <p className={cn("text-xs font-mono font-bold mt-0.5", isOutOfStock ? "text-destructive" : "text-amber-600 dark:text-amber-400")}>
+                          <p className={cn("text-xs font-mono font-bold mt-0.5", isOutOfStock ? "text-destructive" : "text-warning")}>
                             {Math.round(ratio)}%
                           </p>
                         </div>
@@ -5613,7 +5598,7 @@ const POS = () => {
                           <div
                             className={cn(
                               "h-full rounded-full transition-all duration-300",
-                              isOutOfStock ? "bg-destructive" : "bg-amber-500"
+                              isOutOfStock ? "bg-destructive" : "bg-warning"
                             )}
                             style={{ width: `${Math.max(2, ratio)}%` }}
                           />
@@ -5678,7 +5663,7 @@ const POS = () => {
                     : "text-muted-foreground hover:text-foreground hover:bg-background/50"
                 )}
               >
-                <Truck className="h-4 w-4 text-amber-500" /> Delivery ({todayReservations.filter(r => r.orderType === "Delivery").length})
+                <Truck className="h-4 w-4 text-warning" /> Delivery ({todayReservations.filter(r => r.orderType === "Delivery").length})
               </button>
             </div>
           </div>
@@ -5718,9 +5703,9 @@ const POS = () => {
                     key={res.id}
                     className={cn(
                       "p-5 border rounded-2xl transition-all duration-200 hover:shadow-lg space-y-3.5 bg-card",
-                      effStatus === "not_arrived" ? "border-l-4 border-l-rose-500 border-border/80" :
+                      effStatus === "not_arrived" ? "border-l-4 border-l-destructive border-border/80" :
                       effStatus === "confirmed" ? "border-l-4 border-l-info border-border/80" :
-                      effStatus === "seated" ? "border-l-4 border-l-emerald-500 border-border/80" :
+                      effStatus === "seated" ? "border-l-4 border-l-success border-border/80" :
                       effStatus === "completed" ? "border-l-4 border-l-muted border-border/80" : "border-l-4 border-l-warning border-border/80"
                     )}
                   >
@@ -5738,9 +5723,9 @@ const POS = () => {
                         )}
                       </div>
                       <Badge variant="outline" className={cn("text-xs font-extrabold capitalize px-3 py-1 rounded-xl border flex items-center gap-1 shrink-0",
-                        effStatus === "not_arrived" ? "bg-rose-500/15 text-rose-500 border-rose-500/30" :
+                        effStatus === "not_arrived" ? "bg-destructive/15 text-destructive border-destructive/30" :
                         effStatus === "confirmed" ? "bg-info/10 text-info border-info/30" :
-                        effStatus === "seated" ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/30" :
+                        effStatus === "seated" ? "bg-success/10 text-success border-success/30" :
                         effStatus === "completed" ? "bg-muted text-muted-foreground border-border" : "bg-warning/10 text-warning border-warning/30"
                       )}>
                         {effStatus === "not_arrived" ? <AlertCircle className="h-3.5 w-3.5" /> :
@@ -5772,8 +5757,8 @@ const POS = () => {
                     {posReservationTab === "dine_in" && (
                       <div className="bg-muted/50 p-3 rounded-xl border border-border/40 flex items-center justify-between text-xs font-semibold">
                         <span className="flex items-center gap-1.5 text-foreground">
-                          <Utensils className="h-4 w-4 text-amber-500" />
-                          Table: <strong className="text-amber-500 font-extrabold">{res.tableNumber ? `Table ${res.tableNumber}` : "Unassigned"}</strong>
+                          <Utensils className="h-4 w-4 text-primary" />
+                          Table: <strong className="text-primary font-extrabold">{res.tableNumber ? `Table ${res.tableNumber}` : "Unassigned"}</strong>
                         </span>
                         <span className="flex items-center gap-1.5 text-muted-foreground">
                           <Users className="h-3.5 w-3.5" /> {res.guestCount} Pax
@@ -5812,9 +5797,9 @@ const POS = () => {
 
                     {/* Advance Deposit Badge */}
                     {res.advancePaid && Number(res.advancePaid) > 0 ? (
-                      <div className="flex items-center justify-between bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 p-3 rounded-xl font-bold text-xs">
+                      <div className="flex items-center justify-between bg-success/10 border border-success/30 text-success p-3 rounded-xl font-bold text-xs">
                         <span className="flex items-center gap-1.5">
-                          <Check className="h-4 w-4 text-emerald-500" /> Advance Deposit Paid
+                          <Check className="h-4 w-4 text-success" /> Advance Deposit Paid
                         </span>
                         <span className="font-extrabold text-sm">{effectiveSettings.currency} {Number(res.advancePaid).toLocaleString()}</span>
                       </div>
@@ -5959,13 +5944,13 @@ const POS = () => {
             <div className="space-y-1 text-xs">
               <div className="flex justify-between"><span>Subtotal</span><span>{effectiveSettings.currency} {itemsSubtotal.toLocaleString()}</span></div>
               {orderDiscount > 0 && <div className="flex justify-between"><span>Discount</span><span className="text-destructive">-{effectiveSettings.currency} {orderDiscount.toLocaleString()}</span></div>}
-              {dealDiscount > 0 && dealPreview && <div className="flex justify-between"><span className="truncate pr-2">{dealPreview.code ? `${dealPreview.dealName} (${dealPreview.code})` : dealPreview.dealName}</span><span className="text-emerald-600 dark:text-emerald-400 shrink-0">-{effectiveSettings.currency} {dealDiscount.toLocaleString()}</span></div>}
+              {dealDiscount > 0 && dealPreview && <div className="flex justify-between"><span className="truncate pr-2">{dealPreview.code ? `${dealPreview.dealName} (${dealPreview.code})` : dealPreview.dealName}</span><span className="text-success shrink-0">-{effectiveSettings.currency} {dealDiscount.toLocaleString()}</span></div>}
               <div className="flex justify-between"><span>Tax ({Math.round(taxRate * 100)}%)</span><span>{effectiveSettings.currency} {tax.toLocaleString()}</span></div>
               <Separator />
               <div className="flex justify-between font-bold text-sm"><span>Gross Estimated Total</span><span>{effectiveSettings.currency} {total.toLocaleString()}</span></div>
               {loadedAdvancePayment > 0 && (
                 <>
-                  <div className="flex justify-between text-emerald-600 dark:text-emerald-400 font-semibold"><span>Advance Deposit ({loadedAdvanceMethod})</span><span>-{effectiveSettings.currency} {loadedAdvancePayment.toLocaleString()}</span></div>
+                  <div className="flex justify-between text-success font-semibold"><span>Advance Deposit ({loadedAdvanceMethod})</span><span>-{effectiveSettings.currency} {loadedAdvancePayment.toLocaleString()}</span></div>
                   <Separator />
                   <div className="flex justify-between font-extrabold text-base"><span>Net Estimated Payable</span><span className="text-primary">{effectiveSettings.currency} {netPayable.toLocaleString()}</span></div>
                 </>
@@ -6003,14 +5988,14 @@ const POS = () => {
                 const shift = await shiftService.openShift({ openingCash: Number(openingCashInput) });
                 setActiveShift(shift);
                 setShowRegisterOpen(false);
-                toast.success(`Register opened — Shift ${shift.shiftNumber}`);
+                toast.success(`Register opened — shift ${shift.shiftNumber}`);
               } catch (err: any) {
                 // Opening a register can't be queued offline like an order — it needs a
                 // server-assigned shift number and a real opening-cash record — so this is a
                 // genuine dead end until connectivity returns. Say so plainly instead of
                 // surfacing the raw "Failed to fetch" browser error.
                 if (!isOnline() || !(err instanceof ApiError)) {
-                  toast.error("You're offline — connect to the internet to open the register.");
+                  toast.error("You're offline — connect to the internet to open the register");
                 } else {
                   toast.error(err?.message || "Failed to open register");
                 }
@@ -6024,7 +6009,7 @@ const POS = () => {
       <Dialog open={showCashHeldDialog} onOpenChange={setShowCashHeldDialog}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400">
+            <DialogTitle className="flex items-center gap-2 text-success">
               <Wallet className="h-5 w-5" />
               My Collection & Active Balance
             </DialogTitle>
@@ -6035,9 +6020,9 @@ const POS = () => {
 
           <div className="space-y-4 py-2">
             {/* Total Card */}
-            <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-center">
+            <div className="p-4 rounded-xl bg-success/10 border border-success/20 text-center">
               <span className="text-xs text-muted-foreground uppercase tracking-wider font-semibold block">Total Expected Collection</span>
-              <span className="text-2xl font-black text-emerald-600 dark:text-emerald-400 font-mono">
+              <span className="text-2xl font-black text-success font-mono">
                 {effectiveSettings.currency} {(myActiveCash?.totalExpected || 0).toLocaleString()}
               </span>
             </div>
@@ -6068,14 +6053,14 @@ const POS = () => {
                         <div className="flex items-center gap-1.5 flex-wrap">
                           <span className="font-bold font-mono">#{ord.orderNo || ord.orderNumber || ord.id?.slice(-6)}</span>
                           {ord.channel && (
-                            <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 font-semibold border-emerald-500/30 text-emerald-600 dark:text-emerald-400">
+                            <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 font-semibold border-success/30 text-success">
                               {ord.channel}
                             </Badge>
                           )}
                         </div>
                         <span className="text-muted-foreground">({ord.paymentMethod || 'Cash'})</span>
                       </div>
-                      <span className="font-bold font-mono text-emerald-600 dark:text-emerald-400 shrink-0">
+                      <span className="font-bold font-mono text-success shrink-0">
                         {effectiveSettings.currency} {(Number(ord.staffAmount ?? ord.total ?? 0)).toLocaleString()}
                       </span>
                     </div>
@@ -6089,7 +6074,7 @@ const POS = () => {
             </div>
 
             {/* Manager Notice */}
-            <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs text-amber-700 dark:text-amber-300 flex items-start gap-2">
+            <div className="p-3 rounded-lg bg-warning/10 border border-warning/20 text-xs text-warning flex items-start gap-2">
               <Info className="h-4 w-4 shrink-0 mt-0.5" />
               <span>Hand this cash over to the Manager to clear your balance.</span>
             </div>
@@ -6105,7 +6090,7 @@ const POS = () => {
 
       {/* Register Close Dialog */}
       <Dialog open={showRegisterClose} onOpenChange={setShowRegisterClose}>
-        <DialogContent className="max-w-[95vw] sm:max-w-4xl lg:max-w-5xl xl:max-w-6xl max-h-[92vh] overflow-y-auto p-4 sm:p-6 lg:p-8 rounded-3xl border-border/80 shadow-2xl backdrop-blur-md bg-card/95">
+        <DialogContent className="max-w-[95vw] sm:max-w-4xl lg:max-w-5xl xl:max-w-6xl max-h-[92vh] overflow-y-auto p-4 sm:p-6 lg:p-8">
           <DialogHeader className="border-b border-border/60 pb-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <DialogTitle className="flex items-center gap-2.5 text-xl sm:text-2xl font-black tracking-tight text-foreground">
@@ -6145,27 +6130,27 @@ const POS = () => {
                 </p>
               </Card>
 
-              <Card className="p-4 sm:p-5 bg-emerald-500/10 border-emerald-500/30 rounded-2xl shadow-sm hover:border-emerald-500/50 transition-colors flex flex-col justify-between">
+              <Card className="p-4 sm:p-5 bg-success/10 border-success/30 rounded-2xl shadow-sm hover:border-success/50 transition-colors flex flex-col justify-between">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">Expected Closing Cash</span>
-                  <div className="h-8 w-8 rounded-xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-500">
+                  <span className="text-xs font-bold text-success uppercase tracking-wider">Expected Closing Cash</span>
+                  <div className="h-8 w-8 rounded-xl bg-success/20 border border-success/40 flex items-center justify-center text-success">
                     <Wallet className="h-4 w-4" />
                   </div>
                 </div>
-                <p className="font-black text-2xl sm:text-3xl text-emerald-600 dark:text-emerald-400 mt-3 font-mono">
+                <p className="font-black text-2xl sm:text-3xl text-success mt-3 font-mono">
                   {effectiveSettings.currency} {Math.round((activeShift?.openingCash || 0) + shiftSales.pos.cash).toLocaleString()}
                 </p>
               </Card>
             </div>
 
             {/* HERO RECONCILIATION CARD (PHYSICAL DRAWER COUNT & VARIANCE) */}
-            <div className="bg-card rounded-3xl p-5 border border-emerald-500/30 bg-emerald-500/5 dark:bg-emerald-950/10 shadow-sm space-y-4">
+            <div className="bg-success/5 rounded-3xl p-5 border border-success/30 shadow-sm space-y-4">
               <div className="flex items-center justify-between border-b border-border/50 pb-3">
                 <h3 className="font-black text-sm flex items-center gap-2 text-foreground uppercase tracking-wide">
-                  <Coins className="h-4 w-4 text-emerald-500" />
+                  <Coins className="h-4 w-4 text-success" />
                   Physical Cash Drawer Count & Reconciliation
                 </h3>
-                <Badge variant="outline" className="text-xs font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 px-2.5 py-0.5 rounded-lg">
+                <Badge variant="outline" className="text-xs font-bold bg-success/10 text-success border-success/30 px-2.5 py-0.5 rounded-lg">
                   Drawer Audit
                 </Badge>
               </div>
@@ -6173,7 +6158,7 @@ const POS = () => {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <Label className="text-xs font-extrabold flex items-center gap-1.5 text-foreground">
-                    <Banknote className="h-4 w-4 text-emerald-500" />
+                    <Banknote className="h-4 w-4 text-success" />
                     Actual Physical Cash in Drawer ({effectiveSettings.currency}) *
                   </Label>
                   <Input
@@ -6181,7 +6166,7 @@ const POS = () => {
                     value={closingCashInput}
                     onChange={e => setClosingCashInput(e.target.value)}
                     placeholder="Count and enter physical cash..."
-                    className="h-12 text-lg font-black font-mono rounded-xl border-emerald-500/40 focus:border-emerald-500 bg-background"
+                    className="h-12 text-lg font-black font-mono rounded-xl border-success/40 focus:border-success bg-background"
                     min="0"
                   />
                 </div>
@@ -6208,15 +6193,15 @@ const POS = () => {
                   <div className={cn(
                     "p-4 rounded-2xl text-xs sm:text-sm font-bold flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 border shadow-sm transition-all",
                     diff === 0
-                      ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/40"
+                      ? "bg-success/15 text-success border-success/40"
                       : diff < 0
                       ? "bg-destructive/15 text-destructive border-destructive/40"
-                      : "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/40"
+                      : "bg-warning/15 text-warning border-warning/40"
                   )}>
                     <span className="flex items-center gap-2">
                       {diff === 0 && (
                         <>
-                          <CheckCircle2 className="h-5 w-5 text-emerald-500 shrink-0" />
+                          <CheckCircle2 className="h-5 w-5 text-success shrink-0" />
                           <span>Cash drawer matches expected amount perfectly!</span>
                         </>
                       )}
@@ -6228,7 +6213,7 @@ const POS = () => {
                       )}
                       {diff > 0 && (
                         <>
-                          <AlertCircle className="h-5 w-5 text-amber-500 shrink-0" />
+                          <AlertCircle className="h-5 w-5 text-warning shrink-0" />
                           <span>Excess cash detected in physical cash drawer</span>
                         </>
                       )}
@@ -6245,7 +6230,7 @@ const POS = () => {
             <div className="space-y-4 bg-card rounded-3xl p-5 border border-border/70 shadow-sm">
               <div className="flex items-center justify-between border-b border-border/50 pb-3">
                 <h3 className="font-black text-sm flex items-center gap-2 text-foreground uppercase tracking-wide">
-                  <Flame className="h-4 w-4 text-amber-500" />
+                  <Flame className="h-4 w-4 text-primary" />
                   POS Counter Sales Breakdown
                 </h3>
                 <Badge variant="secondary" className="text-xs font-bold px-2.5 py-0.5 rounded-lg">{shiftSales.pos.count} orders</Badge>
@@ -6258,9 +6243,9 @@ const POS = () => {
                     {effectiveSettings.currency} {Math.round(shiftSales.pos.total).toLocaleString()}
                   </span>
                 </div>
-                <div className="p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/20">
-                  <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-bold block uppercase tracking-wider">POS Cash Sales</span>
-                  <span className="font-extrabold text-base text-emerald-600 dark:text-emerald-400 font-mono mt-1 block">
+                <div className="p-3.5 rounded-2xl bg-success/10 border border-success/20">
+                  <span className="text-[11px] text-success font-bold block uppercase tracking-wider">POS Cash Sales</span>
+                  <span className="font-extrabold text-base text-success font-mono mt-1 block">
                     {effectiveSettings.currency} {Math.round(shiftSales.pos.cash).toLocaleString()}
                   </span>
                 </div>
@@ -6301,7 +6286,7 @@ const POS = () => {
                         const mLower = method.toLowerCase();
                         return (
                           <div key={method} className="flex items-center gap-2 bg-muted/50 border border-border/70 rounded-2xl px-3.5 py-2 text-xs font-bold shadow-xs">
-                            {mLower.includes("card") ? <CreditCard className="h-3.5 w-3.5 text-info" /> : <Smartphone className="h-3.5 w-3.5 text-purple-500" />}
+                            {mLower.includes("card") ? <CreditCard className="h-3.5 w-3.5 text-info" /> : <Smartphone className="h-3.5 w-3.5 text-primary" />}
                             <span className="text-muted-foreground">{method}:</span>
                             <span className="font-extrabold text-foreground font-mono">
                               {effectiveSettings.currency} {Math.round(amount).toLocaleString()}
@@ -6337,7 +6322,7 @@ const POS = () => {
                     totalExpenses:    0,
                     notes:            closingNotes,
                   });
-                  toast.success("Cash Register closed successfully!");
+                  toast.success("Cash register closed successfully");
                   window.location.href = "/";
                 } catch (err: any) {
                   toast.error(err?.message || "Failed to close register");
@@ -6382,53 +6367,9 @@ const POS = () => {
                 <span className="text-xl font-black">{activeOrdersCount}</span>
               </button>
 
-              <button
-                type="button"
-                onClick={() => setPosKitchenTab("pending")}
-                className={cn(
-                  "p-3 rounded-2xl border text-center transition-all cursor-pointer flex flex-col items-center justify-center gap-1.5 font-bold",
-                  posKitchenTab === "pending"
-                    ? "bg-amber-500/20 border-amber-500 text-amber-600 dark:text-amber-400 font-extrabold ring-2 ring-amber-500/40 shadow-md scale-[1.02]"
-                    : "bg-muted/40 border-border/70 text-muted-foreground hover:bg-warning/10 hover:text-warning"
-                )}
-              >
-                <div className="flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wider text-amber-600 dark:text-amber-400">
-                  <Clock className="h-3.5 w-3.5" /> Pending
-                </div>
-                <span className="text-xl font-black text-amber-600 dark:text-amber-400">{ordersByStatus.pending.length}</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setPosKitchenTab("preparing")}
-                className={cn(
-                  "p-3 rounded-2xl border text-center transition-all cursor-pointer flex flex-col items-center justify-center gap-1.5 font-bold",
-                  posKitchenTab === "preparing"
-                    ? "bg-info/20 border-info text-info font-extrabold ring-2 ring-info/40 shadow-md scale-[1.02]"
-                    : "bg-muted/40 border-border/70 text-muted-foreground hover:bg-info/10 hover:text-info"
-                )}
-              >
-                <div className="flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wider text-info">
-                  <ChefHat className="h-3.5 w-3.5" /> Preparing
-                </div>
-                <span className="text-xl font-black text-info">{ordersByStatus.preparing.length}</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setPosKitchenTab("ready")}
-                className={cn(
-                  "p-3 rounded-2xl border text-center transition-all cursor-pointer flex flex-col items-center justify-center gap-1.5 font-bold",
-                  posKitchenTab === "ready"
-                    ? "bg-emerald-500/20 border-emerald-500 text-emerald-600 dark:text-emerald-400 font-extrabold ring-2 ring-emerald-500/40 shadow-md scale-[1.02]"
-                    : "bg-muted/40 border-border/70 text-muted-foreground hover:bg-emerald-500/10 hover:text-emerald-500"
-                )}
-              >
-                <div className="flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
-                  <CheckCircle2 className="h-3.5 w-3.5" /> Ready
-                </div>
-                <span className="text-xl font-black text-emerald-600 dark:text-emerald-400">{ordersByStatus.ready.length}</span>
-              </button>
+              <StatusFilterTile status="pending" label="Pending" icon={Clock} count={ordersByStatus.pending.length} active={posKitchenTab === "pending"} onClick={() => setPosKitchenTab("pending")} />
+              <StatusFilterTile status="preparing" label="Preparing" icon={ChefHat} count={ordersByStatus.preparing.length} active={posKitchenTab === "preparing"} onClick={() => setPosKitchenTab("preparing")} />
+              <StatusFilterTile status="ready" label="Ready" icon={CheckCircle2} count={ordersByStatus.ready.length} active={posKitchenTab === "ready"} onClick={() => setPosKitchenTab("ready")} />
             </div>
           </div>
 
@@ -6454,8 +6395,8 @@ const POS = () => {
               return listToRender.map(order => (
                 <Card key={order.id} className={cn(
                   "p-5 border rounded-2xl transition-all duration-200 hover:shadow-lg space-y-3.5 bg-card",
-                  order.status === "pending" ? "border-l-4 border-l-warning border-border/80" :
-                  order.status === "preparing" ? "border-l-4 border-l-info border-border/80" : "border-l-4 border-l-emerald-500 border-border/80",
+                  "border-l-4 border-border/80",
+                  statusTone(order.status === "pending" || order.status === "preparing" ? order.status : "ready").borderL,
                   order.isUrgent && "ring-2 ring-destructive/50"
                 )}>
                   <div className="flex justify-between items-start border-b border-border/40 pb-2.5">
@@ -6468,9 +6409,8 @@ const POS = () => {
                         </Badge>
                       )}
                     </div>
-                    <Badge variant="outline" className={cn("text-xs font-extrabold capitalize px-2.5 py-0.5 rounded-xl border flex items-center gap-1",
-                      order.status === "pending" ? "bg-warning/15 text-warning border-warning/30" :
-                      order.status === "preparing" ? "bg-info/15 text-info border-info/30" : "bg-emerald-500/15 text-emerald-500 border-emerald-500/30"
+                    <Badge variant="outline" className={cn("text-xs font-extrabold capitalize px-2.5 py-0.5 rounded-xl flex items-center gap-1",
+                      statusTone(order.status === "pending" || order.status === "preparing" ? order.status : "ready").badge
                     )}>
                       {order.status === "pending" ? <Clock className="h-3 w-3" /> :
                        order.status === "preparing" ? <ChefHat className="h-3 w-3" /> : <CheckCircle2 className="h-3 w-3" />}
@@ -6492,8 +6432,8 @@ const POS = () => {
                   {order.type === "Dine In" && order.tableNumber && (
                     <div className="bg-muted/50 p-2.5 rounded-xl border border-border/40 flex items-center justify-between font-semibold text-xs">
                       <span className="flex items-center gap-1.5 text-foreground">
-                        <Utensils className="h-4 w-4 text-amber-500" />
-                        Table: <strong className="text-amber-500 font-extrabold">Table {order.tableNumber}</strong>
+                        <Utensils className="h-4 w-4 text-primary" />
+                        Table: <strong className="text-primary font-extrabold">Table {order.tableNumber}</strong>
                       </span>
                       <Badge variant="secondary" className="text-[10px]">{order.type}</Badge>
                     </div>
@@ -6530,9 +6470,9 @@ const POS = () => {
 
                     if (order.status === "pending") {
                       return (
-                        <div className="flex items-center gap-2 bg-amber-500/10 border border-amber-500/20 p-2.5 rounded-xl text-xs">
-                          <Timer className="h-4 w-4 shrink-0 text-amber-500" />
-                          <span className="font-bold text-amber-500">
+                        <div className="flex items-center gap-2 bg-warning/10 border border-warning/20 p-2.5 rounded-xl text-xs">
+                          <Timer className="h-4 w-4 shrink-0 text-warning" />
+                          <span className="font-bold text-warning">
                             Waiting for kitchen · {cookTime} min est.
                           </span>
                         </div>
@@ -6552,8 +6492,8 @@ const POS = () => {
                     const overSec = (elapsedSec - totalSec) % 60;
                     return (
                       <div className={cn("flex items-center gap-2 p-2.5 rounded-xl text-xs font-bold border",
-                        isOverdue ? "bg-rose-500/10 border-rose-500/30 text-rose-500" :
-                        remainSec <= 120 ? "bg-amber-500/10 border-amber-500/30 text-amber-500" : "bg-info/10 border-info/30 text-info"
+                        isOverdue ? "bg-destructive/10 border-destructive/30 text-destructive" :
+                        remainSec <= 120 ? "bg-warning/10 border-warning/30 text-warning" : "bg-info/10 border-info/30 text-info"
                       )}>
                         <Timer className="h-4 w-4 shrink-0" />
                         <span className="tabular-nums font-mono">
@@ -6568,12 +6508,12 @@ const POS = () => {
                   {/* Kitchen Status (view-only — progression happens on Kitchen Panel) */}
                   <div className="flex gap-2 pt-1">
                     {order.status === "preparing" && (
-                      <div className="w-full flex items-center justify-center gap-1.5 text-xs text-sky-500 font-bold bg-sky-500/10 border border-sky-500/20 py-2 rounded-xl">
+                      <div className={cn("w-full flex items-center justify-center gap-1.5 text-xs font-bold py-2 rounded-xl", statusTone("preparing").badge)}>
                         <ChefHat className="h-4 w-4" /> Preparing in Kitchen
                       </div>
                     )}
                     {order.status === "ready" && (
-                      <div className="w-full flex items-center justify-center gap-1.5 text-xs text-emerald-500 font-bold bg-emerald-500/10 border border-emerald-500/20 py-2 rounded-xl">
+                      <div className={cn("w-full flex items-center justify-center gap-1.5 text-xs font-bold py-2 rounded-xl", statusTone("ready").badge)}>
                         <CheckCircle2 className="h-4 w-4" /> Order Ready from Kitchen
                       </div>
                     )}
@@ -6614,7 +6554,7 @@ const POS = () => {
                     {order.items.filter((i: any) => i.status !== "cancelled").map((item: any) => (
                       <div key={item.id} className="flex items-center justify-between text-xs border rounded-md px-2 py-1.5">
                         <span>{item.name} × {item.qty}</span>
-                        <Button size="sm" variant={cancelSelectedItemIds.includes(item.id) ? "destructive" : "outline"} className="h-6 text-[10px] px-2"
+                        <Button size="sm" variant={cancelSelectedItemIds.includes(item.id) ? "destructive" : "outline"} className="h-9 text-xs px-3"
                           onClick={() => setCancelSelectedItemIds(prev => prev.includes(item.id) ? prev.filter(id => id !== item.id) : [...prev, item.id])}>
                           {cancelSelectedItemIds.includes(item.id) ? "Selected" : "Cancel Item"}
                         </Button>
@@ -6774,7 +6714,7 @@ const POS = () => {
                 if (order) {
                   loadRunningOrder(showModifyOrder);
                 }
-                toast.success("Order loaded for modification. Audit logged.");
+                toast.success("Order loaded for modification, audit logged");
                 setShowModifyOrder(null);
                 setModifyCancelReason("");
                 setModifyCancelCustomReason("");
@@ -6800,11 +6740,11 @@ const POS = () => {
               <p className="text-sm font-medium mb-1">{cart.find(c => c.id === editingNotesId)?.name}</p>
               <p className="text-xs text-muted-foreground">Add special instructions for this item</p>
             </div>
-            <textarea
+            <Textarea
               value={tempNotes}
               onChange={e => setTempNotes(e.target.value)}
               placeholder="e.g. Extra spicy, No onions, Well done..."
-              className="w-full h-24 rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-none"
+              className="h-24 resize-none"
               autoFocus
             />
             <div className="flex flex-wrap gap-1.5">

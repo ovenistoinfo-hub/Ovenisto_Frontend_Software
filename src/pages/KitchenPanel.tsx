@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   ArrowLeft, Bell, Clock, Flame, ChefHat, CheckCircle2,
   Utensils, Loader2, Hourglass, Gift, Check
@@ -12,6 +13,7 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { orderService, type OrderRecord, type KitchenRecord } from "@/services/order.service";
 import { ORDER_TYPE_COLORS } from "@/lib/constants";
+import { statusTone } from "@/lib/statusTone";
 import { useVisiblePolling } from "@/hooks/use-visible-polling";
 import { useOrderEvents } from "@/hooks/use-order-events";
 import { useSelfMutationGuard } from "@/hooks/use-self-mutation-guard";
@@ -48,11 +50,13 @@ export interface UnifiedKitchenOrder {
 
 const typeColors = ORDER_TYPE_COLORS;
 
-const statusConfig: Record<KitchenOrderStatus, { border: string; bg: string; icon: typeof Clock; iconColor: string; label: string }> = {
-  new: { border: "border-l-info", bg: "bg-info/5 hover:bg-info/8", icon: Bell, iconColor: "text-info", label: "New" },
-  preparing: { border: "border-l-warning", bg: "bg-warning/5 hover:bg-warning/8", icon: Flame, iconColor: "text-warning", label: "Preparing" },
-  ready: { border: "border-l-success", bg: "bg-success/5 hover:bg-success/8", icon: CheckCircle2, iconColor: "text-success", label: "Ready" },
-  completed: { border: "border-l-muted-foreground/30", bg: "bg-muted/30 opacity-60", icon: CheckCircle2, iconColor: "text-muted-foreground", label: "Completed" },
+// Order-level colors follow the canonical statusTone mapping (shared with POS / Waiter Panel /
+// Order Monitor): new = pending = warning, preparing = info, ready = success.
+const statusConfig: Record<KitchenOrderStatus, { border: string; bg: string; icon: typeof Clock; iconBg: string; iconColor: string; label: string }> = {
+  new: { border: statusTone("pending").borderL, bg: `${statusTone("pending").tint} hover:bg-warning/10`, icon: Bell, iconBg: "bg-warning/15", iconColor: statusTone("pending").text, label: "New" },
+  preparing: { border: statusTone("preparing").borderL, bg: `${statusTone("preparing").tint} hover:bg-info/10`, icon: Flame, iconBg: "bg-info/15", iconColor: statusTone("preparing").text, label: "Preparing" },
+  ready: { border: statusTone("ready").borderL, bg: `${statusTone("ready").tint} hover:bg-success/10`, icon: CheckCircle2, iconBg: "bg-success/15", iconColor: statusTone("ready").text, label: "Ready" },
+  completed: { border: "border-l-muted-foreground/30", bg: "bg-muted/30 opacity-60", icon: CheckCircle2, iconBg: "bg-muted", iconColor: "text-muted-foreground", label: "Completed" },
 };
 
 const formatDuration = (totalMinutes: number) => {
@@ -80,6 +84,74 @@ const getKitchenItemStatus = (order: OrderRecord, kitchenId: string, itemKey: st
   if (progress) return progress.status as "pending" | "preparing" | "ready";
   if (order.status === "ready" || order.status === "completed") return "ready";
   return "pending";
+};
+
+interface DishRowProps {
+  item: KitchenItemEntry;
+  isUpdating: boolean;
+  clock: Date;
+  onAdvance: (currentStatus: "pending" | "preparing" | "ready") => void;
+}
+
+/** One dish line with its own per-dish kitchen controls. Used for both deal sub-items and plain items. */
+const DishRow = ({ item, isUpdating, clock, onAdvance }: DishRowProps) => {
+  const cookTime = item.cookingTime || 10;
+  const elapsedSec = item.preparingAt ? Math.floor((clock.getTime() - item.preparingAt.getTime()) / 1000) : 0;
+  const elapsedMin = Math.floor(elapsedSec / 60);
+  const remainingSec = Math.max(0, cookTime * 60 - elapsedSec);
+  const remainingMin = Math.floor(remainingSec / 60);
+  const isOverdue = item.status === "preparing" && elapsedSec > cookTime * 60;
+
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-2 p-2 rounded-xl bg-muted/20 border border-border/60 hover:border-primary/40 transition-all text-xs">
+      {/* Item Qty & Name — the controls wrap onto their own line on narrow cards instead of squeezing the name */}
+      <div className="flex items-start gap-1.5 min-w-0 grow basis-32">
+        <span className="font-black text-primary font-mono text-xs shrink-0">{item.qty}×</span>
+        <span className="font-bold text-foreground text-xs break-words min-w-0">{item.name}</span>
+      </div>
+
+      {/* Per-Item Action Pill */}
+      <div className="shrink-0 flex items-center gap-1.5 ml-auto">
+        {item.status === "pending" ? (
+          <Button
+            size="sm"
+            disabled={isUpdating}
+            onClick={() => onAdvance("pending")}
+            className={cn("h-10 px-3 text-xs font-bold rounded-md cursor-pointer transition-all gap-1.5 hover:bg-warning/25", statusTone("pending").badge)}
+            title="Start cooking this dish"
+          >
+            {isUpdating ? <Loader2 className="h-4 w-4 animate-spin" /> : <ChefHat className="h-4 w-4" />}
+            {item.cookingTime ? `${item.cookingTime}m Prep` : "Start Prep"}
+          </Button>
+        ) : item.status === "preparing" ? (
+          <div className="flex items-center gap-1.5">
+            <span className={cn(
+              "text-xs font-mono font-bold px-2 py-1 rounded-md",
+              isOverdue
+                ? "bg-destructive/15 text-destructive border border-destructive/30 animate-pulse"
+                : statusTone("preparing").badge
+            )}>
+              {isOverdue ? `+${elapsedMin - cookTime}m` : `${remainingMin}:${String(remainingSec % 60).padStart(2, "0")}`}
+            </span>
+            <Button
+              size="sm"
+              disabled={isUpdating}
+              onClick={() => onAdvance("preparing")}
+              className={cn("h-10 px-3 text-xs font-bold rounded-md cursor-pointer transition-all gap-1.5 hover:bg-success/25", statusTone("ready").badge)}
+              title="Mark this dish ready"
+            >
+              {isUpdating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4 stroke-[2.5]" />}
+              Ready
+            </Button>
+          </div>
+        ) : (
+          <span className={cn("text-xs font-bold px-2.5 py-1.5 rounded-md flex items-center gap-1", statusTone("ready").badge)}>
+            <CheckCircle2 className="h-4 w-4" /> Done
+          </span>
+        )}
+      </div>
+    </div>
+  );
 };
 
 const KitchenPanel = () => {
@@ -419,8 +491,46 @@ const KitchenPanel = () => {
 
   if (loading) {
     return (
-      <div className="fixed inset-0 z-50 bg-background flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      <div className="fixed inset-0 z-50 bg-background flex flex-col" aria-busy="true" aria-label="Loading kitchen orders">
+        {/* Header skeleton */}
+        <div className="h-16 bg-card border-b-2 border-primary/15 flex items-center justify-between px-5 shrink-0 shadow-sm">
+          <div className="flex items-center gap-4">
+            <Skeleton className="h-9 w-20 rounded-lg" />
+            <Skeleton className="h-10 w-10 rounded-xl" />
+            <div className="space-y-1.5">
+              <Skeleton className="h-4 w-36" />
+              <Skeleton className="h-3 w-28" />
+            </div>
+          </div>
+          <div className="flex items-center gap-5">
+            <Skeleton className="h-10 w-64 rounded-xl" />
+            <Skeleton className="h-10 w-32 rounded-xl" />
+          </div>
+        </div>
+
+        {/* Order card skeletons */}
+        <div className="flex-1 overflow-y-auto p-5">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4.5">
+            {[1, 2, 3, 4].map((i) => (
+              <Card key={i} className="rounded-xl overflow-hidden border-l-4 border-l-border bg-card">
+                <CardContent className="p-0">
+                  <div className="px-4 pt-3.5 pb-2.5 flex items-center justify-between border-b border-border/50 bg-muted/20">
+                    <Skeleton className="h-7 w-28 rounded-lg" />
+                    <Skeleton className="h-5 w-16 rounded-md" />
+                  </div>
+                  <div className="p-3 space-y-2.5">
+                    <Skeleton className="h-14 w-full rounded-xl" />
+                    <Skeleton className="h-14 w-full rounded-xl" />
+                    <Skeleton className="h-14 w-full rounded-xl" />
+                  </div>
+                  <div className="p-3 border-t border-border/50">
+                    <Skeleton className="h-10 w-full rounded-lg" />
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
       </div>
     );
   }
@@ -428,9 +538,11 @@ const KitchenPanel = () => {
   if (!kitchen) {
     return (
       <div className="fixed inset-0 z-50 bg-background flex items-center justify-center">
-        <div className="text-center">
-          <ChefHat className="h-16 w-16 text-muted-foreground/30 mx-auto mb-4" />
-          <p className="text-lg font-semibold">Kitchen not found</p>
+        <div className="flex flex-col items-center text-center">
+          <div className="h-24 w-24 rounded-3xl bg-muted/30 flex items-center justify-center mb-5">
+            <ChefHat className="h-12 w-12 text-muted-foreground/30" />
+          </div>
+          <p className="text-xl font-bold text-foreground">Kitchen not found</p>
           <Button asChild className="mt-4"><Link to="/kitchens">Back to Kitchens</Link></Button>
         </div>
       </div>
@@ -467,7 +579,7 @@ const KitchenPanel = () => {
                 size="sm"
                 onClick={() => setStatusFilter(s)}
                 className={cn(
-                  "text-xs capitalize rounded-lg h-8 px-3 transition-all cursor-pointer",
+                  "text-xs capitalize rounded-lg h-10 px-3 transition-all cursor-pointer",
                   statusFilter === s && "gradient-primary text-primary-foreground shadow-sm"
                 )}
               >
@@ -479,21 +591,21 @@ const KitchenPanel = () => {
           {/* Stats Badges */}
           <div className="flex items-center gap-2">
             {newOrderCount > 0 && (
-              <div className="flex items-center gap-1.5 bg-info/10 border border-info/30 rounded-full px-3 py-1.5">
-                <Bell className="h-4 w-4 text-info animate-bounce" />
-                <span className="text-xs font-bold text-info">{newOrderCount} new</span>
+              <div className={cn("flex items-center gap-1.5 rounded-full px-3 py-1.5", statusTone("pending").badge)}>
+                <Bell className="h-4 w-4 animate-bounce" />
+                <span className="text-xs font-bold">{newOrderCount} new</span>
               </div>
             )}
             {preparingCount > 0 && (
-              <div className="flex items-center gap-1.5 bg-warning/10 border border-warning/30 rounded-full px-3 py-1.5">
-                <Flame className="h-4 w-4 text-warning" />
-                <span className="text-xs font-bold text-warning">{preparingCount}</span>
+              <div className={cn("flex items-center gap-1.5 rounded-full px-3 py-1.5", statusTone("preparing").badge)}>
+                <Flame className="h-4 w-4" />
+                <span className="text-xs font-bold">{preparingCount}</span>
               </div>
             )}
             {readyCount > 0 && (
-              <div className="flex items-center gap-1.5 bg-success/10 border border-success/30 rounded-full px-3 py-1.5">
-                <CheckCircle2 className="h-4 w-4 text-success" />
-                <span className="text-xs font-bold text-success">{readyCount}</span>
+              <div className={cn("flex items-center gap-1.5 rounded-full px-3 py-1.5", statusTone("ready").badge)}>
+                <CheckCircle2 className="h-4 w-4" />
+                <span className="text-xs font-bold">{readyCount}</span>
               </div>
             )}
           </div>
@@ -535,7 +647,7 @@ const KitchenPanel = () => {
                   className={cn(
                     "transition-all duration-200 hover:shadow-lg border-l-4 rounded-xl overflow-hidden group flex flex-col justify-between bg-card",
                     cfg.border, cfg.bg,
-                    order.status === "preparing" && "border-warning/80"
+                    order.status === "preparing" && "border-info/80"
                   )}
                 >
                   <CardContent className="p-0 flex flex-col h-full justify-between">
@@ -545,13 +657,13 @@ const KitchenPanel = () => {
                         <div className="flex items-center gap-2">
                           <div className={cn(
                             "h-7 w-7 rounded-lg flex items-center justify-center",
-                            order.status === "new" ? "bg-info/15 text-info" : "bg-warning/15 text-warning"
+                            cfg.iconBg, cfg.iconColor
                           )}>
                             <StatusIcon className="h-3.5 w-3.5" />
                           </div>
                           <span className="text-base font-extrabold tracking-tight text-foreground">{order.orderNumber}</span>
                           {order.tableNumber && (
-                            <Badge className="text-[10px] font-extrabold px-1.5 py-0.5 bg-rose-500 text-white rounded-md">
+                            <Badge className="text-xs font-extrabold px-1.5 py-0.5 bg-primary text-primary-foreground rounded-md">
                               T-{order.tableNumber}
                             </Badge>
                           )}
@@ -559,11 +671,11 @@ const KitchenPanel = () => {
 
                         <div className="flex items-center gap-1.5">
                           {order.hasPendingCancellationRequest && (
-                            <Badge className="bg-amber-500/20 text-amber-700 dark:text-amber-300 border-amber-500/40 text-[9px] font-bold px-1.5 py-0.5 flex items-center gap-1">
-                              <Clock className="h-2.5 w-2.5 text-amber-500" /> Cancel Req
+                            <Badge className="bg-warning/15 text-warning border-warning/40 text-xs font-bold px-1.5 py-0.5 flex items-center gap-1">
+                              <Clock className="h-3 w-3" /> Cancel Req
                             </Badge>
                           )}
-                          <Badge variant="secondary" className={cn("text-[10px] font-bold rounded-md px-2 py-0.5 border", (typeColors as any)[order.type] ?? "")}>
+                          <Badge variant="secondary" className={cn("text-xs font-bold rounded-md px-2 py-0.5 border", (typeColors as any)[order.type] ?? "")}>
                             {order.type}
                           </Badge>
                         </div>
@@ -572,10 +684,10 @@ const KitchenPanel = () => {
                       {/* ── Waiting Time Banner ── */}
                       <div className="px-3.5 py-1.5 flex items-center justify-between text-xs bg-muted/10 border-b border-border/30">
                         <div className="flex items-center gap-1.5 text-muted-foreground">
-                          <Hourglass className="h-3.5 w-3.5 text-amber-500" />
+                          <Hourglass className="h-3.5 w-3.5 text-warning" />
                           <span className="font-medium text-[11px]">Waiting {formatDuration(waitingMin)}</span>
                         </div>
-                        <span className="text-[10px] font-mono text-muted-foreground">{order.allItems.length} items total</span>
+                        <span className="text-[11px] font-mono text-muted-foreground">{order.allItems.length} items total</span>
                       </div>
 
                       {/* ── Items List with Deal Bundling & Per-Item Controls ── */}
@@ -586,8 +698,8 @@ const KitchenPanel = () => {
                             {/* Deal Header */}
                             <div className="flex items-center justify-between text-xs pb-1 border-b border-primary/20">
                               <div className="flex items-center gap-1.5 truncate min-w-0">
-                                <Badge variant="outline" className="text-[9px] font-extrabold text-primary border-primary/30 bg-primary/10 px-1.5 py-0 h-4 uppercase tracking-wider shrink-0 gap-0.5">
-                                  <Gift className="h-2.5 w-2.5" /> Deal
+                                <Badge variant="outline" className="text-xs font-extrabold text-primary border-primary/30 bg-primary/10 px-1.5 py-0 h-5 uppercase tracking-wider shrink-0 gap-1">
+                                  <Gift className="h-3 w-3" /> Deal
                                 </Badge>
                                 <span className="font-extrabold text-xs text-foreground truncate">{group.dealName}</span>
                               </div>
@@ -595,139 +707,29 @@ const KitchenPanel = () => {
 
                             {/* Deal Sub-Items */}
                             <div className="space-y-1.5 pt-0.5">
-                              {group.items.map((item) => {
-                                const lockKey = `${order.id}::${item.actionKey}`;
-                                const isUpdating = updatingKeys[lockKey];
-                                const cookTime = item.cookingTime || 10;
-                                const elapsedSec = item.preparingAt ? Math.floor((clock.getTime() - item.preparingAt.getTime()) / 1000) : 0;
-                                const elapsedMin = Math.floor(elapsedSec / 60);
-                                const remainingSec = Math.max(0, cookTime * 60 - elapsedSec);
-                                const remainingMin = Math.floor(remainingSec / 60);
-                                const isOverdue = item.status === "preparing" && elapsedSec > cookTime * 60;
-
-                                return (
-                                  <div
-                                    key={item.key}
-                                    className="flex items-center justify-between gap-2 p-1.5 rounded-lg bg-background/80 dark:bg-muted/30 border border-border/40 hover:border-primary/30 transition-all text-xs"
-                                  >
-                                    {/* Item Qty & Name */}
-                                    <div className="flex items-center gap-1.5 truncate min-w-0">
-                                      <span className="font-black text-primary font-mono text-xs shrink-0">{item.qty}×</span>
-                                      <span className="font-semibold text-foreground truncate text-xs">{item.name}</span>
-                                    </div>
-
-                                    {/* Per-Item Action Pill */}
-                                    <div className="shrink-0 flex items-center gap-1.5">
-                                      {item.status === "pending" ? (
-                                        <Button
-                                          size="sm"
-                                          disabled={isUpdating}
-                                          onClick={() => handleItemAdvance(order.id, item.actionKey, "pending")}
-                                          className="h-6 px-2 text-[10px] font-bold bg-amber-500/15 hover:bg-amber-500/25 text-amber-500 border border-amber-500/30 rounded-md cursor-pointer transition-all gap-1"
-                                          title="Start cooking this dish"
-                                        >
-                                          {isUpdating ? <Loader2 className="h-3 w-3 animate-spin" /> : <ChefHat className="h-3 w-3" />}
-                                          {item.cookingTime ? `${item.cookingTime}m Prep` : "Start Prep"}
-                                        </Button>
-                                      ) : item.status === "preparing" ? (
-                                        <div className="flex items-center gap-1.5">
-                                          <span className={cn(
-                                            "text-[10px] font-mono font-bold px-1.5 py-0.5 rounded border",
-                                            isOverdue
-                                              ? "bg-destructive/15 text-destructive border-destructive/30 animate-pulse"
-                                              : "bg-sky-500/15 text-sky-400 border-sky-500/30"
-                                          )}>
-                                            {isOverdue ? `+${elapsedMin - cookTime}m` : `${remainingMin}:${String(remainingSec % 60).padStart(2, "0")}`}
-                                          </span>
-                                          <Button
-                                            size="sm"
-                                            disabled={isUpdating}
-                                            onClick={() => handleItemAdvance(order.id, item.actionKey, "preparing")}
-                                            className="h-6 px-2 text-[10px] font-bold bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-500 border border-emerald-500/30 rounded-md cursor-pointer transition-all gap-1"
-                                            title="Mark this dish ready"
-                                          >
-                                            {isUpdating ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3 stroke-[2.5]" />}
-                                            Ready
-                                          </Button>
-                                        </div>
-                                      ) : (
-                                        <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 rounded-md flex items-center gap-1">
-                                          <CheckCircle2 className="h-3 w-3 text-emerald-400" /> Done
-                                        </span>
-                                      )}
-                                    </div>
-                                  </div>
-                                );
-                              })}
+                              {group.items.map((item) => (
+                                <DishRow
+                                  key={item.key}
+                                  item={item}
+                                  isUpdating={Boolean(updatingKeys[`${order.id}::${item.actionKey}`])}
+                                  clock={clock}
+                                  onAdvance={(currentStatus) => handleItemAdvance(order.id, item.actionKey, currentStatus)}
+                                />
+                              ))}
                             </div>
                           </div>
                         ))}
 
                         {/* 2. Standalone Plain Items */}
-                        {order.plainItems.map((item) => {
-                          const lockKey = `${order.id}::${item.actionKey}`;
-                          const isUpdating = updatingKeys[lockKey];
-                          const cookTime = item.cookingTime || 10;
-                          const elapsedSec = item.preparingAt ? Math.floor((clock.getTime() - item.preparingAt.getTime()) / 1000) : 0;
-                          const elapsedMin = Math.floor(elapsedSec / 60);
-                          const remainingSec = Math.max(0, cookTime * 60 - elapsedSec);
-                          const remainingMin = Math.floor(remainingSec / 60);
-                          const isOverdue = item.status === "preparing" && elapsedSec > cookTime * 60;
-
-                          return (
-                            <div
-                              key={item.key}
-                              className="flex items-center justify-between gap-2 p-2 rounded-xl bg-muted/20 border border-border/60 hover:border-primary/40 transition-all text-xs"
-                            >
-                              {/* Item Qty & Name */}
-                              <div className="flex items-center gap-1.5 truncate min-w-0">
-                                <span className="font-black text-foreground font-mono text-xs shrink-0">{item.qty}×</span>
-                                <span className="font-bold text-foreground truncate text-xs">{item.name}</span>
-                              </div>
-
-                              {/* Per-Item Action Pill */}
-                              <div className="shrink-0 flex items-center gap-1.5">
-                                {item.status === "pending" ? (
-                                  <Button
-                                    size="sm"
-                                    disabled={isUpdating}
-                                    onClick={() => handleItemAdvance(order.id, item.actionKey, "pending")}
-                                    className="h-6 px-2 text-[10px] font-bold bg-amber-500/15 hover:bg-amber-500/25 text-amber-500 border border-amber-500/30 rounded-md cursor-pointer transition-all gap-1"
-                                    title="Start cooking this dish"
-                                  >
-                                    {isUpdating ? <Loader2 className="h-3 w-3 animate-spin" /> : <ChefHat className="h-3 w-3" />}
-                                    {item.cookingTime ? `${item.cookingTime}m Prep` : "Start Prep"}
-                                  </Button>
-                                ) : item.status === "preparing" ? (
-                                  <div className="flex items-center gap-1.5">
-                                    <span className={cn(
-                                      "text-[10px] font-mono font-bold px-1.5 py-0.5 rounded border",
-                                      isOverdue
-                                        ? "bg-destructive/15 text-destructive border-destructive/30 animate-pulse"
-                                        : "bg-sky-500/15 text-sky-400 border-sky-500/30"
-                                    )}>
-                                      {isOverdue ? `+${elapsedMin - cookTime}m` : `${remainingMin}:${String(remainingSec % 60).padStart(2, "0")}`}
-                                    </span>
-                                    <Button
-                                      size="sm"
-                                      disabled={isUpdating}
-                                      onClick={() => handleItemAdvance(order.id, item.actionKey, "preparing")}
-                                      className="h-6 px-2 text-[10px] font-bold bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-500 border border-emerald-500/30 rounded-md cursor-pointer transition-all gap-1"
-                                      title="Mark this dish ready"
-                                    >
-                                      {isUpdating ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3 stroke-[2.5]" />}
-                                      Ready
-                                    </Button>
-                                  </div>
-                                ) : (
-                                  <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 rounded-md flex items-center gap-1">
-                                    <CheckCircle2 className="h-3 w-3 text-emerald-400" /> Done
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                          );
-                        })}
+                        {order.plainItems.map((item) => (
+                          <DishRow
+                            key={item.key}
+                            item={item}
+                            isUpdating={Boolean(updatingKeys[`${order.id}::${item.actionKey}`])}
+                            clock={clock}
+                            onAdvance={(currentStatus) => handleItemAdvance(order.id, item.actionKey, currentStatus)}
+                          />
+                        ))}
                       </div>
                     </div>
 
@@ -736,13 +738,13 @@ const KitchenPanel = () => {
                       <Separator />
                       <div className="p-3 bg-muted/10">
                         {order.hasPendingCancellationRequest ? (
-                          <div className="flex items-center justify-center gap-1.5 text-xs text-amber-700 dark:text-amber-300 font-bold bg-amber-500/15 border border-amber-500/30 py-2.5 rounded-lg select-none">
-                            <Clock className="h-4 w-4 text-amber-500" /> Cancel Pending Approval
+                          <div className="flex items-center justify-center gap-1.5 h-10 text-xs text-warning font-bold bg-warning/15 border border-warning/30 rounded-lg select-none">
+                            <Clock className="h-4 w-4" /> Cancel Pending Approval
                           </div>
                         ) : hasPendingItems ? (
                           <Button
                             disabled={isBatchUpdating}
-                            className="w-full text-xs font-bold rounded-lg h-9 bg-warning hover:bg-warning/90 text-warning-foreground shadow-sm cursor-pointer transition-all gap-1.5"
+                            className={cn("w-full text-xs font-bold rounded-lg h-10 shadow-sm cursor-pointer transition-all gap-1.5", statusTone("pending").solid)}
                             onClick={() => handleBatchAdvance(order, "preparing")}
                           >
                             {isBatchUpdating ? (
@@ -755,7 +757,7 @@ const KitchenPanel = () => {
                         ) : hasPreparingItems ? (
                           <Button
                             disabled={isBatchUpdating}
-                            className="w-full text-xs font-bold rounded-lg h-9 gradient-primary text-primary-foreground shadow-md cursor-pointer transition-all gap-1.5"
+                            className={cn("w-full text-xs font-bold rounded-lg h-10 shadow-sm cursor-pointer transition-all gap-1.5", statusTone("ready").solid)}
                             onClick={() => handleBatchAdvance(order, "ready")}
                           >
                             {isBatchUpdating ? (
@@ -766,7 +768,7 @@ const KitchenPanel = () => {
                             Mark All Ready ({order.allItems.filter(i => i.status === "preparing").length} items)
                           </Button>
                         ) : (
-                          <div className="flex items-center justify-center gap-1.5 text-xs font-bold text-emerald-500 bg-emerald-500/10 border border-emerald-500/20 py-2 rounded-lg select-none">
+                          <div className={cn("flex items-center justify-center gap-1.5 h-10 text-xs font-bold rounded-lg select-none", statusTone("ready").badge)}>
                             <CheckCircle2 className="h-4 w-4" /> Ready to Serve
                           </div>
                         )}

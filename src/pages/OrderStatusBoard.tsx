@@ -15,8 +15,10 @@ import { Separator } from "@/components/ui/separator";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
+import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { statusTone } from "@/lib/statusTone";
 import { useData } from "@/contexts/DataContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { orderService, KitchenRecord } from "@/services/order.service";
@@ -32,58 +34,161 @@ interface StatusConfigItem {
   label: string;
   bgActive: string;
   text: string;
-  borderActive: string;
   iconBg: string;
   icon: typeof Clock;
   pill: string;
 }
 
+// Colors for the four real statuses come from the shared statusTone module so this board
+// agrees with KitchenPanel. "active" is an aggregate filter, not a real status, so it uses
+// neutral primary-family tokens.
+const buildStatusConfig = (
+  status: "pending" | "preparing" | "ready" | "completed",
+  icon: typeof Clock,
+): StatusConfigItem => {
+  const tone = statusTone(status);
+  return {
+    label: tone.label,
+    bgActive: `${tone.tile} shadow-sm`,
+    text: tone.text,
+    iconBg: tone.tile,
+    icon,
+    pill: tone.badge,
+  };
+};
+
 const statusConfig: Record<FilterStatus, StatusConfigItem> = {
   active: {
     label: "All Active",
-    bgActive: "bg-primary/10 border-primary/50 shadow-sm",
-    text: "text-primary dark:text-primary",
-    borderActive: "border-primary/50",
+    bgActive: "bg-primary/15 text-primary border-primary/40 shadow-sm",
+    text: "text-primary",
     iconBg: "bg-primary/15 text-primary",
     icon: Flame,
-    pill: "bg-primary/15 text-primary border-primary/30",
+    pill: "bg-primary/15 text-primary border border-primary/30",
   },
-  pending: {
-    label: "Pending",
-    bgActive: "bg-amber-500/10 border-amber-500/50 shadow-sm",
-    text: "text-amber-500 dark:text-amber-400",
-    borderActive: "border-amber-500/50",
-    iconBg: "bg-amber-500/15 text-amber-500",
-    icon: AlertCircle,
-    pill: "bg-amber-500/15 text-amber-500 border-amber-500/30",
-  },
-  preparing: {
-    label: "Preparing",
-    bgActive: "bg-sky-500/10 border-sky-500/50 shadow-sm",
-    text: "text-sky-500 dark:text-sky-400",
-    borderActive: "border-sky-500/50",
-    iconBg: "bg-sky-500/15 text-sky-500",
-    icon: ChefHat,
-    pill: "bg-sky-500/15 text-sky-500 border-sky-500/30",
-  },
-  ready: {
-    label: "Ready",
-    bgActive: "bg-emerald-500/10 border-emerald-500/50 shadow-sm",
-    text: "text-emerald-500 dark:text-emerald-400",
-    borderActive: "border-emerald-500/50",
-    iconBg: "bg-emerald-500/15 text-emerald-500",
-    icon: CheckCircle2,
-    pill: "bg-emerald-500/15 text-emerald-500 border-emerald-500/30",
-  },
-  completed: {
-    label: "Completed",
-    bgActive: "bg-purple-500/10 border-purple-500/50 shadow-sm",
-    text: "text-purple-500 dark:text-purple-400",
-    borderActive: "border-purple-500/50",
-    iconBg: "bg-purple-500/15 text-purple-500",
-    icon: Check,
-    pill: "bg-purple-500/15 text-purple-500 border-purple-500/30",
-  },
+  pending: buildStatusConfig("pending", AlertCircle),
+  preparing: buildStatusConfig("preparing", ChefHat),
+  ready: buildStatusConfig("ready", CheckCircle2),
+  completed: buildStatusConfig("completed", Check),
+};
+
+type ItemKitchenStatus = "pending" | "preparing" | "ready";
+
+const ITEM_STATUS_ICON: Record<ItemKitchenStatus, typeof Clock> = {
+  pending: AlertCircle,
+  preparing: ChefHat,
+  ready: CheckCircle2,
+};
+
+const ITEM_STATUS_SHORT: Record<ItemKitchenStatus, string> = {
+  pending: "Pend",
+  preparing: "Prep",
+  ready: "Ready",
+};
+
+interface ItemCookInfo {
+  cookTime: number;
+  elapsedMin: number;
+  remainingMin: number;
+  isOverdue: boolean;
+  overdueMin: number;
+}
+
+// Compact per-dish status pill (Pend / Prep / Ready) — one shared implementation instead of
+// a hand-copied 3-branch ternary per call site.
+const ItemStatusPill = ({ status }: { status: ItemKitchenStatus }) => {
+  const Icon = ITEM_STATUS_ICON[status];
+  return (
+    <span
+      className={cn(
+        "px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider shrink-0 flex items-center gap-1",
+        statusTone(status).badge,
+      )}
+    >
+      <Icon className={cn("h-3 w-3", status === "preparing" && "animate-pulse")} /> {ITEM_STATUS_SHORT[status]}
+    </span>
+  );
+};
+
+// Per-dish countdown / state pill shown on the right of each item row.
+// `compact` = the smaller variant used for deal sub-items.
+const ItemTimerPill = ({ status, cook, compact = false }: { status: ItemKitchenStatus; cook: ItemCookInfo; compact?: boolean }) => {
+  const iconCls = compact ? "h-3 w-3" : "h-3.5 w-3.5";
+  const base = cn(
+    "font-mono font-black rounded-md border flex items-center gap-1 shadow-xs",
+    compact ? "text-[11px] px-1.5 py-0.5" : "text-xs px-2 py-0.5",
+  );
+
+  if (status === "ready") {
+    return (
+      <span className={cn(base, statusTone("ready").badge)}>
+        <Check className={cn(iconCls, "stroke-[3]")} /> Done
+      </span>
+    );
+  }
+
+  if (status === "preparing") {
+    if (cook.isOverdue) {
+      return (
+        <span className={cn(base, "bg-destructive text-destructive-foreground border-destructive shadow-md animate-pulse")}>
+          <AlertCircle className={iconCls} />
+          {compact ? `+${cook.overdueMin}m` : `+${cook.overdueMin}m overdue`}
+        </span>
+      );
+    }
+    return (
+      <span className={cn(base, statusTone("preparing").badge)}>
+        {cook.cookTime > 0 ? (
+          <>
+            <Clock className={cn(iconCls, "animate-pulse")} />
+            {compact ? `${cook.remainingMin}m` : `${cook.remainingMin}m left`}
+          </>
+        ) : (
+          <>
+            <Clock className={iconCls} />
+            {cook.elapsedMin}m
+          </>
+        )}
+      </span>
+    );
+  }
+
+  return (
+    <span className={cn(base, statusTone("pending").badge)}>
+      <Timer className={iconCls} />
+      {cook.cookTime > 0 ? `${cook.cookTime}m est` : "In Queue"}
+    </span>
+  );
+};
+
+// Placeholder shaped like an order card (header strip, customer row, two item rows, footer).
+const OrderCardSkeleton = () => (
+  <Card className="border border-border/70 bg-card rounded-xl overflow-hidden">
+    <CardContent className="p-0">
+      <div className="px-3.5 py-2.5 flex items-center justify-between border-b border-border/50 bg-muted/20">
+        <Skeleton className="h-4 w-24" />
+        <Skeleton className="h-5 w-12 rounded-full" />
+      </div>
+      <div className="p-3.5 space-y-2.5">
+        <Skeleton className="h-3.5 w-40" />
+        <div className="space-y-2">
+          <Skeleton className="h-9 w-full rounded-lg" />
+          <Skeleton className="h-9 w-full rounded-lg" />
+        </div>
+        <Skeleton className="h-9 w-full rounded-lg" />
+      </div>
+    </CardContent>
+  </Card>
+);
+
+// Status badge for the order-detail table (Ready / Preparing / Pending).
+const ItemStatusBadge = ({ status }: { status: ItemKitchenStatus }) => {
+  const tone = statusTone(status);
+  return (
+    <Badge variant="outline" className={cn("text-[10px] px-1.5 py-0 font-bold", tone.badge)}>
+      {tone.label}
+    </Badge>
+  );
 };
 
 // 3 Main Order Type Columns
@@ -99,6 +204,12 @@ interface OrderColumnConfig {
   badgeBg: string;
 }
 
+// Channels (Dine In / Take Away / Delivery) are NOT statuses, so they must not borrow the
+// warning/info/success/destructive status hues that sit on the same cards. Neutral chips;
+// each channel is told apart by its own icon + label text.
+const CHANNEL_ICON_BG = "bg-primary/10 text-primary border border-primary/20";
+const CHANNEL_BADGE_BG = "bg-muted text-foreground border border-border";
+
 const orderColumns: OrderColumnConfig[] = [
   {
     key: "dine-in",
@@ -106,8 +217,8 @@ const orderColumns: OrderColumnConfig[] = [
     subtitle: "Dine In & Self Order",
     icon: UtensilsCrossed,
     types: ["Dine In", "Self Order"],
-    iconBg: "bg-rose-500/15 text-rose-500 border border-rose-500/20",
-    badgeBg: "bg-rose-500/20 text-rose-400 border border-rose-500/30",
+    iconBg: CHANNEL_ICON_BG,
+    badgeBg: CHANNEL_BADGE_BG,
   },
   {
     key: "takeaway",
@@ -115,8 +226,8 @@ const orderColumns: OrderColumnConfig[] = [
     subtitle: "Take Away & Walk-in",
     icon: ShoppingCart,
     types: ["Take Away", "Walk-in"],
-    iconBg: "bg-amber-500/15 text-amber-500 border border-amber-500/20",
-    badgeBg: "bg-amber-500/20 text-amber-400 border border-amber-500/30",
+    iconBg: CHANNEL_ICON_BG,
+    badgeBg: CHANNEL_BADGE_BG,
   },
   {
     key: "delivery",
@@ -124,8 +235,8 @@ const orderColumns: OrderColumnConfig[] = [
     subtitle: "Delivery, Foodpanda & Online",
     icon: Truck,
     types: ["Delivery", "Foodpanda", "Online"],
-    iconBg: "bg-sky-500/15 text-sky-500 border border-sky-500/20",
-    badgeBg: "bg-sky-500/20 text-sky-400 border border-sky-500/30",
+    iconBg: CHANNEL_ICON_BG,
+    badgeBg: CHANNEL_BADGE_BG,
   },
 ];
 
@@ -166,6 +277,9 @@ const OrderStatusBoard = () => {
     return m;
   }, [foodMenuItems]);
   const [allOrders, setAllOrders] = useState<any[]>([]);
+  // False until the first fetch attempt has settled (success or failure) — keeps the
+  // board from flashing the empty "No Orders Found" state before any data has arrived.
+  const [hasLoaded, setHasLoaded] = useState(false);
   const [activeStatus, setActiveStatus] = useState<FilterStatus>("active");
   const [viewMode, setViewMode] = useState<"columns" | "grid">("columns");
   const [time, setTime] = useState(new Date());
@@ -226,7 +340,12 @@ const OrderStatusBoard = () => {
       setAllOrders((res.data || [])
         .filter((o) => !(o.type === "Self Order" && o.status === "pending" && !o.acceptedById))
         .map(normalize));
-    } catch { }
+    } catch {
+      // Silent: the 60s poll / socket events retry. hasLoaded still flips below so the
+      // board leaves its skeleton state instead of spinning forever.
+    } finally {
+      setHasLoaded(true);
+    }
   }, []);
 
   const handleOrderEvent = useCallback((payload?: any) => {
@@ -427,7 +546,9 @@ const OrderStatusBoard = () => {
       if (selectedOrder && selectedOrder.id === orderId) {
         setSelectedOrder(prev => prev ? { ...prev, status: newStatus } : null);
       }
-      toast.success(`Order #${orderId.slice(-4)} updated to ${newStatus}`);
+      // Human order number (e.g. ORD-020); the raw DB id suffix is only a last-resort fallback.
+      const orderLabel = targetOrder?.orderNumber || `#${orderId.slice(-4)}`;
+      toast.success(`Order ${orderLabel} updated to ${newStatus}`);
     } catch (err: any) {
       toast.error(err?.message || "Failed to update order status");
     } finally {
@@ -560,7 +681,6 @@ const OrderStatusBoard = () => {
 
   // ── Render Individual Order Card ──
   const renderOrderCard = (order: any) => {
-    const cfg = statusConfig[order.status as FilterStatus] ?? statusConfig.pending;
     const elapsed = getElapsed(order);
     const paid = isPaid(order);
     const cookInfo = getCookingInfo(order);
@@ -584,7 +704,7 @@ const OrderStatusBoard = () => {
                 const sameTableOrders = allOrders.filter(o => o.tableNumber === order.tableNumber && o.status !== "cancelled");
                 const orderIdx = sameTableOrders.findIndex(o => o.id === order.id);
                 return (
-                  <Badge className="text-[10px] font-extrabold px-1.5 py-0.5 rounded-md bg-rose-500/90 text-white">
+                  <Badge className="text-[10px] font-extrabold px-1.5 py-0.5 rounded-md bg-primary text-primary-foreground">
                     T-{order.tableNumber}{sameTableOrders.length > 1 ? ` (${orderIdx + 1}/${sameTableOrders.length})` : ""}
                   </Badge>
                 );
@@ -594,7 +714,7 @@ const OrderStatusBoard = () => {
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-6 w-6 rounded-lg text-muted-foreground hover:text-orange-500 hover:bg-orange-500/10 transition-colors p-0 cursor-pointer border border-border/40 bg-background/80"
+                className="h-9 w-9 rounded-lg text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors p-0 cursor-pointer border border-border/40 bg-background/80"
                 title="Print Slip (KOT / Bill)"
                 onClick={(e) => {
                   e.stopPropagation();
@@ -604,7 +724,7 @@ const OrderStatusBoard = () => {
                 <Printer className="h-3.5 w-3.5" />
               </Button>
               <span className="text-[10px] font-mono font-bold text-muted-foreground bg-background/80 px-2 py-0.5 rounded-full flex items-center gap-1 border border-border/50">
-                <Timer className="h-3 w-3 text-amber-500" />
+                <Timer className="h-3 w-3 text-primary" />
                 {elapsed}
               </span>
             </div>
@@ -663,61 +783,14 @@ const OrderStatusBoard = () => {
                             >
                               {/* Left: Sub-item Status Badge + Qty + Name */}
                               <div className="flex items-center gap-1.5 truncate min-w-0">
-                                {subStatus === "ready" ? (
-                                  <span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider bg-emerald-500/25 text-emerald-400 dark:text-emerald-300 border border-emerald-500/40 shrink-0 flex items-center gap-1">
-                                    <CheckCircle2 className="h-3 w-3 text-emerald-400" /> Ready
-                                  </span>
-                                ) : subStatus === "preparing" ? (
-                                  <span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider bg-sky-500/25 text-sky-300 dark:text-sky-200 border border-sky-500/40 shrink-0 flex items-center gap-1">
-                                    <ChefHat className="h-3 w-3 animate-pulse text-sky-300" /> Prep
-                                  </span>
-                                ) : (
-                                  <span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider bg-amber-500/25 text-amber-300 dark:text-amber-200 border border-amber-500/40 shrink-0 flex items-center gap-1">
-                                    <AlertCircle className="h-3 w-3 text-amber-400" /> Pend
-                                  </span>
-                                )}
+                                <ItemStatusPill status={subStatus} />
                                 <span className="font-black text-xs text-foreground shrink-0">{subItem.qty}×</span>
                                 <span className="truncate font-semibold text-foreground text-xs">{subItem.name}</span>
                               </div>
 
                               {/* Right side: Individual Countdown Timer Pill for this deal dish */}
                               <div className="shrink-0">
-                                {subStatus === "ready" ? (
-                                  <span className="font-mono text-[11px] font-black text-emerald-400 dark:text-emerald-300 bg-emerald-500/20 px-1.5 py-0.5 rounded-md border border-emerald-500/40 flex items-center gap-1 shadow-xs">
-                                    <Check className="h-3 w-3 stroke-[3]" /> Done
-                                  </span>
-                                ) : subStatus === "preparing" ? (
-                                  <span
-                                    className={cn(
-                                      "font-mono text-[11px] font-black px-1.5 py-0.5 rounded-md border flex items-center gap-1 shadow-xs",
-                                      subCook.isOverdue
-                                        ? "text-white bg-destructive border-destructive shadow-md animate-pulse"
-                                        : "text-sky-300 dark:text-sky-200 bg-sky-500/25 border-sky-400/60"
-                                    )}
-                                  >
-                                    {subCook.isOverdue ? (
-                                      <>
-                                        <AlertCircle className="h-3 w-3 text-white" />
-                                        +{subCook.overdueMin}m
-                                      </>
-                                    ) : subCook.cookTime > 0 ? (
-                                      <>
-                                        <Clock className="h-3 w-3 animate-pulse" />
-                                        {subCook.remainingMin}m
-                                      </>
-                                    ) : (
-                                      <>
-                                        <Clock className="h-3 w-3" />
-                                        {subCook.elapsedMin}m
-                                      </>
-                                    )}
-                                  </span>
-                                ) : (
-                                  <span className="font-mono text-[11px] font-black text-amber-300 dark:text-amber-200 bg-amber-500/25 px-1.5 py-0.5 rounded-md border border-amber-400/60 flex items-center gap-1 shadow-xs">
-                                    <Timer className="h-3 w-3" />
-                                    {subCook.cookTime > 0 ? `${subCook.cookTime}m est` : "In Queue"}
-                                  </span>
-                                )}
+                                <ItemTimerPill status={subStatus} cook={subCook} compact />
                               </div>
                             </div>
                           );
@@ -735,59 +808,14 @@ const OrderStatusBoard = () => {
                   <div key={i} className="flex items-center justify-between text-xs gap-2 p-1.5 rounded-lg bg-card border border-border/40 hover:border-primary/30 transition-all">
                     {/* Left: Status Badge + Qty + Name */}
                     <div className="flex items-center gap-1.5 truncate min-w-0">
-                      {itemStatus === "ready" ? (
-                        <span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider bg-emerald-500/25 text-emerald-400 dark:text-emerald-300 border border-emerald-500/40 shrink-0 flex items-center gap-1">
-                          <CheckCircle2 className="h-3 w-3 text-emerald-400" /> Ready
-                        </span>
-                      ) : itemStatus === "preparing" ? (
-                        <span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider bg-sky-500/25 text-sky-300 dark:text-sky-200 border border-sky-500/40 shrink-0 flex items-center gap-1">
-                          <ChefHat className="h-3 w-3 animate-pulse text-sky-300" /> Prep
-                        </span>
-                      ) : (
-                        <span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider bg-amber-500/25 text-amber-300 dark:text-amber-200 border border-amber-500/40 shrink-0 flex items-center gap-1">
-                          <AlertCircle className="h-3 w-3 text-amber-400" /> Pend
-                        </span>
-                      )}
+                      <ItemStatusPill status={itemStatus} />
                       <span className="font-black text-xs text-foreground shrink-0">{item.qty}×</span>
                       <span className="truncate font-extrabold text-foreground text-xs">{item.name}</span>
                     </div>
 
                     {/* Right side: Countdown Timer */}
                     <div className="shrink-0">
-                      {itemStatus === "ready" ? (
-                        <span className="font-mono text-xs font-black text-emerald-400 dark:text-emerald-300 bg-emerald-500/20 px-2 py-0.5 rounded-md border border-emerald-500/40 flex items-center gap-1 shadow-xs">
-                          <Check className="h-3.5 w-3.5 stroke-[3]" /> Done
-                        </span>
-                      ) : itemStatus === "preparing" ? (
-                        <span className={cn(
-                          "font-mono text-xs font-black px-2 py-0.5 rounded-md border flex items-center gap-1 shadow-xs",
-                          itemCook.isOverdue
-                            ? "text-white bg-destructive border-destructive shadow-md animate-pulse"
-                            : "text-sky-300 dark:text-sky-200 bg-sky-500/25 border-sky-400/60"
-                        )}>
-                          {itemCook.isOverdue ? (
-                            <>
-                              <AlertCircle className="h-3.5 w-3.5 text-white" />
-                              +{itemCook.overdueMin}m overdue
-                            </>
-                          ) : itemCook.cookTime > 0 ? (
-                            <>
-                              <Clock className="h-3.5 w-3.5 animate-pulse" />
-                              {itemCook.remainingMin}m left
-                            </>
-                          ) : (
-                            <>
-                              <Clock className="h-3.5 w-3.5" />
-                              {itemCook.elapsedMin}m
-                            </>
-                          )}
-                        </span>
-                      ) : (
-                        <span className="font-mono text-xs font-black text-amber-300 dark:text-amber-200 bg-amber-500/25 px-2 py-0.5 rounded-md border border-amber-400/60 flex items-center gap-1 shadow-xs">
-                          <Timer className="h-3.5 w-3.5" />
-                          {itemCook.cookTime > 0 ? `${itemCook.cookTime}m est` : "In Queue"}
-                        </span>
-                      )}
+                      <ItemTimerPill status={itemStatus} cook={itemCook} />
                     </div>
                   </div>
                 );
@@ -798,19 +826,19 @@ const OrderStatusBoard = () => {
             {order.status === "preparing" && cookInfo && (
               <div className="space-y-1 pt-0.5">
                 <div className="flex items-center justify-between text-[10px]">
-                  <span className={cn("font-bold flex items-center gap-1", cookInfo.isOverdue ? "text-destructive" : cookInfo.remainingMin <= 2 ? "text-amber-500" : "text-sky-500")}>
+                  <span className={cn("font-bold flex items-center gap-1", cookInfo.isOverdue ? "text-destructive" : cookInfo.remainingMin <= 2 ? statusTone("pending").text : statusTone("preparing").text)}>
                     <ChefHat className="h-3 w-3" />
                     {cookInfo.isOverdue ? `Overdue +${cookInfo.elapsedMin - cookInfo.maxCookTime}m` : `${cookInfo.remainingMin}m left`}
                   </span>
                   <span className="text-muted-foreground font-mono">{cookInfo.maxCookTime}m max</span>
                 </div>
-                <Progress value={cookInfo.progress} className={cn("h-1.5 rounded-full", cookInfo.isOverdue && "[&>div]:bg-destructive", !cookInfo.isOverdue && cookInfo.progress > 75 && "[&>div]:bg-amber-500")} />
+                <Progress value={cookInfo.progress} className={cn("h-1.5 rounded-full", cookInfo.isOverdue && "[&>div]:bg-destructive", !cookInfo.isOverdue && cookInfo.progress > 75 && "[&>div]:bg-warning")} />
               </div>
             )}
 
             {/* Pending Status Info (Waiting for kitchen start) */}
             {order.status === "pending" && (
-              <div className="flex items-center justify-between text-[10px] bg-amber-500/10 border border-amber-500/20 px-2 py-1 rounded-md text-amber-500 font-bold">
+              <div className={cn("flex items-center justify-between text-[10px] px-2 py-1 rounded-md font-bold", statusTone("pending").badge)}>
                 <span className="flex items-center gap-1">
                   <AlertCircle className="h-3 w-3" /> In Queue
                 </span>
@@ -820,11 +848,9 @@ const OrderStatusBoard = () => {
 
             {/* Footer: Payment Status + Quick Print Action (No Bill Amount) */}
             <div className="flex items-center justify-between pt-2 border-t border-border/40">
-              <Badge className={cn(
+              <Badge variant="outline" className={cn(
                 "text-[10px] font-bold px-2.5 py-1 rounded-lg flex items-center gap-1.5",
-                paid
-                  ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30"
-                  : "bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/30"
+                paid ? statusTone("completed").badge : statusTone("pending").badge
               )}>
                 {paid ? <CreditCard className="h-3 w-3" /> : <Banknote className="h-3 w-3" />}
                 {paid ? (order.paymentMethod || "Paid") : "Payment Pending"}
@@ -833,14 +859,14 @@ const OrderStatusBoard = () => {
               <Button
                 variant="outline"
                 size="sm"
-                className="h-7 px-2.5 text-[11px] font-semibold gap-1.5 text-muted-foreground hover:text-foreground border-border/60 hover:bg-muted rounded-lg"
+                className="h-9 px-3 text-[11px] font-semibold gap-1.5 text-muted-foreground hover:text-foreground border-border/60 hover:bg-muted rounded-lg"
                 title="Print Slip"
                 onClick={(e) => {
                   e.stopPropagation();
                   handleOpenPrintModal(order);
                 }}
               >
-                <Printer className="h-3.5 w-3.5 text-orange-500" />
+                <Printer className="h-3.5 w-3.5 text-primary" />
                 <span>Print Slip</span>
               </Button>
             </div>
@@ -851,7 +877,7 @@ const OrderStatusBoard = () => {
                 size="sm"
                 disabled={updatingOrderId === order.id}
                 onClick={(e) => { e.stopPropagation(); handleStatusUpdate(order.id, "completed"); }}
-                className="w-full h-8 text-xs bg-emerald-500 hover:bg-emerald-600 text-white font-bold shadow-xs flex items-center justify-center gap-1.5 rounded-lg transition-all"
+                className="w-full h-10 text-xs gradient-primary text-primary-foreground hover:opacity-90 font-bold shadow-xs flex items-center justify-center gap-1.5 rounded-lg transition-all"
               >
                 {updatingOrderId === order.id ? (
                   <>
@@ -896,12 +922,12 @@ const OrderStatusBoard = () => {
 
         <div className="flex items-center gap-3">
           {/* View Mode Switcher */}
-          <div className="bg-muted/50 p-1 rounded-lg border border-border/60 flex items-center gap-1">
+          <div className="inline-flex items-center p-0.5 rounded-lg bg-muted/60 border border-border/60 shadow-sm">
             <button
               onClick={() => setViewMode("columns")}
               className={cn(
-                "flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-bold transition-all",
-                viewMode === "columns" ? "bg-card text-foreground shadow-xs border border-border/60" : "text-muted-foreground hover:text-foreground"
+                "flex items-center gap-1.5 px-3 h-9 rounded-md text-xs font-bold transition-all",
+                viewMode === "columns" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
               )}
             >
               <Columns className="h-3.5 w-3.5 text-primary" />
@@ -910,8 +936,8 @@ const OrderStatusBoard = () => {
             <button
               onClick={() => setViewMode("grid")}
               className={cn(
-                "flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-bold transition-all",
-                viewMode === "grid" ? "bg-card text-foreground shadow-xs border border-border/60" : "text-muted-foreground hover:text-foreground"
+                "flex items-center gap-1.5 px-3 h-9 rounded-md text-xs font-bold transition-all",
+                viewMode === "grid" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
               )}
             >
               <LayoutGrid className="h-3.5 w-3.5 text-primary" />
@@ -922,7 +948,7 @@ const OrderStatusBoard = () => {
           <div className="hidden sm:flex items-center gap-2 bg-muted/30 px-2.5 py-1 rounded-lg border border-border/40">
             <Checkbox id="sound" checked={soundAlert} onCheckedChange={(v) => setSoundAlert(!!v)} />
             <Label htmlFor="sound" className="text-xs font-medium cursor-pointer flex items-center gap-1 text-muted-foreground">
-              <Bell className="h-3.5 w-3.5 text-amber-500" /> Sound
+              <Bell className="h-3.5 w-3.5 text-primary" /> Sound
             </Label>
           </div>
 
@@ -951,7 +977,7 @@ const OrderStatusBoard = () => {
                 className={cn(
                   "p-3 rounded-xl text-left border transition-all duration-150 relative overflow-hidden group cursor-pointer",
                   isActive
-                    ? `${cfg.bgActive} ${cfg.borderActive}`
+                    ? cfg.bgActive
                     : "bg-card hover:bg-card/90 border-border/60 text-muted-foreground"
                 )}
               >
@@ -965,11 +991,15 @@ const OrderStatusBoard = () => {
                 </div>
 
                 <div className="mt-1.5 flex items-baseline justify-between relative z-10">
-                  <span className={cn("text-2xl font-black font-mono tracking-tight", isActive ? "text-foreground" : "text-foreground/80")}>
-                    {count}
-                  </span>
+                  {hasLoaded ? (
+                    <span className={cn("text-2xl font-black font-mono tracking-tight", isActive ? "text-foreground" : "text-foreground/80")}>
+                      {count}
+                    </span>
+                  ) : (
+                    <Skeleton className="h-7 w-10" />
+                  )}
                   {isActive && (
-                    <span className={cn("text-[9px] font-bold px-2 py-0.5 rounded-full border", cfg.pill)}>
+                    <span className={cn("text-[9px] font-bold px-2 py-0.5 rounded-full", cfg.pill)}>
                       Active Filter
                     </span>
                   )}
@@ -982,7 +1012,39 @@ const OrderStatusBoard = () => {
 
       {/* ════════════ MAIN CONTENT AREA (FULL SCREEN WIDTH) ════════════ */}
       <main className="flex-1 overflow-hidden p-4 sm:px-6 py-4 bg-muted/10 w-full">
-        {activeStatusOrders.length === 0 ? (
+        {!hasLoaded ? (
+          /* ── FIRST-LOAD SKELETON (mirrors the columns / grid layout) ── */
+          viewMode === "columns" ? (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 lg:gap-6 h-full w-full overflow-hidden">
+              {orderColumns.map((col) => (
+                <div key={col.key} className="flex flex-col h-full bg-card rounded-2xl border border-border/70 overflow-hidden shadow-xs">
+                  <div className="p-3.5 border-b border-border/60 bg-muted/30 flex items-center justify-between shrink-0">
+                    <div className="flex items-center gap-2.5">
+                      <Skeleton className="h-8 w-8 rounded-lg" />
+                      <div className="space-y-1.5">
+                        <Skeleton className="h-3.5 w-32" />
+                        <Skeleton className="h-2.5 w-24" />
+                      </div>
+                    </div>
+                    <Skeleton className="h-6 w-16 rounded-md" />
+                  </div>
+                  <div className="flex-1 overflow-hidden p-3 space-y-3">
+                    <OrderCardSkeleton />
+                    <OrderCardSkeleton />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="h-full overflow-hidden w-full pr-1">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3.5">
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <OrderCardSkeleton key={i} />
+                ))}
+              </div>
+            </div>
+          )
+        ) : activeStatusOrders.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-center p-8">
             <div className="h-16 w-16 rounded-2xl bg-muted/40 flex items-center justify-center mb-3 border border-border/60">
               <ShoppingBag className="h-8 w-8 text-muted-foreground/40" />
@@ -1017,7 +1079,8 @@ const OrderStatusBoard = () => {
                     </div>
 
                     <div className="text-right">
-                      <Badge className={cn("text-xs font-extrabold px-2 py-0.5 rounded-md", col.badgeBg)}>
+                      <Badge variant="outline" className={cn("text-xs font-extrabold px-2 py-0.5 rounded-md gap-1", col.badgeBg)}>
+                        <ColIcon className="h-3 w-3" />
                         {colOrders.length} Orders
                       </Badge>
                       <p className="text-[10px] font-mono font-bold text-muted-foreground mt-0.5">
@@ -1066,8 +1129,8 @@ const OrderStatusBoard = () => {
         <Separator orientation="vertical" className="h-7" />
 
         <div className="flex items-center gap-2.5">
-          <div className="h-7 w-7 rounded-lg bg-emerald-500/10 flex items-center justify-center">
-            <TrendingUp className="h-3.5 w-3.5 text-emerald-500" />
+          <div className={cn("h-7 w-7 rounded-lg flex items-center justify-center", statusTone("completed").tile)}>
+            <TrendingUp className="h-3.5 w-3.5" />
           </div>
           <div>
             <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider">Today's Revenue</p>
@@ -1078,24 +1141,24 @@ const OrderStatusBoard = () => {
         <Separator orientation="vertical" className="h-7" />
 
         <div className="flex items-center gap-2.5">
-          <div className="h-7 w-7 rounded-lg bg-amber-500/10 flex items-center justify-center">
-            <AlertCircle className="h-3.5 w-3.5 text-amber-500" />
+          <div className={cn("h-7 w-7 rounded-lg flex items-center justify-center", statusTone("pending").tile)}>
+            <AlertCircle className="h-3.5 w-3.5" />
           </div>
           <div>
             <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider">Active Pending</p>
-            <p className="text-xs font-extrabold text-amber-500 font-mono">{statusCounts.pending}</p>
+            <p className={cn("text-xs font-extrabold font-mono", statusTone("pending").text)}>{statusCounts.pending}</p>
           </div>
         </div>
 
         <Separator orientation="vertical" className="h-7 hidden sm:block" />
 
         <div className="hidden sm:flex items-center gap-2.5">
-          <div className="h-7 w-7 rounded-lg bg-sky-500/10 flex items-center justify-center">
-            <ChefHat className="h-3.5 w-3.5 text-sky-500" />
+          <div className={cn("h-7 w-7 rounded-lg flex items-center justify-center", statusTone("preparing").tile)}>
+            <ChefHat className="h-3.5 w-3.5" />
           </div>
           <div>
             <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider">In Kitchen</p>
-            <p className="text-xs font-extrabold text-sky-500 font-mono">{statusCounts.preparing}</p>
+            <p className={cn("text-xs font-extrabold font-mono", statusTone("preparing").text)}>{statusCounts.preparing}</p>
           </div>
         </div>
       </footer>
@@ -1104,7 +1167,7 @@ const OrderStatusBoard = () => {
       <Dialog open={!!selectedOrder} onOpenChange={() => setSelectedOrder(null)}>
         <DialogContent className="max-w-lg w-[95vw] max-h-[90vh] overflow-y-auto p-4 sm:p-6 rounded-2xl">
           {selectedOrder && (() => {
-            const cfg = statusConfig[selectedOrder.status as FilterStatus] ?? statusConfig.pending;
+            const orderTone = statusTone(selectedOrder.status);
             const paid = isPaid(selectedOrder);
 
             return (
@@ -1113,12 +1176,12 @@ const OrderStatusBoard = () => {
                   <DialogTitle className="flex items-center justify-between gap-2 flex-wrap">
                     <div className="flex items-center gap-2">
                       <span className="font-black text-xl tracking-tight text-foreground">{selectedOrder.orderNumber}</span>
-                      <Badge className="text-xs font-extrabold px-2.5 py-0.5 rounded-md bg-primary/15 text-primary border border-primary/20">
+                      <Badge variant="outline" className="text-xs font-extrabold px-2.5 py-0.5 rounded-md bg-primary/15 text-primary border border-primary/20">
                         {selectedOrder.type}
                       </Badge>
                     </div>
-                    <Badge className={cn("text-xs font-extrabold rounded-full px-3 py-1 border", cfg.pill)}>
-                      {cfg.label}
+                    <Badge variant="outline" className={cn("text-xs font-extrabold rounded-full px-3 py-1", orderTone.badge)}>
+                      {orderTone.label || selectedOrder.status}
                     </Badge>
                   </DialogTitle>
                   <DialogDescription className="sr-only">Detailed breakdown of order items and statuses</DialogDescription>
@@ -1134,7 +1197,7 @@ const OrderStatusBoard = () => {
                       <p><span className="text-muted-foreground">Staff:</span> <strong className="text-foreground">{selectedOrder.staff}</strong></p>
                     )}
                     {selectedOrder.tableNumber && (
-                      <p><span className="text-muted-foreground">Table:</span> <strong className="text-rose-500 font-extrabold">#{selectedOrder.tableNumber}</strong></p>
+                      <p><span className="text-muted-foreground">Table:</span> <strong className="text-primary font-extrabold">#{selectedOrder.tableNumber}</strong></p>
                     )}
                     {selectedOrder.deliveryAddress && (
                       <p className="col-span-2"><span className="text-muted-foreground">Address:</span> <strong className="text-foreground">{selectedOrder.deliveryAddress}</strong></p>
@@ -1142,12 +1205,12 @@ const OrderStatusBoard = () => {
                     <p>
                       <span className="text-muted-foreground">Payment Status:</span>{" "}
                       {paid
-                        ? <strong className="text-emerald-500 font-extrabold">{selectedOrder.paymentMethod}</strong>
-                        : <strong className="text-amber-500 font-extrabold">Unpaid</strong>
+                        ? <strong className={cn("font-extrabold", statusTone("completed").text)}>{selectedOrder.paymentMethod}</strong>
+                        : <strong className={cn("font-extrabold", statusTone("pending").text)}>Unpaid</strong>
                       }
                     </p>
                     {selectedOrder.advancePayment > 0 && (
-                      <p><span className="text-muted-foreground">Advance Paid:</span> <strong className="text-sky-500 font-extrabold">Rs. {selectedOrder.advancePayment.toLocaleString()}</strong></p>
+                      <p><span className="text-muted-foreground">Advance Paid:</span> <strong className="text-foreground font-extrabold">Rs. {selectedOrder.advancePayment.toLocaleString()}</strong></p>
                     )}
                   </div>
 
@@ -1180,13 +1243,7 @@ const OrderStatusBoard = () => {
                                     </div>
                                   </TableCell>
                                   <TableCell className="text-xs text-center py-2">
-                                    {row.status === "ready" ? (
-                                      <Badge className="text-[10px] bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 px-1.5 py-0 font-bold">Ready</Badge>
-                                    ) : row.status === "preparing" ? (
-                                      <Badge variant="outline" className="text-[10px] text-sky-500 border-sky-500/30 bg-sky-500/10 px-1.5 py-0 font-bold">Preparing</Badge>
-                                    ) : (
-                                      <Badge variant="outline" className="text-[10px] text-amber-500 border-amber-500/30 bg-amber-500/10 px-1.5 py-0 font-bold">Pending</Badge>
-                                    )}
+                                    <ItemStatusBadge status={row.status} />
                                   </TableCell>
                                   <TableCell className="text-xs font-bold text-center py-2">1</TableCell>
                                   <TableCell className="text-xs font-mono text-right py-2">Rs. {Math.round(row.gross).toLocaleString()}</TableCell>
@@ -1205,7 +1262,7 @@ const OrderStatusBoard = () => {
                                       <TableCell className="text-xs text-center py-1.5">
                                         <span className={cn(
                                           "text-[9px] font-bold px-1.5 py-0.5 rounded uppercase",
-                                          subStatus === "ready" ? "text-emerald-500" : subStatus === "preparing" ? "text-sky-500" : "text-amber-500"
+                                          statusTone(subStatus).text
                                         )}>
                                           {subStatus}
                                         </span>
@@ -1226,24 +1283,15 @@ const OrderStatusBoard = () => {
                             <TableRow key={item.id || i} className="hover:bg-muted/30">
                               <TableCell className="text-xs font-semibold py-2">
                                 <div className="flex items-center gap-1.5">
-                                  {itemStatus === "ready" ? (
-                                    <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
-                                  ) : itemStatus === "preparing" ? (
-                                    <ChefHat className="h-4 w-4 text-sky-500/70 shrink-0" />
-                                  ) : (
-                                    <AlertCircle className="h-4 w-4 text-amber-500/70 shrink-0" />
-                                  )}
+                                  {(() => {
+                                    const StatusIcon = ITEM_STATUS_ICON[itemStatus];
+                                    return <StatusIcon className={cn("h-4 w-4 shrink-0", statusTone(itemStatus).text)} />;
+                                  })()}
                                   <span>{item.name}</span>
                                 </div>
                               </TableCell>
                               <TableCell className="text-xs text-center py-2">
-                                {itemStatus === "ready" ? (
-                                  <Badge className="text-[10px] bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 px-1.5 py-0 font-bold">Ready</Badge>
-                                ) : itemStatus === "preparing" ? (
-                                  <Badge variant="outline" className="text-[10px] text-sky-500 border-sky-500/30 bg-sky-500/10 px-1.5 py-0 font-bold">Preparing</Badge>
-                                ) : (
-                                  <Badge variant="outline" className="text-[10px] text-amber-500 border-amber-500/30 bg-amber-500/10 px-1.5 py-0 font-bold">Pending</Badge>
-                                )}
+                                <ItemStatusBadge status={itemStatus} />
                               </TableCell>
                               <TableCell className="text-xs font-bold text-center py-2">{item.qty}</TableCell>
                               <TableCell className="text-xs font-mono text-right py-2">Rs. {Math.round(item.price).toLocaleString()}</TableCell>
@@ -1276,7 +1324,7 @@ const OrderStatusBoard = () => {
                     className="w-full sm:w-auto rounded-xl font-bold gap-1.5"
                     onClick={() => handleOpenPrintModal(selectedOrder)}
                   >
-                    <Printer className="h-4 w-4 text-orange-500" /> Print Slip
+                    <Printer className="h-4 w-4 text-primary" /> Print Slip
                   </Button>
 
                   <Button variant="outline" className="w-full sm:w-auto rounded-xl font-bold" onClick={() => setSelectedOrder(null)}>Close Window</Button>
@@ -1284,7 +1332,7 @@ const OrderStatusBoard = () => {
                   {selectedOrder.status === "ready" && (
                     <Button
                       disabled={updatingOrderId === selectedOrder.id}
-                      className="w-full sm:w-auto bg-emerald-500 hover:bg-emerald-600 text-white font-extrabold rounded-xl shadow-md flex items-center justify-center gap-1.5"
+                      className="w-full sm:w-auto h-10 gradient-primary text-primary-foreground hover:opacity-90 font-extrabold rounded-xl shadow-md flex items-center justify-center gap-1.5"
                       onClick={() => handleStatusUpdate(selectedOrder.id, "completed")}
                     >
                       {updatingOrderId === selectedOrder.id ? (
