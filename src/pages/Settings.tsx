@@ -185,6 +185,7 @@ const SettingsPage = () => {
   const pathSlug = location.pathname.split("/settings/")[1] || "";
   const initialTab = slugTabMap[pathSlug] || "general";
   const { updateSettings } = useData();
+  const { user } = useAuth();
 
   const [tab, setTab] = useState(initialTab);
   const [loadingSettings, setLoadingSettings] = useState(true);
@@ -198,7 +199,19 @@ const SettingsPage = () => {
   });
 
   useEffect(() => {
-    settingsService.getSettings()
+    if (user?.role === "Super Admin") {
+      if (location.pathname === '/settings' || location.pathname === '/settings/' || location.pathname.startsWith('/settings/website')) {
+        navigate('/settings/warehouses', { replace: true });
+      }
+    }
+  }, [user?.role, location.pathname, navigate]);
+
+  useEffect(() => {
+    if (!user?.outletId || user?.role === "Super Admin") {
+      setLoadingSettings(false);
+      return;
+    }
+    settingsService.getMySettings()
       .then((data: SettingsRecord) => {
         setGeneral({
           businessName: data.restaurantName || "",
@@ -301,11 +314,18 @@ const SettingsPage = () => {
     <div className="space-y-6">
       <PageHeader icon={<SettingsIcon className="h-5 w-5" />} title="Settings" subtitle="System configuration" />
       <Tabs value={tab} onValueChange={handleTabChange}>
-        <div className="overflow-x-auto -mx-1 px-1"><TabsList className="inline-flex w-auto min-w-full sm:w-full"><TabsTrigger value="general">General</TabsTrigger><TabsTrigger value="warehouses">Warehouses</TabsTrigger><TabsTrigger value="website">Website</TabsTrigger></TabsList></div>
+        <div className="overflow-x-auto -mx-1 px-1">
+          <TabsList className="inline-flex w-auto min-w-full sm:w-full">
+            {user?.role !== "Super Admin" && <TabsTrigger value="general">General</TabsTrigger>}
+            <TabsTrigger value="warehouses">Warehouses</TabsTrigger>
+            {user?.role !== "Super Admin" && <TabsTrigger value="website">Website</TabsTrigger>}
+          </TabsList>
+        </div>
 
         {/* General Tab */}
-        <TabsContent value="general"><Card className="shadow-sm"><CardHeader><CardTitle>General Settings</CardTitle></CardHeader><CardContent className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {user?.role !== "Super Admin" && (
+          <TabsContent value="general"><Card className="shadow-sm"><CardHeader><CardTitle>General Settings</CardTitle></CardHeader><CardContent className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div><label className="text-sm font-medium">Business Name</label><Input value={general.businessName} onChange={e => setGeneral(p => ({...p, businessName: e.target.value}))} /></div>
             <div><label className="text-sm font-medium">Phone</label><Input value={general.phone} onChange={e => setGeneral(p => ({...p, phone: e.target.value}))} /></div>
             <div><label className="text-sm font-medium">Email</label><Input value={general.email} onChange={e => setGeneral(p => ({...p, email: e.target.value}))} /></div>
@@ -427,11 +447,11 @@ const SettingsPage = () => {
             <Button variant="outline" onClick={() => { setGeneral({ businessName: "Ovenisto", phone: "03201119898", email: "admin@ovenisto.com", currency: "Rs.", taxName: "GST", taxRate: "16", address: "164-J LDA AVENUE-1 Lahore", receiptHeader: "Thank you for dining at Ovenisto!", tableManagement: true, onlineOrders: true, graceMinutes: 15 }); toast.success("Reset to defaults"); }}>Reset to Defaults</Button>
           </div>
         </CardContent></Card></TabsContent>
-
+        )}
 
         {/* Warehouses Tab */}
         <TabsContent value="warehouses"><WarehousesTab /></TabsContent>
-        <TabsContent value="website"><WebsiteSettingsTab /></TabsContent>
+        {user?.role !== "Super Admin" && <TabsContent value="website"><WebsiteSettingsTab /></TabsContent>}
       </Tabs>
     </div>
   );

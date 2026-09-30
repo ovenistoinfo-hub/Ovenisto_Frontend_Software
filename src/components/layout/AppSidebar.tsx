@@ -45,9 +45,9 @@ export const navSections = [
   ]},
   { label: "Outlets", items: [{ title: "Outlets", url: "/outlets", icon: Store, module: "outlets" }]},
   { label: "Settings", items: [
-    { title: "General Settings", url: "/settings", icon: Settings, module: "settings" },
+    { title: "General Settings", url: "/settings", icon: Settings, module: "settings", hideForSuperAdmin: true },
     { title: "Warehouses", url: "/settings/warehouses", icon: Package, module: "settings" },
-    { title: "Website Ordering", url: "/settings/website", icon: Globe, module: "settings" },
+    { title: "Website Ordering", url: "/settings/website", icon: Globe, module: "settings", hideForSuperAdmin: true },
   ]},
   { label: "Item / Stock", items: [
     { title: "Items", icon: Pizza, module: "items", children: [
@@ -140,6 +140,7 @@ export function AppSidebar() {
       <SidebarContent className="overflow-y-auto">
         {navSections.map((section) => {
           const visibleItems = section.items.filter((item: any) => {
+            if (item.hideForSuperAdmin && user?.role === "Super Admin") return false;
             if (item.url === "/my-portal" && ["Admin", "Super Admin"].includes(user?.role ?? "")) {
               return false;
             }

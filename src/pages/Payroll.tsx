@@ -158,7 +158,7 @@ const Payroll = () => {
 
   // Queries
   const { data: settings } = useQuery({
-    queryKey: ["payroll-settings"],
+    queryKey: ["payroll-settings", currentUser?.outletId ?? "all"],
     queryFn: () => settingsService.getSettings(),
   });
 

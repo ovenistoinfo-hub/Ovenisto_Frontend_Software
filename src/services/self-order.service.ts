@@ -31,6 +31,14 @@ async function publicRequest<T>(endpoint: string, options: RequestInit = {}): Pr
   return body.data as T;
 }
 
+/** The display fields the self-order page needs from its branch's settings row. */
+export interface SelfOrderOutletSettings {
+  currency?: string;
+  taxRate?: number | string;
+  taxName?: string;
+  restaurantName?: string | null;
+}
+
 export interface SelfOrderTable {
   tableId: string;
   tableNumber: string;
@@ -225,6 +233,14 @@ export interface SelfOrderActiveOrder {
 export const selfOrderService = {
   async getTable(tableId: string): Promise<SelfOrderTable> {
     return publicRequest<SelfOrderTable>(`/self-order/table/${tableId}`);
+  },
+
+  /** The scanned table's branch settings, from the public GET /settings?outletId=.
+   *  Sent without a staff token on purpose: through api.ts, a stale staff login left
+   *  on this device would 401 and bounce the customer to /login (see the note at
+   *  the top of this file). */
+  async getOutletSettings(outletId: string): Promise<SelfOrderOutletSettings> {
+    return publicRequest<SelfOrderOutletSettings>(`/settings?outletId=${encodeURIComponent(outletId)}`);
   },
 
   /** Pass the scanned table's id so item/variant `available` reflects that

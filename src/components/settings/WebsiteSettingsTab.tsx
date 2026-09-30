@@ -90,7 +90,7 @@ export function WebsiteSettingsTab() {
     }
   };
 
-  const isSuperAdmin = !user?.outletId;
+  const isSuperAdmin = !user?.outletId || user?.role === "Super Admin";
   const isDisabled = isSuperAdmin || loadFailed;
 
   if (loading) return <div className="p-4 text-muted-foreground text-sm">Loading...</div>;

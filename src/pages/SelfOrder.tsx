@@ -16,7 +16,6 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useVisiblePolling } from "@/hooks/use-visible-polling";
 import { getSelfOrderSocket } from "@/lib/self-order-socket";
-import { settingsService } from "@/services/settings.service";
 import {
   selfOrderService,
   type SelfOrderTable,
@@ -426,13 +425,14 @@ const SelfOrder = () => {
   }, [table, hydrated, joined]);
 
   useEffect(() => {
-    settingsService.getSettings().then((s) => {
+    if (!table?.outletId) return;
+    selfOrderService.getOutletSettings(table.outletId).then((s) => {
       setCurrency(s.currency || "Rs.");
       setTaxRate(Number(s.taxRate ?? 0));
       setTaxName(s.taxName || "GST");
       setRestaurantName(s.restaurantName || "");
     }).catch(() => {});
-  }, []);
+  }, [table?.outletId]);
 
   useEffect(() => {
     if (!entryDone) return;

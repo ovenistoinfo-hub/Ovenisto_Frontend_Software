@@ -66,6 +66,7 @@ export function NavDrawer({ open, onOpenChange }: NavDrawerProps) {
         <div className="flex-1 overflow-y-auto p-3 space-y-4">
           {navSections.map((section) => {
             const visibleItems = section.items.filter((item: any) => {
+              if (item.hideForSuperAdmin && user?.role === "Super Admin") return false;
               if (item.url === "/my-portal" && ["Admin", "Super Admin"].includes(user?.role ?? "")) {
                 return false;
               }

@@ -215,7 +215,7 @@ export default function AttendancePage() {
   })), [employees]);
 
   const { data: settings } = useQuery({
-    queryKey: ["settings"],
+    queryKey: ["settings", authUser?.outletId ?? "all"],
     queryFn: () => settingsService.getSettings(),
   });
 
@@ -331,7 +331,7 @@ export default function AttendancePage() {
     onSuccess: (updated) => {
       toast.success("Shift timings saved");
       setEditingShiftConfig(false);
-      qc.setQueryData(["settings"], updated);
+      qc.setQueryData(["settings", authUser?.outletId ?? "all"], updated);
     },
     onError: (e: unknown) => toast.error((e as Error)?.message || "Save failed"),
   });
@@ -926,7 +926,7 @@ export default function AttendancePage() {
                       Reset Filter
                     </Button>
                   )}
-                  {isAdminOrHigher && (
+                  {isAdminOrHigher && authUser?.role !== "Super Admin" && (
                     !editingShiftConfig ? (
                       <Button size="sm" variant="outline" className="h-7 text-xs"
                         onClick={() => { setShiftConfigDraft({ morning: { ...shiftConfig.morning }, evening: { ...shiftConfig.evening }, night: { ...shiftConfig.night } }); setEditingShiftConfig(true); }}>

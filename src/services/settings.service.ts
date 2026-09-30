@@ -48,8 +48,9 @@ export interface UpdateSettingsInput {
 }
 
 export const settingsService = {
-  async getSettings(): Promise<SettingsRecord> {
-    const res = await api.get<{ success: boolean; data: SettingsRecord }>('/settings');
+  async getSettings(outletId?: string): Promise<SettingsRecord> {
+    const url = outletId ? `/settings?outletId=${encodeURIComponent(outletId)}` : '/settings';
+    const res = await api.get<{ success: boolean; data: SettingsRecord }>(url);
     return res.data;
   },
 

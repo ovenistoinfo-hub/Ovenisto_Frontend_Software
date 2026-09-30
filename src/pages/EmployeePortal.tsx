@@ -166,7 +166,7 @@ export default function EmployeePortal() {
 
   // Settings for shift config
   const { data: appSettings } = useQuery({
-    queryKey: ["settings"],
+    queryKey: ["settings", user?.outletId ?? "all"],
     queryFn: () => settingsService.getSettings(),
   });
   const shiftConfig: ShiftConfig = appSettings?.shiftConfig && Object.keys(appSettings.shiftConfig).length > 0

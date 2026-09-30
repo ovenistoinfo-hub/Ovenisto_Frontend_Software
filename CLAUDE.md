@@ -916,21 +916,46 @@ Orders placed on the public website arrive as Delivery / Take Away orders with
 ## Settings "Website" tab + other Step 4b bits (accepted 2026-09-30)
 - **Tab:** `/settings/website` → `components/settings/WebsiteSettingsTab.tsx` (sidebar "Website Ordering"
   link + breadcrumb). It loads with `settingsService.getMySettings()` (`GET /settings/mine`, the caller's
-  own branch row) — **never `getSettings()`**, which hits the public `GET /settings` and returns the FIRST
-  settings row (Main) whoever is logged in; saving from that would overwrite the branch's real config.
+  own branch row — the same row PUT writes). Before Step 4c the public `GET /settings` returned the FIRST
+  row (Main) to everyone, and saving from it would have overwritten the branch's real config.
 - **Config helpers:** `lib/websiteConfig.ts` — `parseWebsiteConfig` mirrors backend `readWebsiteConfig`
   exactly (legacy `deliveryCharges`/`prepTime`, numeric strings, defaults false/false/0/null/0/30);
   `buildWebsiteConfig(raw, form)` spreads the loaded JSON, drops the legacy keys
   (`deliveryCharges`, `prepTime`, `deliveryRadius`, `autoAccept`) and sets the 6 canonical keys. `PUT
   /settings` replaces `websiteConfig` whole, so always build from the loaded raw object.
-- **Locked states:** everything is disabled for Super Admin (no `outletId` — the backend would write the
-  first row) and after a failed load (the form would hold defaults like fee 0).
+- **Locked states:** everything is disabled for Super Admin (by role; the tab is hidden from them anyway
+  since Step 4c) and after a failed load (the form would hold defaults like fee 0).
 - **Receipts:** `PlacedOrderSlipData.deliveryFee?`; a "Delivery Fee" line (only when > 0) in both the
   print HTML and the preview, filled from `order.deliveryFee` by the POS reprint, OrderStatusBoard and
   Sales builders. Cart-built slips never have one.
 - **Reservations:** the `source` union includes `'website'`; there is a Booking Source option and a
   "Website" badge (lucide `Globe`) in the table's customer cell.
 - **Inbox Today cards:** "Accepted by {acceptedByName}" and "Paid · {method}" / "Unpaid".
+
+## Per-branch settings (Step 4c, 2026-09-30)
+- **Every read returns the logged-in user's own branch row.** `GET /settings` runs `optionalAuth` on the
+  backend. Super Admin gets a chain view (the first row with the union of every branch's
+  `paymentMethods`), or the header-picker branch's row when `X-Outlet-Id` is set.
+- **`components/settings/SettingsSync.tsx`**, mounted in `App.tsx` inside `<BrowserRouter>`, pushes those
+  settings into DataContext on login and whenever the user changes (branch users via `getMySettings`,
+  Super Admin via `getSettings`). So the ~20 pages that only read `useData().settings` show the right
+  branch. It is skipped on `/self-order`.
+- **Super Admin = `user.role === "Super Admin"`, never `!user.outletId`:** `admin@ovenisto.com` is a Super
+  Admin whose account is linked to DHA.
+- **Super Admin never sees branch settings:**
+  - Settings renders only the Warehouses tab and redirects any other settings path to
+    `/settings/warehouses`;
+  - `hideForSuperAdmin: true` on the "General Settings" and "Website Ordering" nav items, filtered in both
+    AppSidebar and NavDrawer;
+  - Attendance hides "Edit Timings".
+  - The backend also 403s their PUT.
+- **Query keys** for settings carry the outlet (`["settings", outletId ?? "all"]`,
+  `["payroll-settings", …]`), because the react-query cache is persisted across logins.
+- **SelfOrder** reads its table's branch settings with `selfOrderService.getOutletSettings(outletId)` — the
+  public fetch helper, never `settingsService`/api.ts. Through api.ts, a stale staff token on the device
+  would 401 and hard-redirect the customer to /login.
+- **Pre-existing, not fixed:** AuthContext's `GET /auth/me` on app mount does exactly that redirect on the
+  QR page when a stale staff session is left on the device.
 
 ## MCP Tools: code-review-graph
 
