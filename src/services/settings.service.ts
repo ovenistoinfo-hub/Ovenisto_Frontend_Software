@@ -53,6 +53,11 @@ export const settingsService = {
     return res.data;
   },
 
+  async getMySettings(): Promise<SettingsRecord> {
+    const res = await api.get<{ success: boolean; data: SettingsRecord }>('/settings/mine');
+    return res.data;
+  },
+
   async updateSettings(data: UpdateSettingsInput): Promise<SettingsRecord> {
     const res = await api.put<{ success: boolean; data: SettingsRecord }>('/settings', data);
     return res.data;

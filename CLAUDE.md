@@ -913,6 +913,25 @@ Orders placed on the public website arrive as Delivery / Take Away orders with
 - The react-query cache is persisted (`PersistQueryClientProvider`), so a reload briefly shows the last
   list until the refetch lands.
 
+## Settings "Website" tab + other Step 4b bits (accepted 2026-09-30)
+- **Tab:** `/settings/website` → `components/settings/WebsiteSettingsTab.tsx` (sidebar "Website Ordering"
+  link + breadcrumb). It loads with `settingsService.getMySettings()` (`GET /settings/mine`, the caller's
+  own branch row) — **never `getSettings()`**, which hits the public `GET /settings` and returns the FIRST
+  settings row (Main) whoever is logged in; saving from that would overwrite the branch's real config.
+- **Config helpers:** `lib/websiteConfig.ts` — `parseWebsiteConfig` mirrors backend `readWebsiteConfig`
+  exactly (legacy `deliveryCharges`/`prepTime`, numeric strings, defaults false/false/0/null/0/30);
+  `buildWebsiteConfig(raw, form)` spreads the loaded JSON, drops the legacy keys
+  (`deliveryCharges`, `prepTime`, `deliveryRadius`, `autoAccept`) and sets the 6 canonical keys. `PUT
+  /settings` replaces `websiteConfig` whole, so always build from the loaded raw object.
+- **Locked states:** everything is disabled for Super Admin (no `outletId` — the backend would write the
+  first row) and after a failed load (the form would hold defaults like fee 0).
+- **Receipts:** `PlacedOrderSlipData.deliveryFee?`; a "Delivery Fee" line (only when > 0) in both the
+  print HTML and the preview, filled from `order.deliveryFee` by the POS reprint, OrderStatusBoard and
+  Sales builders. Cart-built slips never have one.
+- **Reservations:** the `source` union includes `'website'`; there is a Booking Source option and a
+  "Website" badge (lucide `Globe`) in the table's customer cell.
+- **Inbox Today cards:** "Accepted by {acceptedByName}" and "Paid · {method}" / "Unpaid".
+
 ## MCP Tools: code-review-graph
 
 **IMPORTANT: This project has a knowledge graph. ALWAYS use the

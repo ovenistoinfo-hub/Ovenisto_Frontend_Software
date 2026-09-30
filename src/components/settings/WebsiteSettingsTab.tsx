@@ -14,6 +14,7 @@ export function WebsiteSettingsTab() {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [rawConfig, setRawConfig] = useState<unknown>(null);
   const [onlineOrdersGlobally, setOnlineOrdersGlobally] = useState(false);
 
@@ -37,11 +38,11 @@ export function WebsiteSettingsTab() {
 
   const load = async () => {
     try {
-      const res = await settingsService.getSettings();
-      if (res.success && res.data) {
-        setOnlineOrdersGlobally(res.data.onlineOrders ?? true);
-        setRawConfig(res.data.websiteConfig);
-        const parsed = parseWebsiteConfig(res.data.websiteConfig);
+      const res = await settingsService.getMySettings();
+      if (res) {
+        setOnlineOrdersGlobally(res.onlineOrders ?? true);
+        setRawConfig(res.websiteConfig);
+        const parsed = parseWebsiteConfig(res.websiteConfig);
         setForm(parsed);
         setFreeDeliveryStr(parsed.freeDeliveryAbove !== null ? String(parsed.freeDeliveryAbove) : "");
         setDeliveryFeeStr(String(parsed.deliveryFee));
@@ -49,6 +50,7 @@ export function WebsiteSettingsTab() {
         setPrepTimeStr(String(parsed.prepTimeMinutes));
       }
     } catch (err: any) {
+      setLoadFailed(true);
       toast.error(err.message || "Failed to load website settings");
     } finally {
       setLoading(false);
@@ -78,13 +80,9 @@ export function WebsiteSettingsTab() {
 
     setSaving(true);
     try {
-      const res = await settingsService.updateSettings({ websiteConfig: payload });
-      if (res.success) {
-        toast.success("Website settings updated");
-        setRawConfig(payload);
-      } else {
-        toast.error(res.message || "Failed to update website settings");
-      }
+      await settingsService.updateSettings({ websiteConfig: payload });
+      toast.success("Website settings updated");
+      setRawConfig(payload);
     } catch (err: any) {
       toast.error(err.message || "Failed to update website settings");
     } finally {
@@ -93,11 +91,22 @@ export function WebsiteSettingsTab() {
   };
 
   const isSuperAdmin = !user?.outletId;
+  const isDisabled = isSuperAdmin || loadFailed;
 
   if (loading) return <div className="p-4 text-muted-foreground text-sm">Loading...</div>;
 
   return (
     <div className="space-y-4 max-w-2xl">
+      {loadFailed && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Error</AlertTitle>
+          <AlertDescription>
+            Could not load this branch's website settings — reload the page.
+          </AlertDescription>
+        </Alert>
+      )}
+
       {isSuperAdmin && (
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
@@ -129,7 +138,7 @@ export function WebsiteSettingsTab() {
               <p className="text-xs text-muted-foreground">Allow customers to place orders online</p>
             </div>
             <Switch
-              disabled={isSuperAdmin}
+              disabled={isDisabled}
               checked={form.enabled}
               onCheckedChange={(c) => setForm({ ...form, enabled: c })}
             />
@@ -141,7 +150,7 @@ export function WebsiteSettingsTab() {
               <p className="text-xs text-muted-foreground">Allow customers to book tables online</p>
             </div>
             <Switch
-              disabled={isSuperAdmin}
+              disabled={isDisabled}
               checked={form.reservationsEnabled}
               onCheckedChange={(c) => setForm({ ...form, reservationsEnabled: c })}
             />
@@ -152,7 +161,7 @@ export function WebsiteSettingsTab() {
               <label className="text-sm font-medium">Delivery fee (Rs)</label>
               <Input
                 type="number"
-                disabled={isSuperAdmin}
+                disabled={isDisabled}
                 min="0"
                 value={deliveryFeeStr}
                 onChange={(e) => setDeliveryFeeStr(e.target.value)}
@@ -162,7 +171,7 @@ export function WebsiteSettingsTab() {
               <label className="text-sm font-medium">Free delivery above (Rs)</label>
               <Input
                 type="number"
-                disabled={isSuperAdmin}
+                disabled={isDisabled}
                 min="0"
                 placeholder="Leave empty for never"
                 value={freeDeliveryStr}
@@ -173,7 +182,7 @@ export function WebsiteSettingsTab() {
               <label className="text-sm font-medium">Minimum order for delivery (Rs)</label>
               <Input
                 type="number"
-                disabled={isSuperAdmin}
+                disabled={isDisabled}
                 min="0"
                 value={minOrderStr}
                 onChange={(e) => setMinOrderStr(e.target.value)}
@@ -183,7 +192,7 @@ export function WebsiteSettingsTab() {
               <label className="text-sm font-medium">Prep time (minutes)</label>
               <Input
                 type="number"
-                disabled={isSuperAdmin}
+                disabled={isDisabled}
                 min="1"
                 max="180"
                 value={prepTimeStr}
@@ -192,7 +201,7 @@ export function WebsiteSettingsTab() {
             </div>
           </div>
 
-          <Button disabled={isSuperAdmin || saving} onClick={handleSave} className="w-full sm:w-auto">
+          <Button disabled={isDisabled || saving} onClick={handleSave} className="w-full sm:w-auto">
             {saving ? "Saving..." : "Save Website Settings"}
           </Button>
         </CardContent>

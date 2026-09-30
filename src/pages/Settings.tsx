@@ -20,6 +20,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { settingsService, type SettingsRecord } from "@/services/settings.service";
 import { warehouseService, type WarehouseRecord, type WarehouseType } from "@/services/warehouse.service";
+import { WebsiteSettingsTab } from "@/components/settings/WebsiteSettingsTab";
 import { outletService } from "@/services/outlet.service";
 
 const tabSlugMap: Record<string, string> = {
