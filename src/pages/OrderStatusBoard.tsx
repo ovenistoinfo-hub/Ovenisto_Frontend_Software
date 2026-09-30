@@ -13,6 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
 import { Separator } from "@/components/ui/separator";
 import { Checkbox } from "@/components/ui/checkbox";
+import { isAwaitingAcceptance } from "@/lib/orderAcceptance";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -315,6 +316,7 @@ const OrderStatusBoard = () => {
       subtotal: Number(order.subtotal ?? order.total ?? 0),
       discount: Number(order.discount) || 0,
       tax: Number(order.tax) || 0,
+      deliveryFee: Number(order.deliveryFee) || 0,
       total: Number(order.total) || 0,
       advancePayment: order.advancePayment ? Number(order.advancePayment) : undefined,
       netPayable: Number(order.total) - Number(order.advancePayment || 0),
@@ -336,9 +338,9 @@ const OrderStatusBoard = () => {
   const loadOrders = useCallback(async () => {
     try {
       const res = await orderService.getOrders({ limit: 200 });
-      // Same gate as KitchenPanel: hide a self-order until a waiter accepts it.
+      // Same gate as KitchenPanel: hide self/website orders until staff accepts them.
       setAllOrders((res.data || [])
-        .filter((o) => !(o.type === "Self Order" && o.status === "pending" && !o.acceptedById))
+        .filter((o) => !isAwaitingAcceptance(o))
         .map(normalize));
     } catch {
       // Silent: the 60s poll / socket events retry. hasLoaded still flips below so the
@@ -351,11 +353,10 @@ const OrderStatusBoard = () => {
   const handleOrderEvent = useCallback((payload?: any) => {
     if (payload && typeof payload === "object" && payload.id) {
       const norm = normalize(payload);
-      const isUnacceptedSelfOrder =
-        norm.type === "Self Order" && norm.status === "pending" && !norm.acceptedById;
+      const awaitingAcceptance = isAwaitingAcceptance(norm);
 
       setAllOrders((prev) => {
-        if (isUnacceptedSelfOrder || norm.status === "cancelled") {
+        if (awaitingAcceptance || norm.status === "cancelled") {
           return prev.filter((o) => o.id !== norm.id);
         }
         const exists = prev.some((o) => o.id === norm.id);

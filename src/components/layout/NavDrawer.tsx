@@ -13,6 +13,7 @@ import { useModuleEvents } from "@/hooks/use-module-events";
 import { cancellationRequestService } from "@/services/cancellationRequest.service";
 import { api } from "@/services/api";
 import { navSections } from "./AppSidebar";
+import { useWebsiteOrders } from "@/hooks/useWebsiteOrders";
 
 interface NavDrawerProps {
   open: boolean;
@@ -35,6 +36,8 @@ export function NavDrawer({ open, onOpenChange }: NavDrawerProps) {
 
   useModuleEvents(["cancellationRequest:created", "cancellationRequest:updated"], refreshPendingCancelCount);
   useVisiblePolling(refreshPendingCancelCount, 120000, canReviewCancellations);
+
+  const { pendingCount: websitePendingCount } = useWebsiteOrders();
 
   const isActive = (url?: string) => {
     if (!url) return false;
@@ -100,6 +103,11 @@ export function NavDrawer({ open, onOpenChange }: NavDrawerProps) {
                       {item.url === "/cancellation-requests" && pendingCancelCount > 0 && (
                         <Badge variant="destructive" className="h-4 min-w-4 px-1 text-[10px] leading-none">
                           {pendingCancelCount}
+                        </Badge>
+                      )}
+                      {item.url === "/website-orders" && websitePendingCount > 0 && (
+                        <Badge variant="destructive" className="h-4 min-w-4 px-1 text-[10px] leading-none">
+                          {websitePendingCount}
                         </Badge>
                       )}
                     </Link>

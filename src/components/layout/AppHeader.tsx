@@ -55,6 +55,7 @@ const breadcrumbConfig: Record<string, { label: string; parent?: { label: string
   "/users": { label: "Users" },
   "/attendance": { label: "Attendance" },
   "/cancellation-requests": { label: "Cancellation Requests" },
+  "/website-orders": { label: "Website Orders" },
   "/cash-hub": { label: "Cash Hub" },
   "/profile": { label: "Profile" },
   "/order-status": { label: "Order Monitor" },

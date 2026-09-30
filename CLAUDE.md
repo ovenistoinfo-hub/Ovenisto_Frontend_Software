@@ -138,9 +138,9 @@ plus a body explaining _why_ the change was made when that is not obvious.
 
 ## Frontend Dev Quick-Reference
 
-- **Refreshes are push-first, poll-as-safety-net — this is a cost rule, not a style one.** Neon bills
-  compute-hours and suspends when idle, so a screen left open on a fast timer is the most expensive
-  thing the frontend can do. Subscribe with `useOrderEvents`/`useTableEvents`/`useReservationEvents`/
+- **Refreshes are push-first, poll-as-safety-net — this is a cost rule, not a style one.** Written
+  when the DB was Neon (billed compute-hours, suspended when idle); since ~2026-09-22 it is Railway
+  Postgres, where a screen left open on a fast timer is still steady load on the one production DB. Subscribe with `useOrderEvents`/`useTableEvents`/`useReservationEvents`/
   `useModuleEvents` for correctness, then add a **long** `useVisiblePolling` behind it purely to
   self-heal a dropped socket message. Prefer that hook over a raw `setInterval` or a bare react-query
   `refetchInterval` — it stops entirely while the tab is hidden, and they don't. Standardised
@@ -889,6 +889,30 @@ plus a body explaining _why_ the change was made when that is not obvious.
   section count is now **18** + one live non-filterable collapsible section (Dough).
 
 <!-- code-review-graph MCP tools -->
+## Website Orders inbox (public-website integration, Step 4a — accepted 2026-09-30)
+Orders placed on the public website arrive as Delivery / Take Away orders with
+`orderSource: 'website'`, `status: 'pending'`, `paymentMethod: 'Pending'`, and the backend returns
+**409** for kitchen/status/rider actions until staff accept them (full backend rules: root CLAUDE.md →
+"Public Website Integration").
+- **One gate:** `src/lib/orderAcceptance.ts` → `isAwaitingAcceptance(o)` = (self-order OR
+  `orderSource === 'website'`) && pending && no `acceptedById`. Used by KitchenPanel, OrderStatusBoard
+  and `delivery.service` `getPendingDeliveryOrders`. WaiterPanel's inbox still lists self-orders only.
+- **UI:** `/website-orders` (`pages/WebsiteOrders.tsx`) and the POS header "Website" Sheet both render
+  `components/website/WebsiteOrdersInbox.tsx`: New (awaiting) and Today sections, Accept
+  (`orderService.acceptOrder`), Decline with optional reason (`rejectOrder`), and Collect Payment for an
+  accepted pickup (`updateOrder(id, { paymentMethod })`; `settings.paymentMethods` is a `string[]`).
+  Money lines read the order's stored subtotal/discount/tax/deliveryFee/total. Permission
+  `website-orders`: Manager, Cashier, Delivery Manager (+ Admin via `*`), excluded for Super Admin.
+- **Refresh — keep this shape:** `hooks/useWebsiteOrders.ts` is a PURE data hook (queries
+  `['website-orders','pending']` and `['website-orders','today']`, no subscriptions). All socket/poll
+  refreshing and the new-order toast + beep live in **one** `components/website/WebsiteOrdersWatcher.tsx`
+  mounted in `App.tsx` inside `<BrowserRouter>` (so it also runs on `/pos` and `/`, which have no
+  AppLayout). It invalidates only for website orders of the user's outlet, with `cancelRefetch: false`.
+  Don't put `useModuleEvents`/`useVisiblePolling` back into the data hook: order events are chain-wide,
+  and with 4 hook instances every event cancelled the in-flight fetch, so the inbox never updated.
+- The react-query cache is persisted (`PersistQueryClientProvider`), so a reload briefly shows the last
+  list until the refetch lands.
+
 ## MCP Tools: code-review-graph
 
 **IMPORTANT: This project has a knowledge graph. ALWAYS use the

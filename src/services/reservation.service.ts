@@ -32,7 +32,7 @@ export interface Reservation {
   tableNumber: string | null;
   status: 'pending' | 'confirmed' | 'seated' | 'completed' | 'cancelled' | 'noShow';
   specialRequests: string | null;
-  source: 'phone' | 'walkin' | 'online';
+  source: 'phone' | 'walkin' | 'online' | 'website';
   outletId: string | null;
   bookingType: 'table_reservation' | 'future_order';
   orderType: 'Dine In' | 'Take Away' | 'Delivery';

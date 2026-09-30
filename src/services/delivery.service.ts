@@ -1,4 +1,5 @@
 import { api } from './api';
+import { isAwaitingAcceptance } from '@/lib/orderAcceptance';
 
 export interface RiderRecord {
   id: string;
@@ -26,6 +27,9 @@ export interface PendingDeliveryOrder {
   paymentMethod: string | null;
   deliveryAddress: string | null;
   status: string;
+  type: string;
+  orderSource?: string | null;
+  acceptedById?: string | null;
   riderId: string | null;
   createdAt: string;
 }
@@ -103,6 +107,6 @@ export const deliveryService = {
 
   async getPendingDeliveryOrders(): Promise<PendingDeliveryOrder[]> {
     const res = await api.get<{ success: boolean; data: PendingDeliveryOrder[] }>('/orders?type=DELIVERY&limit=50');
-    return (res.data || []).filter(o => !o.riderId && o.status !== 'cancelled' && o.status !== 'CANCELLED');
+    return (res.data || []).filter(o => !o.riderId && o.status !== 'cancelled' && o.status !== 'CANCELLED' && !isAwaitingAcceptance(o));
   },
 };

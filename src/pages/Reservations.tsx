@@ -1,6 +1,6 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import {
-  CalendarCheck, Plus, Pencil, Trash2, User, Phone, Users, CheckCircle2,
+  CalendarCheck, Plus, Pencil, Trash2, User, Phone, Users, CheckCircle2, Globe,
   Utensils, CreditCard, Banknote, Smartphone, ShoppingBag, ArrowRight, Truck, XCircle,
   Search, AlertCircle, Clock, MapPin, Check, DollarSign, ListFilter, Sparkles, ChevronRight, X, Zap, Minus, ChefHat, UserX,
   Gift, Package, Layers, Percent
@@ -1304,6 +1304,7 @@ const Reservations = () => {
                       <SelectItem value="phone">Phone</SelectItem>
                       <SelectItem value="walkin">Walk-in</SelectItem>
                       <SelectItem value="online">Online / WhatsApp</SelectItem>
+                      <SelectItem value="website">Website</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -1650,7 +1651,10 @@ const Reservations = () => {
 
                     <TableCell>
                       <div>
-                        <p className="font-semibold text-foreground text-sm">{r.customerName}</p>
+                        <div className="flex items-center gap-2">
+                          <p className="font-semibold text-foreground text-sm">{r.customerName}</p>
+                          {r.source === 'website' && <Badge variant="secondary" className="px-1 py-0 h-4 text-[10px] uppercase font-bold"><Globe className="w-3 h-3 mr-1" />Website</Badge>}
+                        </div>
                         {r.customerPhone && <p className="text-xs text-muted-foreground flex items-center gap-1"><Phone className="h-3 w-3" /> {r.customerPhone}</p>}
                       </div>
                     </TableCell>

@@ -397,6 +397,7 @@ const Sales = () => {
       subtotal: Number(order.subtotal) || 0,
       discount: Number(order.discount) || 0,
       tax: Number(order.tax) || 0,
+      deliveryFee: Number(order.deliveryFee) || 0,
       total: Number(order.total) || 0,
       advancePayment: order.advancePayment ? Number(order.advancePayment) : undefined,
       netPayable: Number(order.total) - Number(order.advancePayment || 0),

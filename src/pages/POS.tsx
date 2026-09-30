@@ -55,6 +55,8 @@ import { getRiderCollectAmount } from "@/utils/deliveryPayment";
 import { dealService, type DealRecord, type DealOptionItemRecord } from "@/services/deal.service";
 import { isDealLive, isDealAvailableForChannel, dealChannelPrice, dealChannelPercent, allocateDealDiscount, dealBogoSides, dealBogoSideMode, dealBogoOptionGroups, capFreeUnitPrice, type DealOptionItemForBogo } from "@/lib/deals";
 import { OrderPlacedPrintModal, type PlacedOrderSlipData } from "@/components/pos/OrderPlacedPrintModal";
+import { useWebsiteOrders } from "@/hooks/useWebsiteOrders";
+import { WebsiteOrdersInbox } from "@/components/website/WebsiteOrdersInbox";
 
 interface CartItem extends OrderItem {
   modifiers?: string[];
@@ -195,8 +197,9 @@ const CANCEL_RESPONSIBLE_ROLES = ['Cashier', 'Kitchen Staff', 'Kitchen Manager',
 
 const POS = () => {
   const { orders: localOrdersData, customers: customersList, foodMenuItems: localFoodMenuItems, foodCategories: localFoodCategories, modifiers: localModifiers, kitchens: localKitchens, ingredients, addItem, updateItem: updateDataItem, shifts, settings, riders: deliveryRiders, updateSettings } = useData();
-  const { user } = useAuth();
+  const { user, hasPermission } = useAuth();
   const { markMine, isLikelyOwnEcho } = useSelfMutationGuard();
+  const { pendingCount: websitePendingCount } = useWebsiteOrders();
 
   // ── API data state (overrides localStorage) ──
   const [apiOrders, setApiOrders] = useState<any[]>([]);
@@ -269,6 +272,7 @@ const POS = () => {
     subtotal: Number(o.subtotal),
     discount: Number(o.discount),
     tax: Number(o.tax),
+    deliveryFee: Number(o.deliveryFee),
     total: Number(o.total),
     advancePayment: Number(o.advancePayment),
     tableNumber: o.tableNumber ?? undefined,
@@ -599,6 +603,7 @@ const POS = () => {
   }, [showOrderStatus]);
 
   // Low Stock
+  const [showWebsiteOrders, setShowWebsiteOrders] = useState(false);
   const [showLowStock, setShowLowStock] = useState(false);
   const [stockSearch, setStockSearch] = useState("");
   const [stockStatusFilter, setStockStatusFilter] = useState<"all" | "out" | "low">("all");
@@ -2788,6 +2793,7 @@ const POS = () => {
       subtotal: Number(order.subtotal ?? order.total ?? 0),
       discount: Number(order.discount) || 0,
       tax: Number(order.tax) || 0,
+      deliveryFee: Number(order.deliveryFee) || 0,
       total: Number(order.total) || 0,
       advancePayment: order.advancePayment ? Number(order.advancePayment) : undefined,
       netPayable: Number(order.total) - Number(order.advancePayment || 0),
@@ -3521,6 +3527,22 @@ const POS = () => {
                   </span>
                 )}
               </button>
+
+              {/* Website Orders (conditional) */}
+              {hasPermission("website-orders") && (
+                <button
+                  onClick={() => setShowWebsiteOrders(true)}
+                  className="group inline-flex items-center gap-1.5 h-8 px-3 rounded-lg border border-border/60 bg-card/80 hover:bg-card hover:border-primary/40 transition-all text-xs font-medium text-foreground/80 hover:text-foreground shrink-0 select-none"
+                >
+                  <ShoppingBag className="h-3.5 w-3.5 text-primary shrink-0" />
+                  <span>Website</span>
+                  {websitePendingCount > 0 && (
+                    <span className="inline-flex items-center justify-center h-5 min-w-[20px] px-1.5 rounded-full text-[10px] font-bold gradient-primary text-primary-foreground leading-none">
+                      {websitePendingCount}
+                    </span>
+                  )}
+                </button>
+              )}
 
               {/* 2 · Stock Alerts (conditional) */}
               {(ingredientAlerts.length > 0 || lowStockFoodItems.length > 0) && (
@@ -6771,6 +6793,22 @@ const POS = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <Sheet open={showWebsiteOrders} onOpenChange={setShowWebsiteOrders}>
+        <SheetContent side="right" className="w-[95vw] sm:max-w-xl md:max-w-2xl lg:max-w-4xl flex flex-col p-0">
+          <SheetHeader className="p-4 md:p-6 border-b shrink-0 flex flex-row items-center justify-between">
+            <div>
+              <SheetTitle className="text-xl flex items-center gap-2">
+                <ShoppingBag className="h-5 w-5 text-primary" />
+                Website Orders
+              </SheetTitle>
+              <SheetDescription>Manage incoming website orders and accept or decline them.</SheetDescription>
+            </div>
+          </SheetHeader>
+          <div className="flex-1 overflow-y-auto p-4 md:p-6 bg-muted/10">
+            <WebsiteOrdersInbox compact />
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 };

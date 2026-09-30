@@ -64,6 +64,7 @@ export interface OrderRecord {
   staffName: string | null;
   tableNumber: number | null;
   deliveryAddress: string | null;
+  deliveryFee: number;
   riderId: string | null;
   isFutureSale: boolean;
   scheduledDate: string | null;
@@ -228,6 +229,7 @@ function buildOfflineOrderStub(row: PendingOrder): OrderRecord {
     staffName: data.staffName ?? null,
     tableNumber: data.tableNumber ?? null,
     deliveryAddress: data.deliveryAddress ?? null,
+    deliveryFee: 0,
     riderId: data.riderId ?? null,
     isFutureSale: data.isFutureSale ?? false,
     scheduledDate: data.scheduledDate ?? null,
@@ -310,6 +312,7 @@ export const orderService = {
     deal?: string;
     /** Keep only orders placed by this staff member (Order.staffId). Amounts stay whole-order. */
     staffId?: string;
+    orderSource?: string;
     page?: number;
     limit?: number;
     outletId?: string;
@@ -318,6 +321,7 @@ export const orderService = {
     if (params?.search) q.set('search', params.search);
     if (params?.status) q.set('status', params.status);
     if (params?.type) q.set('type', params.type);
+    if (params?.orderSource) q.set('orderSource', params.orderSource);
     if (params?.date) q.set('date', params.date);
     if (params?.from) q.set('from', params.from);
     if (params?.to) q.set('to', params.to);
@@ -448,6 +452,16 @@ export const orderService = {
 
   async rejectSelfOrder(id: string, reason?: string): Promise<OrderRecord> {
     const res = await api.post<{ success: boolean; data: OrderRecord }>(`/orders/${id}/reject-self-order`, { reason });
+    return res.data;
+  },
+
+  async acceptOrder(id: string): Promise<OrderRecord> {
+    const res = await api.post<{ success: boolean; data: OrderRecord }>(`/orders/${id}/accept`, {});
+    return res.data;
+  },
+
+  async rejectOrder(id: string, reason?: string): Promise<OrderRecord> {
+    const res = await api.post<{ success: boolean; data: OrderRecord }>(`/orders/${id}/reject`, { reason });
     return res.data;
   },
 

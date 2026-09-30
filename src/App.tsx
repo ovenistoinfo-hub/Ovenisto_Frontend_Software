@@ -13,6 +13,7 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { OfflineSyncManager } from "@/components/offline/OfflineSyncManager";
 import { OfflineIndicator } from "@/components/offline/OfflineIndicator";
+import { WebsiteOrdersWatcher } from "@/components/website/WebsiteOrdersWatcher";
 
 // Login stays eager — it's the first screen, so we don't want to lazy-load it.
 import Login from "./pages/Login";
@@ -50,6 +51,7 @@ const Demands = lazy(() => import("./pages/Demands"));
 const Users = lazy(() => import("./pages/Users"));
 const Attendance = lazy(() => import("./pages/Attendance"));
 const CancellationRequests = lazy(() => import("./pages/CancellationRequests"));
+const WebsiteOrders = lazy(() => import("./pages/WebsiteOrders"));
 const Employees = lazy(() => import("./pages/Employees"));
 const Payroll = lazy(() => import("./pages/Payroll"));
 const Profile = lazy(() => import("./pages/Profile"));
@@ -172,6 +174,7 @@ function AppRoutes() {
       <Route path="/users" element={<ProtectedRoute module="users"><AppLayout><Users /></AppLayout></ProtectedRoute>} />
       <Route path="/attendance" element={<ProtectedRoute module="attendance"><AppLayout><Attendance /></AppLayout></ProtectedRoute>} />
       <Route path="/cancellation-requests" element={<ProtectedRoute module="cancellation-requests"><AppLayout><CancellationRequests /></AppLayout></ProtectedRoute>} />
+      <Route path="/website-orders" element={<ProtectedRoute module="website-orders"><AppLayout><WebsiteOrders /></AppLayout></ProtectedRoute>} />
       <Route path="/cash-hub" element={<ProtectedRoute module="cash-hub"><AppLayout><CashHub /></AppLayout></ProtectedRoute>} />
       <Route path="/employees" element={<ProtectedRoute module="employees"><AppLayout><Employees /></AppLayout></ProtectedRoute>} />
       <Route path="/payroll" element={<ProtectedRoute module="payroll"><AppLayout><Payroll /></AppLayout></ProtectedRoute>} />
@@ -205,6 +208,7 @@ const App = () => (
               <OfflineSyncManager />
               <OfflineIndicator />
               <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+                <WebsiteOrdersWatcher />
                 <Suspense fallback={<div className="flex h-screen items-center justify-center text-sm text-muted-foreground">Loading…</div>}>
                   <AppRoutes />
                 </Suspense>

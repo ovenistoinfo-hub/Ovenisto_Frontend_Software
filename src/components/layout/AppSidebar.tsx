@@ -21,6 +21,7 @@ import { useVisiblePolling } from "@/hooks/use-visible-polling";
 import { useModuleEvents } from "@/hooks/use-module-events";
 import { cancellationRequestService } from "@/services/cancellationRequest.service";
 import { api } from "@/services/api";
+import { useWebsiteOrders } from "@/hooks/useWebsiteOrders";
 
 const CANCELLATION_REQUEST_EVENTS = ["cancellationRequest:created", "cancellationRequest:updated"] as const;
 
@@ -39,12 +40,14 @@ export const navSections = [
     { title: "Order Monitor", url: "/order-status", icon: BarChart3, module: "order-status" },
     { title: "Customer Display", url: "/customer-display", icon: Globe, module: "customer-display" },
     { title: "Cancellation Requests", url: "/cancellation-requests", icon: Ban, module: "cancellation-requests" },
+    { title: "Website Orders", url: "/website-orders", icon: ShoppingBag, module: "website-orders" },
     { title: "Cash Hub", url: "/cash-hub", icon: Coins, module: "cash-hub" },
   ]},
   { label: "Outlets", items: [{ title: "Outlets", url: "/outlets", icon: Store, module: "outlets" }]},
   { label: "Settings", items: [
     { title: "General Settings", url: "/settings", icon: Settings, module: "settings" },
     { title: "Warehouses", url: "/settings/warehouses", icon: Package, module: "settings" },
+    { title: "Website Ordering", url: "/settings/website", icon: Globe, module: "settings" },
   ]},
   { label: "Item / Stock", items: [
     { title: "Items", icon: Pizza, module: "items", children: [
@@ -114,6 +117,8 @@ export function AppSidebar() {
   useModuleEvents(CANCELLATION_REQUEST_EVENTS, refreshPendingCancelCount);
   useVisiblePolling(refreshPendingCancelCount, 120000, canReviewCancellations);
 
+  const { pendingCount: websitePendingCount } = useWebsiteOrders();
+
   const isActive = (url?: string) => {
     if (!url) return false;
     if (url === "/") return location.pathname === "/";
@@ -161,6 +166,11 @@ export function AppSidebar() {
                             {item.url === "/cancellation-requests" && pendingCancelCount > 0 && !collapsed && (
                               <Badge variant="destructive" className="h-4 min-w-4 px-1 text-[10px] leading-none">
                                 {pendingCancelCount}
+                              </Badge>
+                            )}
+                            {item.url === "/website-orders" && websitePendingCount > 0 && !collapsed && (
+                              <Badge variant="destructive" className="h-4 min-w-4 px-1 text-[10px] leading-none">
+                                {websitePendingCount}
                               </Badge>
                             )}
                           </Link>

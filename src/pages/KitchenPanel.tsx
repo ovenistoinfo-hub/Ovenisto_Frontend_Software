@@ -12,6 +12,7 @@ import {
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { orderService, type OrderRecord, type KitchenRecord } from "@/services/order.service";
+import { isAwaitingAcceptance } from "@/lib/orderAcceptance";
 import { ORDER_TYPE_COLORS } from "@/lib/constants";
 import { statusTone } from "@/lib/statusTone";
 import { useVisiblePolling } from "@/hooks/use-visible-polling";
@@ -180,8 +181,8 @@ const KitchenPanel = () => {
 
     for (const o of orders) {
       if (o.status === "cancelled") continue;
-      // Exclude self-orders that are still pending AND not yet accepted by a waiter
-      if (o.type === "Self Order" && o.status === "pending" && !o.acceptedById) continue;
+      // Exclude self/website orders that are still pending AND not yet accepted by staff
+      if (isAwaitingAcceptance(o)) continue;
 
       // Only consider items whose category matches this kitchen's assigned categories
       const relevantItems = o.items.filter((item) => {

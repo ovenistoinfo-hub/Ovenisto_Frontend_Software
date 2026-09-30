@@ -39,6 +39,7 @@ export interface PlacedOrderSlipData {
   subtotal: number;
   discount: number;
   tax: number;
+  deliveryFee?: number;
   total: number;
   advancePayment?: number;
   netPayable?: number;
@@ -193,6 +194,12 @@ function generateBillHtml(slip: PlacedOrderSlipData): string {
         <span>Tax</span>
         <span>${cur} ${slip.tax.toLocaleString()}</span>
       </div>
+      ${(slip.deliveryFee && slip.deliveryFee > 0) ? `
+        <div style="display: flex; justify-content: space-between;">
+          <span>Delivery Fee</span>
+          <span>${cur} ${slip.deliveryFee.toLocaleString()}</span>
+        </div>
+      ` : ""}
       <div style="border-bottom: 1px dashed #000; margin: 4px 0;"></div>
       <div style="display: flex; justify-content: space-between; font-weight: 900; font-size: 13px;">
         <span>TOTAL</span>
@@ -585,6 +592,12 @@ export const OrderPlacedPrintModal: React.FC<OrderPlacedPrintModalProps> = ({
                         <span>Tax</span>
                         <span className="font-mono">{cur} {slipData.tax.toLocaleString()}</span>
                       </div>
+                      {(slipData.deliveryFee && slipData.deliveryFee > 0) ? (
+                        <div className="flex justify-between">
+                          <span>Delivery Fee</span>
+                          <span className="font-mono">{cur} {slipData.deliveryFee.toLocaleString()}</span>
+                        </div>
+                      ) : null}
                       <div className="border-b border-dashed border-black/80 my-1" />
                       <div className="flex justify-between font-black text-sm pt-0.5">
                         <span>TOTAL</span>

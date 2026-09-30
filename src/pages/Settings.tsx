@@ -26,11 +26,13 @@ const tabSlugMap: Record<string, string> = {
   general: "",
   "self-order": "self-order",
   warehouses: "warehouses",
+  website: "website",
 };
 const slugTabMap: Record<string, string> = {
   "": "general",
   "self-order": "self-order",
   warehouses: "warehouses",
+  website: "website",
 };
 
 const TYPE_COLOR: Record<WarehouseType, string> = {
@@ -298,7 +300,7 @@ const SettingsPage = () => {
     <div className="space-y-6">
       <PageHeader icon={<SettingsIcon className="h-5 w-5" />} title="Settings" subtitle="System configuration" />
       <Tabs value={tab} onValueChange={handleTabChange}>
-        <div className="overflow-x-auto -mx-1 px-1"><TabsList className="inline-flex w-auto min-w-full sm:w-full"><TabsTrigger value="general">General</TabsTrigger><TabsTrigger value="warehouses">Warehouses</TabsTrigger></TabsList></div>
+        <div className="overflow-x-auto -mx-1 px-1"><TabsList className="inline-flex w-auto min-w-full sm:w-full"><TabsTrigger value="general">General</TabsTrigger><TabsTrigger value="warehouses">Warehouses</TabsTrigger><TabsTrigger value="website">Website</TabsTrigger></TabsList></div>
 
         {/* General Tab */}
         <TabsContent value="general"><Card className="shadow-sm"><CardHeader><CardTitle>General Settings</CardTitle></CardHeader><CardContent className="space-y-4">
@@ -428,6 +430,7 @@ const SettingsPage = () => {
 
         {/* Warehouses Tab */}
         <TabsContent value="warehouses"><WarehousesTab /></TabsContent>
+        <TabsContent value="website"><WebsiteSettingsTab /></TabsContent>
       </Tabs>
     </div>
   );
