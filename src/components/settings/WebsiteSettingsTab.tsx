@@ -1,13 +1,13 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { settingsService } from "@/services/settings.service";
-import { parseWebsiteConfig, buildWebsiteConfig, WebsiteConfig } from "@/lib/websiteConfig";
+import { parseWebsiteConfig, buildWebsiteConfig, WebsiteConfig, parseMapsLink } from "@/lib/websiteConfig";
+import { MapPin, AlertCircle } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { AlertCircle } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 export function WebsiteSettingsTab() {
@@ -25,12 +25,17 @@ export function WebsiteSettingsTab() {
     freeDeliveryAbove: null,
     minOrder: 0,
     prepTimeMinutes: 30,
+    location: null,
   });
 
   const [freeDeliveryStr, setFreeDeliveryStr] = useState("");
   const [deliveryFeeStr, setDeliveryFeeStr] = useState("0");
   const [minOrderStr, setMinOrderStr] = useState("0");
   const [prepTimeStr, setPrepTimeStr] = useState("30");
+  const [latStr, setLatStr] = useState("");
+  const [lngStr, setLngStr] = useState("");
+  const [mapsLinkStr, setMapsLinkStr] = useState("");
+  const [isLocating, setIsLocating] = useState(false);
 
   useEffect(() => {
     load();
@@ -48,10 +53,12 @@ export function WebsiteSettingsTab() {
         setDeliveryFeeStr(String(parsed.deliveryFee));
         setMinOrderStr(String(parsed.minOrder));
         setPrepTimeStr(String(parsed.prepTimeMinutes));
+        setLatStr(parsed.location ? String(parsed.location.lat) : "");
+        setLngStr(parsed.location ? String(parsed.location.lng) : "");
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       setLoadFailed(true);
-      toast.error(err.message || "Failed to load website settings");
+      toast.error(err instanceof Error ? err.message : "Failed to load website settings");
     } finally {
       setLoading(false);
     }
@@ -68,12 +75,31 @@ export function WebsiteSettingsTab() {
     if (isNaN(pTime) || pTime < 1 || pTime > 180) return toast.error("Prep time must be between 1 and 180 minutes");
     if (fdAbove !== null && (isNaN(fdAbove) || fdAbove < 0)) return toast.error("Invalid free delivery threshold");
 
+    let finalLocation = null;
+    const lStr = latStr.trim();
+    const lnStr = lngStr.trim();
+    if (lStr === "" && lnStr === "") {
+      finalLocation = null;
+    } else if (lStr === "" || lnStr === "") {
+      toast.error("Enter a valid latitude and longitude, or clear both");
+      return;
+    } else {
+      const lat = Number(lStr);
+      const lng = Number(lnStr);
+      if (isNaN(lat) || isNaN(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180 || (lat === 0 && lng === 0)) {
+        toast.error("Enter a valid latitude and longitude, or clear both");
+        return;
+      }
+      finalLocation = { lat, lng };
+    }
+
     const finalForm: WebsiteConfig = {
       ...form,
       deliveryFee: dFee,
       minOrder: mOrder,
       prepTimeMinutes: pTime,
       freeDeliveryAbove: fdAbove,
+      location: finalLocation,
     };
 
     const payload = buildWebsiteConfig(rawConfig, finalForm);
@@ -83,11 +109,44 @@ export function WebsiteSettingsTab() {
       await settingsService.updateSettings({ websiteConfig: payload });
       toast.success("Website settings updated");
       setRawConfig(payload);
-    } catch (err: any) {
-      toast.error(err.message || "Failed to update website settings");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Failed to update website settings");
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleApplyLink = () => {
+    const res = parseMapsLink(mapsLinkStr);
+    if (res.ok) {
+      setLatStr(String(res.lat));
+      setLngStr(String(res.lng));
+      setMapsLinkStr("");
+    } else if (!res.ok && 'reason' in res && res.reason === 'short_link') {
+      toast.error("Short links can't be read here — open it in your browser and paste the full link from the address bar, or paste the coordinates.");
+    } else {
+      toast.error("Could not find coordinates in this link");
+    }
+  };
+
+  const handleDeviceLocation = () => {
+    if (!navigator.geolocation) {
+      toast.error("Geolocation is not supported by your browser");
+      return;
+    }
+    setIsLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setLatStr(String(pos.coords.latitude));
+        setLngStr(String(pos.coords.longitude));
+        setIsLocating(false);
+      },
+      (err) => {
+        toast.error("Could not get location: " + err.message);
+        setIsLocating(false);
+      },
+      { timeout: 8000, enableHighAccuracy: false, maximumAge: 600000 }
+    );
   };
 
   const isSuperAdmin = !user?.outletId || user?.role === "Super Admin";
@@ -198,6 +257,76 @@ export function WebsiteSettingsTab() {
                 value={prepTimeStr}
                 onChange={(e) => setPrepTimeStr(e.target.value)}
               />
+            </div>
+          </div>
+
+          <div className="pt-4 border-t space-y-4">
+            <h3 className="text-lg font-semibold flex items-center">
+              <MapPin className="mr-2 h-5 w-5" />
+              Branch location
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="text-sm font-medium">Latitude</label>
+                <Input
+                  disabled={isDisabled}
+                  placeholder="e.g. 31.47"
+                  value={latStr}
+                  onChange={(e) => setLatStr(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Longitude</label>
+                <Input
+                  disabled={isDisabled}
+                  placeholder="e.g. 74.30"
+                  value={lngStr}
+                  onChange={(e) => setLngStr(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-2">
+              <div className="flex-1">
+                <label className="text-sm font-medium">Paste a Google Maps link or coordinates</label>
+                <div className="flex gap-2 mt-1">
+                  <Input
+                    disabled={isDisabled}
+                    placeholder="Paste here..."
+                    value={mapsLinkStr}
+                    onChange={(e) => setMapsLinkStr(e.target.value)}
+                  />
+                  <Button disabled={isDisabled || !mapsLinkStr} onClick={handleApplyLink} variant="secondary">
+                    Apply
+                  </Button>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 pt-2">
+              <div className="flex-1">
+                <Button disabled={isDisabled || isLocating} onClick={handleDeviceLocation} variant="outline" className="w-full sm:w-auto">
+                  <MapPin className="mr-2 h-4 w-4" />
+                  {isLocating ? "Locating..." : "Use this device's location"}
+                </Button>
+                <p className="text-xs text-muted-foreground mt-1">Only use this while you are at the branch</p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Button disabled={isDisabled} onClick={() => { setLatStr(""); setLngStr(""); setMapsLinkStr(""); }} variant="ghost">
+                  Clear
+                </Button>
+                {latStr && lngStr && !isNaN(Number(latStr)) && !isNaN(Number(lngStr)) && (
+                  <a 
+                    href={`https://www.google.com/maps?q=${latStr},${lngStr}`} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="text-sm text-primary hover:underline"
+                  >
+                    Check on map
+                  </a>
+                )}
+              </div>
             </div>
           </div>
 

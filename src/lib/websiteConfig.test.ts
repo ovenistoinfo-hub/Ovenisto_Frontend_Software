@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseWebsiteConfig, buildWebsiteConfig } from './websiteConfig';
+import { parseWebsiteConfig, buildWebsiteConfig, WebsiteConfig, parseLocation, parseMapsLink } from './websiteConfig';
 
 describe('websiteConfig', () => {
   describe('parseWebsiteConfig', () => {
@@ -12,6 +12,7 @@ describe('websiteConfig', () => {
         freeDeliveryAbove: null,
         minOrder: 0,
         prepTimeMinutes: 30,
+        location: null,
       });
     });
 
@@ -63,13 +64,14 @@ describe('websiteConfig', () => {
         someUnrelatedKey: 'hello',
       };
       
-      const form = {
+      const form: WebsiteConfig = {
         enabled: true,
         reservationsEnabled: true,
         deliveryFee: 150,
         freeDeliveryAbove: null,
         minOrder: 500,
         prepTimeMinutes: 45,
+        location: null,
       };
 
       const built = buildWebsiteConfig(raw, form);
@@ -88,6 +90,75 @@ describe('websiteConfig', () => {
       expect('prepTime' in built).toBe(false);
       expect('deliveryRadius' in built).toBe(false);
       expect('autoAccept' in built).toBe(false);
+      expect('location' in built).toBe(false);
     });
+
+    it('writes location when non-null', () => {
+      const raw = {};
+      const form: WebsiteConfig = {
+        enabled: true,
+        reservationsEnabled: true,
+        deliveryFee: 150,
+        freeDeliveryAbove: null,
+        minOrder: 500,
+        prepTimeMinutes: 45,
+        location: { lat: 31.47, lng: 74.3 },
+      };
+
+      const built = buildWebsiteConfig(raw, form);
+      expect(built.location).toEqual({ lat: 31.47, lng: 74.3 });
+    });
+  });
+});
+
+describe('parseLocation', () => {
+  it('parses valid object', () => {
+    expect(parseLocation({ lat: 31.47, lng: 74.3 })).toEqual({ lat: 31.47, lng: 74.3 });
+  });
+  it('parses numeric strings', () => {
+    expect(parseLocation({ lat: "31.47", lng: "74.3" })).toEqual({ lat: 31.47, lng: 74.3 });
+  });
+  it('rejects out of range', () => {
+    expect(parseLocation({ lat: 91, lng: 0 })).toBeNull();
+    expect(parseLocation({ lat: 0, lng: 181 })).toBeNull();
+  });
+  it('rejects (0,0)', () => {
+    expect(parseLocation({ lat: 0, lng: 0 })).toBeNull();
+  });
+  it('rejects missing or garbage', () => {
+    expect(parseLocation(null)).toBeNull();
+    expect(parseLocation("string")).toBeNull();
+    expect(parseLocation(123)).toBeNull();
+    expect(parseLocation([])).toBeNull();
+    expect(parseLocation({ lat: 31 })).toBeNull();
+  });
+});
+
+describe('parseMapsLink', () => {
+  it('returns short_link for short URLs', () => {
+    expect(parseMapsLink('https://maps.app.goo.gl/abcdefg')).toEqual({ ok: false, reason: 'short_link' });
+    expect(parseMapsLink('https://goo.gl/maps/123')).toEqual({ ok: false, reason: 'short_link' });
+  });
+  
+  it('parses plain lat, lng (Rule a)', () => {
+    expect(parseMapsLink('31.47, 74.3')).toEqual({ ok: true, lat: 31.47, lng: 74.3 });
+    expect(parseMapsLink('31.47,74.3')).toEqual({ ok: true, lat: 31.47, lng: 74.3 });
+  });
+
+  it('parses !3d<lat>!4d<lng> (Rule b) over @<lat>,<lng> (Rule c)', () => {
+    expect(parseMapsLink('https://www.google.com/maps/place/SomePlace/@31.0,74.0,15z/data=!3m1!4b1!4m6!3m5!1s0x0:0x0!8m2!3d31.47!4d74.3!16s%2Fm%2F012345')).toEqual({ ok: true, lat: 31.47, lng: 74.3 });
+  });
+
+  it('parses @<lat>,<lng> (Rule c)', () => {
+    expect(parseMapsLink('https://www.google.com/maps/@31.47,74.3,15z')).toEqual({ ok: true, lat: 31.47, lng: 74.3 });
+  });
+
+  it('parses q, query, ll, destination (Rule d)', () => {
+    expect(parseMapsLink('https://www.google.com/maps?q=31.47,74.3')).toEqual({ ok: true, lat: 31.47, lng: 74.3 });
+    expect(parseMapsLink('https://maps.google.com/?ll=31.47,74.3')).toEqual({ ok: true, lat: 31.47, lng: 74.3 });
+  });
+  
+  it('returns not_found for junk', () => {
+    expect(parseMapsLink('not a map link')).toEqual({ ok: false, reason: 'not_found' });
   });
 });

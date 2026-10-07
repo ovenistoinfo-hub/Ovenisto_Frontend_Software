@@ -923,6 +923,15 @@ Orders placed on the public website arrive as Delivery / Take Away orders with
   `buildWebsiteConfig(raw, form)` spreads the loaded JSON, drops the legacy keys
   (`deliveryCharges`, `prepTime`, `deliveryRadius`, `autoAccept`) and sets the 6 canonical keys. `PUT
   /settings` replaces `websiteConfig` whole, so always build from the loaded raw object.
+- **Branch location (Step 10, 2026-10-06):** a "Branch location" section in the same tab feeds the
+  public website's nearest-branch auto-select.
+  - Fields: lat/lng inputs, "Paste a Google Maps link or coordinates" + Apply, "Use this device's
+    location" (only while at the branch), Check on map, Clear.
+  - `lib/websiteConfig.ts` `parseLocation` mirrors the backend. `parseMapsLink` reads, in order: a plain
+    "lat, lng", a `!3d…!4d…` pin, an `@lat,lng` map centre, or a `q`/`query`/`ll`/`destination` parameter.
+    Short `maps.app.goo.gl` links return `short_link`.
+  - Save: both fields empty → location removed; one empty or invalid → error toast, nothing saved.
+    `buildWebsiteConfig` writes `location` only when set.
 - **Locked states:** everything is disabled for Super Admin (by role; the tab is hidden from them anyway
   since Step 4c) and after a failed load (the form would hold defaults like fee 0).
 - **Receipts:** `PlacedOrderSlipData.deliveryFee?`; a "Delivery Fee" line (only when > 0) in both the
