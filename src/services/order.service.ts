@@ -64,6 +64,9 @@ export interface OrderRecord {
   staffName: string | null;
   tableNumber: number | null;
   deliveryAddress: string | null;
+  // Live-location pin a website customer shared at checkout (Step 11); null when they typed only.
+  deliveryLat?: number | null;
+  deliveryLng?: number | null;
   deliveryFee: number;
   riderId: string | null;
   isFutureSale: boolean;

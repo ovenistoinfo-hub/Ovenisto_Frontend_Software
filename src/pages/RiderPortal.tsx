@@ -1,5 +1,5 @@
 import { useState, useCallback } from "react";
-import { Bike, MapPin, Phone, Clock, CheckCircle2, Truck, RotateCcw, RefreshCw, Package, TrendingUp, Banknote, Wallet, Bell, Navigation, ArrowUpRight, ShieldAlert, Loader2, Info, Coins, Zap } from "lucide-react";
+import { Bike, MapPin, Phone, Clock, CheckCircle2, Truck, RotateCcw, RefreshCw, Package, TrendingUp, Banknote, Wallet, Bell, Navigation, ArrowUpRight, ShieldAlert, Loader2, Info, Coins, Zap, LocateFixed } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -17,6 +17,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { getDeliveryPaymentMode, getRiderCollectAmount } from "@/utils/deliveryPayment";
+import { orderMapsUrl, hasLivePoint } from "@/lib/maps";
 import { api } from "@/services/api";
 
 const STATUS_CONFIG: Record<string, { label: string; class: string; border: string }> = {
@@ -413,14 +414,15 @@ const RiderPortal = () => {
                           </Button>
                         )}
 
-                        {a.customerAddress ? (
+                        {orderMapsUrl({ lat: a.order?.deliveryLat, lng: a.order?.deliveryLng, address: a.customerAddress }) ? (
                           <a
-                            href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(a.customerAddress)}`}
+                            href={orderMapsUrl({ lat: a.order?.deliveryLat, lng: a.order?.deliveryLng, address: a.customerAddress }) ?? undefined}
                             target="_blank"
                             rel="noreferrer"
                             className="flex items-center justify-center gap-2 h-11 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-sm transition-all active:scale-95">
-                            <Navigation className="h-4 w-4" />
-                            Navigate Maps
+                            {hasLivePoint({ lat: a.order?.deliveryLat, lng: a.order?.deliveryLng })
+                              ? <><LocateFixed className="h-4 w-4" /> Navigate to Live Pin</>
+                              : <><Navigation className="h-4 w-4" /> Navigate Maps</>}
                           </a>
                         ) : (
                           <Button disabled variant="outline" className="h-11 rounded-xl text-xs font-bold">

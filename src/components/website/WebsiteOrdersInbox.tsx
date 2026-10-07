@@ -5,7 +5,8 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { ShoppingBag, Loader2, Check, Clock, Phone, MapPin } from 'lucide-react';
+import { ShoppingBag, Loader2, Check, Clock, Phone, MapPin, Navigation, ArrowUpRight, LocateFixed } from 'lucide-react';
+import { orderMapsUrl, hasLivePoint } from '@/lib/maps';
 import { statusTone } from '@/lib/statusTone';
 import { useWebsiteOrders } from '@/hooks/useWebsiteOrders';
 import { orderService, type OrderRecord } from '@/services/order.service';
@@ -126,6 +127,24 @@ export function WebsiteOrdersInbox({ compact = false }: { compact?: boolean }) {
                 <span className="line-clamp-2 leading-relaxed">{o.deliveryAddress}</span>
               </div>
             )}
+            {o.type === 'Delivery' && (() => {
+              const point = { lat: o.deliveryLat, lng: o.deliveryLng };
+              const mapsUrl = orderMapsUrl({ ...point, address: o.deliveryAddress });
+              if (!mapsUrl) return null;
+              const live = hasLivePoint(point);
+              return (
+                <div className="flex items-center gap-2 ml-5">
+                  <a href={mapsUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary hover:underline">
+                    <Navigation className="h-3 w-3" /> Open in Maps <ArrowUpRight className="h-3 w-3" />
+                  </a>
+                  {live && (
+                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-primary bg-primary/10 border border-primary/20 px-1.5 py-0.5 rounded-full">
+                      <LocateFixed className="h-3 w-3" /> Live
+                    </span>
+                  )}
+                </div>
+              );
+            })()}
           </div>
 
           <div className="bg-muted/20 rounded-xl p-3 border border-border/40 space-y-2">

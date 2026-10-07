@@ -4,7 +4,7 @@ import {
   ArrowLeft, RefreshCw, Bell, Clock, BarChart3, TrendingUp, ShoppingBag,
   AlertCircle, ChefHat, CheckCircle2, Timer, UtensilsCrossed,
   ShoppingCart, Truck, CreditCard, Banknote, Receipt, Check, Loader2,
-  Columns, LayoutGrid, Sparkles, User, Flame, Printer, Gift,
+  Columns, LayoutGrid, Sparkles, User, Flame, Printer, Gift, Navigation, ArrowUpRight, LocateFixed,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -26,6 +26,7 @@ import { orderService, KitchenRecord } from "@/services/order.service";
 import { useVisiblePolling } from "@/hooks/use-visible-polling";
 import { useOrderEvents } from "@/hooks/use-order-events";
 import { OrderPlacedPrintModal, type PlacedOrderSlipData } from "@/components/pos/OrderPlacedPrintModal";
+import { orderMapsUrl, hasLivePoint } from "@/lib/maps";
 
 // ─── Status Definitions & Professional Theme Config ───────────────────────
 
@@ -1201,7 +1202,25 @@ const OrderStatusBoard = () => {
                       <p><span className="text-muted-foreground">Table:</span> <strong className="text-primary font-extrabold">#{selectedOrder.tableNumber}</strong></p>
                     )}
                     {selectedOrder.deliveryAddress && (
-                      <p className="col-span-2"><span className="text-muted-foreground">Address:</span> <strong className="text-foreground">{selectedOrder.deliveryAddress}</strong></p>
+                      <div className="col-span-2 flex flex-col items-start gap-1">
+                        <p><span className="text-muted-foreground">Address:</span> <strong className="text-foreground">{selectedOrder.deliveryAddress}</strong></p>
+                        {orderMapsUrl({ lat: selectedOrder.deliveryLat, lng: selectedOrder.deliveryLng, address: selectedOrder.deliveryAddress }) && (
+                          <div className="flex items-center gap-2">
+                            <a
+                              href={orderMapsUrl({ lat: selectedOrder.deliveryLat, lng: selectedOrder.deliveryLng, address: selectedOrder.deliveryAddress })!}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-400 hover:underline">
+                              <Navigation className="h-3 w-3" /> Open in Maps <ArrowUpRight className="h-3 w-3" />
+                            </a>
+                            {hasLivePoint({ lat: selectedOrder.deliveryLat, lng: selectedOrder.deliveryLng }) && (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-bold text-primary bg-primary/10 border border-primary/20 px-1.5 py-0.5 rounded-full">
+                                <LocateFixed className="h-3 w-3" /> Live
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     )}
                     <p>
                       <span className="text-muted-foreground">Payment Status:</span>{" "}

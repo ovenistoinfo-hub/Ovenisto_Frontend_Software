@@ -932,6 +932,13 @@ Orders placed on the public website arrive as Delivery / Take Away orders with
     Short `maps.app.goo.gl` links return `short_link`.
   - Save: both fields empty → location removed; one empty or invalid → error toast, nothing saved.
     `buildWebsiteConfig` writes `location` only when set.
+- **Delivery live location (Step 11, 2026-10-07):** website orders can carry `deliveryLat`/`deliveryLng`
+  (on `OrderRecord`, `PendingDeliveryOrder` and `AssignmentRecord.order`).
+  - `lib/maps.ts` has `orderMapsUrl({lat,lng,address})` (the pin when valid, else an address search, else
+    null) and `hasLivePoint`.
+  - They drive "Open in Maps" + a "Live" badge in WebsiteOrdersInbox, the Delivery.tsx detail, RiderPortal
+    ("Navigate to Live Pin") and the OrderStatusBoard detail. Use them for any new map link; don't
+    hand-build Maps URLs.
 - **Locked states:** everything is disabled for Super Admin (by role; the tab is hidden from them anyway
   since Step 4c) and after a failed load (the form would hold defaults like fee 0).
 - **Receipts:** `PlacedOrderSlipData.deliveryFee?`; a "Delivery Fee" line (only when > 0) in both the

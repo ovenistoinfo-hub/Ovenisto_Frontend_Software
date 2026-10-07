@@ -1,5 +1,5 @@
 import { useState, useCallback } from "react";
-import { Bike, MapPin, Phone, Clock, Users, TrendingUp, Banknote, RefreshCw, Package, CheckCircle2, Truck, Wallet, Loader2, Navigation, ArrowUpRight, ShieldAlert } from "lucide-react";
+import { Bike, MapPin, Phone, Clock, Users, TrendingUp, Banknote, RefreshCw, Package, CheckCircle2, Truck, Wallet, Loader2, Navigation, ArrowUpRight, ShieldAlert, LocateFixed } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,6 +18,7 @@ import { useData } from "@/contexts/DataContext";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { getDeliveryPaymentMode, getRiderCollectAmount } from "@/utils/deliveryPayment";
+import { orderMapsUrl, hasLivePoint } from "@/lib/maps";
 
 /** Kitchen Status Badge for delivery cards */
 function KitchenStatusBadge({ status }: { status?: string }) {
@@ -646,15 +647,28 @@ const Delivery = () => {
                 <span className="flex-1 font-medium">{detailItem?.order?.deliveryAddress || "No delivery address listed"}</span>
               </div>
 
-              {detailItem?.order?.deliveryAddress && (
-                <a
-                  href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(detailItem.order.deliveryAddress)}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-400 hover:underline pt-1">
-                  <Navigation className="h-3 w-3" /> Open address in Maps <ArrowUpRight className="h-3 w-3" />
-                </a>
-              )}
+              {(() => {
+                const point = { lat: detailItem?.order?.deliveryLat, lng: detailItem?.order?.deliveryLng };
+                const mapsUrl = orderMapsUrl({ ...point, address: detailItem?.order?.deliveryAddress });
+                if (!mapsUrl) return null;
+                const live = hasLivePoint(point);
+                return (
+                  <div className="flex items-center gap-2 pt-1">
+                    <a
+                      href={mapsUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-400 hover:underline">
+                      <Navigation className="h-3 w-3" /> {live ? "Open live location in Maps" : "Open address in Maps"} <ArrowUpRight className="h-3 w-3" />
+                    </a>
+                    {live && (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-bold text-primary bg-primary/10 border border-primary/20 px-1.5 py-0.5 rounded-full">
+                        <LocateFixed className="h-3 w-3" /> Live
+                      </span>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
 
             {/* Items Breakdown */}
