@@ -14,6 +14,7 @@ import { cancellationRequestService } from "@/services/cancellationRequest.servi
 import { api } from "@/services/api";
 import { navSections } from "./AppSidebar";
 import { useWebsiteOrders } from "@/hooks/useWebsiteOrders";
+import { usePendingWebsiteReservations } from "@/hooks/usePendingWebsiteReservations";
 
 interface NavDrawerProps {
   open: boolean;
@@ -38,6 +39,7 @@ export function NavDrawer({ open, onOpenChange }: NavDrawerProps) {
   useVisiblePolling(refreshPendingCancelCount, 120000, canReviewCancellations);
 
   const { pendingCount: websitePendingCount } = useWebsiteOrders();
+  const { pendingCount: reservationRequestCount } = usePendingWebsiteReservations();
 
   const isActive = (url?: string) => {
     if (!url) return false;
@@ -109,6 +111,11 @@ export function NavDrawer({ open, onOpenChange }: NavDrawerProps) {
                       {item.url === "/website-orders" && websitePendingCount > 0 && (
                         <Badge variant="destructive" className="h-4 min-w-4 px-1 text-[10px] leading-none">
                           {websitePendingCount}
+                        </Badge>
+                      )}
+                      {item.url === "/reservations" && reservationRequestCount > 0 && (
+                        <Badge variant="destructive" className="h-4 min-w-4 px-1 text-[10px] leading-none" title="Website booking requests waiting">
+                          {reservationRequestCount}
                         </Badge>
                       )}
                     </Link>

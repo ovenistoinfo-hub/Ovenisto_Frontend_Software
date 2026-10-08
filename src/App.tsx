@@ -14,6 +14,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { OfflineSyncManager } from "@/components/offline/OfflineSyncManager";
 import { OfflineIndicator } from "@/components/offline/OfflineIndicator";
 import { WebsiteOrdersWatcher } from "@/components/website/WebsiteOrdersWatcher";
+import { WebsiteReservationsWatcher } from "@/components/website/WebsiteReservationsWatcher";
 import { SettingsSync } from "@/components/settings/SettingsSync";
 
 // Login stays eager — it's the first screen, so we don't want to lazy-load it.
@@ -210,6 +211,7 @@ const App = () => (
               <OfflineIndicator />
               <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
                 <WebsiteOrdersWatcher />
+                <WebsiteReservationsWatcher />
                 <SettingsSync />
                 <Suspense fallback={<div className="flex h-screen items-center justify-center text-sm text-muted-foreground">Loading…</div>}>
                   <AppRoutes />

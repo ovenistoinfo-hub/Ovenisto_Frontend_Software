@@ -169,6 +169,19 @@ const Reservations = () => {
     queryFn: () => reservationService.getAll({ outletId: selectedOutletId !== "all" ? selectedOutletId : undefined }),
   });
 
+  // Website bookings still waiting for an answer, for every date. The list below opens on "Today",
+  // so a request for a later day sat unseen (2026-10-08); this card shows them all on top.
+  const websiteRequests = useMemo(
+    () => reservations
+      .filter(r => r.source === "website" && r.status === "pending")
+      .sort((a, b) => `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`)),
+    [reservations]
+  );
+  const requestDayLabel = (date: string) =>
+    date === today ? "Today"
+      : date === tomorrow ? "Tomorrow"
+        : new Date(`${date}T00:00:00`).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" });
+
   // Friendly toast when a reservation changes from elsewhere (another device/session/staff
   // member) — suppressed for a few seconds after THIS client's own writes so it doesn't
   // double up with the specific success toast that mutation already shows.
@@ -180,6 +193,8 @@ const Reservations = () => {
     const socket = getSocket();
     const onCreated = (payload: Reservation) => {
       if (isLikelyOwnEcho()) return;
+      // WebsiteReservationsWatcher already alerts (toast + beep) for this branch's website bookings.
+      if (payload.source === "website" && payload.outletId === user?.outletId) return;
       toast.info(`New reservation: ${payload.customerName} — ${payload.date} at ${payload.time}`);
     };
     const onUpdated = (payload: Reservation) => {
@@ -199,7 +214,7 @@ const Reservations = () => {
       socket.off("reservation:updated", onUpdated);
       socket.off("reservation:deleted", onDeleted);
     };
-  }, [isLikelyOwnEcho]);
+  }, [isLikelyOwnEcho, user?.outletId]);
 
   const { data: tables = [] } = useQuery({
     queryKey: ["tables", selectedOutletId],
@@ -1116,6 +1131,60 @@ const Reservations = () => {
         />
         <OutletFilterSelect outletId={selectedOutletId} setOutletId={setOutletId} outlets={outlets} isSuperAdmin={isSuperAdmin} />
       </div>
+
+      {/* Website booking requests waiting for an answer, any date (the list below opens on "Today"). */}
+      {websiteRequests.length > 0 && (
+        <Card className="shadow-sm border-warning/40 bg-warning/5">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <Globe className="h-4 w-4 text-warning" /> New website requests ({websiteRequests.length})
+            </CardTitle>
+            <CardDescription className="text-xs">
+              Booked on the website and waiting for an answer, for any date. The customer sees Accept or Decline on their status page.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {websiteRequests.map(r => (
+              <div key={r.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 rounded-lg border border-border bg-card">
+                <div className="min-w-0 text-sm">
+                  <p className="font-semibold text-foreground truncate">
+                    {r.customerName}
+                    {r.customerPhone && <span className="text-muted-foreground font-normal"> · {r.customerPhone}</span>}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    <span className="font-semibold text-foreground">{requestDayLabel(r.date)}</span> at {r.time}
+                    {" · "}{r.orderType === "Take Away" ? "Pickup" : r.orderType || "Dine In"}
+                    {(r.orderType || "Dine In") === "Dine In" ? ` · ${r.guestCount} guests` : ""}
+                    {(r.totalAmount || 0) > 0 ? ` · PKR ${r.totalAmount.toLocaleString()}` : ""}
+                  </p>
+                </div>
+                <div className="flex gap-1.5 shrink-0">
+                  <Button
+                    size="sm"
+                    className="h-7 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-semibold shadow-sm px-2.5 rounded-lg"
+                    onClick={() => changeStatus(r.id, "confirmed")}
+                    disabled={updateMutation.isPending}
+                  >
+                    <Check className="h-3 w-3 mr-1" /> Accept
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 text-xs text-destructive hover:bg-destructive/10 px-2.5 rounded-lg"
+                    onClick={() => changeStatus(r.id, "cancelled")}
+                    disabled={updateMutation.isPending}
+                  >
+                    <X className="h-3 w-3 mr-1" /> Decline
+                  </Button>
+                  <Button size="sm" variant="outline" className="h-7 text-xs px-2.5 rounded-lg" onClick={() => openEdit(r)}>
+                    <Pencil className="h-3 w-3 mr-1" /> Details
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Reservation & Pre-Order Form Card */}
       {showForm && (!isSuperAdmin || editId) && (

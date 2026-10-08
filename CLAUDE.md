@@ -960,6 +960,19 @@ Orders placed on the public website arrive as Delivery / Take Away orders with
     a Duo-deal pickup loaded as 2,698 + 432 = 3,130, matching the website.
   - POS's reservations sheet lists only non-`pending` reservations for today, so a website booking must
     be accepted on Reservations before it can be loaded.
+- **Website booking requests are hard to miss (2026-10-08).** The Reservations list opens on "Today",
+  so a website booking for a later day sat unseen (one waited 2 days). Now:
+  - A "New website requests (N)" card at the top of `Reservations.tsx` lists every `source === 'website'`
+    + `pending` booking, for any date, with Accept / Decline / Details.
+  - A sidebar + NavDrawer badge on Reservations comes from `hooks/usePendingWebsiteReservations.ts`
+    (`GET /reservations?status=pending`, website only, permission `customers`).
+  - `components/website/WebsiteReservationsWatcher.tsx`, mounted in `App.tsx` next to
+    `WebsiteOrdersWatcher`, fires a toast + beep on `reservation:created` for the user's own branch, on
+    any screen, and refreshes the badge (socket + 180 s poll). The page's own `onCreated` toast skips
+    those, so it shows only once.
+  - The beep is shared with website orders: `lib/alertBeep.ts` `playAlertBeep()`.
+  - Live-checked on staging: the card listed 2 real requests, the badge went 2 → 3 on a new ZZTEST
+    booking, and one toast appeared on the Customers page; the ZZTEST row was deleted.
 - **Locked states:** everything is disabled for Super Admin (by role; the tab is hidden from them anyway
   since Step 4c) and after a failed load (the form would hold defaults like fee 0).
 - **Receipts:** `PlacedOrderSlipData.deliveryFee?`; a "Delivery Fee" line (only when > 0) in both the

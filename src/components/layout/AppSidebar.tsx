@@ -22,6 +22,7 @@ import { useModuleEvents } from "@/hooks/use-module-events";
 import { cancellationRequestService } from "@/services/cancellationRequest.service";
 import { api } from "@/services/api";
 import { useWebsiteOrders } from "@/hooks/useWebsiteOrders";
+import { usePendingWebsiteReservations } from "@/hooks/usePendingWebsiteReservations";
 
 const CANCELLATION_REQUEST_EVENTS = ["cancellationRequest:created", "cancellationRequest:updated"] as const;
 
@@ -118,6 +119,7 @@ export function AppSidebar() {
   useVisiblePolling(refreshPendingCancelCount, 120000, canReviewCancellations);
 
   const { pendingCount: websitePendingCount } = useWebsiteOrders();
+  const { pendingCount: reservationRequestCount } = usePendingWebsiteReservations();
 
   const isActive = (url?: string) => {
     if (!url) return false;
@@ -172,6 +174,11 @@ export function AppSidebar() {
                             {item.url === "/website-orders" && websitePendingCount > 0 && !collapsed && (
                               <Badge variant="destructive" className="h-4 min-w-4 px-1 text-[10px] leading-none">
                                 {websitePendingCount}
+                              </Badge>
+                            )}
+                            {item.url === "/reservations" && reservationRequestCount > 0 && !collapsed && (
+                              <Badge variant="destructive" className="h-4 min-w-4 px-1 text-[10px] leading-none" title="Website booking requests waiting">
+                                {reservationRequestCount}
                               </Badge>
                             )}
                           </Link>
