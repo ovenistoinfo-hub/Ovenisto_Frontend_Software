@@ -44,6 +44,24 @@ export class ApiError extends Error {
   }
 }
 
+// --- Waking a slept backend ---
+
+// With Railway Serverless on, a slept backend's first requests can get 502/503/504 from Railway's
+// edge while the container boots. A GET is safe to send again, so it is retried a few times; writes
+// are not (the caller decides).
+const WAKE_RETRY_DELAYS_MS = [1500, 3000, 5000];
+
+async function fetchWithWakeRetry(url: string, init: RequestInit): Promise<Response> {
+  let res = await fetch(url, init);
+  if ((init.method ?? 'GET').toUpperCase() !== 'GET') return res;
+  for (const delay of WAKE_RETRY_DELAYS_MS) {
+    if (![502, 503, 504].includes(res.status) || init.signal?.aborted) return res;
+    await new Promise((resolve) => setTimeout(resolve, delay));
+    res = await fetch(url, init);
+  }
+  return res;
+}
+
 // --- Core request function ---
 
 /** `suppressAuthRedirect` opts a caller out of the hard `/login` redirect below on an
@@ -64,7 +82,7 @@ async function request<T = unknown>(
   const outletId = outletStore.get();
   const outletHeader = outletId && outletId !== 'all' ? { 'X-Outlet-Id': outletId } : {};
 
-  const res = await fetch(`${API_BASE}${endpoint}`, {
+  const res = await fetchWithWakeRetry(`${API_BASE}${endpoint}`, {
     ...fetchOptions,
     headers: {
       'Content-Type': 'application/json',

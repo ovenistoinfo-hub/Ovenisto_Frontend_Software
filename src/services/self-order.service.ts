@@ -19,11 +19,23 @@ export class SelfOrderApiError extends Error {
   }
 }
 
+// A QR customer can be the first to wake a slept backend (Railway Serverless): its first GETs may get
+// 502/503/504 while it boots, and a GET is safe to send again. Same delays as api.ts.
+const WAKE_RETRY_DELAYS_MS = [1500, 3000, 5000];
+
 async function publicRequest<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-  const res = await fetch(`${API_BASE}${endpoint}`, {
+  const init: RequestInit = {
     ...options,
     headers: { "Content-Type": "application/json", ...options.headers },
-  });
+  };
+  let res = await fetch(`${API_BASE}${endpoint}`, init);
+  if ((init.method ?? "GET").toUpperCase() === "GET") {
+    for (const delay of WAKE_RETRY_DELAYS_MS) {
+      if (![502, 503, 504].includes(res.status)) break;
+      await new Promise((resolve) => setTimeout(resolve, delay));
+      res = await fetch(`${API_BASE}${endpoint}`, init);
+    }
+  }
   const body = await res.json().catch(() => ({}));
   if (!res.ok) {
     throw new SelfOrderApiError(body?.error || `Request failed with status ${res.status}`, res.status);

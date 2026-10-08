@@ -33,7 +33,10 @@ not to `/`, because most roles cannot see the dashboard. Most pages render insid
 Everything goes through `src/services/api.ts`. It reads `VITE_API_URL` (default
 `http://localhost:3001/api`), attaches the bearer token from `localStorage`, and on a
 401 transparently calls `/auth/refresh` once and replays the request — so a service
-never handles token refresh itself.
+never handles token refresh itself. A **GET** that gets 502/503/504 is resent up to 3 times
+(1.5 s / 3 s / 5 s; `fetchWithWakeRetry`). Railway's edge returns those while a slept
+backend boots (Serverless). Writes are never resent. `self-order.service.ts`'s
+`publicRequest` does the same for its GETs.
 
 One `*.service.ts` per backend module, 35 of them. They all follow the same envelope
 convention (see the Quick-Reference below). Pages consume them through TanStack Query.
@@ -939,6 +942,22 @@ Orders placed on the public website arrive as Delivery / Take Away orders with
   - They drive "Open in Maps" + a "Live" badge in WebsiteOrdersInbox, the Delivery.tsx detail, RiderPortal
     ("Navigate to Live Pin") and the OrderStatusBoard detail. Use them for any new map link; don't
     hand-build Maps URLs.
+- **Website pre-orders on Reservations + POS (Step 12b, 2026-10-08):** `Reservation` has optional
+  `discount`/`deliveryFee`/`deliveryLat`/`deliveryLng`; `PreOrderItem` has `modifierIds`.
+  - `Reservations.tsx` `preOrderLocked` = editing (`editId`) a `source === 'website'` booking that has
+    items. Then the pre-order is read-only: every item handler (`handleAddPreOrderItem`,
+    `handleDecreasePreOrderItem`, `handleUpdateItemQty`, `appendPreOrderItems`) returns early, the
+    Dine In/Take Away/Delivery switcher is disabled, and "Total charged" shows the stored total. Reason:
+    those handlers re-price at a flat 16% with no discount or delivery fee, which would silently change
+    the server-priced money. Save sends the stored subtotal/tax/total unchanged.
+  - The list shows "Total PKR {totalAmount}" (+ "incl. delivery PKR X") when `totalAmount > 0`, else the
+    old "Food Total"; Delivery rows get an `orderMapsUrl` "Open in Maps" link and a `hasLivePoint` badge.
+  - `POS.tsx` `loadReservationToPOSCart` keeps each line's `discount`, `modifiers`, `modifierIds`, `notes`
+    and deal tags (`dealId`/`dealName`/`dealLineId`/`dealGroupId`/`dealRole`). It used to set
+    `discount: 0` and drop them, so a deal pre-order was charged at full price. Live-tested on staging:
+    a Duo-deal pickup loaded as 2,698 + 432 = 3,130, matching the website.
+  - POS's reservations sheet lists only non-`pending` reservations for today, so a website booking must
+    be accepted on Reservations before it can be loaded.
 - **Locked states:** everything is disabled for Super Admin (by role; the tab is hidden from them anyway
   since Step 4c) and after a failed load (the form would hold defaults like fee 0).
 - **Receipts:** `PlacedOrderSlipData.deliveryFee?`; a "Delivery Fee" line (only when > 0) in both the
