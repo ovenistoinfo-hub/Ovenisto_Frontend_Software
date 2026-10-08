@@ -36,7 +36,9 @@ Everything goes through `src/services/api.ts`. It reads `VITE_API_URL` (default
 never handles token refresh itself. A **GET** that gets 502/503/504 is resent up to 3 times
 (1.5 s / 3 s / 5 s; `fetchWithWakeRetry`). Railway's edge returns those while a slept
 backend boots (Serverless). Writes are never resent. `self-order.service.ts`'s
-`publicRequest` does the same for its GETs.
+`publicRequest` does the same for its GETs. An open socket keeps the backend awake; disconnecting
+it in hidden tabs was **rejected (2026-10-08)**, because a hidden POS tab would then miss
+website-order alerts.
 
 One `*.service.ts` per backend module, 35 of them. They all follow the same envelope
 convention (see the Quick-Reference below). Pages consume them through TanStack Query.
