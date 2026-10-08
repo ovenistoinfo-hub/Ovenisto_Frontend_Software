@@ -8,6 +8,8 @@ export interface PreOrderItem {
   qty: number;
   discount?: number;
   modifiers?: string[];
+  // Website pre-orders store the priced modifiers here (same shape as POS CartItem.modifierIds).
+  modifierIds?: { modifierId: string; qty: number }[];
   notes?: string;
   // Deal identity, mirroring POS.tsx/WaiterPanel.tsx's CartItem — set only on a line added via
   // the pre-order picker's Deals tab. dealLineId groups every line belonging to one redemption
@@ -43,6 +45,12 @@ export interface Reservation {
   depositRef: string | null;
   preOrderItems: PreOrderItem[] | null;
   subtotal: number;
+  // Set by a website pre-order, which the server prices (deal/order discount, delivery fee) and
+  // carries over to the order on convert. A staff-made reservation leaves them at 0 / null.
+  discount?: number;
+  deliveryFee?: number;
+  deliveryLat?: number | null;
+  deliveryLng?: number | null;
   tax: number;
   totalAmount: number;
   orderId: string | null;

@@ -3,8 +3,9 @@ import {
   CalendarCheck, Plus, Pencil, Trash2, User, Phone, Users, CheckCircle2, Globe,
   Utensils, CreditCard, Banknote, Smartphone, ShoppingBag, ArrowRight, Truck, XCircle,
   Search, AlertCircle, Clock, MapPin, Check, DollarSign, ListFilter, Sparkles, ChevronRight, X, Zap, Minus, ChefHat, UserX,
-  Gift, Package, Layers, Percent
+  Gift, Package, Layers, Percent, Lock, Navigation, ArrowUpRight, LocateFixed
 } from "lucide-react";
+import { orderMapsUrl, hasLivePoint } from "@/lib/maps";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -512,8 +513,14 @@ const Reservations = () => {
     toast.info(`Selected customer: ${c.name}`);
   };
 
+  // A website pre-order was priced by the server (deal and order discounts, branch tax, delivery
+  // fee). The handlers below re-price at a flat 16% with none of those, so its items and booking
+  // type stay read-only here; staff change them after converting it to an order.
+  const preOrderLocked = !!editId && form.source === "website" && (form.preOrderItems?.length ?? 0) > 0;
+
   // Pre-Order Item Handlers
   const handleAddPreOrderItem = (item: MenuItemRecord, variantId?: string) => {
+    if (preOrderLocked) return;
     const variant = variantId ? item.variants?.find(v => v.id === variantId) : undefined;
     const price = variant ? Number(variant.price) : Number(item.price);
     const itemName = variant ? `${item.name} (${variant.name})` : item.name;
@@ -551,6 +558,7 @@ const Reservations = () => {
   };
 
   const handleDecreasePreOrderItem = (menuItemId: string, variantId?: string) => {
+    if (preOrderLocked) return;
     setForm(prev => {
       const currentItems = prev.preOrderItems || [];
       const existingIdx = currentItems.findIndex(i => i.menuItemId === menuItemId && i.variantId === (variantId || undefined));
@@ -579,6 +587,7 @@ const Reservations = () => {
   };
 
   const handleUpdateItemQty = (index: number, delta: number) => {
+    if (preOrderLocked) return;
     setForm(prev => {
       const currentItems = prev.preOrderItems || [];
       const updated = currentItems.map((item, idx) => {
@@ -623,6 +632,7 @@ const Reservations = () => {
    *  recompute handleAddPreOrderItem/handleUpdateItemQty above do, factored out since every
    *  deal-add path below needs to append several lines at once. */
   const appendPreOrderItems = (newItems: PreOrderItem[]) => {
+    if (preOrderLocked) return;
     setForm(prev => {
       const updated = [...(prev.preOrderItems || []), ...newItems];
       const subtotal = updated.reduce((sum, i) => sum + (i.price * i.qty), 0);
@@ -1138,6 +1148,7 @@ const Reservations = () => {
                 type="button"
                 variant={form.orderType === "Dine In" ? "default" : "ghost"}
                 className={cn("w-full text-xs font-semibold rounded-lg flex items-center justify-center gap-1.5", form.orderType === "Dine In" && "gradient-primary text-primary-foreground shadow")}
+                disabled={preOrderLocked}
                 onClick={() => setForm(p => ({ ...p, bookingType: "table_reservation", orderType: "Dine In" }))}
               >
                 <Utensils className="h-3.5 w-3.5" /> Dine In
@@ -1146,6 +1157,7 @@ const Reservations = () => {
                 type="button"
                 variant={form.orderType === "Take Away" ? "default" : "ghost"}
                 className={cn("w-full text-xs font-semibold rounded-lg flex items-center justify-center gap-1.5", form.orderType === "Take Away" && "gradient-primary text-primary-foreground shadow")}
+                disabled={preOrderLocked}
                 onClick={() => setForm(p => ({ ...p, bookingType: "future_order", orderType: "Take Away", tableId: undefined, tableNumber: undefined }))}
               >
                 <ShoppingBag className="h-3.5 w-3.5" /> Take Away
@@ -1154,6 +1166,7 @@ const Reservations = () => {
                 type="button"
                 variant={form.orderType === "Delivery" ? "default" : "ghost"}
                 className={cn("w-full text-xs font-semibold rounded-lg flex items-center justify-center gap-1.5", form.orderType === "Delivery" && "gradient-primary text-primary-foreground shadow")}
+                disabled={preOrderLocked}
                 onClick={() => setForm(p => ({ ...p, bookingType: "future_order", orderType: "Delivery", tableId: undefined, tableNumber: undefined }))}
               >
                 <Truck className="h-3.5 w-3.5" /> Delivery
@@ -1320,10 +1333,23 @@ const Reservations = () => {
                   </p>
                   <p className="text-[11px] text-muted-foreground">Select food items customer wants to pre-order in advance.</p>
                 </div>
-                <Button type="button" variant="outline" size="sm" className="h-8 border-primary/40 hover:bg-primary/10 text-xs font-semibold" onClick={() => setShowMenuPicker(true)}>
-                  <Plus className="h-3.5 w-3.5 mr-1 text-primary" /> Add Food Items
-                </Button>
+                {preOrderLocked ? (
+                  <Badge variant="outline" className="text-[10px] bg-muted text-muted-foreground border-border gap-1">
+                    <Lock className="h-3 w-3" /> Website pre-order
+                  </Badge>
+                ) : (
+                  <Button type="button" variant="outline" size="sm" className="h-8 border-primary/40 hover:bg-primary/10 text-xs font-semibold" onClick={() => setShowMenuPicker(true)}>
+                    <Plus className="h-3.5 w-3.5 mr-1 text-primary" /> Add Food Items
+                  </Button>
+                )}
               </div>
+
+              {preOrderLocked && (
+                <p className="text-[11px] text-muted-foreground flex items-start gap-1.5 bg-muted/60 border border-border/60 rounded-lg p-2">
+                  <Lock className="h-3.5 w-3.5 flex-shrink-0 mt-px" />
+                  Website pre-order — priced by the server. Convert it to an order to change items.
+                </p>
+              )}
 
               {form.preOrderItems && form.preOrderItems.length > 0 ? (
                 <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
@@ -1344,15 +1370,21 @@ const Reservations = () => {
                         </p>
                       </div>
                       <div className="flex items-center gap-2">
-                        <div className="flex items-center gap-1 bg-muted rounded-md px-1.5 py-0.5">
-                          <button type="button" onClick={() => handleUpdateItemQty(idx, -1)} className="hover:text-primary font-bold px-1">-</button>
-                          <span className="font-bold text-foreground">{item.qty}</span>
-                          <button type="button" onClick={() => handleUpdateItemQty(idx, 1)} className="hover:text-primary font-bold px-1">+</button>
-                        </div>
+                        {preOrderLocked ? (
+                          <span className="font-bold text-foreground bg-muted rounded-md px-2 py-0.5">x{item.qty}</span>
+                        ) : (
+                          <div className="flex items-center gap-1 bg-muted rounded-md px-1.5 py-0.5">
+                            <button type="button" onClick={() => handleUpdateItemQty(idx, -1)} className="hover:text-primary font-bold px-1">-</button>
+                            <span className="font-bold text-foreground">{item.qty}</span>
+                            <button type="button" onClick={() => handleUpdateItemQty(idx, 1)} className="hover:text-primary font-bold px-1">+</button>
+                          </div>
+                        )}
                         <span className="font-mono font-bold text-foreground w-16 text-right">PKR {(item.price * item.qty).toLocaleString()}</span>
-                        <Button type="button" variant="ghost" size="icon" className="h-6 w-6 text-destructive" onClick={() => handleUpdateItemQty(idx, -item.qty)}>
-                          <Trash2 className="h-3 w-3" />
-                        </Button>
+                        {!preOrderLocked && (
+                          <Button type="button" variant="ghost" size="icon" className="h-6 w-6 text-destructive" onClick={() => handleUpdateItemQty(idx, -item.qty)}>
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -1361,6 +1393,13 @@ const Reservations = () => {
                     <span>Food Total Price:</span>
                     <span className="text-primary font-mono text-sm">PKR {(form.subtotal || 0).toLocaleString()}</span>
                   </div>
+                  {/* The server's total: after deal discounts, plus tax and any delivery fee. */}
+                  {preOrderLocked && (
+                    <div className="flex justify-between items-center text-xs font-bold">
+                      <span>Total charged (incl. tax{form.orderType === "Delivery" ? " & delivery" : ""}):</span>
+                      <span className="text-primary font-mono text-sm">PKR {(form.totalAmount || 0).toLocaleString()}</span>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <p className="text-xs text-center py-4 text-muted-foreground border border-dashed rounded-lg">
@@ -1668,6 +1707,28 @@ const Reservations = () => {
                         <div className="text-xs">
                           <span className="font-bold text-info">{r.orderType}</span>
                           {r.deliveryAddress && <p className="text-[10px] text-muted-foreground truncate max-w-[150px]"><MapPin className="h-2.5 w-2.5 inline mr-0.5" />{r.deliveryAddress}</p>}
+                          {r.orderType === "Delivery" && (() => {
+                            const point = { lat: r.deliveryLat, lng: r.deliveryLng };
+                            const mapsUrl = orderMapsUrl({ ...point, address: r.deliveryAddress });
+                            if (!mapsUrl) return null;
+                            const live = hasLivePoint(point);
+                            return (
+                              <div className="flex items-center gap-1.5 mt-0.5">
+                                <a
+                                  href={mapsUrl}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="inline-flex items-center gap-1 text-[10px] font-bold text-blue-400 hover:underline">
+                                  <Navigation className="h-3 w-3" /> Open in Maps <ArrowUpRight className="h-3 w-3" />
+                                </a>
+                                {live && (
+                                  <span className="inline-flex items-center gap-1 text-[10px] font-bold text-primary bg-primary/10 border border-primary/20 px-1.5 py-0.5 rounded-full">
+                                    <LocateFixed className="h-3 w-3" /> Live
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          })()}
                         </div>
                       )}
                     </TableCell>
@@ -1689,9 +1750,16 @@ const Reservations = () => {
                       {r.preOrderItems && r.preOrderItems.length > 0 ? (
                         <div className="text-xs">
                           <span className="font-semibold text-foreground">{r.preOrderItems.length} items</span>
-                          <span className="text-muted-foreground text-[11px] block font-mono">
-                            Food Total: PKR {(r.subtotal || r.preOrderItems.reduce((sum: number, i: any) => sum + (Number(i.price) * Number(i.qty)), 0)).toLocaleString()}
-                          </span>
+                          {(r.totalAmount || 0) > 0 ? (
+                            <span className="text-muted-foreground text-[11px] block font-mono">
+                              Total PKR {r.totalAmount.toLocaleString()}
+                              {(r.deliveryFee || 0) > 0 && <span className="block">incl. delivery PKR {(r.deliveryFee || 0).toLocaleString()}</span>}
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground text-[11px] block font-mono">
+                              Food Total: PKR {(r.subtotal || r.preOrderItems.reduce((sum: number, i: any) => sum + (Number(i.price) * Number(i.qty)), 0)).toLocaleString()}
+                            </span>
+                          )}
                         </div>
                       ) : (
                         <span className="text-xs text-muted-foreground">—</span>

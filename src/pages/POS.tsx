@@ -2686,6 +2686,9 @@ const POS = () => {
   const loadReservationToPOSCart = (res: ReservationRecord) => {
     setLoadedReservationId(res.id);
     if (res.preOrderItems && res.preOrderItems.length > 0) {
+      // Keep each line's deal identity and discount: dropping them charged a deal pre-order (e.g.
+      // one booked on the website) as plain items at full price. The server re-derives deal lines
+      // from these tags when the order is placed.
       const mappedItems: CartItem[] = res.preOrderItems.map((item, idx) => ({
         id: `res-${res.id}-${idx}-${Date.now()}`,
         menuItemId: item.menuItemId,
@@ -2693,8 +2696,15 @@ const POS = () => {
         name: item.name,
         price: Number(item.price),
         qty: Number(item.qty),
-        discount: 0,
-        modifiers: [],
+        discount: Number(item.discount ?? 0),
+        modifiers: item.modifiers ?? [],
+        modifierIds: item.modifierIds ?? [],
+        notes: item.notes,
+        dealId: item.dealId ?? null,
+        dealName: item.dealName ?? null,
+        dealLineId: item.dealLineId ?? null,
+        dealGroupId: item.dealGroupId ?? null,
+        dealRole: item.dealRole ?? null,
       }));
       setCart(mappedItems);
     } else {
