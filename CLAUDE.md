@@ -928,6 +928,11 @@ Orders placed on the public website arrive as Delivery / Take Away orders with
   `buildWebsiteConfig(raw, form)` spreads the loaded JSON, drops the legacy keys
   (`deliveryCharges`, `prepTime`, `deliveryRadius`, `autoAccept`) and sets the 6 canonical keys. `PUT
   /settings` replaces `websiteConfig` whole, so always build from the loaded raw object.
+- **Opening hours (2026-10-11):** an "Opening hours" section in the same tab (two `type="time"` inputs + Clear)
+  saves `websiteConfig.hours {open, close}` ("HH:mm"; both or neither, not equal; a close earlier than the
+  open means after midnight). `lib/websiteConfig.ts` `parseHours` mirrors the backend's (tested), and
+  `buildWebsiteConfig` writes or deletes `hours`. The website shows these hours per branch and offers
+  booking times only inside them.
 - **Branch location (Step 10, 2026-10-06):** a "Branch location" section in the same tab feeds the
   public website's nearest-branch auto-select.
   - Fields: lat/lng inputs, "Paste a Google Maps link or coordinates" + Apply, "Use this device's

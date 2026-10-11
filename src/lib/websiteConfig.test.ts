@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseWebsiteConfig, buildWebsiteConfig, WebsiteConfig, parseLocation, parseMapsLink } from './websiteConfig';
+import { parseWebsiteConfig, buildWebsiteConfig, WebsiteConfig, parseLocation, parseMapsLink, parseHours } from './websiteConfig';
 
 describe('websiteConfig', () => {
   describe('parseWebsiteConfig', () => {
@@ -13,6 +13,7 @@ describe('websiteConfig', () => {
         minOrder: 0,
         prepTimeMinutes: 30,
         location: null,
+        hours: null,
       });
     });
 
@@ -72,6 +73,7 @@ describe('websiteConfig', () => {
         minOrder: 500,
         prepTimeMinutes: 45,
         location: null,
+        hours: null,
       };
 
       const built = buildWebsiteConfig(raw, form);
@@ -91,6 +93,7 @@ describe('websiteConfig', () => {
       expect('deliveryRadius' in built).toBe(false);
       expect('autoAccept' in built).toBe(false);
       expect('location' in built).toBe(false);
+      expect('hours' in built).toBe(false);
     });
 
     it('writes location when non-null', () => {
@@ -103,10 +106,12 @@ describe('websiteConfig', () => {
         minOrder: 500,
         prepTimeMinutes: 45,
         location: { lat: 31.47, lng: 74.3 },
+        hours: { open: "12:00", close: "00:00" },
       };
 
       const built = buildWebsiteConfig(raw, form);
       expect(built.location).toEqual({ lat: 31.47, lng: 74.3 });
+      expect(built.hours).toEqual({ open: "12:00", close: "00:00" });
     });
   });
 });
@@ -160,5 +165,17 @@ describe('parseMapsLink', () => {
   
   it('returns not_found for junk', () => {
     expect(parseMapsLink('not a map link')).toEqual({ ok: false, reason: 'not_found' });
+  });
+});
+
+describe('parseHours', () => {
+  it('keeps two valid, different HH:mm times and reads them from the config', () => {
+    expect(parseHours({ open: '18:00', close: '02:00' })).toEqual({ open: '18:00', close: '02:00' });
+    expect(parseWebsiteConfig({ hours: { open: '12:00', close: '00:00' } }).hours).toEqual({ open: '12:00', close: '00:00' });
+  });
+  it('returns null for anything else', () => {
+    expect(parseHours({ open: '12:00', close: '12:00' })).toBeNull();
+    expect(parseHours({ open: '9:00', close: '22:00' })).toBeNull();
+    expect(parseHours(null)).toBeNull();
   });
 });

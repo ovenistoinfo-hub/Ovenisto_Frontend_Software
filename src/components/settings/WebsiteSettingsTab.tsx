@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { settingsService } from "@/services/settings.service";
 import { parseWebsiteConfig, buildWebsiteConfig, WebsiteConfig, parseMapsLink } from "@/lib/websiteConfig";
-import { MapPin, AlertCircle } from "lucide-react";
+import { MapPin, AlertCircle, Clock } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
@@ -26,6 +26,7 @@ export function WebsiteSettingsTab() {
     minOrder: 0,
     prepTimeMinutes: 30,
     location: null,
+    hours: null,
   });
 
   const [freeDeliveryStr, setFreeDeliveryStr] = useState("");
@@ -35,6 +36,8 @@ export function WebsiteSettingsTab() {
   const [latStr, setLatStr] = useState("");
   const [lngStr, setLngStr] = useState("");
   const [mapsLinkStr, setMapsLinkStr] = useState("");
+  const [openStr, setOpenStr] = useState("");
+  const [closeStr, setCloseStr] = useState("");
   const [isLocating, setIsLocating] = useState(false);
 
   useEffect(() => {
@@ -55,6 +58,8 @@ export function WebsiteSettingsTab() {
         setPrepTimeStr(String(parsed.prepTimeMinutes));
         setLatStr(parsed.location ? String(parsed.location.lat) : "");
         setLngStr(parsed.location ? String(parsed.location.lng) : "");
+        setOpenStr(parsed.hours?.open ?? "");
+        setCloseStr(parsed.hours?.close ?? "");
       }
     } catch (err: unknown) {
       setLoadFailed(true);
@@ -93,6 +98,12 @@ export function WebsiteSettingsTab() {
       finalLocation = { lat, lng };
     }
 
+    // Both times or neither; the same time twice is meaningless.
+    if (!openStr !== !closeStr || (openStr && openStr === closeStr)) {
+      return toast.error("Set both opening and closing time (different), or clear both");
+    }
+    const finalHours = openStr && closeStr ? { open: openStr, close: closeStr } : null;
+
     const finalForm: WebsiteConfig = {
       ...form,
       deliveryFee: dFee,
@@ -100,6 +111,7 @@ export function WebsiteSettingsTab() {
       prepTimeMinutes: pTime,
       freeDeliveryAbove: fdAbove,
       location: finalLocation,
+      hours: finalHours,
     };
 
     const payload = buildWebsiteConfig(rawConfig, finalForm);
@@ -257,6 +269,32 @@ export function WebsiteSettingsTab() {
                 value={prepTimeStr}
                 onChange={(e) => setPrepTimeStr(e.target.value)}
               />
+            </div>
+          </div>
+
+          <div className="pt-4 border-t space-y-4">
+            <h3 className="text-lg font-semibold flex items-center">
+              <Clock className="mr-2 h-5 w-5" />
+              Opening hours
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="text-sm font-medium">Opens at</label>
+                <Input type="time" disabled={isDisabled} value={openStr} onChange={(e) => setOpenStr(e.target.value)} />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Closes at</label>
+                <Input type="time" disabled={isDisabled} value={closeStr} onChange={(e) => setCloseStr(e.target.value)} />
+              </div>
+            </div>
+            <div className="flex items-start justify-between gap-4">
+              <p className="text-xs text-muted-foreground">
+                Shown on the website for this branch; booking times are offered only inside these hours. Closing
+                after midnight? Pick a closing time earlier than the opening time (e.g. 6:00 PM – 2:00 AM).
+              </p>
+              <Button disabled={isDisabled} onClick={() => { setOpenStr(""); setCloseStr(""); }} variant="ghost" size="sm">
+                Clear
+              </Button>
             </div>
           </div>
 

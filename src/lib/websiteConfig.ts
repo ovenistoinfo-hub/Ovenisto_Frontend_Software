@@ -6,6 +6,18 @@ export interface WebsiteConfig {
   prepTimeMinutes: number;
   reservationsEnabled: boolean;
   location: { lat: number; lng: number } | null;
+  /** Opening hours, 24h "HH:mm" PKT. A `close` at or before `open` means it closes after midnight. */
+  hours: { open: string; close: string } | null;
+}
+
+const HH_MM = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+/** Mirrors backend `parseHours`: two valid, different "HH:mm" times, else null (not set). */
+export function parseHours(value: unknown): { open: string; close: string } | null {
+  if (!value || typeof value !== 'object') return null;
+  const { open, close } = value as Record<string, unknown>;
+  if (typeof open !== 'string' || typeof close !== 'string' || !HH_MM.test(open) || !HH_MM.test(close) || open === close) return null;
+  return { open, close };
 }
 
 function parseNumber(value: unknown, defaultValue: number): number {
@@ -99,6 +111,7 @@ export function parseWebsiteConfig(raw: unknown): WebsiteConfig {
     prepTimeMinutes: 30,
     reservationsEnabled: false,
     location: null,
+    hours: null,
   };
 
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
@@ -127,8 +140,9 @@ export function parseWebsiteConfig(raw: unknown): WebsiteConfig {
   }
 
   const location = parseLocation(obj.location);
+  const hours = parseHours(obj.hours);
 
-  return { enabled, deliveryFee, freeDeliveryAbove, minOrder, prepTimeMinutes, reservationsEnabled, location };
+  return { enabled, deliveryFee, freeDeliveryAbove, minOrder, prepTimeMinutes, reservationsEnabled, location, hours };
 }
 
 export function buildWebsiteConfig(raw: unknown, form: WebsiteConfig): Record<string, unknown> {
@@ -154,6 +168,11 @@ export function buildWebsiteConfig(raw: unknown, form: WebsiteConfig): Record<st
     base.location = form.location;
   } else {
     delete base.location;
+  }
+  if (form.hours) {
+    base.hours = form.hours;
+  } else {
+    delete base.hours;
   }
 
   return base;
