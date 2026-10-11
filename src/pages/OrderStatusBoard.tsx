@@ -1,10 +1,10 @@
 import { useState, useEffect, useCallback, useMemo, Fragment } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
   ArrowLeft, RefreshCw, Bell, Clock, BarChart3, TrendingUp, ShoppingBag,
   AlertCircle, ChefHat, CheckCircle2, Timer, UtensilsCrossed,
   ShoppingCart, Truck, CreditCard, Banknote, Receipt, Check, Loader2,
-  Columns, LayoutGrid, Sparkles, User, Flame, Printer, Gift, Navigation, ArrowUpRight, LocateFixed,
+  Columns, LayoutGrid, Sparkles, User, Flame, Printer, Gift, Navigation, ArrowUpRight, LocateFixed, Globe,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -27,6 +27,8 @@ import { useVisiblePolling } from "@/hooks/use-visible-polling";
 import { useOrderEvents } from "@/hooks/use-order-events";
 import { OrderPlacedPrintModal, type PlacedOrderSlipData } from "@/components/pos/OrderPlacedPrintModal";
 import { orderMapsUrl, hasLivePoint } from "@/lib/maps";
+import { useWebsiteOrders } from "@/hooks/useWebsiteOrders";
+import { WebsiteOrdersInbox } from "@/components/website/WebsiteOrdersInbox";
 
 // ─── Status Definitions & Professional Theme Config ───────────────────────
 
@@ -268,7 +270,17 @@ const pktDateStr = (input?: string | number | Date): string => {
 
 const OrderStatusBoard = () => {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, hasPermission } = useAuth();
+  // Website orders are approved here and nowhere else: a sixth tile opens their inbox in place of the board.
+  const canWebsite = hasPermission("website-orders");
+  const { pendingCount: websitePending } = useWebsiteOrders();
+  const [searchParams] = useSearchParams();
+  const [showWebsite, setShowWebsite] = useState(false);
+  const [collectingId, setCollectingId] = useState<string | null>(null);
+  // Keyed on searchParams: the new-order toast links to ?tab=website while this page may already be open.
+  useEffect(() => {
+    if (canWebsite && searchParams.get("tab") === "website") setShowWebsite(true);
+  }, [searchParams, canWebsite]);
   const { foodMenuItems, settings, currency } = useData();
   // name → menu item, built once per menu change. The board's per-item status
   // and cook-time helpers run for every item of every card on the 1-second
@@ -350,6 +362,20 @@ const OrderStatusBoard = () => {
       setHasLoaded(true);
     }
   }, []);
+
+  // Payment for a website pickup order, taken at the counter (it used to sit on the Website Orders page).
+  const handleCollectPayment = async (order: { id: string }, method: string) => {
+    try {
+      setCollectingId(order.id);
+      await orderService.updateOrder(order.id, { paymentMethod: method });
+      toast.success(`Payment collected: ${method}`);
+      loadOrders();
+    } catch (err: unknown) {
+      toast.error(err instanceof Error && err.message ? err.message : "Failed to collect payment");
+    } finally {
+      setCollectingId(null);
+    }
+  };
 
   const handleOrderEvent = useCallback((payload?: any) => {
     if (payload && typeof payload === "object" && payload.id) {
@@ -873,6 +899,29 @@ const OrderStatusBoard = () => {
               </Button>
             </div>
 
+            {/* A website pickup pays at the counter: record which method was received. */}
+            {order.orderSource === "website" && order.type === "Take Away" && !paid && (
+              <div className="rounded-lg border border-primary/30 bg-primary/5 p-2 space-y-1.5" onClick={(e) => e.stopPropagation()}>
+                <p className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-primary">
+                  <Banknote className="h-3 w-3" /> Collect payment on pickup
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {(settings?.paymentMethods?.length ? settings.paymentMethods : ["Cash"]).map((method: string) => (
+                    <Button
+                      key={method}
+                      size="sm"
+                      variant="outline"
+                      className="h-8 flex-1 min-w-[70px] rounded-lg px-2.5 text-[11px] font-semibold"
+                      disabled={collectingId === order.id}
+                      onClick={() => handleCollectPayment(order, method)}
+                    >
+                      {collectingId === order.id ? <Loader2 className="h-3 w-3 animate-spin" /> : method}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Action Button */}
             {order.status === "ready" && (
               <Button
@@ -923,6 +972,38 @@ const OrderStatusBoard = () => {
         </div>
 
         <div className="flex items-center gap-3">
+          {/* Website orders are approved here: opens their inbox in place of the board. */}
+          {canWebsite && (
+            <button
+              onClick={() => setShowWebsite((v) => !v)}
+              aria-pressed={showWebsite}
+              title={showWebsite ? "Back to the board" : "Website orders waiting for approval"}
+              className={cn(
+                "relative inline-flex items-center gap-2 h-10 pl-3 pr-2 rounded-lg border text-xs font-bold transition-all",
+                showWebsite
+                  ? "gradient-primary text-primary-foreground border-transparent shadow-md shadow-primary/25"
+                  : websitePending > 0
+                    ? "bg-primary/10 border-primary/50 text-primary hover:bg-primary/15"
+                    : "bg-card border-border/70 text-muted-foreground hover:text-foreground hover:border-border"
+              )}
+            >
+              <Globe className="h-4 w-4 shrink-0" />
+              <span className="hidden sm:inline">Website Orders</span>
+              <span className={cn(
+                "inline-flex h-6 min-w-[1.5rem] items-center justify-center rounded-md px-1.5 font-mono text-[11px] font-black",
+                showWebsite ? "bg-white/20 text-primary-foreground" : websitePending > 0 ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
+              )}>
+                {websitePending}
+              </span>
+              {websitePending > 0 && !showWebsite && (
+                <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
+                  <span className="absolute inline-flex h-full w-full rounded-full bg-primary opacity-70 animate-ping motion-reduce:hidden" />
+                  <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-primary ring-2 ring-card" />
+                </span>
+              )}
+            </button>
+          )}
+
           {/* View Mode Switcher */}
           <div className="inline-flex items-center p-0.5 rounded-lg bg-muted/60 border border-border/60 shadow-sm">
             <button
@@ -970,12 +1051,12 @@ const OrderStatusBoard = () => {
             const cfg = statusConfig[statusKey];
             const Icon = cfg.icon;
             const count = statusCounts[statusKey];
-            const isActive = activeStatus === statusKey;
+            const isActive = !showWebsite && activeStatus === statusKey;
 
             return (
               <button
                 key={statusKey}
-                onClick={() => setActiveStatus(statusKey)}
+                onClick={() => { setActiveStatus(statusKey); setShowWebsite(false); }}
                 className={cn(
                   "p-3 rounded-xl text-left border transition-all duration-150 relative overflow-hidden group cursor-pointer",
                   isActive
@@ -1010,11 +1091,26 @@ const OrderStatusBoard = () => {
             );
           })}
         </div>
+        {canWebsite && websitePending > 0 && !showWebsite && (
+          <button
+            onClick={() => setShowWebsite(true)}
+            className="mt-3 w-full flex items-center justify-between gap-3 rounded-xl border border-primary/40 bg-primary/10 px-4 py-2.5 text-left hover:bg-primary/15 transition-colors"
+          >
+            <span className="flex items-center gap-2 text-sm font-bold text-foreground">
+              <Globe className="h-4 w-4 text-primary shrink-0" />
+              {websitePending} website order{websitePending === 1 ? "" : "s"} waiting for approval
+            </span>
+            <span className="text-xs font-bold text-primary whitespace-nowrap">Review</span>
+          </button>
+        )}
       </div>
 
       {/* ════════════ MAIN CONTENT AREA (FULL SCREEN WIDTH) ════════════ */}
       <main className="flex-1 overflow-hidden p-4 sm:px-6 py-4 bg-muted/10 w-full">
-        {!hasLoaded ? (
+        {showWebsite ? (
+          /* ── WEBSITE ORDERS: accept / decline the ones waiting ── */
+          <WebsiteOrdersInbox onClose={() => setShowWebsite(false)} />
+        ) : !hasLoaded ? (
           /* ── FIRST-LOAD SKELETON (mirrors the columns / grid layout) ── */
           viewMode === "columns" ? (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 lg:gap-6 h-full w-full overflow-hidden">

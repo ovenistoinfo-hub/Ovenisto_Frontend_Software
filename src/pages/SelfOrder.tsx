@@ -3,8 +3,9 @@ import { useSearchParams } from "react-router-dom";
 import {
   Flame, Search, ShoppingCart, Plus, Minus, Send, ChevronUp, Loader2,
   XCircle, CheckCircle2, Users, Phone, User, BellRing, Utensils, Sparkles,
-  ArrowRight, X, Receipt, FileText, Ticket, Gift, Package, Layers, Percent, Check, CreditCard,
+  ArrowRight, X, Receipt, FileText, Ticket, Gift, Package, Layers, Percent, Check, CreditCard, Clock,
 } from "lucide-react";
+import { isServedAt, servingLabel, pktMinuteNow, formatMealHours } from "@/lib/mealTime";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -211,6 +212,7 @@ const SelfOrder = () => {
   // ── Menu browsing / cart ──
   const [search, setSearch] = useState("");
   const [catFilter, setCatFilter] = useState("All");
+  const [mealFilter, setMealFilter] = useState<string | null>(null);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [cartOpen, setCartOpen] = useState(false);
   const [notes, setNotes] = useState("");
@@ -476,9 +478,18 @@ const SelfOrder = () => {
   const filtered = useMemo(() => {
     let items = availableItems;
     if (catFilter !== "All") items = items.filter((i) => i.category?.name === catFilter);
+    if (mealFilter) items = items.filter((i) => i.mealTypeIds?.includes(mealFilter));
     if (search) items = items.filter((i) => i.name.toLowerCase().includes(search.toLowerCase()));
     return items;
-  }, [availableItems, catFilter, search]);
+  }, [availableItems, catFilter, mealFilter, search]);
+  // Meal times (set per branch in staff Settings): a dish outside its meal's time shows "Not available".
+  const mealTimes = menu?.mealTypes;
+  const mealChips = useMemo(
+    () => (mealTimes ?? [])
+      .filter((m) => availableItems.some((i) => i.mealTypeIds?.includes(m.id)))
+      .sort((a, b) => (a.hours?.open ?? "99").localeCompare(b.hours?.open ?? "99")),
+    [mealTimes, availableItems],
+  );
 
   const cartTotal = cart.reduce((s, i) => s + i.price * i.qty - (i.discount || 0), 0);
   const cartCount = cart.reduce((s, i) => s + i.qty, 0);
@@ -567,6 +578,10 @@ const SelfOrder = () => {
   // ── Cart helpers ──
 
   const addToCart = (item: SelfOrderMenuItem) => {
+    if (!isServedAt(item.mealTypeIds, mealTimes, pktMinuteNow())) {
+      toast.error(`${item.name} is not available now — served ${servingLabel(item.mealTypeIds, mealTimes)}`);
+      return;
+    }
     const hasVariants = item.variants.length > 0;
     const hasModifiers = resolveModifiers(item).length > 0;
 
@@ -635,6 +650,8 @@ const SelfOrder = () => {
   const updateQty = (id: string, delta: number) => {
     setCart((prev) => prev.map((c) => (c.id === id ? { ...c, qty: Math.max(0, c.qty + delta) } : c)).filter((c) => c.qty > 0));
   };
+  // The cart's X button called this, but it was never defined (a click threw).
+  const removeCartItem = (id: string) => setCart((prev) => prev.filter((c) => c.id !== id));
 
   /** A deal redemption is one unit — removing any of its lines removes all
    *  of them, or a customer could keep half a Fixed Bundle at its bundle
@@ -1864,6 +1881,25 @@ const SelfOrder = () => {
               );
             })}
           </div>
+          {mealChips.length > 0 && catFilter !== "__deals__" && (
+            <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none pt-2" role="group" aria-label="Meal times">
+              <Clock className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+              {[{ id: null as string | null, name: "All meals", hours: null as { open: string; close: string } | null }, ...mealChips].map((m) => (
+                <button
+                  key={m.id ?? "all"}
+                  onClick={() => setMealFilter(m.id)}
+                  aria-pressed={mealFilter === m.id}
+                  className={cn(
+                    "shrink-0 px-2.5 py-1 rounded-full text-[11px] font-semibold whitespace-nowrap border transition-colors",
+                    mealFilter === m.id ? "bg-foreground text-background border-foreground" : "bg-card border-border/80 text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  {m.name}
+                  {m.hours && <span className="ml-1 font-normal opacity-75">{formatMealHours(m.hours)}</span>}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
@@ -1955,6 +1991,9 @@ const SelfOrder = () => {
                 const hasVariants = item.variants.length > 0;
                 const itemModifiers = resolveModifiers(item);
                 const hasModifiers = itemModifiers.length > 0;
+                const mealLabel = servingLabel(item.mealTypeIds, mealTimes);
+                const notServed = !isServedAt(item.mealTypeIds, mealTimes, pktMinuteNow());
+                const blocked = !item.available || notServed;
 
                 return (
                   <div
@@ -1962,7 +2001,7 @@ const SelfOrder = () => {
                     className={cn(
                       "bg-card rounded-2xl border transition-all duration-200 overflow-hidden shadow-xs hover:shadow-md",
                       isExpanded ? "border-primary/50 ring-1 ring-primary/20" : "border-border/80 hover:border-border",
-                      !item.available && "opacity-60 hover:shadow-xs"
+                      blocked && "opacity-60 hover:shadow-xs"
                     )}
                   >
                     <div className="p-3 flex items-start gap-3">
@@ -1972,7 +2011,7 @@ const SelfOrder = () => {
                           <img
                             src={item.image}
                             alt={item.name}
-                            className={cn("h-full w-full object-cover transition-transform duration-300 hover:scale-105", !item.available && "grayscale")}
+                            className={cn("h-full w-full object-cover transition-transform duration-300 hover:scale-105", blocked && "grayscale")}
                             onError={(e) => {
                               (e.target as HTMLElement).style.display = "none";
                             }}
@@ -1998,7 +2037,12 @@ const SelfOrder = () => {
                             )}
                           </div>
 
-                          {!item.available ? (
+                          {notServed ? (
+                            <div className="mt-1">
+                              <p className="font-bold text-destructive text-xs uppercase tracking-wide">Not available</p>
+                              <p className="text-[11px] text-muted-foreground flex items-center gap-1 mt-0.5"><Clock className="h-3 w-3" />{mealLabel}</p>
+                            </div>
+                          ) : !item.available ? (
                             <p className="font-bold text-destructive text-xs mt-1 uppercase tracking-wide">Out of Stock</p>
                           ) : (
                             <p className="font-extrabold text-primary text-base mt-1">
@@ -2036,7 +2080,7 @@ const SelfOrder = () => {
                           ) : (
                             <Button
                               size="sm"
-                              disabled={!item.available}
+                              disabled={blocked}
                               className={cn(
                                 "rounded-xl text-xs font-bold transition-all shadow-xs h-8 px-3",
                                 isExpanded

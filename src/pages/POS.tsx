@@ -55,8 +55,8 @@ import { getRiderCollectAmount } from "@/utils/deliveryPayment";
 import { dealService, type DealRecord, type DealOptionItemRecord } from "@/services/deal.service";
 import { isDealLive, isDealAvailableForChannel, dealChannelPrice, dealChannelPercent, allocateDealDiscount, dealBogoSides, dealBogoSideMode, dealBogoOptionGroups, capFreeUnitPrice, type DealOptionItemForBogo } from "@/lib/deals";
 import { OrderPlacedPrintModal, type PlacedOrderSlipData } from "@/components/pos/OrderPlacedPrintModal";
-import { useWebsiteOrders } from "@/hooks/useWebsiteOrders";
-import { WebsiteOrdersInbox } from "@/components/website/WebsiteOrdersInbox";
+import { useMealTimes } from "@/hooks/useMealTimes";
+import { isServedAt, servingLabel, pktMinuteNow, formatMealHours } from "@/lib/mealTime";
 
 interface CartItem extends OrderItem {
   modifiers?: string[];
@@ -199,7 +199,6 @@ const POS = () => {
   const { orders: localOrdersData, customers: customersList, foodMenuItems: localFoodMenuItems, foodCategories: localFoodCategories, modifiers: localModifiers, kitchens: localKitchens, ingredients, addItem, updateItem: updateDataItem, shifts, settings, riders: deliveryRiders, updateSettings } = useData();
   const { user, hasPermission } = useAuth();
   const { markMine, isLikelyOwnEcho } = useSelfMutationGuard();
-  const { pendingCount: websitePendingCount } = useWebsiteOrders();
 
   // ── API data state (overrides localStorage) ──
   const [apiOrders, setApiOrders] = useState<any[]>([]);
@@ -500,6 +499,9 @@ const POS = () => {
 
   const [cart, setCart] = useState<CartItem[]>([]);
   const [activeCategory, setActiveCategory] = useState("All");
+  // Meal times (Settings → Website → Meal times): a dish outside its meal's time can't be sold.
+  const mealTimes = useMealTimes();
+  const [activeMeal, setActiveMeal] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [orderType, setOrderType] = useState<OrderType>("Dine In");
   const [selectedRunningOrder, setSelectedRunningOrder] = useState<string | null>(null);
@@ -603,7 +605,6 @@ const POS = () => {
   }, [showOrderStatus]);
 
   // Low Stock
-  const [showWebsiteOrders, setShowWebsiteOrders] = useState(false);
   const [showLowStock, setShowLowStock] = useState(false);
   const [stockSearch, setStockSearch] = useState("");
   const [stockStatusFilter, setStockStatusFilter] = useState<"all" | "out" | "low">("all");
@@ -1891,9 +1892,17 @@ const POS = () => {
       items = items.filter((i) => (i as any).tags?.includes(activeTag.toLowerCase()));
     }
     if (activeCategory !== "All") items = items.filter((i) => i.category === activeCategory);
+    if (activeMeal) items = items.filter((i) => i.mealTypeIds?.includes(activeMeal));
     if (search) items = items.filter((i) => i.name.toLowerCase().includes(search.toLowerCase()) || (i.code ?? "").toLowerCase().includes(search.toLowerCase()));
     return items;
-  }, [activeCategory, search, activeTag, foodMenuItems]);
+  }, [activeCategory, activeMeal, search, activeTag, foodMenuItems]);
+  // Meal chips: only meal types some dish is tagged with, in serving order (all-day ones last).
+  const mealChips = useMemo(
+    () => mealTimes
+      .filter((m) => foodMenuItems.some((i) => i.mealTypeIds?.includes(m.id)))
+      .sort((a, b) => (a.hours?.open ?? "99").localeCompare(b.hours?.open ?? "99")),
+    [mealTimes, foodMenuItems],
+  );
 
   const filteredCustomers = effectiveCustomers.filter((c: any) =>
     c.name.toLowerCase().includes(customerSearch.toLowerCase()) || (c.phone || '').includes(customerSearch)
@@ -1915,6 +1924,10 @@ const POS = () => {
   };
 
   const addToCart = (item: typeof foodMenuItems[0]) => {
+    if (!isServedAt(item.mealTypeIds, mealTimes, pktMinuteNow())) {
+      toast.error(`${item.name} is not available now — served ${servingLabel(item.mealTypeIds, mealTimes)}`);
+      return;
+    }
     const hasVariants = (item as any).variants && (item as any).variants.length > 0;
     const itemModifiers = (item as any).modifiers?.filter((m: any) => m.status === "active") || [];
     const hasModifiers = itemModifiers.length > 0;
@@ -3538,22 +3551,6 @@ const POS = () => {
                 )}
               </button>
 
-              {/* Website Orders (conditional) */}
-              {hasPermission("website-orders") && (
-                <button
-                  onClick={() => setShowWebsiteOrders(true)}
-                  className="group inline-flex items-center gap-1.5 h-8 px-3 rounded-lg border border-border/60 bg-card/80 hover:bg-card hover:border-primary/40 transition-all text-xs font-medium text-foreground/80 hover:text-foreground shrink-0 select-none"
-                >
-                  <ShoppingBag className="h-3.5 w-3.5 text-primary shrink-0" />
-                  <span>Website</span>
-                  {websitePendingCount > 0 && (
-                    <span className="inline-flex items-center justify-center h-5 min-w-[20px] px-1.5 rounded-full text-[10px] font-bold gradient-primary text-primary-foreground leading-none">
-                      {websitePendingCount}
-                    </span>
-                  )}
-                </button>
-              )}
-
               {/* 2 · Stock Alerts (conditional) */}
               {(ingredientAlerts.length > 0 || lowStockFoodItems.length > 0) && (
                 <button
@@ -3668,6 +3665,25 @@ const POS = () => {
               );
             })}
           </div>
+          {mealChips.length > 0 && activeCategory !== "__deals__" && (
+            <div className="flex items-center gap-1.5 border-b border-border/60 px-2 py-1.5 overflow-x-auto scrollbar-none" role="group" aria-label="Meal times">
+              <Clock className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+              {[{ id: null as string | null, name: "All meals", hours: null as { open: string; close: string } | null }, ...mealChips].map((m) => (
+                <button
+                  key={m.id ?? "all"}
+                  onClick={() => setActiveMeal(m.id)}
+                  aria-pressed={activeMeal === m.id}
+                  className={cn(
+                    "px-2.5 py-1 text-[11px] rounded-lg whitespace-nowrap font-medium transition-all shrink-0 border",
+                    activeMeal === m.id ? "bg-foreground text-background border-foreground font-bold" : "bg-card border-border/60 text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  {m.name}
+                  {m.hours && <span className="ml-1 font-normal opacity-75">{formatMealHours(m.hours)}</span>}
+                </button>
+              ))}
+            </div>
+          )}
           <div className="flex-1 overflow-y-auto p-2.5 sm:p-3.5 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-3 2xl:grid-cols-4 gap-3 auto-rows-max">
             {activeCategory === "__deals__" ? (
               sellableDeals.length === 0 ? (
@@ -3764,20 +3780,22 @@ const POS = () => {
                 const variantsCount = (item as any).variants?.length || 0;
                 const variantIds = ((item as any).variants || []).map((v: any) => v.id);
                 const outOfStock = isFullyOutOfStock((item as any).recipes || [], variantIds, ingredientStockMap, productionStockMap);
+                const mealLabel = servingLabel(item.mealTypeIds, mealTimes);
+                const notServed = !isServedAt(item.mealTypeIds, mealTimes, pktMinuteNow());
                 return (
                 <React.Fragment key={item.id}>
                   <button
-                    disabled={outOfStock}
+                    disabled={outOfStock || notServed}
                     onClick={() => addToCart(item)}
                     className={cn(
                       "bg-card rounded-2xl border border-border/70 p-2 hover:shadow-xl hover:border-primary/40 transition-all duration-200 text-left group relative flex flex-col justify-between hover:-translate-y-0.5",
                       expandedItemId === item.id && "ring-2 ring-primary border-primary bg-primary/5 shadow-md",
-                      outOfStock && "opacity-60 hover:shadow-none hover:border-border/70 hover:translate-y-0 cursor-not-allowed"
+                      (outOfStock || notServed) && "opacity-60 hover:shadow-none hover:border-border/70 hover:translate-y-0 cursor-not-allowed"
                     )}
                   >
                     <div className="aspect-[4/3] rounded-xl overflow-hidden mb-2 relative border border-border/40 w-full bg-muted/40">
                       {item.image ? (
-                        <img src={item.image} alt={item.name} className={cn("w-full h-full object-cover group-hover:scale-105 transition-transform duration-300", outOfStock && "grayscale")} />
+                        <img src={item.image} alt={item.name} className={cn("w-full h-full object-cover group-hover:scale-105 transition-transform duration-300", (outOfStock || notServed) && "grayscale")} />
                       ) : (
                         <div className="w-full h-full bg-gradient-to-br from-card via-muted/60 to-primary/10 flex flex-col items-center justify-center relative overflow-hidden group-hover:from-card group-hover:to-primary/20 transition-colors">
                           <Utensils className="h-9 w-9 text-primary/20 group-hover:text-primary/35 group-hover:scale-110 transition-all duration-300" />
@@ -3789,6 +3807,11 @@ const POS = () => {
                       {!item.available ? (
                         <div className="absolute inset-0 bg-background/85 backdrop-blur-xs flex items-center justify-center">
                           <Badge variant="destructive" className="text-[10px] font-bold shadow-xs">Unavailable</Badge>
+                        </div>
+                      ) : notServed ? (
+                        <div className="absolute inset-0 bg-background/85 backdrop-blur-xs flex flex-col items-center justify-center gap-1 px-1 text-center">
+                          <Badge variant="destructive" className="text-[10px] font-bold shadow-xs">Not available</Badge>
+                          <span className="text-[9px] font-medium text-muted-foreground leading-tight">{mealLabel}</span>
                         </div>
                       ) : outOfStock ? (
                         <div className="absolute inset-0 bg-background/85 backdrop-blur-xs flex items-center justify-center">
@@ -6803,22 +6826,6 @@ const POS = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      <Sheet open={showWebsiteOrders} onOpenChange={setShowWebsiteOrders}>
-        <SheetContent side="right" className="w-[95vw] sm:max-w-xl md:max-w-2xl lg:max-w-4xl flex flex-col p-0">
-          <SheetHeader className="p-4 md:p-6 border-b shrink-0 flex flex-row items-center justify-between">
-            <div>
-              <SheetTitle className="text-xl flex items-center gap-2">
-                <ShoppingBag className="h-5 w-5 text-primary" />
-                Website Orders
-              </SheetTitle>
-              <SheetDescription>Manage incoming website orders and accept or decline them.</SheetDescription>
-            </div>
-          </SheetHeader>
-          <div className="flex-1 overflow-y-auto p-4 md:p-6 bg-muted/10">
-            <WebsiteOrdersInbox compact />
-          </div>
-        </SheetContent>
-      </Sheet>
     </div>
   );
 };

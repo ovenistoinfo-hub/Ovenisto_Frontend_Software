@@ -53,7 +53,6 @@ const Demands = lazy(() => import("./pages/Demands"));
 const Users = lazy(() => import("./pages/Users"));
 const Attendance = lazy(() => import("./pages/Attendance"));
 const CancellationRequests = lazy(() => import("./pages/CancellationRequests"));
-const WebsiteOrders = lazy(() => import("./pages/WebsiteOrders"));
 const Employees = lazy(() => import("./pages/Employees"));
 const Payroll = lazy(() => import("./pages/Payroll"));
 const Profile = lazy(() => import("./pages/Profile"));
@@ -176,7 +175,8 @@ function AppRoutes() {
       <Route path="/users" element={<ProtectedRoute module="users"><AppLayout><Users /></AppLayout></ProtectedRoute>} />
       <Route path="/attendance" element={<ProtectedRoute module="attendance"><AppLayout><Attendance /></AppLayout></ProtectedRoute>} />
       <Route path="/cancellation-requests" element={<ProtectedRoute module="cancellation-requests"><AppLayout><CancellationRequests /></AppLayout></ProtectedRoute>} />
-      <Route path="/website-orders" element={<ProtectedRoute module="website-orders"><AppLayout><WebsiteOrders /></AppLayout></ProtectedRoute>} />
+      {/* The Website Orders page is gone: website orders are approved on Order Monitor. Old links land there. */}
+      <Route path="/website-orders" element={<Navigate to="/order-status?tab=website" replace />} />
       <Route path="/cash-hub" element={<ProtectedRoute module="cash-hub"><AppLayout><CashHub /></AppLayout></ProtectedRoute>} />
       <Route path="/employees" element={<ProtectedRoute module="employees"><AppLayout><Employees /></AppLayout></ProtectedRoute>} />
       <Route path="/payroll" element={<ProtectedRoute module="payroll"><AppLayout><Payroll /></AppLayout></ProtectedRoute>} />

@@ -49,6 +49,8 @@ import { isDealLive, isDealAvailableForChannel, dealChannelPrice, dealChannelPer
 import { warehouseService, type WarehouseStockRecord } from "@/services/warehouse.service";
 import { stockService, type ProductionStockRecord } from "@/services/stock.service";
 import { calculateFoodAvailability, isFullyOutOfStock } from "@/utils/foodAvailability";
+import { useMealTimes } from "@/hooks/useMealTimes";
+import { isServedAt, servingLabel, pktMinuteNow, formatMealHours } from "@/lib/mealTime";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
 import { OrderPlacedPrintModal, type PlacedOrderSlipData } from "@/components/pos/OrderPlacedPrintModal";
 
@@ -315,6 +317,9 @@ const WaiterPanel = () => {
   const [selectedTableId, setSelectedTableId] = useState<string | null>(null);
   const [cartItems,       setCartItems]        = useState<CartItem[]>([]);
   const [menuCategory,    setMenuCategory]     = useState("All");
+  // Meal times (Settings → Website → Meal times): a dish outside its meal's time can't be ordered.
+  const mealTimes = useMealTimes();
+  const [activeMeal, setActiveMeal] = useState<string | null>(null);
 
   // ── Live ingredient/production stock — mirrors POS.tsx's sourcing exactly
   // (same stock the backend's validateOrderStock checks at order creation),
@@ -757,8 +762,12 @@ const WaiterPanel = () => {
 
   const categoryNames = ["All", ...cats.map((c) => c.name)];
   const filteredMenu   = menuItems.filter(
-    (i) => menuCategory === "All" || i.category?.name === menuCategory
+    (i) => (menuCategory === "All" || i.category?.name === menuCategory) && (!activeMeal || i.mealTypeIds?.includes(activeMeal))
   );
+  // Meal chips: only meal types some dish is tagged with, in serving order (all-day ones last).
+  const mealChips = mealTimes
+    .filter((m) => menuItems.some((i) => i.mealTypeIds?.includes(m.id)))
+    .sort((a, b) => (a.hours?.open ?? "99").localeCompare(b.hours?.open ?? "99"));
   const cartTotal = cartItems.reduce((s, i) => s + i.price * i.qty - (i.discount || 0), 0);
 
   // Order-level deal (Promo Code / Minimum Spend). createOrder resolves one of
@@ -1432,6 +1441,10 @@ const WaiterPanel = () => {
   };
 
   const addToOrder = (item: MenuItemRecord) => {
+    if (!isServedAt(item.mealTypeIds, mealTimes, pktMinuteNow())) {
+      toast.error(`${item.name} is not available now — served ${servingLabel(item.mealTypeIds, mealTimes)}`);
+      return;
+    }
     const hasVariants  = item.variants && item.variants.length > 0;
     const itemMods     = resolveModifiers(item);
     const hasModifiers = itemMods.length > 0;
@@ -3262,6 +3275,25 @@ const WaiterPanel = () => {
                   );
                 })}
               </div>
+              {mealChips.length > 0 && menuCategory !== "__deals__" && (
+                <div className="flex items-center gap-1.5 pb-2 overflow-x-auto scrollbar-none" role="group" aria-label="Meal times">
+                  <Clock className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  {[{ id: null as string | null, name: "All meals", hours: null as { open: string; close: string } | null }, ...mealChips].map((m) => (
+                    <button
+                      key={m.id ?? "all"}
+                      onClick={() => { setActiveMeal(m.id); resetExpansion(); }}
+                      aria-pressed={activeMeal === m.id}
+                      className={cn(
+                        "px-2.5 py-1 text-[11px] rounded-lg whitespace-nowrap font-medium transition-all shrink-0 border",
+                        activeMeal === m.id ? "bg-foreground text-background border-foreground font-bold" : "bg-card border-border text-muted-foreground hover:text-foreground"
+                      )}
+                    >
+                      {m.name}
+                      {m.hours && <span className="ml-1 font-normal opacity-75">{formatMealHours(m.hours)}</span>}
+                    </button>
+                  ))}
+                </div>
+              )}
 
               {/* Row 3: Menus Grid (POS Layout) */}
               <div className="flex-1 overflow-y-auto pr-1 pb-4">
@@ -3366,21 +3398,23 @@ const WaiterPanel = () => {
                         const baseItemPrice = dineInPrice(item);
                         const variantsCount = item.variants?.length || 0;
                         const outOfStock = isFullyOutOfStock(item.recipes || [], (item.variants || []).map((v) => v.id), ingredientStockMap, productionStockMap);
+                        const mealLabel = servingLabel(item.mealTypeIds, mealTimes);
+                        const notServed = !isServedAt(item.mealTypeIds, mealTimes, pktMinuteNow());
 
                         return (
                           <Fragment key={item.id}>
                             <button
-                              disabled={outOfStock}
+                              disabled={outOfStock || notServed}
                               onClick={() => addToOrder(item)}
                               className={cn(
                                 "bg-card rounded-2xl border border-border p-2 hover:shadow-xl hover:border-primary/40 transition-all duration-200 text-left group relative flex flex-col justify-between hover:-translate-y-0.5 shadow-xs",
                                 isExpanded && "ring-2 ring-primary border-primary bg-primary/5 shadow-md",
-                                outOfStock && "opacity-60 hover:shadow-none hover:border-border hover:translate-y-0 cursor-not-allowed"
+                                (outOfStock || notServed) && "opacity-60 hover:shadow-none hover:border-border hover:translate-y-0 cursor-not-allowed"
                               )}
                             >
                               <div className="aspect-[4/3] rounded-xl overflow-hidden mb-2 relative border border-border w-full bg-muted/40">
                                 {item.image ? (
-                                  <img src={item.image} alt={item.name} className={cn("w-full h-full object-cover group-hover:scale-105 transition-transform duration-300", outOfStock && "grayscale")} />
+                                  <img src={item.image} alt={item.name} className={cn("w-full h-full object-cover group-hover:scale-105 transition-transform duration-300", (outOfStock || notServed) && "grayscale")} />
                                 ) : (
                                   <div className="w-full h-full bg-gradient-to-br from-card via-muted/60 to-primary/10 flex flex-col items-center justify-center relative overflow-hidden group-hover:from-card group-hover:to-primary/20 transition-colors">
                                     <Utensils className="h-8 w-8 text-primary/25 group-hover:text-primary/40 group-hover:scale-110 transition-all duration-300" />
@@ -3389,7 +3423,12 @@ const WaiterPanel = () => {
                                     </span>
                                   </div>
                                 )}
-                                {outOfStock ? (
+                                {notServed ? (
+                                  <div className="absolute inset-0 bg-background/85 backdrop-blur-xs flex flex-col items-center justify-center gap-1 px-1 text-center">
+                                    <span className="text-[10px] font-bold text-destructive-foreground bg-destructive px-2 py-0.5 rounded-md shadow-xs">Not available</span>
+                                    <span className="text-[9px] font-medium text-muted-foreground leading-tight">{mealLabel}</span>
+                                  </div>
+                                ) : outOfStock ? (
                                   <div className="absolute inset-0 bg-background/85 backdrop-blur-xs flex items-center justify-center">
                                     <span className="text-[10px] font-bold text-destructive-foreground bg-destructive px-2 py-0.5 rounded-md shadow-xs">Out of Stock</span>
                                   </div>

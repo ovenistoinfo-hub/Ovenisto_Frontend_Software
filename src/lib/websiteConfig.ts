@@ -8,6 +8,8 @@ export interface WebsiteConfig {
   location: { lat: number; lng: number } | null;
   /** Opening hours, 24h "HH:mm" PKT. A `close` at or before `open` means it closes after midnight. */
   hours: { open: string; close: string } | null;
+  /** Serving times per MealType id (same shape as `hours`). A meal type without an entry is served all day. */
+  mealHours: Record<string, { open: string; close: string }>;
 }
 
 const HH_MM = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -18,6 +20,17 @@ export function parseHours(value: unknown): { open: string; close: string } | nu
   const { open, close } = value as Record<string, unknown>;
   if (typeof open !== 'string' || typeof close !== 'string' || !HH_MM.test(open) || !HH_MM.test(close) || open === close) return null;
   return { open, close };
+}
+
+/** Mirrors backend `parseMealHours`: `{ [mealTypeId]: { open, close } }`, keeping only valid entries. */
+export function parseMealHours(value: unknown): Record<string, { open: string; close: string }> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  const out: Record<string, { open: string; close: string }> = {};
+  for (const [id, h] of Object.entries(value)) {
+    const parsed = parseHours(h);
+    if (parsed) out[id] = parsed;
+  }
+  return out;
 }
 
 function parseNumber(value: unknown, defaultValue: number): number {
@@ -112,6 +125,7 @@ export function parseWebsiteConfig(raw: unknown): WebsiteConfig {
     reservationsEnabled: false,
     location: null,
     hours: null,
+    mealHours: {},
   };
 
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
@@ -141,8 +155,9 @@ export function parseWebsiteConfig(raw: unknown): WebsiteConfig {
 
   const location = parseLocation(obj.location);
   const hours = parseHours(obj.hours);
+  const mealHours = parseMealHours(obj.mealHours);
 
-  return { enabled, deliveryFee, freeDeliveryAbove, minOrder, prepTimeMinutes, reservationsEnabled, location, hours };
+  return { enabled, deliveryFee, freeDeliveryAbove, minOrder, prepTimeMinutes, reservationsEnabled, location, hours, mealHours };
 }
 
 export function buildWebsiteConfig(raw: unknown, form: WebsiteConfig): Record<string, unknown> {
@@ -169,11 +184,24 @@ export function buildWebsiteConfig(raw: unknown, form: WebsiteConfig): Record<st
   } else {
     delete base.location;
   }
-  if (form.hours) {
-    base.hours = form.hours;
-  } else {
-    delete base.hours;
-  }
+  // `hours` / `mealHours` are edited in General Settings (withServiceHours) and kept here as they are.
 
+  return base;
+}
+
+/**
+ * Opening hours + meal times, edited in General Settings, written into the branch's websiteConfig JSON.
+ * Every other key is kept: the backend replaces the whole JSON on save. null / {} removes the key.
+ */
+export function withServiceHours(
+  raw: unknown,
+  hours: { open: string; close: string } | null,
+  mealHours: Record<string, { open: string; close: string }>,
+): Record<string, unknown> {
+  const base: Record<string, unknown> = raw && typeof raw === 'object' && !Array.isArray(raw) ? { ...(raw as Record<string, unknown>) } : {};
+  if (hours) base.hours = hours;
+  else delete base.hours;
+  if (Object.keys(mealHours).length > 0) base.mealHours = mealHours;
+  else delete base.mealHours;
   return base;
 }

@@ -14,6 +14,8 @@ import { toast } from "sonner";
 import { menuService, type MenuItemRecord, type CategoryRecord } from "@/services/menu.service";
 import { PageHeader } from "@/components/ui/page-header";
 import { TablePagination, paginate } from "@/components/TablePagination";
+import { mealTypeService, type MealTypeRecord } from "@/services/mealType.service";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const FoodMenu = () => {
   const navigate = useNavigate();
@@ -22,16 +24,20 @@ const FoodMenu = () => {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [catFilter, setCatFilter] = useState("All");
+  const [mealTypes, setMealTypes] = useState<MealTypeRecord[]>([]);
+  const [mealFilter, setMealFilter] = useState("all");
   const [page, setPage] = useState(1);
 
   const fetchAll = useCallback(async () => {
     try {
-      const [menuItems, cats] = await Promise.all([
+      const [menuItems, cats, meals] = await Promise.all([
         menuService.getMenuItems({ limit: 500 }),
         menuService.getCategories(),
+        mealTypeService.getAll().catch(() => [] as MealTypeRecord[]),
       ]);
       setItems(menuItems);
       setCategories(cats);
+      setMealTypes(meals);
     } catch (err: any) {
       toast.error(err.message || "Failed to load menu items");
     } finally {
@@ -43,6 +49,7 @@ const FoodMenu = () => {
 
   const filtered = items.filter((i) =>
     (catFilter === "All" || i.category?.name === catFilter) &&
+    (mealFilter === "all" || (i.mealTypeIds ?? []).includes(mealFilter)) &&
     i.name.toLowerCase().includes(search.toLowerCase())
   );
 
@@ -75,9 +82,18 @@ const FoodMenu = () => {
           <div className="flex items-center gap-3 flex-wrap">
             <div className="relative max-w-sm flex-1"><Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search menu..." className="pl-9" /></div>
             <div className="flex gap-1 flex-wrap">
-              <Button key="All" variant={catFilter === "All" ? "default" : "outline"} size="sm" onClick={() => setCatFilter("All")} className={catFilter === "All" ? "gradient-primary text-primary-foreground" : ""}>All</Button>
-              {categories.map((c) => (<Button key={c.id} variant={catFilter === c.name ? "default" : "outline"} size="sm" onClick={() => setCatFilter(c.name)} className={catFilter === c.name ? "gradient-primary text-primary-foreground" : ""}>{c.name}</Button>))}
+              <Button key="All" variant={catFilter === "All" ? "default" : "outline"} size="sm" onClick={() => { setCatFilter("All"); setPage(1); }} className={catFilter === "All" ? "gradient-primary text-primary-foreground" : ""}>All</Button>
+              {categories.map((c) => (<Button key={c.id} variant={catFilter === c.name ? "default" : "outline"} size="sm" onClick={() => { setCatFilter(c.name); setPage(1); }} className={catFilter === c.name ? "gradient-primary text-primary-foreground" : ""}>{c.name}</Button>))}
             </div>
+            {mealTypes.length > 0 && (
+              <Select value={mealFilter} onValueChange={(v) => { setMealFilter(v); setPage(1); }}>
+                <SelectTrigger className="w-44 h-9" aria-label="Meal type"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All meal types</SelectItem>
+                  {mealTypes.map((m) => <SelectItem key={m.id} value={m.id}>{m.name}{m.status !== "active" ? " (inactive)" : ""}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            )}
           </div>
         </CardHeader>
         <CardContent>
@@ -87,7 +103,7 @@ const FoodMenu = () => {
             <>
             <div className="rounded-lg border overflow-auto max-h-[calc(100vh-300px)]">
               <Table>
-                <TableHeader className="sticky top-0 z-10 bg-card"><TableRow className="bg-muted/50 hover:bg-muted/50"><TableHead>SN</TableHead><TableHead>Item</TableHead><TableHead>Category</TableHead><TableHead>Code</TableHead><TableHead>Price</TableHead><TableHead>Cost</TableHead><TableHead>Margin</TableHead><TableHead>Cooking Time</TableHead><TableHead>Low Stock Alert</TableHead><TableHead>Available</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader>
+                <TableHeader className="sticky top-0 z-10 bg-card"><TableRow className="bg-muted/50 hover:bg-muted/50"><TableHead>SN</TableHead><TableHead>Item</TableHead><TableHead>Category</TableHead><TableHead>Meal Type</TableHead><TableHead>Code</TableHead><TableHead>Price</TableHead><TableHead>Cost</TableHead><TableHead>Margin</TableHead><TableHead>Cooking Time</TableHead><TableHead>Low Stock Alert</TableHead><TableHead>Available</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader>
                 <TableBody>{paginate(filtered, page).map((item, i) => {
                   const margin = item.price > 0 ? ((item.price - (item.costPrice || 0)) / item.price) * 100 : 0;
                   return (
@@ -95,6 +111,15 @@ const FoodMenu = () => {
                     <TableCell>{(page - 1) * 10 + i + 1}</TableCell>
                     <TableCell><div className="flex items-center gap-2">{item.image ? (<img src={item.image} alt={item.name} className="h-8 w-8 rounded-md object-cover shrink-0" />) : (<div className="h-8 w-8 rounded-md gradient-primary flex items-center justify-center text-primary-foreground text-xs font-bold shrink-0">{item.name.charAt(0)}</div>)}<span className="font-medium">{item.name}</span></div></TableCell>
                     <TableCell><Badge variant="secondary">{item.category?.name || "—"}</Badge></TableCell>
+                    <TableCell>
+                      {/* Meal types this dish is tagged with (set on the item form); ids of deleted meal types are skipped. */}
+                      {(() => {
+                        const names = (item.mealTypeIds ?? []).map((id) => mealTypes.find((m) => m.id === id)?.name).filter(Boolean);
+                        return names.length > 0
+                          ? <div className="flex flex-wrap gap-1">{names.map((n) => <Badge key={n} variant="outline" className="text-[11px] font-medium">{n}</Badge>)}</div>
+                          : <span className="text-xs text-muted-foreground">—</span>;
+                      })()}
+                    </TableCell>
                     <TableCell className="text-muted-foreground text-xs">{item.code || "—"}</TableCell>
                     <TableCell className="font-medium">Rs. {item.price}</TableCell>
                     <TableCell className="text-muted-foreground">{item.costPrice > 0 ? `Rs. ${item.costPrice.toFixed(0)}` : "—"}</TableCell>

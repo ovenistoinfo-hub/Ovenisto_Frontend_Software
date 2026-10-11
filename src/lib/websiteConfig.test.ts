@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseWebsiteConfig, buildWebsiteConfig, WebsiteConfig, parseLocation, parseMapsLink, parseHours } from './websiteConfig';
+import { parseWebsiteConfig, buildWebsiteConfig, WebsiteConfig, parseLocation, parseMapsLink, parseHours, parseMealHours, withServiceHours } from './websiteConfig';
 
 describe('websiteConfig', () => {
   describe('parseWebsiteConfig', () => {
@@ -14,6 +14,7 @@ describe('websiteConfig', () => {
         prepTimeMinutes: 30,
         location: null,
         hours: null,
+        mealHours: {},
       });
     });
 
@@ -74,6 +75,7 @@ describe('websiteConfig', () => {
         prepTimeMinutes: 45,
         location: null,
         hours: null,
+        mealHours: {},
       };
 
       const built = buildWebsiteConfig(raw, form);
@@ -94,6 +96,7 @@ describe('websiteConfig', () => {
       expect('autoAccept' in built).toBe(false);
       expect('location' in built).toBe(false);
       expect('hours' in built).toBe(false);
+      expect('mealHours' in built).toBe(false);
     });
 
     it('writes location when non-null', () => {
@@ -107,11 +110,16 @@ describe('websiteConfig', () => {
         prepTimeMinutes: 45,
         location: { lat: 31.47, lng: 74.3 },
         hours: { open: "12:00", close: "00:00" },
+        mealHours: {},
       };
 
       const built = buildWebsiteConfig(raw, form);
       expect(built.location).toEqual({ lat: 31.47, lng: 74.3 });
-      expect(built.hours).toEqual({ open: "12:00", close: "00:00" });
+      // Hours / meal times belong to General Settings: the website save keeps what is stored.
+      expect('hours' in built).toBe(false);
+      const kept = buildWebsiteConfig({ hours: { open: '10:00', close: '02:00' }, mealHours: { bf: { open: '08:00', close: '11:00' } } }, { ...form, hours: null });
+      expect(kept.hours).toEqual({ open: '10:00', close: '02:00' });
+      expect(kept.mealHours).toEqual({ bf: { open: '08:00', close: '11:00' } });
     });
   });
 });
@@ -177,5 +185,24 @@ describe('parseHours', () => {
     expect(parseHours({ open: '12:00', close: '12:00' })).toBeNull();
     expect(parseHours({ open: '9:00', close: '22:00' })).toBeNull();
     expect(parseHours(null)).toBeNull();
+  });
+});
+
+describe('parseMealHours', () => {
+  it('keeps only valid entries and reads them from the config', () => {
+    expect(parseMealHours({ bf: { open: '08:00', close: '11:00' }, bad: { open: '8:00', close: '11:00' } })).toEqual({ bf: { open: '08:00', close: '11:00' } });
+    expect(parseMealHours(null)).toEqual({});
+    expect(parseWebsiteConfig({ mealHours: { dn: { open: '19:00', close: '02:00' } } }).mealHours).toEqual({ dn: { open: '19:00', close: '02:00' } });
+  });
+});
+
+describe('withServiceHours', () => {
+  it('writes hours and meal times and keeps every other website key', () => {
+    const out = withServiceHours({ enabled: true, deliveryFee: 150 }, { open: '10:00', close: '02:00' }, { bf: { open: '08:00', close: '11:00' } });
+    expect(out).toEqual({ enabled: true, deliveryFee: 150, hours: { open: '10:00', close: '02:00' }, mealHours: { bf: { open: '08:00', close: '11:00' } } });
+  });
+  it('removes cleared hours and meal times', () => {
+    expect(withServiceHours({ enabled: true, hours: { open: '10:00', close: '22:00' }, mealHours: { bf: { open: '08:00', close: '11:00' } } }, null, {})).toEqual({ enabled: true });
+    expect(withServiceHours(null, null, {})).toEqual({});
   });
 });

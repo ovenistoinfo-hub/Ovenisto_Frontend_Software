@@ -108,8 +108,8 @@ export function NavDrawer({ open, onOpenChange }: NavDrawerProps) {
                           {pendingCancelCount}
                         </Badge>
                       )}
-                      {item.url === "/website-orders" && websitePendingCount > 0 && (
-                        <Badge variant="destructive" className="h-4 min-w-4 px-1 text-[10px] leading-none">
+                      {item.url === "/order-status" && websitePendingCount > 0 && (
+                        <Badge variant="destructive" className="h-4 min-w-4 px-1 text-[10px] leading-none" title="Website orders waiting for approval">
                           {websitePendingCount}
                         </Badge>
                       )}

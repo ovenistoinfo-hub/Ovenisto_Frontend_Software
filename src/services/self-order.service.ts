@@ -95,11 +95,15 @@ export interface SelfOrderMenuItem {
   available: boolean;
   variants: SelfOrderMenuVariant[];
   modifiers: SelfOrderMenuModifier[];
+  /** Meal types (Breakfast, Lunch…) the dish is tagged with. */
+  mealTypeIds?: string[];
 }
 
 export interface SelfOrderMenu {
   categories: SelfOrderMenuCategory[];
   items: SelfOrderMenuItem[];
+  /** The table's branch serving time per meal type ("HH:mm" PKT; null hours = all day). Same shape as lib/mealTime's MealTime. */
+  mealTypes?: { id: string; name: string; hours: { open: string; close: string } | null }[];
 }
 
 export interface SelfOrderDealComponent {

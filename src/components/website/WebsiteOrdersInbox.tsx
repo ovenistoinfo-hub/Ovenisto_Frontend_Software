@@ -1,37 +1,60 @@
-import React, { useState } from 'react';
-import { Card, CardContent } from '@/components/ui/card';
+import { useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { ShoppingBag, Loader2, Check, Clock, Phone, MapPin, Navigation, ArrowUpRight, LocateFixed } from 'lucide-react';
+import { Globe, Loader2, Check, Clock, Phone, MapPin, Navigation, ArrowUpRight, LocateFixed, ShoppingBag, Truck, Gift, X, Inbox } from 'lucide-react';
 import { orderMapsUrl, hasLivePoint } from '@/lib/maps';
-import { statusTone } from '@/lib/statusTone';
+import { cn } from '@/lib/utils';
 import { useWebsiteOrders } from '@/hooks/useWebsiteOrders';
-import { orderService, type OrderRecord } from '@/services/order.service';
+import { orderService, type OrderRecord, type OrderItemRecord } from '@/services/order.service';
 import { useData } from '@/contexts/DataContext';
 import { toast } from 'sonner';
-import { isAwaitingAcceptance } from '@/lib/orderAcceptance';
 
-export function WebsiteOrdersInbox({ compact = false }: { compact?: boolean }) {
-  const { pending, today, isLoading, refresh } = useWebsiteOrders();
+/** A guest who has waited this long for an answer is shown in red. */
+const LATE_AFTER_MIN = 15;
+
+/** 12 → "12m", 95 → "1h 35m", 1500 → "1d 1h". */
+const formatWait = (mins: number) =>
+  mins < 60 ? `${mins}m` : mins < 1440 ? `${Math.floor(mins / 60)}h ${mins % 60}m` : `${Math.floor(mins / 1440)}d ${Math.floor((mins % 1440) / 60)}h`;
+
+/** Consecutive lines of one deal redemption become one group; a plain line is a group of its own. */
+function groupLines(items: OrderItemRecord[]): { dealName: string | null; lines: OrderItemRecord[] }[] {
+  const groups: { key: string | null; dealName: string | null; lines: OrderItemRecord[] }[] = [];
+  for (const it of items) {
+    const key = it.dealLineId ?? null;
+    const last = groups[groups.length - 1];
+    if (key && last?.key === key) last.lines.push(it);
+    else groups.push({ key, dealName: key ? it.dealName ?? null : null, lines: [it] });
+  }
+  return groups;
+}
+
+const errorText = (err: unknown, fallback: string) => (err instanceof Error && err.message ? err.message : fallback);
+
+/**
+ * Website orders waiting for staff approval, shown inside Order Monitor (the only place they are approved).
+ * Accepting sends the order to the kitchen and onto the board; payment for a pickup is collected on its board card.
+ */
+export function WebsiteOrdersInbox({ onClose }: { onClose?: () => void }) {
+  const { pending, isLoading, refresh } = useWebsiteOrders();
   const { settings } = useData();
+  const cur = settings?.currency ?? 'Rs.';
 
   const [acceptingId, setAcceptingId] = useState<string | null>(null);
   const [rejectTarget, setRejectTarget] = useState<OrderRecord | null>(null);
   const [rejectReason, setRejectReason] = useState('');
   const [rejecting, setRejecting] = useState(false);
-  const [collectingId, setCollectingId] = useState<string | null>(null);
 
   const handleAccept = async (order: OrderRecord) => {
     try {
       setAcceptingId(order.id);
       await orderService.acceptOrder(order.id);
-      toast.success('Order accepted');
+      toast.success(`Order #${order.orderNumber} accepted`);
       refresh();
-    } catch (err: any) {
-      toast.error(err.response?.data?.message || err.message || 'Failed to accept order');
+    } catch (err: unknown) {
+      toast.error(errorText(err, 'Failed to accept order'));
     } finally {
       setAcceptingId(null);
     }
@@ -46,242 +69,195 @@ export function WebsiteOrdersInbox({ compact = false }: { compact?: boolean }) {
       setRejectTarget(null);
       setRejectReason('');
       refresh();
-    } catch (err: any) {
-      toast.error(err.response?.data?.message || err.message || 'Failed to decline order');
+    } catch (err: unknown) {
+      toast.error(errorText(err, 'Failed to decline order'));
     } finally {
       setRejecting(false);
     }
   };
 
-  const handleCollect = async (order: OrderRecord, method: string) => {
-    if (!method) return;
-    try {
-      setCollectingId(order.id);
-      await orderService.updateOrder(order.id, { paymentMethod: method });
-      toast.success('Payment collected');
-      refresh();
-    } catch (err: any) {
-      toast.error(err.response?.data?.message || err.message || 'Failed to collect payment');
-    } finally {
-      setCollectingId(null);
-    }
-  };
+  // Oldest first: the guest who has waited longest is answered first.
+  const orders = [...pending].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
-  // Sort pending oldest first
-  const sortedPending = [...pending].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-  // Sort today newest first
-  // Everything else from today means we exclude what is in pending
-  const sortedToday = [...today]
-    .filter(o => !isAwaitingAcceptance(o))
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-
-  const renderCard = (o: OrderRecord, isNew: boolean) => {
-    const tone = statusTone(o.status);
-    const mins = Math.floor((Date.now() - new Date(o.createdAt).getTime()) / 60000);
-    const cur = settings?.currency ?? 'Rs.';
-    const methods = settings?.paymentMethods?.length ? settings.paymentMethods : ['Cash'];
+  const renderCard = (o: OrderRecord) => {
+    const mins = Math.max(0, Math.floor((Date.now() - new Date(o.createdAt).getTime()) / 60000));
+    const late = mins >= LATE_AFTER_MIN;
+    const isDelivery = o.type === 'Delivery';
+    const TypeIcon = isDelivery ? Truck : ShoppingBag;
+    const name = o.customerName || 'Guest';
+    const point = { lat: o.deliveryLat, lng: o.deliveryLng };
+    const mapsUrl = isDelivery ? orderMapsUrl({ ...point, address: o.deliveryAddress }) : null;
+    const busy = acceptingId === o.id;
 
     return (
-      <Card key={o.id} className="overflow-hidden rounded-2xl shadow-sm border-border/60 bg-card flex flex-col">
-        <div className="bg-muted/30 p-3 px-4 flex items-center justify-between border-b border-border/40">
-          <div className="flex flex-col gap-1">
-            <div className="flex items-center gap-2">
-              <span className="font-bold text-sm tracking-tight">#{o.orderNumber}</span>
-              <Badge variant="secondary" className="text-[10px] font-semibold tracking-wider uppercase h-5 px-1.5">
-                {o.type}
-              </Badge>
+      <article key={o.id} className="flex flex-col overflow-hidden rounded-xl border border-border/70 bg-background shadow-xs">
+        {/* Number, channel, how long the guest has waited, and the amount. */}
+        <div className="flex items-start justify-between gap-3 px-4 pt-3.5 pb-3">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-mono text-base font-black tracking-tight text-foreground">#{o.orderNumber}</span>
+              <span className="inline-flex items-center gap-1 rounded-md border border-border bg-muted px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-foreground">
+                <TypeIcon className="h-3 w-3 text-primary" /> {isDelivery ? 'Delivery' : 'Pickup'}
+              </span>
             </div>
-            <div className="flex items-center text-xs text-muted-foreground gap-1.5">
-              <Clock className="h-3 w-3" />
-              {mins}m ago
+            <p className={cn('mt-1 flex items-center gap-1 text-xs font-semibold', late ? 'text-destructive' : 'text-muted-foreground')}>
+              <Clock className="h-3 w-3" /> Waiting {formatWait(mins)}
+            </p>
+          </div>
+          <div className="shrink-0 text-right">
+            <span className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Total</span>
+            <span className="font-mono text-lg font-black leading-tight text-primary">{cur} {o.total.toLocaleString()}</span>
+          </div>
+        </div>
+
+        {/* Who ordered, and where it goes. */}
+        <div className="mx-4 rounded-lg border border-border/50 bg-muted/30 px-3 py-2.5">
+          <div className="flex items-center gap-3">
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-black uppercase text-primary">
+              {name.charAt(0)}
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-semibold text-foreground">{name}</p>
+              {o.phone && (
+                <a href={`tel:${o.phone}`} className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline">
+                  <Phone className="h-3 w-3" /> {o.phone}
+                </a>
+              )}
             </div>
           </div>
-          <Badge className={`rounded-md shadow-sm border ${tone.badge}`}>
-            {tone.label}
-          </Badge>
-        </div>
-        
-        <div className="p-4 flex-1 flex flex-col gap-4 text-sm">
-          <div className="flex flex-col gap-1.5">
-            <div className="font-semibold flex items-center justify-between">
-              <span>{o.customerName || 'Guest'}</span>
-              {!isNew && o.status !== 'cancelled' && (
-                <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-muted text-muted-foreground whitespace-nowrap">
-                  {o.paymentMethod !== 'Pending' ? `Paid · ${o.paymentMethod}` : "Unpaid"}
+          {isDelivery && o.deliveryAddress && (
+            <p className="mt-2 flex items-start gap-1.5 border-t border-border/40 pt-2 text-xs text-muted-foreground">
+              <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+              <span className="line-clamp-2 leading-relaxed">{o.deliveryAddress}</span>
+            </p>
+          )}
+          {mapsUrl && (
+            <div className="mt-1.5 flex items-center gap-2 pl-5">
+              <a href={mapsUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary hover:underline">
+                <Navigation className="h-3 w-3" /> Open in Maps <ArrowUpRight className="h-3 w-3" />
+              </a>
+              {hasLivePoint(point) && (
+                <span className="inline-flex items-center gap-1 rounded-full border border-primary/20 bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold text-primary">
+                  <LocateFixed className="h-3 w-3" /> Live
                 </span>
               )}
             </div>
-            {!isNew && o.acceptedByName && (
-              <span className="text-[10px] text-muted-foreground leading-none -mt-0.5 mb-1 block">
-                Accepted by {o.acceptedByName}
-              </span>
-            )}
-            {o.phone && (
-              <a href={`tel:${o.phone}`} className="flex items-center gap-1.5 text-xs text-primary hover:underline w-fit">
-                <Phone className="h-3 w-3" /> {o.phone}
-              </a>
-            )}
-            {o.type === 'Delivery' && o.deliveryAddress && (
-              <div className="flex items-start gap-1.5 text-xs text-muted-foreground mt-0.5">
-                <MapPin className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-                <span className="line-clamp-2 leading-relaxed">{o.deliveryAddress}</span>
-              </div>
-            )}
-            {o.type === 'Delivery' && (() => {
-              const point = { lat: o.deliveryLat, lng: o.deliveryLng };
-              const mapsUrl = orderMapsUrl({ ...point, address: o.deliveryAddress });
-              if (!mapsUrl) return null;
-              const live = hasLivePoint(point);
-              return (
-                <div className="flex items-center gap-2 ml-5">
-                  <a href={mapsUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary hover:underline">
-                    <Navigation className="h-3 w-3" /> Open in Maps <ArrowUpRight className="h-3 w-3" />
-                  </a>
-                  {live && (
-                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-primary bg-primary/10 border border-primary/20 px-1.5 py-0.5 rounded-full">
-                      <LocateFixed className="h-3 w-3" /> Live
-                    </span>
-                  )}
-                </div>
-              );
-            })()}
-          </div>
-
-          <div className="bg-muted/20 rounded-xl p-3 border border-border/40 space-y-2">
-            {o.items.map((it, i) => (
-              <div key={i} className="flex justify-between items-start gap-2 text-xs">
-                <div className="flex gap-1.5">
-                  <span className="font-bold min-w-[1.25rem]">{it.qty}x</span>
-                  <div className="flex flex-col">
-                    <span className="font-medium leading-relaxed">{it.name}</span>
-                    {it.modifiers?.map((m: any, idx: number) => {
-                      const mName = typeof m === 'string' ? m : m?.name;
-                      return mName ? (
-                        <span key={idx} className="text-muted-foreground leading-tight">+ {mName}</span>
-                      ) : null;
-                    })}
-                    {it.notes && <span className="text-muted-foreground italic leading-tight">Note: {it.notes}</span>}
-                  </div>
-                </div>
-              </div>
-            ))}
-            <div className="pt-2 mt-2 border-t border-border/50 flex flex-col gap-1 text-xs">
-              <div className="flex justify-between text-muted-foreground">
-                <span>Subtotal</span>
-                <span>{cur} {o.subtotal?.toLocaleString()}</span>
-              </div>
-              {o.discount > 0 && (
-                <div className="flex justify-between text-muted-foreground">
-                  <span>Discount {o.appliedDealName ? `(${o.appliedDealName})` : ''}</span>
-                  <span>-{cur} {o.discount.toLocaleString()}</span>
-                </div>
-              )}
-              {o.tax > 0 && (
-                <div className="flex justify-between text-muted-foreground">
-                  <span>Tax</span>
-                  <span>{cur} {o.tax.toLocaleString()}</span>
-                </div>
-              )}
-              {o.deliveryFee > 0 && (
-                <div className="flex justify-between text-muted-foreground">
-                  <span>Delivery Fee</span>
-                  <span>{cur} {o.deliveryFee.toLocaleString()}</span>
-                </div>
-              )}
-              <div className="flex justify-between font-bold pt-1">
-                <span>Total</span>
-                <span>{cur} {o.total.toLocaleString()}</span>
-              </div>
-            </div>
-          </div>
+          )}
         </div>
 
-        {isNew && (
-          <div className="p-3 bg-muted/20 border-t border-border/40 flex gap-2">
-            <Button
-              size="sm"
-              variant="outline"
-              className="flex-1 border-destructive/30 text-destructive hover:bg-destructive/10 text-xs rounded-xl h-10 font-semibold"
-              disabled={acceptingId === o.id}
-              onClick={() => { setRejectTarget(o); setRejectReason(''); }}
-            >
-              Decline
-            </Button>
-            <Button
-              size="sm"
-              className="flex-1 gradient-primary text-primary-foreground text-xs font-bold rounded-xl h-10 shadow-md shadow-primary/20 hover:opacity-95"
-              disabled={acceptingId === o.id}
-              onClick={() => handleAccept(o)}
-            >
-              {acceptingId === o.id ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <><Check className="h-3.5 w-3.5 mr-1" /> Accept Order</>
+        {/* What they ordered: a deal's dishes sit together under its name. */}
+        <ul className="flex-1 space-y-2.5 px-4 py-3 text-xs">
+          {groupLines(o.items).map((g, gi) => (
+            <li key={gi}>
+              {g.dealName && (
+                <p className="mb-1 flex items-center gap-1.5 text-[11px] font-bold text-primary">
+                  <Gift className="h-3 w-3" /> {g.dealName}
+                </p>
               )}
-            </Button>
-          </div>
-        )}
+              <ul className={cn('space-y-1.5', g.dealName && 'border-l-2 border-primary/25 pl-2.5')}>
+                {g.lines.map((it) => {
+                  // The stored name of a deal dish repeats the deal ("Duo Offer: Chicken Tikka Pizza").
+                  const prefix = g.dealName ? `${g.dealName}: ` : '';
+                  const label = prefix && it.name.startsWith(prefix) ? it.name.slice(prefix.length) : it.name;
+                  return (
+                    <li key={it.id} className="flex items-start gap-2">
+                      <span className="mt-px inline-flex h-5 min-w-[1.5rem] shrink-0 items-center justify-center rounded-md bg-muted px-1 font-mono text-[11px] font-black text-foreground">
+                        {it.qty}×
+                      </span>
+                      <span className="min-w-0">
+                        <span className="block font-semibold leading-snug text-foreground">{label}</span>
+                        {it.modifiers?.map((m) => <span key={m} className="block leading-tight text-muted-foreground">+ {m}</span>)}
+                        {it.notes && <span className="block italic leading-tight text-muted-foreground">Note: {it.notes}</span>}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+            </li>
+          ))}
+        </ul>
 
-        {!isNew && o.type === 'Take Away' && o.paymentMethod === 'Pending' && o.status !== 'cancelled' && (
-          <div className="p-3 bg-muted/20 border-t border-border/40 flex flex-wrap gap-2">
-            {methods.map(method => (
-              <Button
-                key={method}
-                size="sm"
-                variant="outline"
-                className="flex-1 text-xs rounded-xl h-9 min-w-[80px]"
-                disabled={collectingId === o.id}
-                onClick={() => handleCollect(o, method)}
-              >
-                {collectingId === o.id ? <Loader2 className="h-3 w-3 animate-spin" /> : method}
-              </Button>
-            ))}
-          </div>
-        )}
-      </Card>
+        {/* The stored money lines (never re-derived here). */}
+        <dl className="mx-4 mb-3 space-y-0.5 border-t border-dashed border-border/60 pt-2 text-[11px] text-muted-foreground">
+          <div className="flex justify-between"><dt>Subtotal</dt><dd className="font-mono">{cur} {o.subtotal?.toLocaleString()}</dd></div>
+          {o.discount > 0 && (
+            <div className="flex justify-between">
+              <dt>Discount{o.appliedDealName ? ` (${o.appliedDealName})` : ''}</dt>
+              <dd className="font-mono">-{cur} {o.discount.toLocaleString()}</dd>
+            </div>
+          )}
+          {o.tax > 0 && <div className="flex justify-between"><dt>Tax</dt><dd className="font-mono">{cur} {o.tax.toLocaleString()}</dd></div>}
+          {o.deliveryFee > 0 && <div className="flex justify-between"><dt>Delivery fee</dt><dd className="font-mono">{cur} {o.deliveryFee.toLocaleString()}</dd></div>}
+        </dl>
+
+        <div className="grid grid-cols-[auto_1fr] gap-2 border-t border-border/50 bg-muted/20 p-3">
+          <Button
+            variant="outline"
+            className="h-10 rounded-lg border-destructive/30 px-4 text-xs font-semibold text-destructive hover:bg-destructive/10 hover:text-destructive"
+            disabled={busy}
+            onClick={() => { setRejectTarget(o); setRejectReason(''); }}
+          >
+            <X className="mr-1 h-3.5 w-3.5" /> Decline
+          </Button>
+          <Button
+            className="gradient-primary h-10 rounded-lg text-xs font-bold text-primary-foreground shadow-md shadow-primary/20 hover:opacity-95"
+            disabled={busy}
+            onClick={() => handleAccept(o)}
+          >
+            {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <><Check className="mr-1 h-3.5 w-3.5" /> Accept order</>}
+          </Button>
+        </div>
+      </article>
     );
   };
 
-  if (isLoading && !sortedPending.length && !sortedToday.length) {
-    return <div className="p-8 flex items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>;
-  }
-
   return (
-    <div className={compact ? "space-y-6" : "space-y-8 max-w-5xl mx-auto"}>
-      <section className="space-y-4">
-        <h3 className="font-bold text-lg flex items-center gap-2">
-          New Orders
-          {sortedPending.length > 0 && <Badge variant="secondary" className="rounded-full">{sortedPending.length}</Badge>}
-        </h3>
-        {sortedPending.length === 0 ? (
-          <div className="border border-dashed border-border/60 rounded-2xl p-8 flex flex-col items-center justify-center text-muted-foreground bg-muted/10">
-            <ShoppingBag className="h-8 w-8 mb-2 opacity-50" />
-            <p className="text-sm font-medium">No new orders</p>
+    <section className="flex h-full flex-col overflow-hidden rounded-2xl border border-border/70 bg-card shadow-xs">
+      {/* Same header strip as the board's type columns. */}
+      <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border/60 bg-muted/30 p-3.5">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-primary/20 bg-primary/10 text-primary">
+            <Globe className="h-4 w-4" />
           </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {sortedPending.map(o => renderCard(o, true))}
+          <div className="min-w-0">
+            <h2 className="text-sm font-extrabold tracking-tight text-foreground">Website Orders</h2>
+            <p className="truncate text-[11px] text-muted-foreground">Accept an order to send it to the kitchen. It then joins the board.</p>
           </div>
-        )}
-      </section>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <Badge variant="outline" className={cn('h-7 rounded-md px-2.5 font-mono text-[11px] font-bold', orders.length > 0 ? 'border-primary/30 bg-primary/10 text-primary' : 'text-muted-foreground')}>
+            {orders.length} waiting
+          </Badge>
+          {onClose && (
+            <Button variant="outline" size="sm" className="h-7 rounded-md px-2.5 text-[11px] font-semibold" onClick={onClose}>
+              Back to board
+            </Button>
+          )}
+        </div>
+      </div>
 
-      <section className="space-y-4">
-        <h3 className="font-bold text-lg text-muted-foreground">Today's Orders</h3>
-        {sortedToday.length === 0 ? (
-          <div className="border border-dashed border-border/60 rounded-2xl p-8 flex flex-col items-center justify-center text-muted-foreground bg-muted/10">
-            <p className="text-sm">No accepted orders today</p>
+      <div className="flex-1 overflow-y-auto p-3 sm:p-4">
+        {isLoading && orders.length === 0 ? (
+          <div className="flex h-full items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+        ) : orders.length === 0 ? (
+          <div className="flex h-full flex-col items-center justify-center p-8 text-center">
+            <div className="mb-3 flex h-16 w-16 items-center justify-center rounded-2xl border border-border/60 bg-muted/40">
+              <Inbox className="h-8 w-8 text-muted-foreground/40" />
+            </div>
+            <h3 className="mb-1 text-base font-extrabold text-foreground">No website orders waiting</h3>
+            <p className="max-w-sm text-xs text-muted-foreground">A new order shows up here with an alert. Accepted orders are on the board.</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 opacity-80 hover:opacity-100 transition-opacity">
-            {sortedToday.map(o => renderCard(o, false))}
+          <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+            {orders.map(renderCard)}
           </div>
         )}
-      </section>
+      </div>
 
       <Dialog open={rejectTarget !== null} onOpenChange={(open) => { if (!open && !rejecting) setRejectTarget(null); }}>
         <DialogContent className="w-[90vw] max-w-[420px] rounded-2xl">
           <DialogHeader>
-            <DialogTitle>Decline order?</DialogTitle>
+            <DialogTitle>Decline order{rejectTarget ? ` #${rejectTarget.orderNumber}` : ''}?</DialogTitle>
             <DialogDescription>The guest will be told their order was declined. A reason is optional.</DialogDescription>
           </DialogHeader>
           <div className="space-y-2 py-1">
@@ -293,18 +269,18 @@ export function WebsiteOrdersInbox({ compact = false }: { compact?: boolean }) {
               placeholder="e.g. Item unavailable"
               rows={3}
               maxLength={300}
-              className="rounded-xl text-sm resize-none"
+              className="resize-none rounded-xl text-sm"
               disabled={rejecting}
             />
           </div>
           <DialogFooter className="flex gap-2">
-            <Button variant="outline" onClick={() => setRejectTarget(null)} disabled={rejecting} className="rounded-xl flex-1 h-10">Cancel</Button>
-            <Button variant="destructive" onClick={handleReject} disabled={rejecting} className="rounded-xl flex-1 h-10 font-bold">
+            <Button variant="outline" onClick={() => setRejectTarget(null)} disabled={rejecting} className="h-10 flex-1 rounded-xl">Cancel</Button>
+            <Button variant="destructive" onClick={handleReject} disabled={rejecting} className="h-10 flex-1 rounded-xl font-bold">
               {rejecting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Decline'}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </section>
   );
 }

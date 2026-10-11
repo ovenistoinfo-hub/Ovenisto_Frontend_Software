@@ -902,12 +902,22 @@ Orders placed on the public website arrive as Delivery / Take Away orders with
 - **One gate:** `src/lib/orderAcceptance.ts` → `isAwaitingAcceptance(o)` = (self-order OR
   `orderSource === 'website'`) && pending && no `acceptedById`. Used by KitchenPanel, OrderStatusBoard
   and `delivery.service` `getPendingDeliveryOrders`. WaiterPanel's inbox still lists self-orders only.
-- **UI:** `/website-orders` (`pages/WebsiteOrders.tsx`) and the POS header "Website" Sheet both render
-  `components/website/WebsiteOrdersInbox.tsx`: New (awaiting) and Today sections, Accept
-  (`orderService.acceptOrder`), Decline with optional reason (`rejectOrder`), and Collect Payment for an
-  accepted pickup (`updateOrder(id, { paymentMethod })`; `settings.paymentMethods` is a `string[]`).
-  Money lines read the order's stored subtotal/discount/tax/deliveryFee/total. Permission
-  `website-orders`: Manager, Cashier, Delivery Manager (+ Admin via `*`), excluded for Super Admin.
+- **UI (changed 2026-10-11, owner): website orders are approved on Order Monitor only.** The
+  `/website-orders` page (`pages/WebsiteOrders.tsx`, deleted) and the POS header "Website" Sheet are gone;
+  `/website-orders` redirects to `/order-status?tab=website`. `pages/OrderStatusBoard.tsx`'s header bar has a
+  "Website Orders" button (shown with the `website-orders` permission; pending count, pulsing dot; a toggle)
+  that swaps the board for the inbox (`showWebsite` state, opened by `?tab=website` via an effect keyed on
+  `searchParams`), and a "N website orders waiting for approval" bar under the tiles. The inbox shows
+  **pending orders only** in the board's column chrome (deal dishes grouped under the deal name, "Waiting 12m"
+  turning red after 15 min); its Today list is gone, so **payment for a website pickup is collected on the
+  board's order card** ("Collect payment on pickup": `orderSource === 'website'`, Take Away, unpaid →
+  `updateOrder(id, { paymentMethod })`). `useWebsiteOrders` no longer runs the `today` query. The sidebar / NavDrawer badge sits on the Order
+  Monitor item, and the new-order toast's "View" goes there. Permission `website-orders`: Manager, Delivery
+  Manager (+ Admin via `*`); **Cashier lost it** (owner's choice: it has no `order-status`); still excluded
+  for Super Admin. The inbox is
+  `components/website/WebsiteOrdersInbox.tsx`: Accept (`orderService.acceptOrder`) and Decline with an
+  optional reason (`rejectOrder`); `settings.paymentMethods` is a `string[]`.
+  Money lines read the order's stored subtotal/discount/tax/deliveryFee/total.
 - **Refresh — keep this shape:** `hooks/useWebsiteOrders.ts` is a PURE data hook (queries
   `['website-orders','pending']` and `['website-orders','today']`, no subscriptions). All socket/poll
   refreshing and the new-order toast + beep live in **one** `components/website/WebsiteOrdersWatcher.tsx`
@@ -928,11 +938,38 @@ Orders placed on the public website arrive as Delivery / Take Away orders with
   `buildWebsiteConfig(raw, form)` spreads the loaded JSON, drops the legacy keys
   (`deliveryCharges`, `prepTime`, `deliveryRadius`, `autoAccept`) and sets the 6 canonical keys. `PUT
   /settings` replaces `websiteConfig` whole, so always build from the loaded raw object.
-- **Opening hours (2026-10-11):** an "Opening hours" section in the same tab (two `type="time"` inputs + Clear)
+- **General Settings reorganised (2026-10-11, owner):** `components/settings/GeneralSettingsTab.tsx` replaced the
+  inline General card in `pages/Settings.tsx`. Section cards (2 columns on xl): Business profile, Billing & receipts,
+  Opening hours, Operations (table management, online orders, attendance grace), Meal times, Payment methods; a
+  sticky save bar shows "Unsaved changes" and offers Discard / Save. The old "Reset to Defaults" (hard-coded Main
+  branch address, and it dropped `paymentMethods`) is gone. A failed load shows an error, never an editable empty
+  form. Save sends the general fields plus `websiteConfig` = `withServiceHours(storedWebsiteConfig, hours,
+  mealHours)` — the backend replaces the whole JSON, so every website key must be kept.
+  Time fields use the app's `components/ui/time-picker.tsx` (not `<input type="time">`), which gained two
+  optional props: `placeholder` (empty = "Not set") and `range` (times outside are disabled; tested in
+  `time-picker.test.tsx`). Meal-time pickers get the opening hours as `range`, and Save refuses a meal outside
+  them (`lib/mealTime.ts` `isWindowInside`, which handles past-midnight hours).
+- **Opening hours (2026-10-11):** now in Settings → **General** (moved from the Website tab the same day; two `type="time"` inputs + Clear)
   saves `websiteConfig.hours {open, close}` ("HH:mm"; both or neither, not equal; a close earlier than the
   open means after midnight). `lib/websiteConfig.ts` `parseHours` mirrors the backend's (tested), and
   `buildWebsiteConfig` writes or deletes `hours`. The website shows these hours per branch and offers
   booking times only inside them.
+- **Meal times (2026-10-11):** a "Meal times" section, now in Settings → **General**, lists the active meal types
+  (`mealTypeService.getAll()`), each with From/To `type="time"` inputs + Clear (both or neither, not equal;
+  blank = served all day). It saves `websiteConfig.mealHours {[mealTypeId]: {open, close}}`;
+  `lib/websiteConfig.ts` `parseMealHours` mirrors the backend (tested); `withServiceHours` writes hours + meal
+  times, and `buildWebsiteConfig` (Website tab) keeps whatever is stored. Entries of inactive meal types are kept. Saving invalidates the `["meal-times"]` query.
+- **Meal times on POS / Waiter Panel / Self-Order (2026-10-11, owner: "hr jaga"):** pure `lib/mealTime.ts`
+  (`isServedAt`, `servingLabel`, `pktMinuteNow`, `formatMealHours`; tested) + `hooks/useMealTimes.ts`
+  (POS/Waiter: `/meal-types` + `/settings/mine`, key `["meal-times", outletId]`, 5 min; empty for Super
+  Admin = no restriction). Self-Order reads `menu.mealTypes` from `/self-order/menu`. Each screen: meal chips
+  under the categories, a dish outside its time is disabled with a **"Not available"** badge + its time (owner
+  asked for that wording, not "Out of Stock"), and `addToCart`/`addToOrder` refuse it with a toast. Only
+  `createSelfOrder` re-checks server-side; staff orders are not server-checked (offline sync / edits).
+  Also fixed: Self-Order cart's X button called an undefined `removeCartItem` (a click threw).
+- **Food Menu meal-type filter (2026-10-11):** `pages/items/FoodMenu.tsx` has an "All meal types" `<Select>`
+  next to the category chips (filters on `item.mealTypeIds`), plus a "Meal Type" column after Category
+  (outline badges; "—" when untagged). Changing either filter now resets to page 1.
 - **Branch location (Step 10, 2026-10-06):** a "Branch location" section in the same tab feeds the
   public website's nearest-branch auto-select.
   - Fields: lat/lng inputs, "Paste a Google Maps link or coordinates" + Apply, "Use this device's

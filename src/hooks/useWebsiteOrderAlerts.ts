@@ -26,7 +26,7 @@ export function useWebsiteOrderAlerts() {
           duration: 10000,
           action: {
             label: 'View',
-            onClick: () => navigate('/website-orders')
+            onClick: () => navigate('/order-status?tab=website')
           }
         });
         playAlertBeep();

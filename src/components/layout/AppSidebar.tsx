@@ -41,7 +41,6 @@ export const navSections = [
     { title: "Order Monitor", url: "/order-status", icon: BarChart3, module: "order-status" },
     { title: "Customer Display", url: "/customer-display", icon: Globe, module: "customer-display" },
     { title: "Cancellation Requests", url: "/cancellation-requests", icon: Ban, module: "cancellation-requests" },
-    { title: "Website Orders", url: "/website-orders", icon: ShoppingBag, module: "website-orders" },
     { title: "Cash Hub", url: "/cash-hub", icon: Coins, module: "cash-hub" },
   ]},
   { label: "Outlets", items: [{ title: "Outlets", url: "/outlets", icon: Store, module: "outlets" }]},
@@ -171,8 +170,8 @@ export function AppSidebar() {
                                 {pendingCancelCount}
                               </Badge>
                             )}
-                            {item.url === "/website-orders" && websitePendingCount > 0 && !collapsed && (
-                              <Badge variant="destructive" className="h-4 min-w-4 px-1 text-[10px] leading-none">
+                            {item.url === "/order-status" && websitePendingCount > 0 && !collapsed && (
+                              <Badge variant="destructive" className="h-4 min-w-4 px-1 text-[10px] leading-none" title="Website orders waiting for approval">
                                 {websitePendingCount}
                               </Badge>
                             )}

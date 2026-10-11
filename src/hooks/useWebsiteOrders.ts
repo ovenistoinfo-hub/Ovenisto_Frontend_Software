@@ -17,22 +17,10 @@ export function useWebsiteOrders() {
     enabled,
   });
 
-  const todayQuery = useQuery({
-    queryKey: ['website-orders', 'today'],
-    queryFn: async () => {
-      const pkt = new Date(Date.now() + 5 * 60 * 60 * 1000);
-      const todayPkt = pkt.toISOString().slice(0, 10);
-      const res = await orderService.getOrders({ orderSource: 'website', from: todayPkt, to: todayPkt, limit: 100 });
-      return res.data || [];
-    },
-    enabled,
-  });
-
   return {
     pending: pendingQuery.data || [],
-    today: todayQuery.data || [],
     pendingCount: pendingQuery.data?.length || 0,
-    isLoading: pendingQuery.isLoading || todayQuery.isLoading,
+    isLoading: pendingQuery.isLoading,
     refresh: () => queryClient.invalidateQueries({ queryKey: ['website-orders'] }),
   };
 }
