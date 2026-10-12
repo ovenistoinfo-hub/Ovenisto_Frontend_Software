@@ -20,6 +20,7 @@ import {
   ConciergeBell,
   QrCode,
   Bike,
+  Globe,
   type LucideIcon,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -106,13 +107,14 @@ const DiffBadge = ({
   );
 };
 
-// The four cash-collection channels a balance order can come from. Each has its own icon,
+// The five cash-collection channels a balance order can come from. Each has its own icon,
 // label text and token color so they read apart without relying on color alone.
 const CHANNEL_STYLES: Record<string, { Icon: LucideIcon; className: string }> = {
   "POS Counter": { Icon: Store, className: "bg-primary/10 text-primary border-primary/30" },
   "Waiter Panel": { Icon: ConciergeBell, className: "bg-info/10 text-info border-info/30" },
   "Self-Order (QR)": { Icon: QrCode, className: "bg-warning/10 text-warning border-warning/30" },
   "Delivery Rider (COD)": { Icon: Bike, className: "bg-success/10 text-success border-success/30" },
+  "Website Pickup": { Icon: Globe, className: "bg-muted text-foreground border-border" },
 };
 
 const CashHub = () => {
