@@ -967,6 +967,13 @@ Orders placed on the public website arrive as Delivery / Take Away orders with
   Order Monitor no longer collects; on an unpaid website pickup in Ready it shows a disabled "Collect payment
   on POS first" instead of Complete Order, because the backend 409s that completion. Pickups still awaiting
   approval are not listed — accept them on Order Monitor first.
+- **Website online payment — Safepay (2026-10-12, owner; backend CLAUDE.md "Website online payment").** A paid-online order
+  arrives with `paymentMethod: "Online (Safepay)"` (`lib/onlinePayment.ts` `isPaidOnline`, tested): a "Paid online" chip on its inbox
+  card, nothing to collect on POS or from the rider, skipped by Cash Hub. Declining one says to refund it in the Safepay dashboard.
+  The inbox's **Refunds due (N)** list (`useWebsiteOrders().refundsDue`, key `['website-orders','refunds-due']`,
+  `paymentService.getRefundsDue` → `GET /payments/refunds-due`) has **Mark refunded** (optional reference →
+  `POST /payments/:id/refunded`). `use-module-events` clears the `/payments` GET cache on order events. Settings → Website has
+  **Accept online payment** (`websiteConfig.onlinePayment`); the website shows it only once the server has the Safepay keys.
 
 ## Settings "Website" tab + other Step 4b bits (accepted 2026-09-30)
 - **Tab:** `/settings/website` → `components/settings/WebsiteSettingsTab.tsx` (sidebar "Website Ordering"

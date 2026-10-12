@@ -63,7 +63,8 @@ are unit-tested. **Confirm in the sandbox before go-live:**
    - `POST /api/payments/safepay/webhook` verifies `x-sfpy-signature` and answers 200.
 
    A failed signature check changes nothing and is logged. The return still redirects, to
-   `/order/:id?payment=failed`.
+   `/order/:id?payment=failed`. If recording a valid payment fails, the return still redirects with
+   `?payment=done` and the webhook confirms it (owner, 2026-10-12).
 4. **`confirmPayment` rules** (pure decision helper, tested). In every case except the first, the payment
    becomes `paid` with `paidAt`:
    - Payment row already `paid` → do nothing.
@@ -85,8 +86,9 @@ are unit-tested. **Confirm in the sandbox before go-live:**
 
    Both require the signed-in customer who placed the order (`customerUid`), use the order rate limit, and
    work only while the order is `AWAITING_PAYMENT` and not expired.
-7. **Expiry.** An `AWAITING_PAYMENT` order older than **30 minutes** is cancelled with
-   `rejectionReason: 'Payment not completed'`. No timer does this. It is applied when the order is read (status,
+7. **Expiry.** An `AWAITING_PAYMENT` order is cancelled with `rejectionReason: 'Payment not completed'` once
+   **30 minutes** have passed since its latest checkout was opened (or since it was placed, if none was;
+   owner, 2026-10-12, so a retry gets the full window). No timer does this. It is applied when the order is read (status,
    My Orders, retry, pay-cash), and Order Monitor's Refunds due and inbox queries run the same sweep for that
    outlet. Nothing was charged, so nothing is refunded.
 
