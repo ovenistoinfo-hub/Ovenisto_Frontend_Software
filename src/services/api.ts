@@ -217,7 +217,9 @@ const MUTATION_DEPENDENCIES: Record<string, string[]> = {
   '/challans': ['/warehouses', '/inventory'],
   '/demands': ['/warehouses', '/inventory'],
   '/purchase-requests': ['/warehouses', '/inventory'],
-  '/orders': ['/warehouses', '/inventory'],
+  // '/payments' too: declining a paid-online order creates a refund due, and Order Monitor reads
+  // that list (GET /payments/refunds-due) through the 30s GET cache below.
+  '/orders': ['/warehouses', '/inventory', '/payments'],
   // Expenses have no socket event at all (grep confirms — unlike orders/purchases/cancellation
   // requests), so the Dashboard's Net Profit + Expenses Breakdown sections would otherwise show a
   // stale /reports response for up to 30s (api.ts's own GET cache) after adding/editing/deleting

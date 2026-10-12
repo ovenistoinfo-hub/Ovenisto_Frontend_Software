@@ -29,6 +29,7 @@ export function useWebsiteOrders() {
   return {
     pending: pendingQuery.data || [],
     refundsDue: refundsQuery.data || [],
+    refundsError: refundsQuery.isError,
     pendingCount: pendingQuery.data?.length || 0,
     isLoading: pendingQuery.isLoading,
     refresh: () => queryClient.invalidateQueries({ queryKey: ['website-orders'] }),

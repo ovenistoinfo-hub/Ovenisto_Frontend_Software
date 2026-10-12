@@ -274,7 +274,7 @@ const OrderStatusBoard = () => {
   const { user, hasPermission } = useAuth();
   // Website orders are approved here and nowhere else: a sixth tile opens their inbox in place of the board.
   const canWebsite = hasPermission("website-orders");
-  const { pendingCount: websitePending } = useWebsiteOrders();
+  const { pendingCount: websitePending, refundsDue: websiteRefundsDue } = useWebsiteOrders();
   const [searchParams] = useSearchParams();
   const [showWebsite, setShowWebsite] = useState(false);
   // Keyed on searchParams: the new-order toast links to ?tab=website while this page may already be open.
@@ -968,6 +968,14 @@ const OrderStatusBoard = () => {
               )}>
                 {websitePending}
               </span>
+              {websiteRefundsDue.length > 0 && (
+                <span
+                  title="Online payments to refund from the Safepay dashboard"
+                  className="inline-flex h-6 items-center justify-center rounded-md bg-destructive px-1.5 text-[11px] font-bold text-destructive-foreground"
+                >
+                  {websiteRefundsDue.length} refund{websiteRefundsDue.length === 1 ? '' : 's'}
+                </span>
+              )}
               {websitePending > 0 && !showWebsite && (
                 <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
                   <span className="absolute inline-flex h-full w-full rounded-full bg-primary opacity-70 animate-ping motion-reduce:hidden" />

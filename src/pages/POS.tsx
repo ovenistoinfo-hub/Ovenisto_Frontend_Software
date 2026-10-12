@@ -57,6 +57,8 @@ import { isDealLive, isDealAvailableForChannel, dealChannelPrice, dealChannelPer
 import { OrderPlacedPrintModal, type PlacedOrderSlipData } from "@/components/pos/OrderPlacedPrintModal";
 import { WebsitePickupPaymentDialog, type PickupPaymentOrder } from "@/components/pos/WebsitePickupPaymentDialog";
 import { isCollectablePickup } from "@/lib/websitePickup";
+import { isPaidOnline } from "@/lib/onlinePayment";
+import { partialCancelTotals, cancelRefundMethodFor } from "@/lib/cancelRequest";
 import { advanceMethodOf, buildPaymentMethodString, parseNetParts, settledPaymentMethod, settlePaymentEntries, splitTotal } from "@/lib/paymentSplit";
 import { useMealTimes } from "@/hooks/useMealTimes";
 import { isServedAt, servingLabel, pktMinuteNow, formatMealHours } from "@/lib/mealTime";
@@ -1886,9 +1888,9 @@ const POS = () => {
     if (!isFullCancel) {
       const remainingItems = activeItems.filter((i: any) => !cancelSelectedItemIds.includes(i.id));
       const remainingItemsSubtotal = remainingItems.reduce((s: number, i: any) => s + (i.price * i.qty - i.discount), 0);
-      newSubtotal = remainingItemsSubtotal - order.discount;
-      newTax = Math.round(newSubtotal * taxRate);
-      newTotal = newSubtotal + newTax;
+      ({ newSubtotal, newTax, newTotal } = partialCancelTotals({
+        remainingItemsSubtotal, discount: order.discount, taxRate, deliveryFee: order.deliveryFee,
+      }));
     }
 
     setCancelSubmitting(true);
@@ -1900,7 +1902,7 @@ const POS = () => {
         responsibleUserId: cancelResponsibleUserId || undefined,
         penaltyAmount: cancelPenaltyAmount || undefined,
         refundAmount,
-        refundMethod: cancelRefundMethod,
+        refundMethod: cancelRefundMethodFor(order, cancelRefundMethod),
         newSubtotal, newTax, newTotal,
       });
       toast.success("Cancellation request sent for approval");
@@ -6698,6 +6700,7 @@ const POS = () => {
             const order = allOrdersData.find(o => o.id === showModifyOrder);
             if (!order) return <p className="text-sm text-muted-foreground">Order not found</p>;
             if (modifyCancelAction === "cancel") {
+              const paidOnline = isPaidOnline(order);
               return (
                 <div className="space-y-3">
                   <div className="text-sm space-y-1">
@@ -6773,6 +6776,11 @@ const POS = () => {
                         placeholder="0" />
                     </div>
                   </div>
+                  {paidOnline && (
+                    <p className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs font-semibold text-foreground">
+                      Paid online ({effectiveSettings.currency} {order.total.toLocaleString()}). Refund it from the Safepay dashboard, then mark it under Refunds due in Order Monitor.
+                    </p>
+                  )}
                   <div className="grid grid-cols-2 gap-2 items-end">
                     <div className="bg-muted/50 rounded-lg p-2.5 text-xs">
                       <p className="font-semibold text-muted-foreground uppercase tracking-wider text-[10px]">Refund Amount</p>
@@ -6789,15 +6797,24 @@ const POS = () => {
                     </div>
                     <div>
                       <Label className="text-xs font-medium">Refund Method</Label>
-                      <Select value={cancelRefundMethod} onValueChange={setCancelRefundMethod}>
-                        <SelectTrigger className="mt-1 h-9 text-sm"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          {(effectiveSettings.paymentMethods ?? ["Cash", "Credit Card", "Account", "JazzCash", "EasyPaisa"]).map((pm) => (
-                            <SelectItem key={pm} value={pm.toLowerCase()}>{pm}</SelectItem>
-                          ))}
-                          <SelectItem value="none">None</SelectItem>
-                        </SelectContent>
-                      </Select>
+                      {paidOnline ? (
+                        <Select value="safepay" disabled>
+                          <SelectTrigger className="mt-1 h-9 text-sm"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="safepay">Safepay (refund from dashboard)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <Select value={cancelRefundMethod} onValueChange={setCancelRefundMethod}>
+                          <SelectTrigger className="mt-1 h-9 text-sm"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            {(effectiveSettings.paymentMethods ?? ["Cash", "Credit Card", "Account", "JazzCash", "EasyPaisa"]).map((pm) => (
+                              <SelectItem key={pm} value={pm.toLowerCase()}>{pm}</SelectItem>
+                            ))}
+                            <SelectItem value="none">None</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      )}
                     </div>
                   </div>
                   <div className="bg-muted/50 rounded-lg p-2.5 text-xs space-y-1">

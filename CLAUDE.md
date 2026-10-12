@@ -974,6 +974,12 @@ Orders placed on the public website arrive as Delivery / Take Away orders with
   `paymentService.getRefundsDue` → `GET /payments/refunds-due`) has **Mark refunded** (optional reference →
   `POST /payments/:id/refunded`). `use-module-events` clears the `/payments` GET cache on order events. Settings → Website has
   **Accept online payment** (`websiteConfig.onlinePayment`); the website shows it only once the server has the Safepay keys.
+  Review fixes (same day): a POS partial cancel keeps the order's delivery fee in the new total (`lib/cancelRequest.ts`
+  `partialCancelTotals`, tested), so Refunds due can't over-refund it; the POS cancel dialog for a paid-online order shows a
+  Safepay note, fixes the refund method to `"safepay"` (`cancelRefundMethodFor`) and sends that; the inbox shows "Couldn't load
+  refunds due" instead of an empty list when the query fails (`useWebsiteOrders().refundsError`); Order Monitor's Website Orders
+  button carries a red "N refunds" badge beside the pending count; and `/orders` mutations clear the `/payments` GET cache
+  (`MUTATION_DEPENDENCIES`), so a just-declined order's refund shows at once.
 
 ## Settings "Website" tab + other Step 4b bits (accepted 2026-09-30)
 - **Tab:** `/settings/website` → `components/settings/WebsiteSettingsTab.tsx` (sidebar "Website Ordering"

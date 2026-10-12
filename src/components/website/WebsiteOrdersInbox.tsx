@@ -41,7 +41,7 @@ const errorText = (err: unknown, fallback: string) => (err instanceof Error && e
  * Accepting sends the order to the kitchen and onto the board; payment for a pickup is collected on its board card.
  */
 export function WebsiteOrdersInbox({ onClose }: { onClose?: () => void }) {
-  const { pending, refundsDue, isLoading, refresh } = useWebsiteOrders();
+  const { pending, refundsDue, refundsError, isLoading, refresh } = useWebsiteOrders();
   const { settings } = useData();
   const cur = settings?.currency ?? 'Rs.';
 
@@ -63,6 +63,7 @@ export function WebsiteOrdersInbox({ onClose }: { onClose?: () => void }) {
       refresh();
     } catch (err: unknown) {
       toast.error(errorText(err, 'Failed to record the refund'));
+      refresh(); // another manager may have just recorded it
     } finally {
       setRefunding(false);
     }
@@ -263,6 +264,13 @@ export function WebsiteOrdersInbox({ onClose }: { onClose?: () => void }) {
       </div>
 
       <div className="flex-1 overflow-y-auto p-3 sm:p-4">
+        {refundsError && (
+          <div className="mb-4 rounded-xl border border-destructive/30 bg-destructive/5 p-3">
+            <p className="flex items-center gap-2 text-sm font-semibold text-destructive">
+              <RotateCcw className="h-4 w-4" /> Couldn't load refunds due. Refresh to try again.
+            </p>
+          </div>
+        )}
         {refundsDue.length > 0 && (
           <div className="mb-4 rounded-xl border border-destructive/30 bg-destructive/5 p-3">
             <p className="flex items-center gap-2 text-sm font-extrabold text-foreground">
@@ -277,7 +285,7 @@ export function WebsiteOrdersInbox({ onClose }: { onClose?: () => void }) {
                       #{r.orderNumber} · {r.customerName || 'Guest'}{r.phone ? ` · ${r.phone}` : ''}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      {REFUND_REASON_LABEL[r.reason]} · paid {cur} {r.paid.toLocaleString()} · Safepay {r.tracker}
+                      {REFUND_REASON_LABEL[r.reason] ?? r.reason} · paid {cur} {r.paid.toLocaleString()} · Safepay {r.tracker}
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
