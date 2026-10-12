@@ -14,6 +14,7 @@ import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@
 import { Separator } from "@/components/ui/separator";
 import { Checkbox } from "@/components/ui/checkbox";
 import { isAwaitingAcceptance } from "@/lib/orderAcceptance";
+import { isUnpaidWebsitePickup } from "@/lib/websitePickup";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -276,7 +277,6 @@ const OrderStatusBoard = () => {
   const { pendingCount: websitePending } = useWebsiteOrders();
   const [searchParams] = useSearchParams();
   const [showWebsite, setShowWebsite] = useState(false);
-  const [collectingId, setCollectingId] = useState<string | null>(null);
   // Keyed on searchParams: the new-order toast links to ?tab=website while this page may already be open.
   useEffect(() => {
     if (canWebsite && searchParams.get("tab") === "website") setShowWebsite(true);
@@ -362,20 +362,6 @@ const OrderStatusBoard = () => {
       setHasLoaded(true);
     }
   }, []);
-
-  // Payment for a website pickup order, taken at the counter (it used to sit on the Website Orders page).
-  const handleCollectPayment = async (order: { id: string }, method: string) => {
-    try {
-      setCollectingId(order.id);
-      await orderService.updateOrder(order.id, { paymentMethod: method });
-      toast.success(`Payment collected: ${method}`);
-      loadOrders();
-    } catch (err: unknown) {
-      toast.error(err instanceof Error && err.message ? err.message : "Failed to collect payment");
-    } finally {
-      setCollectingId(null);
-    }
-  };
 
   const handleOrderEvent = useCallback((payload?: any) => {
     if (payload && typeof payload === "object" && payload.id) {
@@ -899,31 +885,18 @@ const OrderStatusBoard = () => {
               </Button>
             </div>
 
-            {/* A website pickup pays at the counter: record which method was received. */}
-            {order.orderSource === "website" && order.type === "Take Away" && !paid && (
-              <div className="rounded-lg border border-primary/30 bg-primary/5 p-2 space-y-1.5" onClick={(e) => e.stopPropagation()}>
-                <p className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-primary">
-                  <Banknote className="h-3 w-3" /> Collect payment on pickup
-                </p>
-                <div className="flex flex-wrap gap-1.5">
-                  {(settings?.paymentMethods?.length ? settings.paymentMethods : ["Cash"]).map((method: string) => (
-                    <Button
-                      key={method}
-                      size="sm"
-                      variant="outline"
-                      className="h-8 flex-1 min-w-[70px] rounded-lg px-2.5 text-[11px] font-semibold"
-                      disabled={collectingId === order.id}
-                      onClick={() => handleCollectPayment(order, method)}
-                    >
-                      {collectingId === order.id ? <Loader2 className="h-3 w-3 animate-spin" /> : method}
-                    </Button>
-                  ))}
-                </div>
-              </div>
+            {/* Action Button — an unpaid website pickup is paid (and handed over) on POS; the server refuses to complete it unpaid. */}
+            {order.status === "ready" && isUnpaidWebsitePickup(order) && (
+              <Button
+                size="sm"
+                variant="outline"
+                disabled
+                className="w-full h-10 text-xs font-semibold flex items-center justify-center gap-1.5 rounded-lg"
+              >
+                <Banknote className="h-3.5 w-3.5" /> Collect payment on POS first
+              </Button>
             )}
-
-            {/* Action Button */}
-            {order.status === "ready" && (
+            {order.status === "ready" && !isUnpaidWebsitePickup(order) && (
               <Button
                 size="sm"
                 disabled={updatingOrderId === order.id}
