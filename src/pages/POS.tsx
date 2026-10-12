@@ -57,7 +57,7 @@ import { isDealLive, isDealAvailableForChannel, dealChannelPrice, dealChannelPer
 import { OrderPlacedPrintModal, type PlacedOrderSlipData } from "@/components/pos/OrderPlacedPrintModal";
 import { WebsitePickupPaymentDialog, type PickupPaymentOrder } from "@/components/pos/WebsitePickupPaymentDialog";
 import { isCollectablePickup } from "@/lib/websitePickup";
-import { buildPaymentMethodString, settledPaymentMethod, settlePaymentEntries } from "@/lib/paymentSplit";
+import { advanceMethodOf, buildPaymentMethodString, parseNetParts, settledPaymentMethod, settlePaymentEntries, splitTotal } from "@/lib/paymentSplit";
 import { useMealTimes } from "@/hooks/useMealTimes";
 import { isServedAt, servingLabel, pktMinuteNow, formatMealHours } from "@/lib/mealTime";
 
@@ -1414,10 +1414,21 @@ const POS = () => {
         // For advance delivery orders, only count what the cashier actually collected at the POS counter.
         // The remaining COD balance is the rider's responsibility, not the POS register's.
         let orderAmt = Number(o.total || 0);
-        if (hasAdvancePM) {
-          const advancePaid = Number(o.advancePayment || 0);
+        let splitPm = pm;
+        // A booking's tracked advance is on whoever took it (Cash Hub "Reservation Advance"), never in
+        // this drawer — same rule as the backend's classifyOrderCash.
+        const advancePaid = Number(o.advancePayment || 0);
+        const trackedAdvance = o.reservationId && advancePaid > 0 ? Math.min(advancePaid, orderAmt) : 0;
+        const netParts = parseNetParts(pm);
+        if (hasAdvancePM && netParts.length > 0) {
+          // Advance paid earlier, the rest at this counter ("Advance (Cash): Rs.500, Net (JazzCash): Rs.1008").
+          // This used to count only the advance.
+          const parts = trackedAdvance > 0 ? netParts : [{ method: advanceMethodOf(pm), amount: advancePaid }, ...netParts];
+          orderAmt = splitTotal(parts);
+          splitPm = buildPaymentMethodString(parts);
+        } else if (hasAdvancePM) {
           if (advancePaid > 0) {
-            orderAmt = advancePaid;
+            orderAmt = advancePaid - trackedAdvance;
           } else {
             // Fallback: parse advance amount directly from PM string
             // e.g. "Advance (JazzCash): Rs.485" → 485
@@ -1429,10 +1440,12 @@ const POS = () => {
           // 100% on delivery, so none of it ever lands in this cashier's drawer.
           // It's tracked under the rider's own balance in Cash Hub instead.
           orderAmt = 0;
+        } else {
+          orderAmt -= trackedAdvance;
         }
         total += orderAmt;
 
-        const splits = parsePaymentSplits(pm, orderAmt);
+        const splits = parsePaymentSplits(splitPm, orderAmt);
 
         splits.forEach(({ method, amount }) => {
           const mLower = method.toLowerCase();
@@ -2492,6 +2505,9 @@ const POS = () => {
         isUrgent,
         customerType: (selectedCustomerData as any)?.customerType || "walk-in",
         orderSource: "pos" as const,
+        // A booking paid off here: the server puts its tracked advance on this order, so Cash Hub
+        // credits this cashier only with what they collect now.
+        ...(loadedReservationId && !loadedOrderId ? { reservationId: loadedReservationId } : {}),
       };
 
       if (loadedOrderId) {

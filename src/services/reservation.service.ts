@@ -55,6 +55,13 @@ export interface Reservation {
   totalAmount: number;
   orderId: string | null;
   isAdvanceAdjusted: boolean;
+  // Who took the advance — it sits on their Cash Hub balance until settled (null on older bookings).
+  advanceCollectedById?: string | null;
+  advanceCollectedByName?: string | null;
+  advanceCollectedAt?: string | null;
+  advanceSettlementId?: string | null;
+  // Cancelled with the advance handed back: it left Cash Hub.
+  advanceRefunded?: boolean;
   createdAt: string;
 }
 
@@ -102,7 +109,7 @@ export const reservationService = {
     return res.data;
   },
 
-  async update(id: string, data: Partial<CreateReservationInput & { status: string; isAdvanceAdjusted?: boolean; orderId?: string }>): Promise<Reservation> {
+  async update(id: string, data: Partial<CreateReservationInput & { status: string; isAdvanceAdjusted?: boolean; orderId?: string; advanceRefunded?: boolean }>): Promise<Reservation> {
     const res = await api.put<{ success: boolean; data: Reservation }>(`/reservations/${id}`, data);
     return res.data;
   },

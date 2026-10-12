@@ -81,6 +81,8 @@ export interface OrderRecord {
   isUrgent: boolean;
   customerType: string | null;
   orderSource: string | null;
+  /** The booking whose tracked advance `advancePayment` is — Cash Hub credits that advance to whoever took it. */
+  reservationId?: string | null;
   cashApproved?: boolean;
   /** Set only on a client-side stub returned while offline (see order.service.ts's createOrder).
    *  `orderNumber` is a provisional "OFFLINE-xxxx" label and `id` is a local placeholder — never
@@ -133,6 +135,8 @@ export interface KitchenRecord {
 }
 
 export interface CreateOrderInput {
+  /** A booking whose tracked advance this order carries (the server checks it and takes the amount from it). */
+  reservationId?: string;
   customerName?: string;
   phone?: string;
   customerId?: string;

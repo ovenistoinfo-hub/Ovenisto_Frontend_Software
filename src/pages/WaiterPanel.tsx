@@ -51,7 +51,7 @@ import { stockService, type ProductionStockRecord } from "@/services/stock.servi
 import { calculateFoodAvailability, isFullyOutOfStock } from "@/utils/foodAvailability";
 import { useMealTimes } from "@/hooks/useMealTimes";
 import { isServedAt, servingLabel, pktMinuteNow, formatMealHours } from "@/lib/mealTime";
-import { allocatePaymentToOrders, buildPaymentMethodString, settlePaymentEntries, type PaymentSplit } from "@/lib/paymentSplit";
+import { allocatePaymentToOrders, buildPaymentMethodString, hasOutstandingBalance, planTableAdvance, settlePaymentEntries, type PaymentSplit } from "@/lib/paymentSplit";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
 import { OrderPlacedPrintModal, type PlacedOrderSlipData } from "@/components/pos/OrderPlacedPrintModal";
 
@@ -622,17 +622,9 @@ const WaiterPanel = () => {
     return parts[1] && !isNaN(Number(parts[1])) ? Number(parts[1]) : (t.capacity || 0);
   };
 
-  const isOrderUnpaid = (o: any) => {
-    if (!o.paymentMethod || o.paymentMethod === "Pending" || o.paymentMethod === "Unpaid") return true;
-
-    const total = Number(o.total || 0);
-    const advance = Number(o.advancePayment || 0);
-    const netDue = total - advance;
-    if (advance > 0 && netDue > 0.01 && o.paymentStatus !== "fully_paid") {
-      return true;
-    }
-    return false;
-  };
+  // It used to also call an order with an advance "unpaid" unless `o.paymentStatus === "fully_paid"` —
+  // a field orders don't have, so a booking's order stayed unpaid even after Pay Bill.
+  const isOrderUnpaid = (o: any) => hasOutstandingBalance(o);
 
   const getTableOrders = (tableNum: number) => {
     const t = tables.find((tbl) => Number(tbl.number) === tableNum);
@@ -1897,12 +1889,15 @@ const WaiterPanel = () => {
       const unpaidOrders = activeTableOrders.filter(isOrderUnpaid);
       if (unpaidOrders.length > 0) {
         const isReservationDineIn = Boolean(activeReservationForTable);
+        // A booking advance that no order carries yet goes on one of them, so Cash Hub credits this
+        // waiter only with what they collected — the advance is on whoever took it.
+        const advancePlan = planTableAdvance(
+          unpaidOrders.map((o) => ({ total: Number(o.total || 0), advancePayment: Number(o.advancePayment || 0) })),
+          Number(activeReservationForTable?.advancePaid || 0)
+        );
         // Each order stores its own share of the table's payment. Writing the whole table's string to
         // every order made Cash Hub book the table's amounts once per order.
-        const orderMethods = allocatePaymentToOrders(
-          settled,
-          unpaidOrders.map((o) => Number(o.total || 0) - Number(o.advancePayment || 0))
-        );
+        const orderMethods = allocatePaymentToOrders(settled, advancePlan.dues);
 
         await Promise.all(
           unpaidOrders.map((o, i) => {
@@ -1910,7 +1905,12 @@ const WaiterPanel = () => {
             const mLower = orderMethod.toLowerCase();
             const isCashMethod = mLower.includes("cash") && !mLower.includes("jazz") && !mLower.includes("easy") && !mLower.includes("online") && !mLower.includes("card") && !mLower.includes("mobile") && !mLower.includes("paisa");
             const shouldBeApproved = !isCashMethod || isReservationDineIn;
-            return orderService.updateOrder(o.id, { paymentMethod: orderMethod, cashApproved: shouldBeApproved });
+            const carriesAdvance = i === advancePlan.targetIndex && activeReservationForTable;
+            return orderService.updateOrder(o.id, {
+              paymentMethod: orderMethod,
+              cashApproved: shouldBeApproved,
+              ...(carriesAdvance ? { reservationId: activeReservationForTable.id } : {}),
+            });
           })
         );
         await loadOrders();

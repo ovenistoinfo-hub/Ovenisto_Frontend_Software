@@ -178,6 +178,22 @@ plus a body explaining _why_ the change was made when that is not obvious.
   (overpay included) to **every** unpaid order on the table, so a two-order table booked its amounts twice;
   `allocatePaymentToOrders(settled, orderDues)` now gives each order its own share (tested). A new payment
   screen must use these helpers rather than joining its rows itself.
+- **A reservation advance belongs to whoever took it** (2026-10-12, owner; backend CLAUDE.md "Reservation
+  advances in Cash Hub" has the server rules). The backend stamps the collector when the booking is saved, and
+  Cash Hub shows the advance on their balance as a **"Reservation Advance"** line (`CashHub.tsx` channel badge)
+  until settled. So an order paying off a booking must carry `reservationId`, and the settling cashier/waiter is
+  credited only with total − advance:
+  - POS `createOrder` for a loaded booking sends `reservationId` (not on an edit of an existing order). Its shift
+    register applies the same rule: with `reservationId` it counts only the `Net (…)` parts (`parseNetParts`).
+  - Waiter Pay Bill: `planTableAdvance(orders, advance)` picks the one unpaid order that carries the table
+    booking's advance (sent as `updateOrder({ reservationId })`) and gives every order its due for
+    `allocatePaymentToOrders` (tested). Its "unpaid" check is `hasOutstandingBalance` — it used to read a
+    `paymentStatus` field orders don't have.
+  - Reservations: cancelling a booking with an advance opens a dialog — **Refunded** (`advanceRefunded: true`,
+    the line leaves Cash Hub) or **Not refunded** (stays until settled); an advance already handed over can only
+    be cancelled, not refunded. The advance badge shows "taken by NAME", "Refunded" or "Handed over in Cash Hub".
+    The backend refuses deleting a booking with an open advance and changing a settled/linked amount; the
+    mutations toast its message.
 
 - **`SelfOrder.tsx`'s per-device `localStorage` never reflects another device's state.** A
   promoted/fresh host's local `orders`/session data starts empty regardless of what other

@@ -132,6 +132,8 @@ const Reservations = () => {
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  // A booking with an advance waiting for the "was it refunded?" answer before it is cancelled.
+  const [cancelTarget, setCancelTarget] = useState<Reservation | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm());
 
   // Food Menu Selection Modal State
@@ -321,7 +323,7 @@ const Reservations = () => {
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: Partial<CreateReservationInput & { status: string }> }) =>
+    mutationFn: ({ id, data }: { id: string; data: Partial<CreateReservationInput & { status: string; advanceRefunded?: boolean }> }) =>
       reservationService.update(id, data),
     onSuccess: () => {
       markMine();
@@ -329,7 +331,7 @@ const Reservations = () => {
       toast.success("Updated successfully");
       setShowForm(false);
     },
-    onError: () => toast.error("Failed to update"),
+    onError: (err: unknown) => toast.error(err instanceof Error && err.message ? err.message : "Failed to update"),
   });
 
   const deleteMutation = useMutation({
@@ -340,7 +342,10 @@ const Reservations = () => {
       toast.success("Deleted successfully");
       setDeleteId(null);
     },
-    onError: () => toast.error("Failed to delete"),
+    onError: (err: unknown) => {
+      toast.error(err instanceof Error && err.message ? err.message : "Failed to delete");
+      setDeleteId(null);
+    },
   });
 
   const convertMutation = useMutation({
@@ -360,9 +365,17 @@ const Reservations = () => {
     onError: (err: any) => toast.error(err?.message || "Failed to convert to active order"),
   });
 
-  const changeStatus = (id: string, status: string) => {
+  // Cancelling a booking that took an advance first asks whether it was given back (see the dialog).
+  const changeStatus = (id: string, status: string, advanceRefunded?: boolean) => {
+    if (status === "cancelled" && advanceRefunded === undefined) {
+      const booking = reservations.find((r) => r.id === id);
+      if (booking && (booking.advancePaid || 0) > 0) {
+        setCancelTarget(booking);
+        return;
+      }
+    }
     updateMutation.mutate(
-      { id, data: { status } },
+      { id, data: { status, ...(advanceRefunded !== undefined ? { advanceRefunded } : {}) } },
       {
         onSuccess: () => {
           if (status === "confirmed") {
@@ -1808,7 +1821,12 @@ const Reservations = () => {
                           <Badge className="bg-emerald-500/15 text-emerald-500 border-emerald-500/30 text-xs font-bold flex items-center gap-1 w-fit">
                             <Check className="h-3 w-3" /> PKR {r.advancePaid.toLocaleString()}
                           </Badge>
-                          <p className="text-[10px] text-muted-foreground">via {r.paymentMethod || "Cash"}</p>
+                          <p className="text-[10px] text-muted-foreground">
+                            via {r.paymentMethod || "Cash"}
+                            {r.advanceCollectedByName ? ` · taken by ${r.advanceCollectedByName}` : ""}
+                          </p>
+                          {r.advanceRefunded && <p className="text-[10px] text-muted-foreground">Refunded</p>}
+                          {r.advanceSettlementId && <p className="text-[10px] text-muted-foreground">Handed over in Cash Hub</p>}
                         </div>
                       ) : (
                         <span className="text-xs text-muted-foreground">No Deposit</span>
@@ -2415,6 +2433,61 @@ const Reservations = () => {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={() => deleteId && deleteMutation.mutate(deleteId)} className="bg-destructive text-destructive-foreground">Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Cancelling a booking that took an advance: was it given back? Refunded → it leaves Cash Hub;
+          kept → it stays on the balance of whoever took it until settled. */}
+      <AlertDialog open={!!cancelTarget} onOpenChange={(open) => { if (!open) setCancelTarget(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Cancel this booking?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              {cancelTarget?.advanceSettlementId ? (
+                <p>
+                  The PKR {(cancelTarget.advancePaid || 0).toLocaleString()} advance was already handed over in Cash Hub.
+                  If you give it back, record the refund as an expense.
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  <p>
+                    {cancelTarget?.customerName} paid a PKR {(cancelTarget?.advancePaid || 0).toLocaleString()} advance
+                    {cancelTarget?.paymentMethod ? ` by ${cancelTarget.paymentMethod}` : ""}
+                    {cancelTarget?.advanceCollectedByName ? `, taken by ${cancelTarget.advanceCollectedByName}` : ""}. Was it given back?
+                  </p>
+                  <p className="text-xs">
+                    Refunded: it comes off their Cash Hub balance. Not refunded: it stays on their balance until it is settled.
+                  </p>
+                </div>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="gap-2 sm:gap-2">
+            <AlertDialogCancel>Keep booking</AlertDialogCancel>
+            {cancelTarget?.advanceSettlementId ? (
+              <AlertDialogAction
+                onClick={() => { if (cancelTarget) changeStatus(cancelTarget.id, "cancelled", false); setCancelTarget(null); }}
+                className="bg-destructive text-destructive-foreground"
+              >
+                Cancel booking
+              </AlertDialogAction>
+            ) : (
+              <>
+                <AlertDialogAction
+                  onClick={() => { if (cancelTarget) changeStatus(cancelTarget.id, "cancelled", false); setCancelTarget(null); }}
+                  className="bg-background text-foreground border border-input hover:bg-muted"
+                >
+                  Not refunded
+                </AlertDialogAction>
+                <AlertDialogAction
+                  onClick={() => { if (cancelTarget) changeStatus(cancelTarget.id, "cancelled", true); setCancelTarget(null); }}
+                  className="bg-destructive text-destructive-foreground"
+                >
+                  Refunded
+                </AlertDialogAction>
+              </>
+            )}
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

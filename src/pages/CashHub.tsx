@@ -21,6 +21,7 @@ import {
   QrCode,
   Bike,
   Globe,
+  CalendarCheck,
   type LucideIcon,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -107,7 +108,7 @@ const DiffBadge = ({
   );
 };
 
-// The five cash-collection channels a balance order can come from. Each has its own icon,
+// The six cash-collection channels a balance order can come from. Each has its own icon,
 // label text and token color so they read apart without relying on color alone.
 const CHANNEL_STYLES: Record<string, { Icon: LucideIcon; className: string }> = {
   "POS Counter": { Icon: Store, className: "bg-primary/10 text-primary border-primary/30" },
@@ -115,6 +116,7 @@ const CHANNEL_STYLES: Record<string, { Icon: LucideIcon; className: string }> = 
   "Self-Order (QR)": { Icon: QrCode, className: "bg-warning/10 text-warning border-warning/30" },
   "Delivery Rider (COD)": { Icon: Bike, className: "bg-success/10 text-success border-success/30" },
   "Website Pickup": { Icon: Globe, className: "bg-muted text-foreground border-border" },
+  "Reservation Advance": { Icon: CalendarCheck, className: "bg-muted text-foreground border-border" },
 };
 
 const CashHub = () => {
@@ -1098,7 +1100,7 @@ const CashHub = () => {
                       return (
                         <TableRow key={ord.id || idx}>
                           <TableCell className="font-mono text-xs font-semibold">
-                            #{ord.orderNo || ord.orderNumber || ord.id?.substring(0, 8)}
+                            {channelLabel === "Reservation Advance" ? "" : "#"}{ord.orderNo || ord.orderNumber || ord.id?.substring(0, 8)}
                           </TableCell>
                           <TableCell className="text-xs">
                             <Badge
@@ -1249,7 +1251,7 @@ const CashHub = () => {
                         {viewHistoryRecord.orders.map((ord: any, idx: number) => (
                           <TableRow key={ord.id || idx}>
                             <TableCell className="font-mono text-xs font-semibold">
-                              #{ord.orderNumber || ord.orderNo || ord.id?.substring(0, 8)}
+                              {ord.type === "Reservation Advance" ? "" : "#"}{ord.orderNumber || ord.orderNo || ord.id?.substring(0, 8)}
                             </TableCell>
                             <TableCell className="text-xs">
                               <Badge variant="outline" className="text-[10px] uppercase font-bold">

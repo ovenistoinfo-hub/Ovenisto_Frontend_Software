@@ -85,3 +85,64 @@ export function allocatePaymentToOrders(settled: PaymentSplit[], orderDues: numb
     return parts.length > 0 ? buildPaymentMethodString(parts) : pool[0].method;
   });
 }
+
+/**
+ * Waiter Panel: a table whose booking took an advance. The advance lowers the bill, and it has to sit
+ * on one order (`updateOrder({ reservationId })`) so Cash Hub credits the waiter only with the rest —
+ * the advance is on whoever took it. That's the last order big enough to hold it (else the largest).
+ * When an order already carries an advance (a converted booking), nothing moves. `dues` = what each
+ * order still needs from the table's payment.
+ */
+export function planTableAdvance(
+  orders: { total: number; advancePayment?: number | null }[],
+  reservationAdvance: number
+): { targetIndex: number | null; dues: number[] } {
+  const totals = orders.map((o) => roundedPart(o.total));
+  if (orders.some((o) => Number(o.advancePayment || 0) > 0)) {
+    return { targetIndex: null, dues: orders.map((o, i) => Math.max(0, totals[i] - roundedPart(Number(o.advancePayment || 0)))) };
+  }
+  const advance = roundedPart(reservationAdvance);
+  if (advance === 0 || orders.length === 0) return { targetIndex: null, dues: totals };
+
+  let targetIndex = -1;
+  for (let i = totals.length - 1; i >= 0; i--) {
+    if (totals[i] >= advance) { targetIndex = i; break; }
+  }
+  if (targetIndex === -1) {
+    targetIndex = totals.reduce((best, t, i) => (t > totals[best] ? i : best), 0);
+  }
+  const dues = [...totals];
+  dues[targetIndex] = Math.max(0, totals[targetIndex] - advance);
+  return { targetIndex, dues };
+}
+
+/**
+ * Does this order still owe money? Nothing recorded (empty / Pending / Unpaid), or only an advance
+ * recorded ("Advance (X): Rs.A") with the rest still due. An order that carries an advance and was then
+ * paid ("Cash", or "Advance (…), Net (…)") is settled.
+ */
+export function hasOutstandingBalance(o: { paymentMethod?: string | null; total: number; advancePayment?: number | null }): boolean {
+  const pm = (o.paymentMethod ?? "").trim().toLowerCase();
+  if (pm === "" || pm === "pending" || pm === "unpaid") return true;
+  const advance = Number(o.advancePayment || 0);
+  const advanceOnly = /^advance\s*\(/.test(pm) && !/net\s*\(|cod balance\s*\(/.test(pm);
+  return advance > 0 && Number(o.total || 0) - advance > 0.01 && advanceOnly;
+}
+
+/** The "Net (method): Rs.X" parts of an advance string — what was paid after the advance (mirrors the backend). */
+export function parseNetParts(pm: string | null | undefined): PaymentSplit[] {
+  const parts: PaymentSplit[] = [];
+  const re = /Net\s*\(([^)]+)\)\s*:\s*(?:Rs\.?|PKR)?\s*([\d,]+(?:\.\d+)?)/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(pm ?? "")) !== null) {
+    const amount = parseFloat(m[2].replace(/,/g, ""));
+    if (amount > 0) parts.push({ method: m[1].trim(), amount });
+  }
+  return parts;
+}
+
+/** The method an advance was paid in ("Advance (JazzCash): Rs.507" → "JazzCash"); else the string itself. */
+export function advanceMethodOf(pm: string): string {
+  const m = pm.match(/Advance\s*\(([^):,]+)/i);
+  return m ? m[1].trim() : pm;
+}
