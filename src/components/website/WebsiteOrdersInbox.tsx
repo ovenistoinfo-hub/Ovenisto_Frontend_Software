@@ -4,11 +4,14 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { Globe, Loader2, Check, Clock, Phone, MapPin, Navigation, ArrowUpRight, LocateFixed, ShoppingBag, Truck, Gift, X, Inbox } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Globe, Loader2, Check, Clock, Phone, MapPin, Navigation, ArrowUpRight, LocateFixed, ShoppingBag, Truck, Gift, X, Inbox, CreditCard, RotateCcw } from 'lucide-react';
 import { orderMapsUrl, hasLivePoint } from '@/lib/maps';
 import { cn } from '@/lib/utils';
 import { useWebsiteOrders } from '@/hooks/useWebsiteOrders';
 import { orderService, type OrderRecord, type OrderItemRecord } from '@/services/order.service';
+import { paymentService, type RefundDue } from '@/services/payment.service';
+import { isPaidOnline, REFUND_REASON_LABEL } from '@/lib/onlinePayment';
 import { useData } from '@/contexts/DataContext';
 import { toast } from 'sonner';
 
@@ -38,7 +41,7 @@ const errorText = (err: unknown, fallback: string) => (err instanceof Error && e
  * Accepting sends the order to the kitchen and onto the board; payment for a pickup is collected on its board card.
  */
 export function WebsiteOrdersInbox({ onClose }: { onClose?: () => void }) {
-  const { pending, isLoading, refresh } = useWebsiteOrders();
+  const { pending, refundsDue, isLoading, refresh } = useWebsiteOrders();
   const { settings } = useData();
   const cur = settings?.currency ?? 'Rs.';
 
@@ -46,6 +49,24 @@ export function WebsiteOrdersInbox({ onClose }: { onClose?: () => void }) {
   const [rejectTarget, setRejectTarget] = useState<OrderRecord | null>(null);
   const [rejectReason, setRejectReason] = useState('');
   const [rejecting, setRejecting] = useState(false);
+  const [refundTarget, setRefundTarget] = useState<RefundDue | null>(null);
+  const [refundRef, setRefundRef] = useState('');
+  const [refunding, setRefunding] = useState(false);
+
+  const handleMarkRefunded = async () => {
+    if (!refundTarget) return;
+    try {
+      setRefunding(true);
+      await paymentService.markRefunded(refundTarget.paymentId, refundRef.trim() || undefined);
+      toast.success(`Refund recorded for #${refundTarget.orderNumber}`);
+      setRefundTarget(null);
+      refresh();
+    } catch (err: unknown) {
+      toast.error(errorText(err, 'Failed to record the refund'));
+    } finally {
+      setRefunding(false);
+    }
+  };
 
   const handleAccept = async (order: OrderRecord) => {
     try {
@@ -99,6 +120,11 @@ export function WebsiteOrdersInbox({ onClose }: { onClose?: () => void }) {
               <span className="inline-flex items-center gap-1 rounded-md border border-border bg-muted px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-foreground">
                 <TypeIcon className="h-3 w-3 text-primary" /> {isDelivery ? 'Delivery' : 'Pickup'}
               </span>
+              {isPaidOnline(o) && (
+                <span className="inline-flex items-center gap-1 rounded-md border border-primary/20 bg-primary/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-primary">
+                  <CreditCard className="h-3 w-3" /> Paid online
+                </span>
+              )}
             </div>
             <p className={cn('mt-1 flex items-center gap-1 text-xs font-semibold', late ? 'text-destructive' : 'text-muted-foreground')}>
               <Clock className="h-3 w-3" /> Waiting {formatWait(mins)}
@@ -237,6 +263,34 @@ export function WebsiteOrdersInbox({ onClose }: { onClose?: () => void }) {
       </div>
 
       <div className="flex-1 overflow-y-auto p-3 sm:p-4">
+        {refundsDue.length > 0 && (
+          <div className="mb-4 rounded-xl border border-destructive/30 bg-destructive/5 p-3">
+            <p className="flex items-center gap-2 text-sm font-extrabold text-foreground">
+              <RotateCcw className="h-4 w-4 text-destructive" /> Refunds due ({refundsDue.length})
+            </p>
+            <p className="mb-3 mt-0.5 text-xs text-muted-foreground">Refund each one from the Safepay dashboard, then mark it here.</p>
+            <ul className="space-y-2">
+              {refundsDue.map((r) => (
+                <li key={r.paymentId} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/60 bg-background px-3 py-2">
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-foreground">
+                      #{r.orderNumber} · {r.customerName || 'Guest'}{r.phone ? ` · ${r.phone}` : ''}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {REFUND_REASON_LABEL[r.reason]} · paid {cur} {r.paid.toLocaleString()} · Safepay {r.tracker}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-sm font-black text-destructive">{cur} {r.due.toLocaleString()}</span>
+                    <Button size="sm" variant="outline" className="h-8 rounded-lg text-xs font-semibold" onClick={() => { setRefundTarget(r); setRefundRef(''); }}>
+                      Mark refunded
+                    </Button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
         {isLoading && orders.length === 0 ? (
           <div className="flex h-full items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
         ) : orders.length === 0 ? (
@@ -259,6 +313,11 @@ export function WebsiteOrdersInbox({ onClose }: { onClose?: () => void }) {
           <DialogHeader>
             <DialogTitle>Decline order{rejectTarget ? ` #${rejectTarget.orderNumber}` : ''}?</DialogTitle>
             <DialogDescription>The guest will be told their order was declined. A reason is optional.</DialogDescription>
+            {rejectTarget && isPaidOnline(rejectTarget) && (
+              <p className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs font-semibold text-foreground">
+                Paid online ({cur} {rejectTarget.total.toLocaleString()}). After declining, refund it from the Safepay dashboard, then mark it under Refunds due.
+              </p>
+            )}
           </DialogHeader>
           <div className="space-y-2 py-1">
             <Label htmlFor="decline-reason" className="text-xs font-semibold">Reason for declining (optional)</Label>
@@ -277,6 +336,27 @@ export function WebsiteOrdersInbox({ onClose }: { onClose?: () => void }) {
             <Button variant="outline" onClick={() => setRejectTarget(null)} disabled={rejecting} className="h-10 flex-1 rounded-xl">Cancel</Button>
             <Button variant="destructive" onClick={handleReject} disabled={rejecting} className="h-10 flex-1 rounded-xl font-bold">
               {rejecting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Decline'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={refundTarget !== null} onOpenChange={(open) => { if (!open && !refunding) setRefundTarget(null); }}>
+        <DialogContent className="w-[90vw] max-w-[420px] rounded-2xl">
+          <DialogHeader>
+            <DialogTitle>Mark refunded{refundTarget ? ` · #${refundTarget.orderNumber}` : ''}</DialogTitle>
+            <DialogDescription>
+              Confirm you refunded {cur} {refundTarget?.due.toLocaleString()} from the Safepay dashboard.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 py-1">
+            <Label htmlFor="refund-ref" className="text-xs font-semibold">Safepay refund reference (optional)</Label>
+            <Input id="refund-ref" value={refundRef} onChange={(e) => setRefundRef(e.target.value)} maxLength={100} disabled={refunding} className="rounded-xl" />
+          </div>
+          <DialogFooter className="flex gap-2">
+            <Button variant="outline" onClick={() => setRefundTarget(null)} disabled={refunding} className="h-10 flex-1 rounded-xl">Cancel</Button>
+            <Button onClick={handleMarkRefunded} disabled={refunding} className="h-10 flex-1 rounded-xl font-bold">
+              {refunding ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Mark refunded'}
             </Button>
           </DialogFooter>
         </DialogContent>

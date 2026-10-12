@@ -15,6 +15,7 @@ function invalidateCacheForEvents(eventsList: string[]): void {
       // MUTATION_DEPENDENCIES never sees it) — staff clients only learn about
       // it via this push event, so the customers cache must invalidate here too.
       api.clearCache("/orders");
+      api.clearCache("/payments");
       api.clearCache("/customers");
       api.clearCache("/reports");
     } else if (evt.startsWith("order:")) {
@@ -28,6 +29,7 @@ function invalidateCacheForEvents(eventsList: string[]): void {
       // (e.g. Order Monitor's Complete Order) only emit "order:updated", not
       // "order:created", so this must be cleared in this branch too, not just above.
       api.clearCache("/orders");
+      api.clearCache("/payments");
       api.clearCache("/reports");
       api.clearCache("/delivery/dashboard");
       api.clearCache("/delivery/my-assignments");
