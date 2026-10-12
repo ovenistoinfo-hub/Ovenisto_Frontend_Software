@@ -55,6 +55,8 @@ import { getRiderCollectAmount } from "@/utils/deliveryPayment";
 import { dealService, type DealRecord, type DealOptionItemRecord } from "@/services/deal.service";
 import { isDealLive, isDealAvailableForChannel, dealChannelPrice, dealChannelPercent, allocateDealDiscount, dealBogoSides, dealBogoSideMode, dealBogoOptionGroups, capFreeUnitPrice, type DealOptionItemForBogo } from "@/lib/deals";
 import { OrderPlacedPrintModal, type PlacedOrderSlipData } from "@/components/pos/OrderPlacedPrintModal";
+import { WebsitePickupPaymentDialog, type PickupPaymentOrder } from "@/components/pos/WebsitePickupPaymentDialog";
+import { isCollectablePickup } from "@/lib/websitePickup";
 import { useMealTimes } from "@/hooks/useMealTimes";
 import { isServedAt, servingLabel, pktMinuteNow, formatMealHours } from "@/lib/mealTime";
 
@@ -583,7 +585,11 @@ const POS = () => {
 
   // Drafts
   const [drafts, setDrafts] = useState<DraftOrder[]>([]);
-  const [showDrafts, setShowDrafts] = useState(false);
+  const [sidebarTab, setSidebarTab] = useState<"running" | "pickups" | "drafts">("running");
+  // The website pickup whose payment is being taken (WebsitePickupPaymentDialog); null = closed.
+  const [payingPickup, setPayingPickup] = useState<PickupPaymentOrder | null>(null);
+  // Opens the slip modal straight on the bill after a pickup payment, instead of its KOT/Bill grid.
+  const [slipDirectMode, setSlipDirectMode] = useState<"bill" | undefined>(undefined);
 
   // Quick Tags
   const [activeTag, setActiveTag] = useState<string | null>(null);
@@ -1242,6 +1248,17 @@ const POS = () => {
   const runningOrders = useMemo(() => {
     return allOrdersData.filter((o) => (o.status === "preparing" || o.status === "pending") && isPosOrder(o));
   }, [allOrdersData, isPosOrder]);
+
+  // Website pickups waiting to be paid at this counter (accepted, open, unpaid), newest first.
+  const pickupOrders = useMemo(
+    () => allOrdersData
+      .filter((o) => isCollectablePickup(o))
+      .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()),
+    [allOrdersData]
+  );
+  const pickupPaymentMethods: string[] = effectiveSettings?.paymentMethods?.length
+    ? effectiveSettings.paymentMethods
+    : ["Cash"];
 
   // Load tables from backend
   const loadTables = useCallback(() => {
@@ -2300,7 +2317,7 @@ const POS = () => {
     setOrderType(draft.orderType);
     setTableNumber(draft.tableNumber || null);
     setDeliveryAddress(draft.deliveryAddress || "");
-    setShowDrafts(false);
+    setSidebarTab("running");
     setDrafts((p) => p.filter((d) => d.id !== draft.id));
   };
 
@@ -2831,6 +2848,21 @@ const POS = () => {
     setShowOrderPlacedModal(true);
   };
 
+  const handlePickupCollected = (order: PickupPaymentOrder, paymentMethod: string) => {
+    setPayingPickup(null);
+    loadApiOrders();
+    setSlipDirectMode("bill");
+    // `order` is the full normalized POS row (type/date/time/etc. ride along); the bill names the
+    // cashier who took the money, not the manager who approved the order online.
+    handleOpenOrderSlip({ ...order, paymentMethod, staff: user?.name ?? "" });
+  };
+
+  const pickupCountBadge = pickupOrders.length > 0 ? (
+    <span className="absolute -top-1 -right-1 min-w-4 h-4 px-1 rounded-full bg-primary text-primary-foreground text-[9px] font-bold flex items-center justify-center">
+      {pickupOrders.length}
+    </span>
+  ) : null;
+
   if (user?.role === "Super Admin") {
     return (
       <div className="flex flex-col items-center justify-center min-h-[400px] text-center p-6 space-y-3">
@@ -2845,7 +2877,7 @@ const POS = () => {
 
   return (
     <div className="fixed inset-0 z-50 bg-background flex overflow-hidden print:static print:z-auto print:block">
-      {/* LEFT: Running Orders / Drafts — hidden on <xl, toggle via button */}
+      {/* LEFT: Running Orders / Website Pickups / Drafts — hidden on <xl, toggle via button */}
       {showLeftSidebar && (
         <div className="fixed inset-0 z-40 bg-black/40 xl:hidden" onClick={() => setShowLeftSidebar(false)} />
       )}
@@ -2878,15 +2910,16 @@ const POS = () => {
 
         {/* Tabs */}
         <div className="p-2.5 border-b border-border/60">
-          <Tabs value={showDrafts ? "drafts" : "running"} onValueChange={(v) => setShowDrafts(v === "drafts")}>
+          <Tabs value={sidebarTab} onValueChange={(v) => setSidebarTab(v as "running" | "pickups" | "drafts")}>
             <TabsList className="w-full h-8 bg-muted/60 rounded-lg">
-              <TabsTrigger value="running" className="text-xs flex-1 rounded-md data-[state=active]:shadow-sm">Running ({runningOrders.length})</TabsTrigger>
-              <TabsTrigger value="drafts" className="text-xs flex-1 rounded-md data-[state=active]:shadow-sm">Drafts ({drafts.length})</TabsTrigger>
+              <TabsTrigger value="running" className="text-[11px] px-1 flex-1 rounded-md data-[state=active]:shadow-sm">Running ({runningOrders.length})</TabsTrigger>
+              <TabsTrigger value="pickups" className="text-[11px] px-1 flex-1 rounded-md data-[state=active]:shadow-sm">Pickups ({pickupOrders.length})</TabsTrigger>
+              <TabsTrigger value="drafts" className="text-[11px] px-1 flex-1 rounded-md data-[state=active]:shadow-sm">Drafts ({drafts.length})</TabsTrigger>
             </TabsList>
           </Tabs>
         </div>
         <div className="flex-1 overflow-y-auto p-2.5 space-y-2">
-            {showDrafts ? (
+            {sidebarTab === "drafts" ? (
               drafts.length === 0 ? (
                 <div className="text-center py-8">
                   <FileText className="h-8 w-8 mx-auto text-muted-foreground/30 mb-2" />
@@ -2905,6 +2938,40 @@ const POS = () => {
                     </div>
                   </Card>
                 ))
+              )
+            ) : sidebarTab === "pickups" ? (
+              pickupOrders.length === 0 ? (
+                <div className="text-center py-8">
+                  <ShoppingBag className="h-8 w-8 mx-auto text-muted-foreground/30 mb-2" />
+                  <p className="text-xs text-muted-foreground">No website pickups to collect</p>
+                </div>
+              ) : (
+                pickupOrders.map((o) => {
+                  const stage = (o.status === "ready" || o.status === "preparing" ? o.status : "pending") as "pending" | "preparing" | "ready";
+                  return (
+                    <button
+                      key={o.id}
+                      type="button"
+                      onClick={() => setPayingPickup(o)}
+                      className="w-full text-left p-2.5 rounded-2xl border border-border/60 bg-muted/20 hover:bg-muted/40 hover:border-border/90 transition-all duration-200 text-xs space-y-2 shadow-2xs"
+                    >
+                      <div className="flex items-center justify-between gap-1">
+                        <span className="font-mono font-black text-xs tracking-tight text-foreground">#{o.orderNumber}</span>
+                        <span className={cn("text-[9px] px-1.5 py-0.5 rounded-full capitalize font-bold", statusTone(stage).badge)}>{stage}</span>
+                      </div>
+                      <div className="flex items-center justify-between gap-1 text-[11px]">
+                        <span className="truncate font-medium text-foreground">{o.customer || "Walk-in"}</span>
+                        {o.phone && <span className="font-mono text-muted-foreground shrink-0">{o.phone}</span>}
+                      </div>
+                      <div className="flex items-center justify-between pt-1 border-t border-border/40 text-[10px]">
+                        <span className="font-mono font-bold text-foreground">Rs. {Number(o.total || 0).toLocaleString()}</span>
+                        <span className="flex items-center gap-1 font-semibold text-primary">
+                          <Banknote className="h-3 w-3" /> Collect
+                        </span>
+                      </div>
+                    </button>
+                  );
+                })
               )
             ) : (
               runningOrders.length === 0 ? (
@@ -3002,8 +3069,9 @@ const POS = () => {
           {/* Mobile Cart Header (xl:hidden) */}
           <div className="px-2.5 py-2 border-b border-border/60 bg-card/70 flex items-center justify-between xl:hidden shrink-0">
             <div className="flex items-center gap-2">
-              <Button variant="outline" size="icon" className="h-8 w-8 rounded-lg" onClick={() => setShowLeftSidebar(!showLeftSidebar)}>
+              <Button variant="outline" size="icon" className="h-8 w-8 rounded-lg relative" onClick={() => setShowLeftSidebar(!showLeftSidebar)}>
                 <ClipboardList className="h-3.5 w-3.5" />
+                {pickupCountBadge}
               </Button>
               <span className="font-bold text-xs">Current Order</span>
             </div>
@@ -3523,8 +3591,9 @@ const POS = () => {
 
             {/* Mobile: sidebar + cart toggles (hidden on xl) */}
             <div className="flex items-center gap-1.5 xl:hidden mr-1">
-              <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg text-muted-foreground hover:text-foreground" onClick={() => setShowLeftSidebar(!showLeftSidebar)}>
+              <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg text-muted-foreground hover:text-foreground relative" onClick={() => setShowLeftSidebar(!showLeftSidebar)}>
                 <ClipboardList className="h-4 w-4" />
+                {pickupCountBadge}
               </Button>
               <Button variant="ghost" size="sm" className="h-8 text-xs rounded-lg px-2 relative text-muted-foreground hover:text-foreground gap-1.5" onClick={() => setMobileView("cart")}>
                 <ShoppingCart className="h-3.5 w-3.5" />
@@ -4760,8 +4829,20 @@ const POS = () => {
       {/* Order Placed Print Options & Thermal Preview Modal */}
       <OrderPlacedPrintModal
         open={showOrderPlacedModal}
-        onOpenChange={setShowOrderPlacedModal}
+        onOpenChange={(open) => {
+          setShowOrderPlacedModal(open);
+          if (!open) setSlipDirectMode(undefined);
+        }}
         slipData={placedOrderSlip}
+        directMode={slipDirectMode}
+      />
+
+      <WebsitePickupPaymentDialog
+        order={payingPickup}
+        paymentMethods={pickupPaymentMethods}
+        onOpenChange={(open) => { if (!open) setPayingPickup(null); }}
+        onBeforeWrite={markMine}
+        onDone={handlePickupCollected}
       />
 
       {/* KOT Dialog */}
