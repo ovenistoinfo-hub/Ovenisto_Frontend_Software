@@ -928,9 +928,13 @@ Orders placed on the public website arrive as Delivery / Take Away orders with
 - **Website pickup payment is taken on POS (2026-10-12, owner).** POS's left sidebar has a **Pickups (N)** tab
   (count also on both sidebar toggle buttons) listing `lib/websitePickup.ts` `isCollectablePickup` orders:
   website + Take Away + accepted + open + payment missing/`Pending`/`Unpaid` (tested). A row opens
-  `components/pos/WebsitePickupPaymentDialog.tsx` (tested): the order's STORED lines/subtotal/discount/tax/total
-  (never re-derived — the website priced it server-side), method buttons from `settings.paymentMethods`, an
-  optional split (`Cash: Rs.900, JazzCash: Rs.779`, `buildPaymentMethodString`), cash received → change.
+  `components/pos/WebsitePickupPaymentDialog.tsx` (tested), built as a copy of POS's Finalize Sale "Payment
+  Checkout" form (owner, 2026-10-12: the same form as POS / Waiter Panel): left the order's STORED
+  lines/subtotal/discount/tax/total (never re-derived — the website priced it server-side; deal lines grouped by
+  `groupPickupLines`, which also drops the server's `"<deal>: "` name prefix), right the method chips + amount +
+  Add + added rows + Total Settled + Change Return, with POS's own icons. The stored string comes from
+  `settledPaymentMethod(entries, total)` (tested): one method → its name; a split → `Cash: Rs.908, JazzCash:
+  Rs.600` with the change taken off the cash part, because the backend books split amounts as written.
   Confirm = `updateOrder({ paymentMethod })` (the backend re-stamps `staffId` to the cashier, so the cash lands
   on their Cash Hub balance as channel "Website Pickup" and in their shift), then, only when the order is
   `ready`, `updateOrderStatus('completed')` ("Collect & Hand Over"); then the bill preview (`directMode="bill"`).

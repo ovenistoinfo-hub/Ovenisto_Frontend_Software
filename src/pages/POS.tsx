@@ -4840,6 +4840,7 @@ const POS = () => {
       <WebsitePickupPaymentDialog
         order={payingPickup}
         paymentMethods={pickupPaymentMethods}
+        taxPercent={effectiveSettings?.taxRate ?? 16}
         onOpenChange={(open) => { if (!open) setPayingPickup(null); }}
         onBeforeWrite={markMine}
         onDone={handlePickupCollected}
