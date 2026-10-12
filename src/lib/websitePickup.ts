@@ -23,57 +23,6 @@ export function isCollectablePickup(o: PickupLike): boolean {
   return isUnpaidWebsitePickup(o) && !isAwaitingAcceptance(o) && o.status !== "cancelled" && o.status !== "completed";
 }
 
-export interface PaymentSplit {
-  method: string;
-  amount: number;
-}
-
-const roundedPart = (amount: number) => Math.max(0, Math.round(Number.isFinite(amount) ? amount : 0));
-
-export function splitTotal(splits: PaymentSplit[]): number {
-  return splits.reduce((sum, p) => sum + roundedPart(p.amount), 0);
-}
-
-/** "Cash" for one method, "Cash: Rs.900, JazzCash: Rs.779" for a split — the string a POS sale stores. */
-export function buildPaymentMethodString(splits: PaymentSplit[]): string {
-  const used = splits.map((p) => ({ method: p.method, amount: roundedPart(p.amount) })).filter((p) => p.amount > 0);
-  if (used.length === 1) return used[0].method;
-  return used.map((p) => `${p.method}: Rs.${p.amount}`).join(", ");
-}
-
-export function changeDue(given: number, total: number): number {
-  return Math.max(0, Math.round((Number.isFinite(given) ? given : 0) - total));
-}
-
-/**
- * The payment string for what the cashier added on the payment form (same rows as POS's Finalize Sale:
- * method + amount, Add). The backend books split amounts exactly as written, so they must add up to the
- * total: change handed back comes off the cash part first, then off the last non-cash part. One method
- * used → just its name ("Cash"), as a single-method POS sale stores it.
- */
-export function settledPaymentMethod(entries: PaymentSplit[], due: number): string {
-  const merged: PaymentSplit[] = [];
-  for (const e of entries) {
-    const amount = roundedPart(e.amount);
-    if (amount === 0) continue;
-    const same = merged.find((m) => m.method === e.method);
-    if (same) same.amount += amount;
-    else merged.push({ method: e.method, amount });
-  }
-  let change = splitTotal(merged) - Math.round(due);
-  if (change > 0) {
-    const isCash = (m: PaymentSplit) => m.method.trim().toLowerCase() === "cash";
-    const giveBackFrom = [...merged.filter(isCash), ...merged.filter((m) => !isCash(m)).reverse()];
-    for (const m of giveBackFrom) {
-      const take = Math.min(m.amount, change);
-      m.amount -= take;
-      change -= take;
-      if (change <= 0) break;
-    }
-  }
-  return buildPaymentMethodString(merged);
-}
-
 export interface PickupLine {
   id?: string;
   name: string;

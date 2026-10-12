@@ -168,6 +168,16 @@ plus a body explaining _why_ the change was made when that is not obvious.
   and keep sending `discount` = the manual staff discount only — the server adds the deal on top, so
   pre-adding it double-counts. Any bill or receipt that re-derives `subtotal + tax` instead of reading
   the order's stored `discount`/`total` will disagree with what was charged.
+- **Every "Payment Checkout" form writes `Order.paymentMethod` through `lib/paymentSplit.ts`** (2026-10-12) —
+  POS Finalize Sale, Waiter Panel Pay Bill and the website pickup form. Cash Hub books each `Method: Rs.X`
+  part exactly as written, so `settlePaymentEntries(rows, due)` merges the added rows per method and takes
+  the change handed back off the cash part first; one method → just its name (tested). Two bugs this fixed:
+  POS stored only the last chip tapped (its `isSplitMode` was never set true, so Cash + JazzCash was booked
+  as all JazzCash), and its loaded-reservation-advance string now writes one `Net (<method>): Rs.X` part per
+  method instead of `Net (<last chip>): Rs.<amount handed over>`. Waiter Panel wrote the rows as typed
+  (overpay included) to **every** unpaid order on the table, so a two-order table booked its amounts twice;
+  `allocatePaymentToOrders(settled, orderDues)` now gives each order its own share (tested). A new payment
+  screen must use these helpers rather than joining its rows itself.
 
 - **`SelfOrder.tsx`'s per-device `localStorage` never reflects another device's state.** A
   promoted/fresh host's local `orders`/session data starts empty regardless of what other
@@ -933,7 +943,7 @@ Orders placed on the public website arrive as Delivery / Take Away orders with
   lines/subtotal/discount/tax/total (never re-derived — the website priced it server-side; deal lines grouped by
   `groupPickupLines`, which also drops the server's `"<deal>: "` name prefix), right the method chips + amount +
   Add + added rows + Total Settled + Change Return, with POS's own icons. The stored string comes from
-  `settledPaymentMethod(entries, total)` (tested): one method → its name; a split → `Cash: Rs.908, JazzCash:
+  `lib/paymentSplit.ts` `settledPaymentMethod(entries, total)` (tested): one method → its name; a split → `Cash: Rs.908, JazzCash:
   Rs.600` with the change taken off the cash part, because the backend books split amounts as written.
   Confirm = `updateOrder({ paymentMethod })` (the backend re-stamps `staffId` to the cashier, so the cash lands
   on their Cash Hub balance as channel "Website Pickup" and in their shift), then, only when the order is

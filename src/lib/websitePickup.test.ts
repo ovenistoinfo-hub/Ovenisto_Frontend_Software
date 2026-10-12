@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { isUnpaidWebsitePickup, isCollectablePickup, buildPaymentMethodString, splitTotal, changeDue, settledPaymentMethod, groupPickupLines } from "./websitePickup";
+import { isUnpaidWebsitePickup, isCollectablePickup, groupPickupLines } from "./websitePickup";
 
 const pickup = { type: "Take Away", orderSource: "website", paymentMethod: "Pending" as string | null | undefined, status: "preparing", acceptedById: "u1" as string | null };
 
@@ -32,56 +32,6 @@ describe("isCollectablePickup", () => {
     expect(isCollectablePickup({ ...pickup, status: "cancelled" })).toBe(false);
     expect(isCollectablePickup({ ...pickup, status: "completed" })).toBe(false);
     expect(isCollectablePickup({ ...pickup, paymentMethod: "JazzCash" })).toBe(false);
-  });
-});
-
-describe("buildPaymentMethodString", () => {
-  it("returns the bare method when only one carries an amount", () => {
-    expect(buildPaymentMethodString([{ method: "Cash", amount: 1500 }, { method: "JazzCash", amount: 0 }])).toBe("Cash");
-  });
-
-  it("uses the POS split format, rounding each part", () => {
-    expect(buildPaymentMethodString([{ method: "Cash", amount: 900 }, { method: "JazzCash", amount: 779.4 }])).toBe("Cash: Rs.900, JazzCash: Rs.779");
-  });
-
-  it("is empty when nothing was entered", () => {
-    expect(buildPaymentMethodString([{ method: "Cash", amount: 0 }])).toBe("");
-  });
-});
-
-describe("splitTotal", () => {
-  it("adds rounded positive parts and ignores blanks and negatives", () => {
-    expect(splitTotal([{ method: "Cash", amount: 900.4 }, { method: "Card", amount: 779.6 }, { method: "X", amount: -5 }, { method: "Y", amount: NaN }])).toBe(1680);
-  });
-});
-
-describe("changeDue", () => {
-  it("is what the customer gets back, never negative", () => {
-    expect(changeDue(2000, 1679)).toBe(321);
-    expect(changeDue(1000, 1679)).toBe(0);
-    expect(changeDue(NaN, 1679)).toBe(0);
-  });
-});
-
-describe("settledPaymentMethod", () => {
-  it("stores a single method by name, however much cash was handed over", () => {
-    expect(settledPaymentMethod([{ method: "Cash", amount: 2000 }], 1508)).toBe("Cash");
-    expect(settledPaymentMethod([{ method: "Cash", amount: 500 }, { method: "Cash", amount: 1008 }], 1508)).toBe("Cash");
-    expect(settledPaymentMethod([{ method: "Credit Card", amount: 1508 }], 1508)).toBe("Credit Card");
-  });
-
-  it("takes the change off the cash part, so a split adds up to the total", () => {
-    expect(settledPaymentMethod([{ method: "Cash", amount: 1000 }, { method: "JazzCash", amount: 600 }], 1508))
-      .toBe("Cash: Rs.908, JazzCash: Rs.600");
-  });
-
-  it("takes any excess off the last non-cash part when no cash was used", () => {
-    expect(settledPaymentMethod([{ method: "Credit Card", amount: 1000 }, { method: "JazzCash", amount: 600 }], 1508))
-      .toBe("Credit Card: Rs.1000, JazzCash: Rs.508");
-  });
-
-  it("is empty when nothing was added", () => {
-    expect(settledPaymentMethod([], 1508)).toBe("");
   });
 });
 

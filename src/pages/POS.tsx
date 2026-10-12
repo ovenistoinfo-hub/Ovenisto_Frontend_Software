@@ -57,6 +57,7 @@ import { isDealLive, isDealAvailableForChannel, dealChannelPrice, dealChannelPer
 import { OrderPlacedPrintModal, type PlacedOrderSlipData } from "@/components/pos/OrderPlacedPrintModal";
 import { WebsitePickupPaymentDialog, type PickupPaymentOrder } from "@/components/pos/WebsitePickupPaymentDialog";
 import { isCollectablePickup } from "@/lib/websitePickup";
+import { buildPaymentMethodString, settledPaymentMethod, settlePaymentEntries } from "@/lib/paymentSplit";
 import { useMealTimes } from "@/hooks/useMealTimes";
 import { isServedAt, servingLabel, pktMinuteNow, formatMealHours } from "@/lib/mealTime";
 
@@ -2438,17 +2439,20 @@ const POS = () => {
           : `Advance (${advanceMethod}): Rs.0`;
         finalAdvancePayment = advanceTotal;
       } else {
-        payMethodStr = isSplitMode && paymentEntries.length > 0
-          ? paymentEntries.map(e => `${e.method}: Rs.${e.amount}`).join(", ")
-          : finalizeMethod;
+        payMethodStr = paymentEntries.length > 0 ? settledPaymentMethod(paymentEntries, netPayable) : finalizeMethod;
         finalAdvancePayment = 0;
       }
     } else {
-      payMethodStr = isSplitMode && paymentEntries.length > 0
-        ? paymentEntries.map(e => `${e.method}: Rs.${e.amount}`).join(", ")
-        : finalizeMethod;
+      // Every added row counts (this used to store only the last chip tapped, so a Cash + JazzCash sale
+      // was booked entirely as JazzCash), and the change handed back is taken off before saving —
+      // Cash Hub books each "Method: Rs.X" part exactly as written.
+      const settled = settlePaymentEntries(paymentEntries, netPayable);
+      payMethodStr = settled.length > 0 ? buildPaymentMethodString(settled) : finalizeMethod;
       if (loadedAdvancePayment > 0) {
-        payMethodStr = `Advance (${loadedAdvanceMethod}): Rs.${loadedAdvancePayment}${paymentEntries.length > 0 || finalizeMethod ? `, Net (${payMethodStr}): Rs.${totalPaid || netPayable}` : ""}`;
+        payMethodStr = [
+          `Advance (${loadedAdvanceMethod}): Rs.${loadedAdvancePayment}`,
+          ...settled.map((p) => `Net (${p.method}): Rs.${p.amount}`),
+        ].join(", ");
       }
       finalAdvancePayment = loadedAdvancePayment;
     }

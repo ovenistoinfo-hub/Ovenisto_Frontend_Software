@@ -7,7 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { orderService } from "@/services/order.service";
-import { changeDue, groupPickupLines, settledPaymentMethod, splitTotal, type PickupLine } from "@/lib/websitePickup";
+import { groupPickupLines, type PickupLine } from "@/lib/websitePickup";
+import { changeDue, settledPaymentMethod, splitTotal } from "@/lib/paymentSplit";
 
 export interface PickupPaymentOrder {
   id: string;

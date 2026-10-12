@@ -51,6 +51,7 @@ import { stockService, type ProductionStockRecord } from "@/services/stock.servi
 import { calculateFoodAvailability, isFullyOutOfStock } from "@/utils/foodAvailability";
 import { useMealTimes } from "@/hooks/useMealTimes";
 import { isServedAt, servingLabel, pktMinuteNow, formatMealHours } from "@/lib/mealTime";
+import { allocatePaymentToOrders, buildPaymentMethodString, settlePaymentEntries, type PaymentSplit } from "@/lib/paymentSplit";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
 import { OrderPlacedPrintModal, type PlacedOrderSlipData } from "@/components/pos/OrderPlacedPrintModal";
 
@@ -1882,8 +1883,11 @@ const WaiterPanel = () => {
     openTableSlipFor(selectedTable, activeTableOrders, overridePaymentMethod);
   };
 
-  const settleBilling = async (paymentMethod: string) => {
+  /** `settled` = the Pay Bill rows with the change already taken off (they add up to the table's bill). */
+  const settleBilling = async (settled: PaymentSplit[]) => {
     if (!selectedTable || selectedTableNum === null) return;
+    // The whole table's payment, for the toast and the slip.
+    const paymentMethod = buildPaymentMethodString(settled) || settlePaymentMethod;
     setSettlingBillingState(true);
     try {
       markMine();
@@ -1893,14 +1897,21 @@ const WaiterPanel = () => {
       const unpaidOrders = activeTableOrders.filter(isOrderUnpaid);
       if (unpaidOrders.length > 0) {
         const isReservationDineIn = Boolean(activeReservationForTable);
-        const mLower = paymentMethod.toLowerCase();
-        const isCashMethod = mLower.includes("cash") && !mLower.includes("jazz") && !mLower.includes("easy") && !mLower.includes("online") && !mLower.includes("card") && !mLower.includes("mobile") && !mLower.includes("paisa");
-        const shouldBeApproved = !isCashMethod || isReservationDineIn;
+        // Each order stores its own share of the table's payment. Writing the whole table's string to
+        // every order made Cash Hub book the table's amounts once per order.
+        const orderMethods = allocatePaymentToOrders(
+          settled,
+          unpaidOrders.map((o) => Number(o.total || 0) - Number(o.advancePayment || 0))
+        );
 
         await Promise.all(
-          unpaidOrders.map((o) =>
-            orderService.updateOrder(o.id, { paymentMethod, cashApproved: shouldBeApproved })
-          )
+          unpaidOrders.map((o, i) => {
+            const orderMethod = orderMethods[i] || paymentMethod;
+            const mLower = orderMethod.toLowerCase();
+            const isCashMethod = mLower.includes("cash") && !mLower.includes("jazz") && !mLower.includes("easy") && !mLower.includes("online") && !mLower.includes("card") && !mLower.includes("mobile") && !mLower.includes("paisa");
+            const shouldBeApproved = !isCashMethod || isReservationDineIn;
+            return orderService.updateOrder(o.id, { paymentMethod: orderMethod, cashApproved: shouldBeApproved });
+          })
         );
         await loadOrders();
         await loadReservations();
@@ -4446,12 +4457,7 @@ const WaiterPanel = () => {
                           ? "gradient-primary text-primary-foreground font-bold shadow-primary/20"
                           : "bg-muted text-muted-foreground opacity-50 cursor-not-allowed"
                       )}
-                      onClick={() => {
-                        const finalPaymentMethod = waiterPaymentEntries.length > 0
-                          ? waiterPaymentEntries.map(e => `${e.method}: Rs.${e.amount}`).join(", ")
-                          : settlePaymentMethod;
-                        settleBilling(finalPaymentMethod);
-                      }}
+                      onClick={() => settleBilling(settlePaymentEntries(waiterPaymentEntries, netAmountDue))}
                       disabled={!isReady || settlingBillingState}
                     >
                       {settlingBillingState ? (
