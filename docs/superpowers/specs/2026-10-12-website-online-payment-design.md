@@ -51,26 +51,31 @@ are unit-tested. **Confirm in the sandbox before go-live:**
    - returns `{ orderId, orderNumber, total, status: 'awaiting_payment', checkoutUrl }`.
 
    `order:created` is not emitted yet. A repeated `clientRequestId` returns the existing order without a new
-   `checkoutUrl`; the website then sends the customer to `/order/:id`, which has Pay now.
+   `checkoutUrl`; the website then sends the customer to `/order/:id`, which has Pay now. If Safepay can't be
+   reached, the order is still created and `checkoutUrl` is `null`; the customer lands on `/order/:id` with
+   Pay now and Pay cash instead.
 2. **Redirect.** The website clears the cart, saves the order to recent, and sends the browser to
    `checkoutUrl`.
 3. **Confirmation.** Both arrivals run the same idempotent `confirmPayment(tracker)`:
-   - `POST /api/website/payments/safepay/return` (urlencoded + JSON) verifies `sig`, then answers
-     `303 → {origin}/order/:id?payment=done`. The origin is stored on the payment row at start, and only an
-     origin in the CORS allow-list is accepted.
-   - `POST /api/website/payments/safepay/webhook` verifies `x-sfpy-signature` and answers 200.
+   - `POST /api/payments/safepay/return?pid=<paymentId>` (urlencoded + JSON, parsed by the app's global
+     parsers) verifies `sig` for that payment's tracker, then answers `303 → {origin}/order/:id?payment=done`.
+     The origin is stored on the payment row at start, and only an origin the CORS rule allows is accepted.
+   - `POST /api/payments/safepay/webhook` verifies `x-sfpy-signature` and answers 200.
 
    A failed signature check changes nothing and is logged. The return still redirects, to
    `/order/:id?payment=failed`.
-4. **`confirmPayment` rules** (pure decision helper, tested):
+4. **`confirmPayment` rules** (pure decision helper, tested). In every case except the first, the payment
+   becomes `paid` with `paidAt`:
    - Payment row already `paid` → do nothing.
-   - Order `AWAITING_PAYMENT` → payment `paid`, order `PENDING`, `paymentMethod = ONLINE_PAYMENT_METHOD`
+   - Another payment of the same order is already `paid` (the customer paid twice) → nothing else changes.
+     The extra payment shows under Refunds due.
+   - Order `AWAITING_PAYMENT` → order `PENDING`, `paymentMethod = ONLINE_PAYMENT_METHOD`
      (`'Online (Safepay)'`), then emit `order:created` so the inbox, toast and beep fire as for a cash order.
      The order's age doesn't matter: if it hasn't expired, it's taken.
    - Order not cancelled, but the customer already switched it to cash (`paymentMethod` still
      `Pending`/`Unpaid`) → mark it paid online the same way, and emit `order:updated`.
-   - Order cancelled or expired, or already paid another way → payment `refund_pending`, and staff are
-     notified (it appears under Refunds due).
+   - Order cancelled or expired, or already paid another way → nothing else changes. It shows under Refunds
+     due; `order:updated` is emitted so staff see it.
 5. **Cancel or failure on Safepay.** `cancel_url` = `{origin}/order/:id?payment=cancelled` (a plain GET to the
    website). The order stays `AWAITING_PAYMENT`.
 6. **Retry or switch.**
@@ -90,10 +95,17 @@ are unit-tested. **Confirm in the sandbox before go-live:**
 - `enum OrderStatus` gains `AWAITING_PAYMENT @map("awaiting_payment")`.
 - New model `OrderPayment`:
   - `id`, `orderId` (FK, cascade), `provider` (`'safepay'`), `tracker` (unique), `amount Decimal`;
-  - `status` (`initiated` | `paid` | `failed` | `refund_pending` | `refunded`);
-  - `returnOrigin`, `paidAt`, `refundedAt`, `refundedById`/`refundedByName`, `refundReference`;
+  - `status` (`initiated` | `paid`);
+  - `refundedAmount Decimal @default(0)`;
+  - `returnOrigin`, `paidAt`, `refundedAt`, `refundedByName`, `refundReference`;
   - `createdAt`/`updatedAt`;
   - `@@index([orderId])`, `@@index([status])`.
+- "Refund due" is **derived, never stored**, so no cancel path can forget it. For an order's `paid` payments,
+  oldest first:
+  - If the order is cancelled, or no longer marked `Online (Safepay)`, every payment is due in full.
+  - Otherwise the first payment is kept and owes back `max(0, amount − order.total)` (items cancelled after
+    paying). Any later paid payment is a duplicate and is due in full.
+  - Each due amount has `refundedAmount` taken off it.
 - `websiteConfig.onlinePayment: boolean` (default false), parsed by `readWebsiteConfig` and the staff app's
   `parseWebsiteConfig`.
 - Env, all optional in `env.ts`: `SAFEPAY_ENV` (`sandbox` | `production`), `SAFEPAY_API_KEY`,
@@ -121,11 +133,13 @@ An `AWAITING_PAYMENT` order must not appear anywhere staff look, or be counted a
 
 ## Refunds
 
-- Every path that cancels a paid-online order (`rejectOrder`, `updateOrderStatus`/`updateOrder` → cancelled,
-  an approved cancellation request) calls one helper. It moves the order's `paid` payment to `refund_pending`.
-- `GET /orders/refunds-due` lists `refund_pending` payments for the outlet (scoped).
-  `POST /orders/:id/payment/refunded` `{ reference? }` sets `refunded` and stamps who did it and when. Allowed
-  roles: Super Admin, Admin, Manager.
+- Because refund due is derived (see Data), every way an order gets cancelled or reduced is covered: decline,
+  status → cancelled, an approved full or partial cancellation request, a late or duplicate payment.
+- `GET /api/payments/refunds-due` lists every payment with an amount due for the outlet (scoped).
+  `POST /api/payments/:id/refunded` `{ reference? }` adds the current due to `refundedAmount` and stamps who did
+  it and when. Allowed roles: the website-order approvers (Super Admin, Admin, Manager, Delivery Manager).
+- **Edit lock:** `updateOrder` on a paid-online order refuses (409) a different `paymentMethod`, or a total
+  above what was paid. Staff add extra items as a separate order.
 - **Staff app:** decline and cancel dialogs on a paid-online order say "Paid online (Rs. X): refund it from the
   Safepay dashboard". Order Monitor's website inbox has a **Refunds due (N)** list with **Mark refunded**
   (optional reference).
@@ -146,10 +160,10 @@ An `AWAITING_PAYMENT` order must not appear anywhere staff look, or be counted a
   The status endpoint returns `payment: { status, amount, method } | null`, with no PII.
 - **Website My Orders:** an awaiting order shows "Payment pending" and a Pay now link.
 - **Staff app:**
-  - a "Paid online" badge on inbox cards and in the order detail;
+  - a "Paid online" badge on inbox cards (the order detail already prints the stored method, "Online (Safepay)");
   - Refunds due in the inbox;
-  - an "Accept online payment" switch in Settings → Website. The tab says when the gateway isn't configured
-    on the server.
+  - an "Accept online payment" switch in Settings → Website. Its help text says it works only once the
+    Safepay keys are set on the server; the website hides the option until both are true.
 
 ## Errors and safety
 
