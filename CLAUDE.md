@@ -909,9 +909,7 @@ Orders placed on the public website arrive as Delivery / Take Away orders with
   that swaps the board for the inbox (`showWebsite` state, opened by `?tab=website` via an effect keyed on
   `searchParams`), and a "N website orders waiting for approval" bar under the tiles. The inbox shows
   **pending orders only** in the board's column chrome (deal dishes grouped under the deal name, "Waiting 12m"
-  turning red after 15 min); its Today list is gone, so **payment for a website pickup is collected on the
-  board's order card** ("Collect payment on pickup": `orderSource === 'website'`, Take Away, unpaid →
-  `updateOrder(id, { paymentMethod })`). `useWebsiteOrders` no longer runs the `today` query. The sidebar / NavDrawer badge sits on the Order
+  turning red after 15 min); its Today list is gone. `useWebsiteOrders` no longer runs the `today` query. The sidebar / NavDrawer badge sits on the Order
   Monitor item, and the new-order toast's "View" goes there. Permission `website-orders`: Manager, Delivery
   Manager (+ Admin via `*`); **Cashier lost it** (owner's choice: it has no `order-status`); still excluded
   for Super Admin. The inbox is
@@ -927,6 +925,18 @@ Orders placed on the public website arrive as Delivery / Take Away orders with
   and with 4 hook instances every event cancelled the in-flight fetch, so the inbox never updated.
 - The react-query cache is persisted (`PersistQueryClientProvider`), so a reload briefly shows the last
   list until the refetch lands.
+- **Website pickup payment is taken on POS (2026-10-12, owner).** POS's left sidebar has a **Pickups (N)** tab
+  (count also on both sidebar toggle buttons) listing `lib/websitePickup.ts` `isCollectablePickup` orders:
+  website + Take Away + accepted + open + payment missing/`Pending`/`Unpaid` (tested). A row opens
+  `components/pos/WebsitePickupPaymentDialog.tsx` (tested): the order's STORED lines/subtotal/discount/tax/total
+  (never re-derived — the website priced it server-side), method buttons from `settings.paymentMethods`, an
+  optional split (`Cash: Rs.900, JazzCash: Rs.779`, `buildPaymentMethodString`), cash received → change.
+  Confirm = `updateOrder({ paymentMethod })` (the backend re-stamps `staffId` to the cashier, so the cash lands
+  on their Cash Hub balance as channel "Website Pickup" and in their shift), then, only when the order is
+  `ready`, `updateOrderStatus('completed')` ("Collect & Hand Over"); then the bill preview (`directMode="bill"`).
+  Order Monitor no longer collects; on an unpaid website pickup in Ready it shows a disabled "Collect payment
+  on POS first" instead of Complete Order, because the backend 409s that completion. Pickups still awaiting
+  approval are not listed — accept them on Order Monitor first.
 
 ## Settings "Website" tab + other Step 4b bits (accepted 2026-09-30)
 - **Tab:** `/settings/website` → `components/settings/WebsiteSettingsTab.tsx` (sidebar "Website Ordering"
