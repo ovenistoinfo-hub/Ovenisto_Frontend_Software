@@ -10,6 +10,8 @@ export interface WebsiteConfig {
   hours: { open: string; close: string } | null;
   /** Serving times per MealType id (same shape as `hours`). A meal type without an entry is served all day. */
   mealHours: Record<string, { open: string; close: string }>;
+  /** "Pay online" (Safepay) for this branch. The website shows it only when the server also has the Safepay keys. */
+  onlinePayment: boolean;
 }
 
 const HH_MM = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -126,6 +128,7 @@ export function parseWebsiteConfig(raw: unknown): WebsiteConfig {
     location: null,
     hours: null,
     mealHours: {},
+    onlinePayment: false,
   };
 
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
@@ -135,6 +138,7 @@ export function parseWebsiteConfig(raw: unknown): WebsiteConfig {
   const obj = raw as Record<string, unknown>;
   const enabled = obj.enabled === true || obj.enabled === 'true';
   const reservationsEnabled = obj.reservationsEnabled === true || obj.reservationsEnabled === 'true';
+  const onlinePayment = obj.onlinePayment === true || obj.onlinePayment === 'true';
 
   let deliveryFee = defaults.deliveryFee;
   if ('deliveryFee' in obj) {
@@ -157,7 +161,7 @@ export function parseWebsiteConfig(raw: unknown): WebsiteConfig {
   const hours = parseHours(obj.hours);
   const mealHours = parseMealHours(obj.mealHours);
 
-  return { enabled, deliveryFee, freeDeliveryAbove, minOrder, prepTimeMinutes, reservationsEnabled, location, hours, mealHours };
+  return { enabled, deliveryFee, freeDeliveryAbove, minOrder, prepTimeMinutes, reservationsEnabled, location, hours, mealHours, onlinePayment };
 }
 
 export function buildWebsiteConfig(raw: unknown, form: WebsiteConfig): Record<string, unknown> {
@@ -175,6 +179,7 @@ export function buildWebsiteConfig(raw: unknown, form: WebsiteConfig): Record<st
   // set canonical keys
   base.enabled = form.enabled;
   base.reservationsEnabled = form.reservationsEnabled;
+  base.onlinePayment = form.onlinePayment;
   base.deliveryFee = form.deliveryFee;
   base.freeDeliveryAbove = form.freeDeliveryAbove;
   base.minOrder = form.minOrder;

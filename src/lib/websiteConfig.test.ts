@@ -15,6 +15,7 @@ describe('websiteConfig', () => {
         location: null,
         hours: null,
         mealHours: {},
+        onlinePayment: false,
       });
     });
 
@@ -54,6 +55,12 @@ describe('websiteConfig', () => {
       expect(garbage3.deliveryFee).toBe(0); // negative goes to default
       expect(garbage3.prepTimeMinutes).toBe(30); // NaN goes to default
     });
+
+    it('reads the online payment switch', () => {
+      expect(parseWebsiteConfig({ onlinePayment: true }).onlinePayment).toBe(true);
+      expect(parseWebsiteConfig({ onlinePayment: 'true' }).onlinePayment).toBe(true);
+      expect(parseWebsiteConfig({}).onlinePayment).toBe(false);
+    });
   });
 
   describe('buildWebsiteConfig', () => {
@@ -76,6 +83,7 @@ describe('websiteConfig', () => {
         location: null,
         hours: null,
         mealHours: {},
+        onlinePayment: false,
       };
 
       const built = buildWebsiteConfig(raw, form);
@@ -88,6 +96,7 @@ describe('websiteConfig', () => {
         freeDeliveryAbove: null,
         minOrder: 500,
         prepTimeMinutes: 45,
+        onlinePayment: false,
       });
 
       expect('deliveryCharges' in built).toBe(false);
@@ -111,6 +120,7 @@ describe('websiteConfig', () => {
         location: { lat: 31.47, lng: 74.3 },
         hours: { open: "12:00", close: "00:00" },
         mealHours: {},
+        onlinePayment: false,
       };
 
       const built = buildWebsiteConfig(raw, form);

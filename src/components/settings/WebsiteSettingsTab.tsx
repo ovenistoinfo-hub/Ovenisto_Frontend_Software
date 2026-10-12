@@ -29,6 +29,7 @@ export function WebsiteSettingsTab() {
     location: null,
     hours: null,
     mealHours: {},
+    onlinePayment: false,
   });
 
   const [freeDeliveryStr, setFreeDeliveryStr] = useState("");
@@ -215,6 +216,18 @@ export function WebsiteSettingsTab() {
               disabled={isDisabled}
               checked={form.reservationsEnabled}
               onCheckedChange={(c) => setForm({ ...form, reservationsEnabled: c })}
+            />
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div>
+              <label className="text-sm font-medium">Accept online payment</label>
+              <p className="text-xs text-muted-foreground">Customers can pay by card, bank account or Easypaisa through Safepay. It shows on the website only once the Safepay keys are set on the server.</p>
+            </div>
+            <Switch
+              disabled={isDisabled}
+              checked={form.onlinePayment}
+              onCheckedChange={(c) => setForm({ ...form, onlinePayment: c })}
             />
           </div>
 
