@@ -6,7 +6,6 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Switch } from "@/components/ui/switch";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
@@ -14,7 +13,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
-import { Plus, Trash2, Upload, ArrowLeft, Utensils, Timer, Loader2, X, ChevronDown, ChevronRight, AlertTriangle } from "lucide-react";
+import { Plus, Trash2, Upload, ArrowLeft, Utensils, Timer, Loader2, X, ChevronDown, ChevronRight, AlertTriangle, Globe } from "lucide-react";
+import { ToggleRow } from "@/components/settings/SettingsParts";
 import { DEFAULT_LOW_STOCK_ALERT } from "@/utils/foodAvailability";
 import { PageHeader } from "@/components/ui/page-header";
 import { toast } from "sonner";
@@ -95,6 +95,9 @@ const FoodMenuForm = () => {
   // Form data
   const [form, setForm] = useState({ name: "", code: "", categoryId: "", description: "", available: true, cookingTime: 0, lowStockAlert: DEFAULT_LOW_STOCK_ALERT });
   const [mealTypeIds, setMealTypeIds] = useState<string[]>([]);
+  // Website: "New on the menu" and dishes that must be booked hours ahead.
+  const [isNew, setIsNew] = useState(false);
+  const [advanceHours, setAdvanceHours] = useState("");
   const [imageUrl, setImageUrl] = useState("");
   const [pricingType, setPricingType] = useState<"simple" | "variant">("simple");
 
@@ -203,6 +206,8 @@ const FoodMenuForm = () => {
             lowStockAlert: item.lowStockAlert ?? DEFAULT_LOW_STOCK_ALERT,
           });
           setMealTypeIds(item.mealTypeIds || []);
+          setIsNew(item.isNew === true);
+          setAdvanceHours(item.advanceHours ? String(item.advanceHours) : "");
           setImageUrl(item.image || "");
           setSimplePrice(item.price);
           setSimpleDineIn((item as any).dineInPrice ?? null);
@@ -660,6 +665,8 @@ const FoodMenuForm = () => {
         // `??` not `||`: 0 is a real choice ("only warn once it's actually out").
         lowStockAlert: form.lowStockAlert ?? DEFAULT_LOW_STOCK_ALERT,
         mealTypeIds,
+        isNew,
+        advanceHours: advanceHours.trim() ? Number(advanceHours) : null,
         variants: pricingType === "variant"
           ? variants.map((v, idx) => ({ ...v, costPrice: getColumnTotal(idx.toString()) }))
           : [],
@@ -863,6 +870,42 @@ const FoodMenuForm = () => {
                 </div>
               </div>
             )}
+
+            {/* Website: "New on the menu" and dishes that must be booked ahead */}
+            <div className="rounded-xl border border-primary/20 bg-primary/[0.03] p-4 space-y-3">
+              <div className="flex items-start gap-2.5">
+                <span className="h-8 w-8 shrink-0 rounded-lg bg-primary/10 text-primary ring-1 ring-primary/20 flex items-center justify-center">
+                  <Globe className="h-4 w-4" />
+                </span>
+                <div>
+                  <p className="text-sm font-semibold">On the website</p>
+                  <p className="text-[11px] text-muted-foreground">How this dish shows on the public website.</p>
+                </div>
+              </div>
+              <ToggleRow id="is-new" label={'Show in "New on the menu"'} hint={'Listed on the website\'s home page with a "New" tag.'} checked={isNew} onChange={setIsNew} />
+              <div className="rounded-lg border border-border/60 bg-muted/20 px-3 py-2.5 space-y-2">
+                <Label htmlFor="advance-hours" className="text-sm font-medium">Book ahead for reservations</Label>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {/* Quick picks; any 1–720 can still be typed */}
+                  {([["None", ""], ["6h", "6"], ["12h", "12"], ["24h", "24"], ["48h", "48"]] as const).map(([label, value]) => (
+                    <button
+                      key={label}
+                      type="button"
+                      onClick={() => setAdvanceHours(value)}
+                      className={`h-8 rounded-full border px-3 text-xs font-semibold transition-colors ${advanceHours.trim() === value ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card text-muted-foreground hover:border-primary/40 hover:text-foreground"}`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                  <Input id="advance-hours" type="number" min={1} max={720} value={advanceHours} onChange={(e) => setAdvanceHours(e.target.value)} placeholder="Hours" className="h-8 w-24" />
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  {Number(advanceHours) >= 1
+                    ? `A website reservation with this dish must be made at least ${Math.min(720, Math.floor(Number(advanceHours)))} hours ahead. Normal orders are not affected.`
+                    : "For slow-cooked dishes such as a whole roast. The website lists them under Advance-Order Dishes."}
+                </p>
+              </div>
+            </div>
 
             <div><Label>Description</Label><Textarea value={form.description} onChange={(e) => setForm(p => ({ ...p, description: e.target.value }))} placeholder="Item description..." /></div>
           </CardContent></Card>

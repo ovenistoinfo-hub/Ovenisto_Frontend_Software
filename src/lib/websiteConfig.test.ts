@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseWebsiteConfig, buildWebsiteConfig, WebsiteConfig, parseLocation, parseMapsLink, parseHours, parseMealHours, withServiceHours } from './websiteConfig';
+import { parseWebsiteConfig, buildWebsiteConfig, WebsiteConfig, parseLocation, parseMapsLink, parseHours, parseMealHours, withServiceHours, parseFirstOrderDiscount } from './websiteConfig';
 
 describe('websiteConfig', () => {
   describe('parseWebsiteConfig', () => {
@@ -16,6 +16,7 @@ describe('websiteConfig', () => {
         hours: null,
         mealHours: {},
         onlinePayment: false,
+        firstOrderDiscount: { enabled: false, percent: 0 },
       });
     });
 
@@ -84,6 +85,7 @@ describe('websiteConfig', () => {
         hours: null,
         mealHours: {},
         onlinePayment: false,
+        firstOrderDiscount: { enabled: true, percent: 15 },
       };
 
       const built = buildWebsiteConfig(raw, form);
@@ -97,6 +99,7 @@ describe('websiteConfig', () => {
         minOrder: 500,
         prepTimeMinutes: 45,
         onlinePayment: false,
+        firstOrderDiscount: { enabled: true, percent: 15 },
       });
 
       expect('deliveryCharges' in built).toBe(false);
@@ -121,6 +124,7 @@ describe('websiteConfig', () => {
         hours: { open: "12:00", close: "00:00" },
         mealHours: {},
         onlinePayment: false,
+        firstOrderDiscount: { enabled: false, percent: 0 },
       };
 
       const built = buildWebsiteConfig(raw, form);
@@ -214,5 +218,14 @@ describe('withServiceHours', () => {
   it('removes cleared hours and meal times', () => {
     expect(withServiceHours({ enabled: true, hours: { open: '10:00', close: '22:00' }, mealHours: { bf: { open: '08:00', close: '11:00' } } }, null, {})).toEqual({ enabled: true });
     expect(withServiceHours(null, null, {})).toEqual({});
+  });
+});
+
+describe('parseFirstOrderDiscount', () => {
+  it('mirrors the backend: a percent outside 1–90 turns the offer off', () => {
+    expect(parseFirstOrderDiscount({ enabled: true, percent: 15 })).toEqual({ enabled: true, percent: 15 });
+    expect(parseFirstOrderDiscount({ enabled: true, percent: 0 })).toEqual({ enabled: false, percent: 0 });
+    expect(parseFirstOrderDiscount({ enabled: false, percent: 20 })).toEqual({ enabled: false, percent: 20 });
+    expect(parseWebsiteConfig({ firstOrderDiscount: { enabled: 'true', percent: '10' } }).firstOrderDiscount).toEqual({ enabled: true, percent: 10 });
   });
 });

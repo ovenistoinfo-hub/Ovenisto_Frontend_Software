@@ -1102,6 +1102,48 @@ Orders placed on the public website arrive as Delivery / Take Away orders with
 - **Pre-existing, not fixed:** AuthContext's `GET /auth/me` on app mount does exactly that redirect on the
   QR page when a stale staff session is left on the device.
 
+## Website extras (2026-10-14, uncommitted)
+- **Food Menu form → "Website" block:**
+  - a "Show in New on the menu" switch (`isNew`);
+  - "Book ahead (hours)" (`advanceHours`, 1–720; empty = any time).
+  - The Food Menu list shows "New" and "Book Xh ahead" badges.
+- **Settings → Website:**
+  - A First-order discount switch + percent (1–90), stored in `websiteConfig.firstOrderDiscount`.
+    `lib/websiteConfig.ts` `parseFirstOrderDiscount` mirrors the backend; the percent is kept when switched off.
+  - `components/settings/ComingSoonSection.tsx` sits under the card: coming-soon dishes (chain-wide, with
+    votes, a Show switch and delete) and customer dish suggestions.
+  - The online payment text now says card only.
+- **New page `/event-inquiries`** (`pages/EventInquiries.tsx`):
+  - Permission `reservations`: Manager, Floor Manager, Admin / Super Admin.
+  - Shows website event and catering requests with a New / Contacted / Closed filter and a status Select.
+  - A 180 s poll keeps it fresh; there is no socket event for inquiries.
+  - Service: `services/siteContent.service.ts` (`/api/site-content`).
+- **Book-ahead hours apply to website reservations only (owner's rule, same day):** POS, Waiter Panel and
+  Self-Order sell the dish like any other.
+- Typecheck 21 errors (the old baseline), 93 tests.
+- **Website tab redesign (2026-10-14, owner: "polish it"):**
+  - It now matches the General tab: `Section` / `Field` / `ToggleRow` moved to `components/settings/SettingsParts.tsx`,
+    shared by both tabs, plus the same skeleton and sticky save bar (unsaved-changes dot, Discard).
+  - At the top, an "On the website" status strip: orders, bookings, card payment, first-order offer, map pin.
+  - Four cards in a 2-column grid (xl): website ordering toggles · delivery & pickup fees · first-order offer (switch
+    in the card header, with a live "Rs 2,000 order gets Rs X off" example) · branch location (lat/lng, paste a link,
+    device location, and a map preview of the pin).
+  - All edited values live in one `draft` state; it is compared with the last loaded/saved JSON to show unsaved
+    changes. Save validation and `buildWebsiteConfig` are unchanged.
+  - Coming soon sits below the save bar because it saves on its own.
+  - Not browser-checked by Claude (staff login needed).
+- **The other new staff screens, same day:**
+  - **`EventInquiries`:** four clickable stat tiles that double as filters (New · Contacted · Next 7 days · Closed),
+    plus a search over name, phone and occasion.
+    - Each card has a calendar date block, an occasion icon, an "In N days / Today / Past" chip
+      (`lib/eventInquiry.ts` `daysUntil` / `whenLabel`, tested), guests / venue / branch chips, a Call button and
+      a New / Contacted / Closed segmented control.
+  - **`ComingSoonSection`:** two shared `Section` cards. Dishes are ranked, each with a vote bar relative to the
+    leader (`Progress`) and a Shown / Hidden switch; suggestions sit in a scrolling list with a count badge.
+  - **Food Menu form "On the website" block:** it uses the shared `ToggleRow`, and book-ahead has quick picks
+    (None · 6h · 12h · 24h · 48h) beside the hours box.
+  - Also not browser-checked by Claude (login needed). Typecheck 21 (baseline), 95 tests.
+
 ## MCP Tools: code-review-graph
 
 **IMPORTANT: This project has a knowledge graph. ALWAYS use the

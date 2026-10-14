@@ -12,6 +12,8 @@ export interface WebsiteConfig {
   mealHours: Record<string, { open: string; close: string }>;
   /** "Pay online" (Safepay) for this branch. The website shows it only when the server also has the Safepay keys. */
   onlinePayment: boolean;
+  /** The branch's offer on a customer's first website order; percent 1–90 (mirrors the backend). */
+  firstOrderDiscount: { enabled: boolean; percent: number };
 }
 
 const HH_MM = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -117,6 +119,16 @@ export function parseMapsLink(text: string): { ok: true; lat: number; lng: numbe
   return { ok: false, reason: 'not_found' };
 }
 
+/** Mirrors backend `parseFirstOrderDiscount`: a percent outside 1–90 turns the offer off. */
+export function parseFirstOrderDiscount(value: unknown): { enabled: boolean; percent: number } {
+  const off = { enabled: false, percent: 0 };
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return off;
+  const obj = value as Record<string, unknown>;
+  const percent = Number(obj.percent);
+  if (!Number.isFinite(percent) || percent < 1 || percent > 90) return off;
+  return { enabled: obj.enabled === true || obj.enabled === 'true', percent: Math.round(percent * 100) / 100 };
+}
+
 export function parseWebsiteConfig(raw: unknown): WebsiteConfig {
   const defaults: WebsiteConfig = {
     enabled: false,
@@ -129,6 +141,7 @@ export function parseWebsiteConfig(raw: unknown): WebsiteConfig {
     hours: null,
     mealHours: {},
     onlinePayment: false,
+    firstOrderDiscount: { enabled: false, percent: 0 },
   };
 
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
@@ -161,7 +174,9 @@ export function parseWebsiteConfig(raw: unknown): WebsiteConfig {
   const hours = parseHours(obj.hours);
   const mealHours = parseMealHours(obj.mealHours);
 
-  return { enabled, deliveryFee, freeDeliveryAbove, minOrder, prepTimeMinutes, reservationsEnabled, location, hours, mealHours, onlinePayment };
+  const firstOrderDiscount = parseFirstOrderDiscount(obj.firstOrderDiscount);
+
+  return { enabled, deliveryFee, freeDeliveryAbove, minOrder, prepTimeMinutes, reservationsEnabled, location, hours, mealHours, onlinePayment, firstOrderDiscount };
 }
 
 export function buildWebsiteConfig(raw: unknown, form: WebsiteConfig): Record<string, unknown> {
@@ -180,6 +195,8 @@ export function buildWebsiteConfig(raw: unknown, form: WebsiteConfig): Record<st
   base.enabled = form.enabled;
   base.reservationsEnabled = form.reservationsEnabled;
   base.onlinePayment = form.onlinePayment;
+  // Kept even when switched off, so the percent is remembered.
+  base.firstOrderDiscount = form.firstOrderDiscount;
   base.deliveryFee = form.deliveryFee;
   base.freeDeliveryAbove = form.freeDeliveryAbove;
   base.minOrder = form.minOrder;

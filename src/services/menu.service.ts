@@ -47,6 +47,10 @@ export interface MenuItemRecord {
   tags: string[];
   cookingTime: number;
   mealTypeIds: string[];
+  /** Website: listed under "New on the menu". */
+  isNew?: boolean;
+  /** Website: must be booked this many hours ahead (null = any time). */
+  advanceHours?: number | null;
   variants: MenuItemVariant[];
   modifiers?: MenuItemModifierRecord[];
   recipes?: RecipeIngredient[];

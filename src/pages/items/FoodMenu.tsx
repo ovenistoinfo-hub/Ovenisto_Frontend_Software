@@ -109,7 +109,7 @@ const FoodMenu = () => {
                   return (
                   <TableRow key={item.id} className="hover:bg-muted/30 transition-colors">
                     <TableCell>{(page - 1) * 10 + i + 1}</TableCell>
-                    <TableCell><div className="flex items-center gap-2">{item.image ? (<img src={item.image} alt={item.name} className="h-8 w-8 rounded-md object-cover shrink-0" />) : (<div className="h-8 w-8 rounded-md gradient-primary flex items-center justify-center text-primary-foreground text-xs font-bold shrink-0">{item.name.charAt(0)}</div>)}<span className="font-medium">{item.name}</span></div></TableCell>
+                    <TableCell><div className="flex items-center gap-2">{item.image ? (<img src={item.image} alt={item.name} className="h-8 w-8 rounded-md object-cover shrink-0" />) : (<div className="h-8 w-8 rounded-md gradient-primary flex items-center justify-center text-primary-foreground text-xs font-bold shrink-0">{item.name.charAt(0)}</div>)}<span className="font-medium">{item.name}</span>{item.isNew && <Badge variant="outline" className="text-[10px] border-primary/40 text-primary">New</Badge>}{(item.advanceHours ?? 0) > 0 && <Badge variant="outline" className="text-[10px]">Book {item.advanceHours}h ahead</Badge>}</div></TableCell>
                     <TableCell><Badge variant="secondary">{item.category?.name || "—"}</Badge></TableCell>
                     <TableCell>
                       {/* Meal types this dish is tagged with (set on the item form); ids of deleted meal types are skipped. */}

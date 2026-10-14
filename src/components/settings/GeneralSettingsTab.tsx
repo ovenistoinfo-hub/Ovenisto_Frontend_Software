@@ -1,13 +1,11 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Store, Receipt, Wallet, Clock, UtensilsCrossed, SlidersHorizontal, Plus, X, Moon, AlertCircle, type LucideIcon } from "lucide-react";
+import { Store, Receipt, Wallet, Clock, UtensilsCrossed, SlidersHorizontal, Plus, X, Moon, AlertCircle } from "lucide-react";
 import { useData } from "@/contexts/DataContext";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TimePicker } from "@/components/ui/time-picker";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -18,6 +16,7 @@ import { settingsService, type SettingsRecord } from "@/services/settings.servic
 import { mealTypeService, type MealTypeRecord } from "@/services/mealType.service";
 import { parseWebsiteConfig, withServiceHours } from "@/lib/websiteConfig";
 import { formatMealHours, isWindowInside } from "@/lib/mealTime";
+import { Section, Field, ToggleRow } from "@/components/settings/SettingsParts";
 
 type Times = { open: string; close: string };
 
@@ -62,52 +61,6 @@ function formFromSettings(data: SettingsRecord): GeneralForm {
     mealTimes: mealHours,
   };
 }
-
-/** One settings group: icon, title, one-line purpose, then its fields. */
-function Section({ icon: Icon, title, description, action, className, children }: {
-  icon: LucideIcon;
-  title: string;
-  description: string;
-  action?: ReactNode;
-  className?: string;
-  children: ReactNode;
-}) {
-  return (
-    <Card className={cn("shadow-sm", className)}>
-      <CardHeader className="pb-4">
-        <div className="flex items-start gap-3">
-          <span className="h-9 w-9 shrink-0 rounded-xl bg-primary/10 text-primary ring-1 ring-primary/20 flex items-center justify-center">
-            <Icon className="h-4 w-4" />
-          </span>
-          <div className="min-w-0 flex-1">
-            <CardTitle className="text-base">{title}</CardTitle>
-            <p className="text-xs text-muted-foreground mt-0.5">{description}</p>
-          </div>
-          {action}
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-4">{children}</CardContent>
-    </Card>
-  );
-}
-
-const Field = ({ id, label, hint, children }: { id: string; label: string; hint?: string; children: ReactNode }) => (
-  <div className="space-y-1.5">
-    <Label htmlFor={id} className="text-sm font-medium">{label}</Label>
-    {children}
-    {hint && <p className="text-[11px] text-muted-foreground">{hint}</p>}
-  </div>
-);
-
-const ToggleRow = ({ id, label, hint, checked, onChange }: { id: string; label: string; hint: string; checked: boolean; onChange: (v: boolean) => void }) => (
-  <div className="flex items-center justify-between gap-4 rounded-lg border border-border/60 bg-muted/20 px-3 py-2.5">
-    <div className="min-w-0">
-      <Label htmlFor={id} className="text-sm font-medium">{label}</Label>
-      <p className="text-[11px] text-muted-foreground">{hint}</p>
-    </div>
-    <Switch id={id} checked={checked} onCheckedChange={onChange} />
-  </div>
-);
 
 /** A time range as typed: "" both = not set, one side only / equal = invalid. */
 const timesState = (t: Times) => (!t.open && !t.close ? "unset" : !t.open || !t.close || t.open === t.close ? "invalid" : "set");
