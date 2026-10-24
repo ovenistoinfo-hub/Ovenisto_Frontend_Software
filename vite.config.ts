@@ -19,17 +19,22 @@ export default defineConfig(({ mode }) => ({
     // load). Deliberately does NOT cache/intercept /api/* — that stays api.ts's + the offline
     // order queue's job, not this service worker's.
     VitePWA({
-      // 'prompt' (not 'autoUpdate') + no update prompt wired up anywhere = a new build's service
-      // worker installs and precaches quietly, but never takes over / reloads a tab that's
-      // already open — it only activates the next time the page does a real fresh navigation.
-      // 'autoUpdate' would auto-reload an already-open POS tab mid-shift the moment a deploy
-      // lands, which is exactly what this is avoiding.
+      // A new build's service worker takes over as soon as it installs (skipWaiting +
+      // clientsClaim) but never reloads an open tab: the running page keeps its code, and the
+      // next normal reload gets the new build. Without these two, the new worker sat in
+      // "waiting" until every tab of the site was closed — a plain reload kept serving the old
+      // precached build, so staff saw old screens days after a deploy (2026-10-24). An open tab
+      // that later lazy-loads a chunk the new build removed is reloaded once by
+      // src/lib/chunk-reload.ts. No update prompt is wired up, so 'prompt' only means
+      // "register without auto-reloading".
       registerType: "prompt",
       injectRegister: "auto",
       workbox: {
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff,woff2}"],
         navigateFallback: "/index.html",
         navigateFallbackDenylist: [/^\/api/],
+        skipWaiting: true,
+        clientsClaim: true,
       },
       manifest: false,
     }),

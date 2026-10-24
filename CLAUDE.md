@@ -220,6 +220,13 @@ plus a body explaining _why_ the change was made when that is not obvious.
   `componentDidCatch` — by reloading once. The guard is a timestamp in `sessionStorage`, not a
   boolean flag: a flag cleared on successful boot would loop forever when a chunk is genuinely
   missing rather than merely renamed. A second failure inside 10s falls through to the error screen.
+- **The service worker (`vite-plugin-pwa`, `vite.config.ts`) must keep `skipWaiting` + `clientsClaim`.**
+  It precaches the whole build so POS can boot offline, and serves `index.html` from that cache. Without
+  the two flags a deploy's new worker waited until every tab of the site was closed, and a plain reload
+  kept serving the old build: staging showed an old Settings page days after a successful deploy
+  (2026-10-24). Now the new worker takes over once installed, with no forced reload. The update check runs
+  on a page load, so the first reload after a deploy can still show the old build while the new one
+  downloads; the next reload shows the new one. Ctrl+Shift+R bypasses the worker.
 - **The react-query cache persists to `localStorage`** (`App.tsx`'s `PersistQueryClientProvider`,
   key `ovenisto-rq-cache`). A breaking change to a query's returned data shape needs the `buster`
   string there bumped, or a stale cached shape can crash a page on load before it refetches.
