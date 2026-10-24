@@ -1150,6 +1150,11 @@ Orders placed on the public website arrive as Delivery / Take Away orders with
   - **Food Menu form "On the website" block:** it uses the shared `ToggleRow`, and book-ahead has quick picks
     (None · 6h · 12h · 24h · 48h) beside the hours box.
   - Also not browser-checked by Claude (login needed). Typecheck 21 (baseline), 95 tests.
+- **Kitchen Posts page (2026-10-24, uncommitted):** `/kitchen-posts` (`pages/KitchenPosts.tsx`, permission
+  `settings`, Settings group in the sidebar, visible to Super Admin too: posts are chain-wide). Inline form: title,
+  text, up to 10 photos (direct `/api/upload/image`, thumbnails with Remove), a YouTube / Instagram link (the backend
+  refuses other links), "Show on the website". Cards have Edit / Hide / Delete (AlertDialog). Service:
+  `siteContent.service.ts` `kitchenPostService`. The website shows them at `/kitchen` and on Home.
 
 ## MCP Tools: code-review-graph
 
@@ -1188,3 +1193,22 @@ Fall back to Grep/Glob/Read **only** when the graph doesn't cover what you need.
 2. Use `detect_changes` for code review.
 3. Use `get_affected_flows` to understand impact.
 4. Use `query_graph` pattern="tests_for" to check coverage.
+
+## Rider navigation + exact customer location (2026-10-24, uncommitted)
+Owner: check the website gets the customer's exact location, and make the rider's "open in maps" show the route
+from the rider's location to the customer.
+- **Website:** `lib/geo.ts` `getBrowserPosition` used `maximumAge: 600000`, so "Use my current location" could
+  return a fix up to 10 minutes old. With `highAccuracy` it now asks for a fresh fix (`maximumAge: 0`) and returns
+  the browser's `accuracy` (metres). `LiveLocationField` shows "Accurate to about X m", or, above 100 m (a
+  Wi-Fi/IP guess, typical on laptops), "Only accurate to about X … turn on GPS … press Update". Only `{lat, lng}`
+  is sent to the server.
+- **Rider app (Flutter):** "Navigate" never opened. The manifest's `<queries>` had only `tel`, so on Android 11+
+  `canLaunchUrl` returned false for the Maps link and the rider got "Couldn't open maps". It also searched the
+  typed address and ignored the pin. Now: `<queries>` has `VIEW` + `https`; `OrderInfo` reads
+  `deliveryLat`/`deliveryLng` (the API already sent them); `lib/utils/maps_url.dart` `deliveryDirectionsUri`
+  (tested) builds `google.com/maps/dir/?api=1&destination=<pin or address>&travelmode=driving` with no origin, so
+  Maps starts from the phone's own location; `DeliveryActions.openNavigation(context, assignment)` calls
+  `launchUrl` directly. Checked on a real Android phone: the link opens Google Maps with "Your location" → the
+  pin and a Start button. Then tested end to end on the Pixel 7 (release-signed build with `--dart-define` API/SOCKET = staging, rider1, a ZZTEST website delivery order with a pin): Accept → Details → Navigate opened Google Maps "Your location" → the pin. Build note: on this machine Gradle fails with "Unable to establish loopback connection" unless `TMP`/`TEMP`/`java.io.tmpdir` point at a plain path (e.g. `C:gtmp`).
+- **Web Rider Portal:** "Navigate to Live Pin" uses the new `lib/maps.ts` `orderDirectionsUrl` (directions, no
+  origin; tested). The inbox, Delivery board and Order Monitor keep `orderMapsUrl` (a pin search).

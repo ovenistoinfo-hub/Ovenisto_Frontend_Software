@@ -20,3 +20,14 @@ export function orderMapsUrl(params: { lat?: number | null; lng?: number | null;
   }
   return null;
 }
+
+/**
+ * Google Maps turn-by-turn directions to the delivery, for the rider. No origin on purpose: Maps then
+ * starts from the device's own current location (the rider's).
+ */
+export function orderDirectionsUrl(params: { lat?: number | null; lng?: number | null; address?: string | null }): string | null {
+  const destination = isValidPoint(params.lat, params.lng)
+    ? `${params.lat},${params.lng}`
+    : params.address?.trim() ? encodeURIComponent(params.address.trim()) : null;
+  return destination ? `https://www.google.com/maps/dir/?api=1&destination=${destination}&travelmode=driving` : null;
+}

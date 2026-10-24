@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { orderMapsUrl, hasLivePoint } from './maps';
+import { orderMapsUrl, orderDirectionsUrl, hasLivePoint } from './maps';
 
 describe('orderMapsUrl', () => {
   it('returns exact coordinates URL when both lat and lng are present', () => {
@@ -30,5 +30,17 @@ describe('orderMapsUrl', () => {
   it('returns null when nothing is present', () => {
     expect(orderMapsUrl({})).toBeNull();
     expect(orderMapsUrl({ lat: null, address: '   ' })).toBeNull();
+  });
+});
+
+describe('orderDirectionsUrl', () => {
+  it('routes to the live pin from the device location (no origin)', () => {
+    expect(orderDirectionsUrl({ lat: 31.437, lng: 74.248, address: 'House 1' }))
+      .toBe('https://www.google.com/maps/dir/?api=1&destination=31.437,74.248&travelmode=driving');
+  });
+  it('falls back to the typed address, else null', () => {
+    expect(orderDirectionsUrl({ address: ' House 12, Johar Town ' }))
+      .toBe('https://www.google.com/maps/dir/?api=1&destination=House%2012%2C%20Johar%20Town&travelmode=driving');
+    expect(orderDirectionsUrl({ lat: 0, lng: 0, address: '' })).toBeNull();
   });
 });

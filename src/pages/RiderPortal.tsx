@@ -17,7 +17,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { getDeliveryPaymentMode, getRiderCollectAmount } from "@/utils/deliveryPayment";
-import { orderMapsUrl, hasLivePoint } from "@/lib/maps";
+import { orderDirectionsUrl, hasLivePoint } from "@/lib/maps";
 import { api } from "@/services/api";
 
 const STATUS_CONFIG: Record<string, { label: string; class: string; border: string }> = {
@@ -414,9 +414,9 @@ const RiderPortal = () => {
                           </Button>
                         )}
 
-                        {orderMapsUrl({ lat: a.order?.deliveryLat, lng: a.order?.deliveryLng, address: a.customerAddress }) ? (
+                        {orderDirectionsUrl({ lat: a.order?.deliveryLat, lng: a.order?.deliveryLng, address: a.customerAddress }) ? (
                           <a
-                            href={orderMapsUrl({ lat: a.order?.deliveryLat, lng: a.order?.deliveryLng, address: a.customerAddress }) ?? undefined}
+                            href={orderDirectionsUrl({ lat: a.order?.deliveryLat, lng: a.order?.deliveryLng, address: a.customerAddress }) ?? undefined}
                             target="_blank"
                             rel="noreferrer"
                             className="flex items-center justify-center gap-2 h-11 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-sm transition-all active:scale-95">
