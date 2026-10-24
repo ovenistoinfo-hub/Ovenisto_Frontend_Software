@@ -322,24 +322,24 @@ export function WebsiteSettingsTab() {
             <p className="text-[11px] text-muted-foreground">Use the device location only while you are at the branch.</p>
           </Section>
         </div>
-
-        {/* Save bar: stays at the bottom of the screen while scrolling, like General. */}
-        <div className="sticky bottom-0 z-20 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border/70 bg-card/95 backdrop-blur px-4 py-3 shadow-lg">
-          <span className={cn("flex items-center gap-2 text-xs font-medium", dirty ? "text-primary" : "text-muted-foreground")}>
-            <span className={cn("h-2 w-2 rounded-full", dirty ? "bg-primary animate-pulse" : "bg-muted-foreground/40")} />
-            {dirty ? "Unsaved changes" : "All changes saved"}
-          </span>
-          <div className="flex gap-2">
-            <Button variant="outline" disabled={!dirty || saving} onClick={() => setDraft(JSON.parse(savedSnapshot))}>Discard</Button>
-            <Button className="gradient-primary text-primary-foreground" disabled={!dirty || saving} onClick={handleSave}>
-              {saving ? "Saving…" : "Save changes"}
-            </Button>
-          </div>
-        </div>
       </div>
 
-      {/* Saved as you go (its own API), so it sits outside the save bar. */}
+      {/* Saved as you go (its own API); the save bar below does not cover it. */}
       <ComingSoonSection />
+
+      {/* Save bar: stays at the bottom of the screen while scrolling and ends the page, like General. */}
+      <div className="sticky bottom-0 z-20 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border/70 bg-card/95 backdrop-blur px-4 py-3 shadow-lg">
+        <span className={cn("flex items-center gap-2 text-xs font-medium", dirty ? "text-primary" : "text-muted-foreground")}>
+          <span className={cn("h-2 w-2 rounded-full", dirty ? "bg-primary animate-pulse" : "bg-muted-foreground/40")} />
+          {dirty ? "Unsaved changes" : "All changes saved"}
+        </span>
+        <div className="flex gap-2">
+          <Button variant="outline" disabled={!dirty || saving} onClick={() => setDraft(JSON.parse(savedSnapshot))}>Discard</Button>
+          <Button className="gradient-primary text-primary-foreground" disabled={!dirty || saving} onClick={handleSave}>
+            {saving ? "Saving…" : "Save changes"}
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }
