@@ -4,7 +4,7 @@ import {
   Home, BarChart3, ShoppingCart, ChefHat, UtensilsCrossed, Store, Settings, Globe, CalendarDays,
   Pizza, Factory, Package, DollarSign, ShoppingBag, CreditCard, ArrowLeftRight,
   Users, Clock, ChevronDown, ChevronRight, Flame, LogOut, Link2,
-  Bike, CalendarCheck, LayoutGrid, ClipboardList, CalendarOff, UserCircle, IdCard, Coins, Ban, Tag, PartyPopper
+  Bike, CalendarCheck, LayoutGrid, ClipboardList, CalendarOff, UserCircle, IdCard, Coins, Ban, Tag, PartyPopper, Camera
 } from "lucide-react";
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupLabel, SidebarGroupContent,
@@ -48,6 +48,7 @@ export const navSections = [
     { title: "General Settings", url: "/settings", icon: Settings, module: "settings", hideForSuperAdmin: true },
     { title: "Warehouses", url: "/settings/warehouses", icon: Package, module: "settings" },
     { title: "Website Ordering", url: "/settings/website", icon: Globe, module: "settings", hideForSuperAdmin: true },
+    { title: "Kitchen Posts", url: "/kitchen-posts", icon: Camera, module: "settings" },
   ]},
   { label: "Item / Stock", items: [
     { title: "Items", icon: Pizza, module: "items", children: [

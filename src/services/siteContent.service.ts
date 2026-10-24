@@ -69,3 +69,37 @@ export const siteContentService = {
     return res.data;
   },
 };
+
+/** An "Inside our kitchen" post on the website. Chain-wide. */
+export interface KitchenPost {
+  id: string;
+  title: string;
+  body: string | null;
+  images: string[];
+  /** The YouTube / Instagram link staff pasted. */
+  videoUrl: string | null;
+  /** What the website embeds; null when there is no (valid) link. */
+  videoEmbedUrl: string | null;
+  isPublished: boolean;
+  createdAt: string;
+}
+
+export type KitchenPostInput = Pick<KitchenPost, 'title' | 'body' | 'images' | 'videoUrl' | 'isPublished'>;
+
+export const kitchenPostService = {
+  async list(): Promise<KitchenPost[]> {
+    const res = await api.get<{ success: boolean; data: KitchenPost[] }>('/site-content/kitchen-posts');
+    return res.data;
+  },
+  async create(data: KitchenPostInput): Promise<KitchenPost> {
+    const res = await api.post<{ success: boolean; data: KitchenPost }>('/site-content/kitchen-posts', data);
+    return res.data;
+  },
+  async update(id: string, data: Partial<KitchenPostInput>): Promise<KitchenPost> {
+    const res = await api.put<{ success: boolean; data: KitchenPost }>(`/site-content/kitchen-posts/${id}`, data);
+    return res.data;
+  },
+  async remove(id: string): Promise<void> {
+    await api.delete(`/site-content/kitchen-posts/${id}`);
+  },
+};

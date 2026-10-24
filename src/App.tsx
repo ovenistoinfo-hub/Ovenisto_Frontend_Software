@@ -67,6 +67,7 @@ const SelfOrder = lazy(() => import("./pages/SelfOrder"));
 const Delivery = lazy(() => import("./pages/Delivery"));
 const Reservations = lazy(() => import("./pages/Reservations"));
 const EventInquiries = lazy(() => import("./pages/EventInquiries"));
+const KitchenPosts = lazy(() => import("./pages/KitchenPosts"));
 const TableLayout = lazy(() => import("./pages/TableLayout"));
 const EmployeePortal = lazy(() => import("./pages/EmployeePortal"));
 const RiderPortal = lazy(() => import("./pages/RiderPortal"));
@@ -168,6 +169,7 @@ function AppRoutes() {
       <Route path="/deals/edit/:id" element={<ProtectedRoute module="sales"><AppLayout><DealForm /></AppLayout></ProtectedRoute>} />
       <Route path="/reservations" element={<ProtectedRoute module="customers"><AppLayout><Reservations /></AppLayout></ProtectedRoute>} />
       <Route path="/event-inquiries" element={<ProtectedRoute module="reservations"><AppLayout><EventInquiries /></AppLayout></ProtectedRoute>} />
+      <Route path="/kitchen-posts" element={<ProtectedRoute module="settings"><AppLayout><KitchenPosts /></AppLayout></ProtectedRoute>} />
       <Route path="/purchase-requests" element={<ProtectedRoute module="purchase-requests"><AppLayout><PurchaseRequests /></AppLayout></ProtectedRoute>} />
       <Route path="/purchases" element={<ProtectedRoute module="purchases"><AppLayout><Purchases /></AppLayout></ProtectedRoute>} />
       <Route path="/suppliers" element={<ProtectedRoute module="suppliers"><AppLayout><Suppliers /></AppLayout></ProtectedRoute>} />

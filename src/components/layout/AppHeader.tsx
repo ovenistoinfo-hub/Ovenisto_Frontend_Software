@@ -47,6 +47,7 @@ const breadcrumbConfig: Record<string, { label: string; parent?: { label: string
   "/delivery": { label: "Delivery" },
   "/reservations": { label: "Reservations" },
   "/event-inquiries": { label: "Event Inquiries" },
+  "/kitchen-posts": { label: "Kitchen Posts" },
   "/deals": { label: "Deals & Combos" },
   "/table-layout": { label: "Table Layout" },
   "/shifts": { label: "Shifts" },
