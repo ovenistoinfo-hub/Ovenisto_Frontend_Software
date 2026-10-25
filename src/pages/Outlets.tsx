@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { outletService, type OutletRecord } from "@/services/outlet.service";
 import { PageHeader } from "@/components/ui/page-header";
+import { formatPakistaniPhone } from "@/lib/utils";
 
 const Outlets = () => {
   const [list, setList] = useState<OutletRecord[]>([]);
@@ -49,6 +50,8 @@ const Outlets = () => {
   const handleSave = async () => {
     if (!form.name.trim()) { toast.error("Outlet name is required"); return; }
     if (!form.code.trim()) { toast.error("Outlet code is required"); return; }
+    // Optional, but when given it must be a full 11-digit number (0300-1234567): customers see it on the website.
+    if (form.phone && form.phone.replace(/D/g, "").length !== 11) { toast.error("Phone number must be exactly 11 digits (e.g. 0300-1234567)"); return; }
     setSaving(true);
     try {
       if (editingId) {
@@ -123,7 +126,7 @@ const Outlets = () => {
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label>Phone</Label>
-                <Input placeholder="0300-0000000" value={form.phone} onChange={(e) => setForm(p => ({ ...p, phone: e.target.value }))} />
+                <Input placeholder="0300-0000000" inputMode="tel" maxLength={12} value={form.phone} onChange={(e) => setForm(p => ({ ...p, phone: formatPakistaniPhone(e.target.value) }))} />
               </div>
               <div className="space-y-1.5">
                 <Label>Email</Label>
