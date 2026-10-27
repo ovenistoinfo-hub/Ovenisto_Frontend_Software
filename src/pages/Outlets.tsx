@@ -51,7 +51,7 @@ const Outlets = () => {
     if (!form.name.trim()) { toast.error("Outlet name is required"); return; }
     if (!form.code.trim()) { toast.error("Outlet code is required"); return; }
     // Optional, but when given it must be a full 11-digit number (0300-1234567): customers see it on the website.
-    if (form.phone && form.phone.replace(/D/g, "").length !== 11) { toast.error("Phone number must be exactly 11 digits (e.g. 0300-1234567)"); return; }
+    if (form.phone && form.phone.replace(/\D/g, "").length !== 11) { toast.error("Phone number must be exactly 11 digits (e.g. 0300-1234567)"); return; }
     setSaving(true);
     try {
       if (editingId) {
