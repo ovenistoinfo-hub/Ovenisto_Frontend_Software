@@ -30,6 +30,7 @@ export interface KitchenItemEntry {
   cookingTime: number;
   dealName?: string | null;
   dealItemKey?: string | null;
+  notes?: string | null;
   status: "pending" | "preparing" | "ready";
   preparingAt: Date | null;
   actionKey: string; // this dish's own dealItemKey; "shared" only for legacy pre-key orders
@@ -108,7 +109,10 @@ const DishRow = ({ item, isUpdating, clock, onAdvance }: DishRowProps) => {
       {/* Item Qty & Name — the controls wrap onto their own line on narrow cards instead of squeezing the name */}
       <div className="flex items-start gap-1.5 min-w-0 grow basis-32">
         <span className="font-black text-primary font-mono text-xs shrink-0">{item.qty}×</span>
-        <span className="font-bold text-foreground text-xs break-words min-w-0">{item.name}</span>
+        <div className="min-w-0">
+          <span className="font-bold text-foreground text-xs break-words">{item.name}</span>
+          {item.notes && <p className="text-[11px] font-semibold text-destructive break-words">Note: {item.notes}</p>}
+        </div>
       </div>
 
       {/* Per-Item Action Pill */}
@@ -225,6 +229,7 @@ const KitchenPanel = () => {
           cookingTime: rawItem.cookingTime ?? 0,
           dealName: rawItem.dealName ?? null,
           dealItemKey: rawItem.dealItemKey ?? null,
+          notes: rawItem.notes?.trim() || null,
           status,
           preparingAt: status === "preparing" ? (preparingAtMap.current[itemTicketId] ?? placedAtMap.current[o.id]) : null,
           actionKey,

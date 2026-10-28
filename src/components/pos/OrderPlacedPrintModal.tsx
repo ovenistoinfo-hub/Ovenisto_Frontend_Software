@@ -476,8 +476,8 @@ export const OrderPlacedPrintModal: React.FC<OrderPlacedPrintModalProps> = ({
                       <p className="text-[11px] text-zinc-700">#{slipData.orderNumber} &bull; {slipData.orderType}</p>
                       <p className="text-[11px] text-zinc-700">
                         {slipData.customerName || "Walk-in"}
-                        {slipData.tableNumber ? ` &bull; Table #${slipData.tableNumber}` : ""}
-                        {slipData.staffName ? ` &bull; Waiter: ${slipData.staffName}` : ""}
+                        {slipData.tableNumber ? ` • Table #${slipData.tableNumber}` : ""}
+                        {slipData.staffName ? ` • Waiter: ${slipData.staffName}` : ""}
                       </p>
                       {slipData.isUrgent && (
                         <p className="font-bold text-[10px] uppercase border border-black px-1.5 py-0.5 inline-block mt-1">
@@ -543,8 +543,8 @@ export const OrderPlacedPrintModal: React.FC<OrderPlacedPrintModalProps> = ({
                     <div className="border-b border-dashed border-black/80 my-2" />
 
                     <div className="text-[11px] space-y-0.5">
-                      <p>#{slipData.orderNumber} &bull; {slipData.orderType}{slipData.tableNumber ? ` &bull; Table #${slipData.tableNumber}` : ""}</p>
-                      <p>{slipData.customerName || "Walk-in"}{slipData.customerPhone ? ` &bull; ${slipData.customerPhone}` : ""}</p>
+                      <p>#{slipData.orderNumber} &bull; {slipData.orderType}{slipData.tableNumber ? ` • Table #${slipData.tableNumber}` : ""}</p>
+                      <p>{slipData.customerName || "Walk-in"}{slipData.customerPhone ? ` • ${slipData.customerPhone}` : ""}</p>
                       {slipData.customerAddress && <p className="text-[10px]">Address: {slipData.customerAddress}</p>}
                       <p>{dateStr}, {timeStr}</p>
                     </div>

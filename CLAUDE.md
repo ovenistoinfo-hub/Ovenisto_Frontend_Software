@@ -1212,3 +1212,9 @@ from the rider's location to the customer.
   pin and a Start button. Then tested end to end on the Pixel 7 (release-signed build with `--dart-define` API/SOCKET = staging, rider1, a ZZTEST website delivery order with a pin): Accept → Details → Navigate opened Google Maps "Your location" → the pin. Build note: on this machine Gradle fails with "Unable to establish loopback connection" unless `TMP`/`TEMP`/`java.io.tmpdir` point at a plain path (e.g. `C:gtmp`).
 - **Web Rider Portal:** "Navigate to Live Pin" uses the new `lib/maps.ts` `orderDirectionsUrl` (directions, no
   origin; tested). The inbox, Delivery board and Order Monitor keep `orderMapsUrl` (a pin search).
+
+## Production on Railway (2026-10-27)
+Production staff app = Railway service **Ovenisto_Software** (`main`, Railpack, port 8080) at
+`https://ovenistosoftware-production.up.railway.app`; the Vercel deploy above is retired. `VITE_API_URL` is the production
+backend `/api` URL (build-time). Its origin must be in the production backend's `CORS_ORIGIN`. The production DB started
+empty, so the first login lands on a chain with no branches: create them in Outlets (phone: 11 digits, `0300-1234567`).
