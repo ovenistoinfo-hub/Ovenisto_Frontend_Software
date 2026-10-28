@@ -366,7 +366,7 @@ const Reservations = () => {
   });
 
   // Cancelling a booking that took an advance first asks whether it was given back (see the dialog).
-  const changeStatus = (id: string, status: string, advanceRefunded?: boolean) => {
+  const changeStatus = (id: string, status: string, advanceRefunded?: boolean, rejectionReason?: string) => {
     if (status === "cancelled" && advanceRefunded === undefined) {
       const booking = reservations.find((r) => r.id === id);
       if (booking && (booking.advancePaid || 0) > 0) {
@@ -375,7 +375,7 @@ const Reservations = () => {
       }
     }
     updateMutation.mutate(
-      { id, data: { status, ...(advanceRefunded !== undefined ? { advanceRefunded } : {}) } },
+      { id, data: { status, ...(advanceRefunded !== undefined ? { advanceRefunded } : {}), ...(rejectionReason ? { rejectionReason } : {}) } },
       {
         onSuccess: () => {
           if (status === "confirmed") {
@@ -1153,7 +1153,7 @@ const Reservations = () => {
               <Globe className="h-4 w-4 text-warning" /> New website requests ({websiteRequests.length})
             </CardTitle>
             <CardDescription className="text-xs">
-              Booked on the website and waiting for an answer, for any date. The customer sees Accept or Decline on their status page.
+              Booked on the website and waiting for an answer, for any date. The customer sees "Confirmed" or "Cancelled" on their booking page.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-2">
@@ -1184,7 +1184,10 @@ const Reservations = () => {
                     size="sm"
                     variant="ghost"
                     className="h-7 text-xs text-destructive hover:bg-destructive/10 px-2.5 rounded-lg"
-                    onClick={() => changeStatus(r.id, "cancelled")}
+                    onClick={() => {
+                      const reason = window.prompt("Reason for declining (optional). The customer will see it:");
+                      if (reason !== null) changeStatus(r.id, "cancelled", undefined, reason.trim());
+                    }}
                     disabled={updateMutation.isPending}
                   >
                     <X className="h-3 w-3 mr-1" /> Decline

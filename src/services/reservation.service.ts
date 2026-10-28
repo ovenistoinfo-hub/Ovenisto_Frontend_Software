@@ -109,7 +109,7 @@ export const reservationService = {
     return res.data;
   },
 
-  async update(id: string, data: Partial<CreateReservationInput & { status: string; isAdvanceAdjusted?: boolean; orderId?: string; advanceRefunded?: boolean }>): Promise<Reservation> {
+  async update(id: string, data: Partial<CreateReservationInput & { status: string; isAdvanceAdjusted?: boolean; orderId?: string; advanceRefunded?: boolean; rejectionReason?: string }>): Promise<Reservation> {
     const res = await api.put<{ success: boolean; data: Reservation }>(`/reservations/${id}`, data);
     return res.data;
   },
