@@ -5,13 +5,15 @@ export type DeliveryPaymentMode = "cod" | "advance" | "prepaid" | "collected";
  * "Cash on Delivery"              → "cod"
  * "Cash on Delivery (Collected)"  → "collected"
  * starts with "Advance ("         → "advance"
+ * "Pending" / "Unpaid" (a website order not yet paid) → "cod"
  * anything else (normal payment)  → "prepaid"
  */
 export function getDeliveryPaymentMode(
   paymentMethod: string | undefined | null,
   _advancePayment: number
 ): DeliveryPaymentMode {
-  if (!paymentMethod || paymentMethod === "Cash on Delivery") return "cod";
+  // Mirrors the backend's computeOrderAmountToCollect: an unpaid order is collected by the rider.
+  if (!paymentMethod || paymentMethod === "Cash on Delivery" || /^(pending|unpaid)$/i.test(paymentMethod.trim())) return "cod";
   if (paymentMethod === "Cash on Delivery (Collected)") return "collected";
   if (paymentMethod.startsWith("Advance (")) return "advance";
   return "prepaid";

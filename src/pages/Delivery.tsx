@@ -292,7 +292,7 @@ const Delivery = () => {
                         <CardContent className="p-4 space-y-3">
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
-                              <span className="font-black text-base text-foreground group-hover:text-amber-500 transition-colors">#{o.orderNumber}</span>
+                              <span className="font-black text-base text-foreground group-hover:text-amber-500 transition-colors whitespace-nowrap">#{o.orderNumber}</span>
                             </div>
                             <div className="flex items-center gap-1.5">
                               <KitchenStatusBadge status={(o as any).status} />
@@ -356,7 +356,7 @@ const Delivery = () => {
                           onClick={() => setDetailItem({ order: a.order as unknown as PendingDeliveryOrder, assignment: a })}>
                           <CardContent className="p-4 space-y-3">
                             <div className="flex items-center justify-between">
-                              <span className="font-black text-base group-hover:text-amber-500 transition-colors">#{a.order?.orderNumber}</span>
+                              <span className="font-black text-base group-hover:text-amber-500 transition-colors whitespace-nowrap">#{a.order?.orderNumber}</span>
                               <div className="flex items-center gap-1.5">
                                 <KitchenStatusBadge status={(a.order as any)?.status} />
                                 <Badge variant="outline" className={cn("font-bold text-xs", statusInfo.class)}>
