@@ -54,6 +54,7 @@ import { isServedAt, servingLabel, pktMinuteNow, formatMealHours } from "@/lib/m
 import { allocatePaymentToOrders, buildPaymentMethodString, hasOutstandingBalance, planTableAdvance, settlePaymentEntries, type PaymentSplit } from "@/lib/paymentSplit";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
 import { OrderPlacedPrintModal, type PlacedOrderSlipData } from "@/components/pos/OrderPlacedPrintModal";
+import { orderBelongsToCustomer } from "@/lib/customerOrders";
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
@@ -823,7 +824,7 @@ const WaiterPanel = () => {
 
   const customerHistory = useMemo(() => {
     if (!selectedCustomerData) return null;
-    const custOrders = orders.filter(o => o.customerName === selectedCustomerData.name || (selectedCustomerData.phone && o.phone && o.phone.replace(/\D/g, "") === selectedCustomerData.phone.replace(/\D/g, "")));
+    const custOrders = orders.filter(o => orderBelongsToCustomer(o, selectedCustomerData));
     const avgBill = custOrders.length > 0 ? Math.round(custOrders.reduce((s, o) => s + Number(o.total), 0) / custOrders.length) : 0;
     const topItems: Record<string, number> = {};
     custOrders.forEach(o => (o.items || []).forEach(i => { topItems[i.name] = (topItems[i.name] || 0) + i.qty; }));

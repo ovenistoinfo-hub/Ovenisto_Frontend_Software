@@ -62,6 +62,7 @@ import { partialCancelTotals, cancelRefundMethodFor } from "@/lib/cancelRequest"
 import { advanceMethodOf, buildPaymentMethodString, parseNetParts, settledPaymentMethod, settlePaymentEntries, splitTotal } from "@/lib/paymentSplit";
 import { useMealTimes } from "@/hooks/useMealTimes";
 import { isServedAt, servingLabel, pktMinuteNow, formatMealHours } from "@/lib/mealTime";
+import { orderBelongsToCustomer } from "@/lib/customerOrders";
 
 interface CartItem extends OrderItem {
   modifiers?: string[];
@@ -1829,7 +1830,7 @@ const POS = () => {
     if (!selectedCustomer) return null;
     const cust = effectiveCustomers.find((c: any) => c.id === selectedCustomer);
     if (!cust) return null;
-    const custOrders = allOrdersData.filter(o => o.customer === cust.name);
+    const custOrders = allOrdersData.filter(o => orderBelongsToCustomer(o as any, cust));
     const avgBill = custOrders.length > 0 ? Math.round(custOrders.reduce((s, o) => s + o.total, 0) / custOrders.length) : 0;
     const lastVisit = custOrders.length > 0 ? custOrders.sort((a, b) => b.date.localeCompare(a.date))[0]?.date : "-";
     const topItems: Record<string, number> = {};
