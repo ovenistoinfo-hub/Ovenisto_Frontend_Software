@@ -2767,10 +2767,12 @@ const POS = () => {
     setOrderType(targetType);
 
     if (res.customerName) {
-      const matchedCust = effectiveCustomers.find(c =>
-        c.name.toLowerCase().trim() === res.customerName.toLowerCase().trim() ||
-        (res.customerPhone && c.phone && c.phone.replace(/\D/g, "") === res.customerPhone.replace(/\D/g, ""))
-      );
+      // The phone is the identity; a name alone can belong to several customers ("Awais" x4), so it is the
+      // fallback only when the booking has no phone or no customer has it.
+      const bookingDigits = (res.customerPhone || "").replace(/\D/g, "");
+      const matchedCust =
+        (bookingDigits ? effectiveCustomers.find(c => c.phone && c.phone.replace(/\D/g, "") === bookingDigits) : undefined) ||
+        effectiveCustomers.find(c => c.name.toLowerCase().trim() === res.customerName.toLowerCase().trim());
       if (matchedCust) {
         setSelectedCustomer(matchedCust.id);
       }
