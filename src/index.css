@@ -78,7 +78,8 @@
     --accent: 18 100% 62%;
     --accent-foreground: 0 0% 100%;
 
-    --destructive: 0 62.8% 30.6%;
+    /* Same red as light mode: the old dark value (30% lightness) made every red number nearly invisible on the dark background. */
+    --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 95%;
 
     --success: 142 71% 35%;
