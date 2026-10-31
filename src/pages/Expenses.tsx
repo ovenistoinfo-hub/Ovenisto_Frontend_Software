@@ -100,7 +100,7 @@ const Expenses = () => {
 
   const handleSave = async () => {
     if (!form.description.trim()) { toast.error("Description is required"); return; }
-    if (!form.amount || form.amount <= 0) { toast.error("Amount is required"); return; }
+    if (!form.amount || form.amount <= 0) { toast.error("Enter an amount greater than 0"); return; }
     setSaving(true);
     try {
       if (editingId) {
