@@ -860,7 +860,9 @@ const Payroll = () => {
                                 <p className="text-[9px] text-muted-foreground">
                                   Paid through {row.latestPaidThrough}
                                   {row.isPaid
-                                    ? (row.periodStart <= endDate ? ` · Next: ${row.periodStart} → ${endDate}` : "")
+                                    ? (row.latestPaidThrough < endDate
+                                        ? ` · Next: ${new Date(new Date(`${row.latestPaidThrough}T00:00:00Z`).getTime() + 86_400_000).toISOString().slice(0, 10)} → ${endDate}`
+                                        : "")
                                     : ` · Now calculating: ${row.periodStart} → ${row.periodEnd}`}
                                 </p>
                               )}

@@ -157,7 +157,9 @@ export default function EmployeePortal() {
   // Leave date filter
   const leaveYearStart = `${new Date().getFullYear()}-01-01`;
   const [leaveFrom, setLeaveFrom] = useState(leaveYearStart);
-  const [leaveTo, setLeaveTo]     = useState(today);
+  // Whole year, so leave booked for a later date still shows.
+  const leaveYearEnd = `${new Date().getFullYear()}-12-31`;
+  const [leaveTo, setLeaveTo]     = useState(leaveYearEnd);
 
   // Leave form
   const [showLeaveForm, setShowLeaveForm] = useState(false);
@@ -542,14 +544,14 @@ export default function EmployeePortal() {
                     const isDefaultOff = jsDay === userDefaultOff;
                     const isOnLeave = approvedLeaves.some(l => l.startDate <= ds && l.endDate >= ds);
 
-                    let shiftType = shiftByDate[ds] ?? "off";
+                    let shiftType = shiftByDate[ds] ?? (isDefaultOff ? "off" : "none");
                     if (isOnLeave) {
                       shiftType = isDefaultOff ? "off" : "leave";
                     }
 
-                    const label     = shiftType === "leave" ? "Leave" : (shiftType === "off" ? "Day Off" : shiftType.charAt(0).toUpperCase() + shiftType.slice(1));
+                    const label     = shiftType === "none" ? "Not scheduled" : shiftType === "leave" ? "Leave" : (shiftType === "off" ? "Day Off" : shiftType.charAt(0).toUpperCase() + shiftType.slice(1));
                     const isToday   = ds === today;
-                    const times     = (shiftType !== "off" && shiftType !== "leave") ? shiftConfig[shiftType as ShiftName] : null;
+                    const times     = (shiftType !== "off" && shiftType !== "leave" && shiftType !== "none") ? shiftConfig[shiftType as ShiftName] : null;
                     return (
                       <TableRow key={ds} className={cn("hover:bg-muted/20", isToday && "bg-primary/5")}>
                         <TableCell className="text-sm font-medium">
@@ -847,7 +849,7 @@ export default function EmployeePortal() {
                   <Label className="text-xs">To</Label>
                   <DatePicker value={leaveTo} onChange={setLeaveTo} min={leaveFrom} className="mt-1 w-40" />
                 </div>
-                <Button size="sm" variant="outline" onClick={() => { setLeaveFrom(leaveYearStart); setLeaveTo(today); }}>This Year</Button>
+                <Button size="sm" variant="outline" onClick={() => { setLeaveFrom(leaveYearStart); setLeaveTo(leaveYearEnd); }}>This Year</Button>
                 <Button size="sm" variant="outline" onClick={() => {
                   const m = today.slice(0, 7);
                   setLeaveFrom(`${m}-01`);
