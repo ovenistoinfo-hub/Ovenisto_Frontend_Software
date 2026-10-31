@@ -156,7 +156,7 @@ export function AppHeader() {
           <Button key={a.label} variant="ghost" size="sm" asChild className="text-muted-foreground hover:text-primary h-8">
             <Link to={a.url}>
               <a.icon className="h-4 w-4" />
-              <span className="text-xs">{a.label}</span>
+              <span className="text-xs hidden xl:inline">{a.label}</span>
             </Link>
           </Button>
         ))}
@@ -184,7 +184,7 @@ export function AppHeader() {
               <div className="h-7 w-7 rounded-full gradient-primary flex items-center justify-center text-primary-foreground text-xs font-semibold">
                 {user?.name?.charAt(0) || "A"}
               </div>
-              <div className="hidden md:block text-left">
+              <div className="hidden lg:block text-left">
                 <p className="text-xs font-medium leading-none">{user?.name || "Admin"}</p>
                 <p className="text-[10px] text-muted-foreground">{user?.role || "Super Admin"}</p>
               </div>
