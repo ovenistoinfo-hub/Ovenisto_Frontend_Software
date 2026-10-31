@@ -136,6 +136,8 @@ export function GeneralSettingsTab() {
   };
 
   const save = async () => {
+    if (!form.businessName.trim()) return toast.error("Business name is required");
+    if (!form.currency.trim()) return toast.error("Currency is required");
     const rate = Number(form.taxRate);
     if (isNaN(rate) || rate < 0 || rate > 100) return toast.error("Tax rate must be between 0 and 100");
     if (form.email && !form.email.includes("@")) return toast.error("Invalid email format");
