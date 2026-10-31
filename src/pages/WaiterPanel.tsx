@@ -68,6 +68,8 @@ interface CartItem {
   qty: number;
   variant?: string;
   modifiers?: string[];
+  /** Backend uses these to deduct each add-on's ingredient stock (same shape POS sends). */
+  modifierIds?: { modifierId: string; qty: number }[];
   /** Set once a line came off a Deal card rather than the plain menu — see
    *  POS.tsx's identical fields for the full contract (grouping, removal as
    *  one unit, and what deal.revalidate.ts re-derives server-side). */
@@ -1504,6 +1506,7 @@ const WaiterPanel = () => {
         id: cartKey, menuItemId: item.id, variantId: selectedVariant?.id ?? null, cookingTime: item.cookingTime ?? 0,
         name: variantName ? `${item.name} (${variantName})` : item.name,
         price: totalPrice, qty: 1, variant: variantName, modifiers: modNames,
+        modifierIds: Object.entries(selectedModifierQtys).map(([mId, modQty]) => ({ modifierId: mId, qty: modQty })),
       }];
     });
     toast.success(`${item.name}${variantName ? ` (${variantName})` : ""} added`);
@@ -1623,6 +1626,7 @@ const WaiterPanel = () => {
           variantId: i.variantId || null,
           cookingTime: i.cookingTime ?? null,
           name: i.name, price: i.price, qty: i.qty, discount: i.discount || 0, modifiers: i.modifiers ?? [],
+          modifierIds: i.modifierIds ?? [],
           dealId: i.dealId || null, dealName: i.dealName || null, dealLineId: i.dealLineId || null,
           dealGroupId: i.dealGroupId || null, dealRole: i.dealRole || null,
         })),

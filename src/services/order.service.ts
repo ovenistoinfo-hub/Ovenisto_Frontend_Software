@@ -160,7 +160,7 @@ export interface CreateOrderInput {
     discount?: number;
     modifiers?: string[];
     /** Menu-item modifier ids, distinct from `modifiers` (their display names) — both are sent. */
-    modifierIds?: string[];
+    modifierIds?: { modifierId: string; qty: number }[];
     cookingTime?: number | null;
     notes?: string | null;
     /** Deal-tagged line fields — see deal.revalidate.ts's IncomingOrderItem on the backend, which
