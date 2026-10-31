@@ -31,6 +31,7 @@ export interface KitchenItemEntry {
   dealName?: string | null;
   dealItemKey?: string | null;
   notes?: string | null;
+  modifiers?: string[];
   status: "pending" | "preparing" | "ready";
   preparingAt: Date | null;
   actionKey: string; // this dish's own dealItemKey; "shared" only for legacy pre-key orders
@@ -111,6 +112,9 @@ const DishRow = ({ item, isUpdating, clock, onAdvance }: DishRowProps) => {
         <span className="font-black text-primary font-mono text-xs shrink-0">{item.qty}×</span>
         <div className="min-w-0">
           <span className="font-bold text-foreground text-xs break-words">{item.name}</span>
+          {item.modifiers && item.modifiers.length > 0 && (
+            <p className="text-[11px] font-semibold text-muted-foreground break-words">+ {item.modifiers.join(", ")}</p>
+          )}
           {item.notes && <p className="text-[11px] font-semibold text-destructive break-words">Note: {item.notes}</p>}
         </div>
       </div>
@@ -230,6 +234,7 @@ const KitchenPanel = () => {
           dealName: rawItem.dealName ?? null,
           dealItemKey: rawItem.dealItemKey ?? null,
           notes: rawItem.notes?.trim() || null,
+          modifiers: Array.isArray(rawItem.modifiers) ? rawItem.modifiers.map((m) => String(m).replace(/\s*\(\+Rs\.?\s*[\d,.]+\)\s*$/, "")) : [],
           status,
           preparingAt: status === "preparing" ? (preparingAtMap.current[itemTicketId] ?? placedAtMap.current[o.id]) : null,
           actionKey,
