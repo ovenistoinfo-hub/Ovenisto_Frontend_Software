@@ -471,10 +471,10 @@ const Production = () => {
                                   <TableCell className={`text-sm ${expiryColor(b.effectiveExpiry)}`}>{expiryLabel(b.effectiveExpiry)}</TableCell>
                                   <TableCell>
                                     {wasteTarget?.batchId === b.id ? (
-                                      <div className="flex gap-1 items-center">
+                                      <div className="flex flex-wrap gap-1 items-center min-w-[7rem]">
                                         <Input
                                           type="number" min={0.01} max={b.remainingQty} step={0.01}
-                                          className="w-20 h-7 text-xs"
+                                          className="w-16 h-7 text-xs"
                                           value={wasteQty}
                                           onChange={e => setWasteQty(e.target.value)}
                                         />
