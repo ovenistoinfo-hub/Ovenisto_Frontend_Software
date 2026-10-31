@@ -284,7 +284,7 @@ const StockAdjustments = () => {
     if (mode === "waste") {
       const name = form.ingredientId ? (selectedIng?.name || "") : form.itemName.trim();
       if (!name) { toast.error("Select ingredient or enter item name"); return null; }
-      if (form.quantity <= 0) { toast.error("Enter quantity"); return null; }
+      if (form.quantity <= 0) { toast.error("Quantity must be greater than 0"); return null; }
       if (!form.reason) { toast.error("Select a waste reason"); return null; }
       if (form.ingredientId && !form.warehouseId) { toast.error("Select target warehouse for stock deduction"); return null; }
       return {
@@ -301,7 +301,7 @@ const StockAdjustments = () => {
       };
     }
     if (!form.ingredientId) { toast.error("Select an ingredient"); return null; }
-    if (form.quantity <= 0) { toast.error("Enter quantity"); return null; }
+    if (form.quantity <= 0) { toast.error("Quantity must be greater than 0"); return null; }
     if (!form.warehouseId) { toast.error("Select target warehouse"); return null; }
     return {
       kind: "correction",
