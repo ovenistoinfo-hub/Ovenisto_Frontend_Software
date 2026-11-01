@@ -470,7 +470,7 @@ const Users = () => {
           {/* Custom Header */}
           <DialogHeader className="px-6 pt-5 pb-4 border-b border-border/60 bg-muted/40">
             <div className="flex items-center gap-3">
-              <div className="p-2.5 rounded-xl bg-warning/10 border border-warning/30 text-warning">
+              <div className="p-2.5 rounded-xl bg-primary/10 border border-primary/30 text-primary">
                 <ShieldCheck className="h-5 w-5" />
               </div>
               <div>
@@ -499,7 +499,7 @@ const Users = () => {
                 <Tabs value={accountMode} onValueChange={(v) => handleModeChange(v as "employee" | "owner")} className="w-full">
                   <TabsList className="grid grid-cols-2 w-full p-1 bg-muted/60 rounded-xl h-12">
                     <TabsTrigger value="employee" className="rounded-lg text-xs font-bold gap-2 data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-sm">
-                      <UserCheck className="h-4 w-4 text-success" />
+                      <UserCheck className="h-4 w-4 text-primary" />
                       Employee Login Account
                     </TabsTrigger>
                     <TabsTrigger value="owner" className="rounded-lg text-xs font-bold gap-2 data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-sm">
@@ -513,9 +513,9 @@ const Users = () => {
 
             {/* Employee Selection Section (Only in Add + Employee mode) */}
             {!editingId && accountMode === "employee" && (
-              <div className="p-4 rounded-xl bg-success/5 border border-success/20 space-y-3">
+              <div className="p-4 rounded-xl bg-primary/5 border border-primary/20 space-y-3">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-xs font-bold text-success">
+                  <div className="flex items-center gap-2 text-xs font-bold text-primary">
                     <UserPlus className="h-4 w-4" />
                     Step 1: Select Onboarded Employee
                   </div>
@@ -527,13 +527,13 @@ const Users = () => {
                 {unlinkedEmployees.length === 0 ? (
                   <div className="p-3.5 rounded-lg bg-card border border-border/80 text-xs text-muted-foreground flex items-center justify-between">
                     <span>No unlinked employees found waiting for a login.</span>
-                    <Link to="/employees" className="text-success font-bold hover:underline flex items-center gap-1">
+                    <Link to="/employees" className="text-primary font-bold hover:underline flex items-center gap-1">
                       Onboard Employee →
                     </Link>
                   </div>
                 ) : (
                   <Select value={selectedEmployeeId} onValueChange={handleEmployeeSelect}>
-                    <SelectTrigger className="h-10 bg-card border-success/30 text-xs font-semibold">
+                    <SelectTrigger className="h-10 bg-card border-primary/30 text-xs font-semibold">
                       <SelectValue placeholder="-- Choose an onboarded staff member --" />
                     </SelectTrigger>
                     <SelectContent>
@@ -551,10 +551,10 @@ const Users = () => {
                 )}
 
                 {selectedEmployeeObj && (
-                  <div className="p-3 rounded-lg bg-card border border-success/30 text-xs space-y-1 animate-in fade-in duration-200">
+                  <div className="p-3 rounded-lg bg-card border border-primary/30 text-xs space-y-1 animate-in fade-in duration-200">
                     <div className="flex items-center justify-between">
                       <span className="font-bold text-foreground">Linked Profile Details</span>
-                      <Badge variant="outline" className="text-[9px] bg-success/10 text-success border-success/30">
+                      <Badge variant="outline" className="text-[9px] bg-primary/10 text-primary border-primary/30">
                         ✔ Auto-Filled
                       </Badge>
                     </div>
@@ -572,7 +572,7 @@ const Users = () => {
                 {/* 1. Identity & Credentials Card */}
                 <div className="space-y-3">
                   <div className="flex items-center gap-2 text-xs font-bold text-muted-foreground uppercase tracking-wider">
-                    <KeyRound className="h-3.5 w-3.5 text-warning" />
+                    <KeyRound className="h-3.5 w-3.5 text-primary" />
                     Account Identity & Credentials
                   </div>
 
@@ -657,7 +657,7 @@ const Users = () => {
                 <div className="space-y-3 pt-2">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2 text-xs font-bold text-muted-foreground uppercase tracking-wider">
-                      <Building2 className="h-3.5 w-3.5 text-warning" />
+                      <Building2 className="h-3.5 w-3.5 text-primary" />
                       Role & Branch Scope
                     </div>
                     <Badge variant="outline" className={cn("text-[11px] font-bold px-2 py-0.5", roleColors[form.role])}>
@@ -728,7 +728,7 @@ const Users = () => {
                 <div className="space-y-3 pt-2">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2 text-xs font-bold text-muted-foreground uppercase tracking-wider">
-                      <Shield className="h-3.5 w-3.5 text-warning" />
+                      <Shield className="h-3.5 w-3.5 text-primary" />
                       Granular Module Permissions
                     </div>
                     <div className="flex items-center gap-1.5">
@@ -738,7 +738,7 @@ const Users = () => {
                       <Button type="button" variant="outline" size="sm" className="h-7 text-[10px] gap-1 px-2" onClick={() => applyPreset("view")}>
                         <Eye className="h-3 w-3" /> View Only
                       </Button>
-                      <Button type="button" variant="outline" size="sm" className="h-7 text-[10px] gap-1 px-2 text-warning" onClick={() => applyPreset("full")}>
+                      <Button type="button" variant="outline" size="sm" className="h-7 text-[10px] gap-1 px-2 text-primary" onClick={() => applyPreset("full")}>
                         <Sparkles className="h-3 w-3" /> Full Access
                       </Button>
                     </div>
@@ -758,7 +758,7 @@ const Users = () => {
                         {modules.map(mod => (
                           <tr key={mod} className="hover:bg-muted/30 transition-colors">
                             <td className="p-2.5 font-semibold text-foreground flex items-center gap-2">
-                              <span className="h-1.5 w-1.5 rounded-full bg-warning" />
+                              <span className="h-1.5 w-1.5 rounded-full bg-primary" />
                               {mod}
                             </td>
                             {permTypes.map(perm => (
@@ -771,7 +771,7 @@ const Users = () => {
                                   <Checkbox
                                     checked={(perms[mod] || []).includes(perm)}
                                     onCheckedChange={() => togglePerm(mod, perm)}
-                                    className="data-[state=checked]:bg-warning data-[state=checked]:border-warning"
+                                    className="data-[state=checked]:bg-primary data-[state=checked]:border-primary"
                                   />
                                 )}
                               </td>
@@ -787,13 +787,13 @@ const Users = () => {
           </div>
 
           {/* Modal Footer */}
-          <DialogFooter className="px-6 py-4 border-t border-border/60 bg-muted/40 flex items-center justify-between">
+          <DialogFooter className="px-4 sm:px-6 py-4 border-t border-border/60 bg-muted/40 flex flex-row items-center justify-between gap-2 sm:space-x-0">
             <Button variant="outline" size="sm" onClick={() => setShowDialog(false)}>
               Cancel
             </Button>
             <Button
               size="sm"
-              className="bg-warning hover:bg-warning text-warning-foreground font-semibold gap-1.5 shadow-md active:scale-95 transition-all"
+              className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold gap-1.5 shadow-md active:scale-95 transition-all"
               onClick={handleSave}
               disabled={saving || (!editingId && accountMode === "employee" && selectedEmployeeId === "none")}
             >
