@@ -697,7 +697,7 @@ const Transfers = () => {
                 </div>
                 <div className="min-w-0">
                   <p className="text-xs text-muted-foreground">{isSuperAdmin ? "Total Transfers" : "Total Receives"}</p>
-                  <p className="text-2xl font-bold tracking-tight text-primary">
+                  <p className="text-2xl font-bold tracking-tight text-primary whitespace-nowrap">
                     {currency} {stats.total.toLocaleString()}
                   </p>
                 </div>
@@ -712,7 +712,7 @@ const Transfers = () => {
                 </div>
                 <div className="min-w-0">
                   <p className="text-xs text-muted-foreground">{isSuperAdmin ? "Today's Transfers" : "Today's Receives"}</p>
-                  <p className="text-2xl font-bold tracking-tight text-primary">
+                  <p className="text-2xl font-bold tracking-tight text-primary whitespace-nowrap">
                     {currency} {stats.today.toLocaleString()}
                   </p>
                 </div>
@@ -742,7 +742,7 @@ const Transfers = () => {
                 </div>
                 <div className="min-w-0">
                   <p className="text-xs text-muted-foreground">This Month</p>
-                  <p className="text-2xl font-bold tracking-tight text-primary">
+                  <p className="text-2xl font-bold tracking-tight text-primary whitespace-nowrap">
                     {currency} {stats.monthly.toLocaleString()}
                   </p>
                 </div>

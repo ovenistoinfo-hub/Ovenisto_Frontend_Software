@@ -59,9 +59,11 @@ function makeProvisionalOrderNumber(localId: string): string {
  *  swallow that silently, since there would then be no record of the order at all. */
 export async function addPendingOrder(
   payload: Omit<CreateOrderInput, "clientRequestId">,
-  meta: { sourceScreen: "pos" | "waiter"; outletId: string | null; postSync?: PendingOrderPostSync }
+  meta: { sourceScreen: "pos" | "waiter"; outletId: string | null; postSync?: PendingOrderPostSync; localId?: string }
 ): Promise<PendingOrder> {
-  const localId = crypto.randomUUID();
+  // `localId` is the clientRequestId the failed first attempt already sent: reusing it lets the
+  // server answer the retry with the order it may already have created (a timed-out POST).
+  const localId = meta.localId ?? crypto.randomUUID();
   const now = Date.now();
   const row: PendingOrder = {
     localId,

@@ -1774,7 +1774,7 @@ const SelfOrder = () => {
     <div className="min-h-screen bg-background flex flex-col">
       {/* Sticky Header Bar */}
       <div className="sticky top-0 z-30 bg-card/90 backdrop-blur-md border-b border-border/80 px-4 py-2.5 shadow-sm transition-all">
-        <div className="max-w-lg mx-auto flex items-center justify-between gap-2">
+        <div className="max-w-lg md:max-w-3xl lg:max-w-5xl xl:max-w-6xl 2xl:max-w-7xl mx-auto flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 min-w-0">
             <div className="h-9 w-9 rounded-xl gradient-primary flex items-center justify-center text-primary-foreground shadow-md shadow-primary/25 shrink-0">
               <Flame className="h-5 w-5 animate-pulse" />
@@ -1823,7 +1823,7 @@ const SelfOrder = () => {
 
       {/* Sticky Search & Category Bar */}
       <div className="bg-card/60 backdrop-blur-xs border-b border-border/60 sticky top-[57px] z-20 space-y-2 py-2 px-4 shadow-xs">
-        <div className="max-w-lg mx-auto">
+        <div className="max-w-lg md:max-w-3xl lg:max-w-5xl xl:max-w-6xl 2xl:max-w-7xl mx-auto">
           <div className="relative">
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
@@ -1905,10 +1905,10 @@ const SelfOrder = () => {
 
       {/* Menu Items Container */}
       <div className="flex-1 overflow-y-auto px-4 py-4 pb-28">
-        <div className="max-w-lg mx-auto space-y-3">
+        <div className="max-w-lg md:max-w-3xl lg:max-w-5xl xl:max-w-6xl 2xl:max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-3">
           {catFilter === "__deals__" ? (
             sellableDeals.length === 0 ? (
-              <div className="text-center py-16 px-4 space-y-2 bg-card/40 rounded-3xl border border-dashed border-border">
+              <div className="col-span-full text-center py-16 px-4 space-y-2 bg-card/40 rounded-3xl border border-dashed border-border">
                 <Gift className="h-8 w-8 mx-auto text-muted-foreground" />
                 <p className="font-semibold text-foreground text-sm">No deals are running right now</p>
               </div>
@@ -2027,7 +2027,7 @@ const SelfOrder = () => {
                       <div className="flex-1 min-w-0 flex flex-col justify-between self-stretch">
                         <div>
                           <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className="font-bold text-foreground text-sm leading-snug line-clamp-1">
+                            <span className="font-bold text-foreground text-sm leading-snug break-words">
                               {item.name}
                             </span>
                             {item.category?.name && (
@@ -2125,7 +2125,7 @@ const SelfOrder = () => {
                                     disabled={!v.available}
                                     onClick={() => setSelectedVariant(isSelected ? null : v)}
                                     className={cn(
-                                      "px-3 py-2 rounded-xl text-xs font-semibold border text-left transition-all flex items-center justify-between",
+                                      "px-3 py-2 rounded-xl text-xs font-semibold border text-left transition-all flex items-center justify-between gap-1.5",
                                       !v.available
                                         ? "opacity-50 cursor-not-allowed line-through bg-muted/40 border-border/60 text-muted-foreground"
                                         : isSelected
@@ -2133,7 +2133,7 @@ const SelfOrder = () => {
                                         : "bg-card border-border/80 text-foreground hover:border-primary/40"
                                     )}
                                   >
-                                    <span className="truncate">{v.name}</span>
+                                    <span className="min-w-0 break-words leading-tight">{v.name}</span>
                                     {v.available ? (
                                       <span className="font-bold shrink-0 ml-1">
                                         {currency} {v.price.toLocaleString()}
@@ -2200,7 +2200,7 @@ const SelfOrder = () => {
               })}
 
               {filtered.length === 0 && (
-                <div className="text-center py-16 px-4 space-y-2 bg-card/40 rounded-3xl border border-dashed border-border">
+                <div className="col-span-full text-center py-16 px-4 space-y-2 bg-card/40 rounded-3xl border border-dashed border-border">
                   <Search className="h-8 w-8 mx-auto text-muted-foreground" />
                   <p className="font-semibold text-foreground text-sm">No dishes match "{search}"</p>
                   <p className="text-xs text-muted-foreground">Try clearing search or picking another category.</p>

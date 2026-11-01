@@ -2783,7 +2783,7 @@ const WaiterPanel = () => {
         
         {/* Top Actions & Stats Cards Row (Floor Plan mode only) */}
         {!isOrderingMode && (
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 w-full shrink-0">
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(9.5rem,1fr))] gap-2.5 w-full shrink-0">
             {[
               { key: "my_collection", count: `${currency} ${(myActiveCash?.totalExpected || 0).toLocaleString()}`, label: "My Collection", color: "text-success", bg: "bg-success/10", border: "border-success/30", Icon: Wallet },
               { key: "available",     count: stats.available,                              label: "Available",          color: "text-success",  bg: "bg-success/10",  border: "border-success/30",  Icon: CircleDot },

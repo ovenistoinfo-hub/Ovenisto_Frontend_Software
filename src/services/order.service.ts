@@ -397,8 +397,11 @@ export const orderService = {
    *  nor a clean network error), since fetch itself has no timeout; `suppressAuthRedirect`
    *  prevents an unrelated hard /login redirect from firing mid-checkout on a 401 here. */
   async createOrder(data: CreateOrderInput, offlineMeta?: OfflineQueueMeta): Promise<OrderRecord> {
+    // Minted BEFORE the first attempt: a 10s timeout can fire after the server already created the
+    // order, and the queued retry must carry the same key or it creates a duplicate order.
+    const clientRequestId = data.clientRequestId ?? crypto.randomUUID();
     try {
-      return await postOrderDirect(data);
+      return await postOrderDirect({ ...data, clientRequestId });
     } catch (err) {
       if (err instanceof ApiError) throw err; // a genuine rejection (stock/deal/validation) — unchanged behavior
       // Network-type failure (fetch TypeError, or our own AbortController timeout) — queue it
@@ -407,6 +410,7 @@ export const orderService = {
         sourceScreen: offlineMeta?.sourceScreen ?? 'pos',
         outletId: outletStore.get(),
         postSync: offlineMeta?.postSync,
+        localId: clientRequestId,
       });
       return buildOfflineOrderStub(row);
     }
