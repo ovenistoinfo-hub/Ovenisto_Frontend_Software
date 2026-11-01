@@ -737,12 +737,12 @@ const Transfers = () => {
           <Card className="shadow-sm">
             <CardContent className="p-5">
               <div className="flex items-center gap-4">
-                <div className="h-11 w-11 rounded-xl bg-purple-500/10 flex items-center justify-center shrink-0">
-                  <BarChart3 className="h-5 w-5 text-purple-500" />
+                <div className="h-11 w-11 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                  <BarChart3 className="h-5 w-5 text-primary" />
                 </div>
                 <div className="min-w-0">
                   <p className="text-xs text-muted-foreground">This Month</p>
-                  <p className="text-2xl font-bold tracking-tight text-purple-500">
+                  <p className="text-2xl font-bold tracking-tight text-primary">
                     {currency} {stats.monthly.toLocaleString()}
                   </p>
                 </div>

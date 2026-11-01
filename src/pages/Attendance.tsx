@@ -1121,7 +1121,7 @@ export default function AttendancePage() {
                           if (onLeave) {
                             return (
                               <td key={i} className={cn("border p-1.5 text-center", activeSection.cellBg)}>
-                                <div title="Approved leave" className="text-[10px] px-2 py-1.5 rounded-md font-medium w-full border bg-purple-100 text-purple-700 border-purple-200 cursor-not-allowed">
+                                <div title="Approved leave" className="text-[10px] px-2 py-1.5 rounded-md font-medium w-full border bg-info/15 text-info border-info/30 cursor-not-allowed">
                                   Leave
                                 </div>
                               </td>

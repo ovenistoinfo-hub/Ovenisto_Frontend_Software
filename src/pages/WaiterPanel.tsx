@@ -3342,7 +3342,7 @@ const WaiterPanel = () => {
                                 {deal.image ? (
                                   <img src={deal.image} alt={deal.name} className={cn("w-full h-full object-cover group-hover:scale-105 transition-transform duration-300", outOfStock && "grayscale")} />
                                 ) : (
-                                  <div className="w-full h-full bg-muted/40 flex flex-col items-center justify-center relative overflow-hidden group-hover:from-amber-500/20 group-hover:to-orange-500/30 transition-all duration-300">
+                                  <div className="w-full h-full bg-muted/40 flex flex-col items-center justify-center relative overflow-hidden transition-all duration-300">
                                     <div className="p-2.5 rounded-full bg-primary/10 border border-primary/20 shadow-inner group-hover:scale-110 group-hover:bg-primary/20 transition-all duration-300">
                                       <Gift className="h-6 w-6 text-primary group-hover:text-primary transition-colors" />
                                     </div>

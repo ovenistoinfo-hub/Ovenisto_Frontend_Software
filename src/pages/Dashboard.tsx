@@ -770,7 +770,7 @@ const Dashboard = () => {
     {
       title: "Delivery",
       icon: Bike,
-      color: "bg-purple-500/10 text-purple-500 border-purple-500/20",
+      color: "bg-primary/10 text-primary border-primary/20",
       orders: channelData?.channels.delivery.orders ?? 0,
       sale: channelData?.channels.delivery.sale ?? 0,
       cost: channelData?.channels.delivery.cost ?? 0,

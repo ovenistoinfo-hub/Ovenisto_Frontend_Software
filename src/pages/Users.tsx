@@ -24,7 +24,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 
 const roleColors: Record<string, string> = {
-  "Super Admin": "bg-purple-500/15 text-purple-700 dark:text-purple-300 border-purple-500/30",
+  "Super Admin": "bg-primary/15 text-primary border-primary/30",
   Admin: "bg-destructive/15 text-destructive border-destructive/30",
   Manager: "bg-info/15 text-info border-info/30",
   "Floor Manager": "bg-success/15 text-success border-success/30",
@@ -36,7 +36,7 @@ const roleColors: Record<string, string> = {
   "Store Manager": "bg-info/15 text-info border-info/30",
   Accountant: "bg-success/15 text-success border-success/30",
   Rider: "bg-warning/15 text-warning border-warning/30",
-  "Customer Screen": "bg-slate-500/15 text-slate-700 dark:text-slate-300 border-slate-500/30",
+  "Customer Screen": "bg-muted text-muted-foreground border-border",
 };
 
 const roles = [
@@ -503,7 +503,7 @@ const Users = () => {
                       Employee Login Account
                     </TabsTrigger>
                     <TabsTrigger value="owner" className="rounded-lg text-xs font-bold gap-2 data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-sm">
-                      <Crown className="h-4 w-4 text-purple-500" />
+                      <Crown className="h-4 w-4 text-primary" />
                       Administrative / Kiosk Account
                     </TabsTrigger>
                   </TabsList>

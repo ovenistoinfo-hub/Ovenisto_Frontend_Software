@@ -352,7 +352,7 @@ const TableLayout = () => {
               <Card
                 onClick={() => openEdit(t)}
                 className={cn(
-                  "shadow-md bg-white dark:bg-zinc-900/40 border rounded-2xl flex flex-col justify-between p-3 h-[152px] w-full cursor-pointer transition-all duration-300 relative hover:scale-[1.02]",
+                  "shadow-md bg-card border rounded-2xl flex flex-col justify-between p-3 h-[152px] w-full cursor-pointer transition-all duration-300 relative hover:scale-[1.02]",
                   cardStatusClass,
                   isMaint && "opacity-50 cursor-not-allowed"
                 )}
@@ -372,7 +372,7 @@ const TableLayout = () => {
                     <Button
                       variant="outline"
                       size="icon"
-                      className="h-6 w-6 rounded bg-zinc-950/40 border-zinc-800 hover:bg-zinc-800 hover:border-zinc-700 shadow-xs transition-all duration-200 z-20"
+                      className="h-6 w-6 rounded bg-muted border-border hover:bg-accent shadow-xs transition-all duration-200 z-20"
                       onClick={(e) => {
                         e.stopPropagation();
                         setSelectedQrTable(t);
@@ -386,17 +386,17 @@ const TableLayout = () => {
                 {/* Middle Area: Graphical Table Blueprint Diagram */}
                 <div className="flex-grow flex items-center justify-center relative my-1 w-full select-none">
                   {t.shape === "round" && (
-                    <div className={cn("h-16 w-16 rounded-full border-2 flex items-center justify-center relative bg-zinc-50 dark:bg-zinc-950/40", statusBorderClass)}>
+                    <div className={cn("h-16 w-16 rounded-full border-2 flex items-center justify-center relative bg-muted/50", statusBorderClass)}>
                       {renderMiniChairs("round", t.capacity, chairBgClass)}
                     </div>
                   )}
                   {t.shape === "square" && (
-                    <div className={cn("h-14 w-14 rounded-xl border-2 flex items-center justify-center relative bg-zinc-50 dark:bg-zinc-950/40", statusBorderClass)}>
+                    <div className={cn("h-14 w-14 rounded-xl border-2 flex items-center justify-center relative bg-muted/50", statusBorderClass)}>
                       {renderMiniChairs("square", t.capacity, chairBgClass)}
                     </div>
                   )}
                   {t.shape === "rectangle" && (
-                    <div className={cn("h-12 w-20 rounded-xl border-2 flex items-center justify-center relative bg-zinc-50 dark:bg-zinc-950/40", statusBorderClass)}>
+                    <div className={cn("h-12 w-20 rounded-xl border-2 flex items-center justify-center relative bg-muted/50", statusBorderClass)}>
                       {renderMiniChairs("rectangle", t.capacity, chairBgClass)}
                     </div>
                   )}
@@ -408,7 +408,7 @@ const TableLayout = () => {
                     {t.floor || "Main Hall"}
                   </span>
                   <div className="flex items-center gap-1 shrink-0">
-                    <div className="flex items-center gap-1 text-[11px] font-bold text-foreground bg-zinc-100 dark:bg-zinc-800/90 px-2 py-0.5 rounded-full border border-zinc-200 dark:border-zinc-700/80 shadow-xs">
+                    <div className="flex items-center gap-1 text-[11px] font-bold text-foreground bg-muted px-2 py-0.5 rounded-full border border-border shadow-xs">
                       <Users className="h-3 w-3 text-muted-foreground shrink-0" />
                       <span>{t.capacity}</span>
                     </div>

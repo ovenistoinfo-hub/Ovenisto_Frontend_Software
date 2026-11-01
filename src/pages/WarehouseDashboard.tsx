@@ -298,9 +298,9 @@ export default function WarehouseDashboard() {
 
                 <Card className="shadow-sm border-l-4 border-l-purple-500 p-4 flex flex-col gap-1">
                   <div className="flex items-center gap-2 text-muted-foreground text-xs font-medium">
-                    <Trash2 className="h-3.5 w-3.5 text-purple-500" /> Waste
+                    <Trash2 className="h-3.5 w-3.5 text-primary" /> Waste
                   </div>
-                  <p className="text-xl font-bold text-purple-600 dark:text-purple-400">{fmt(d?.waste ?? 0)}</p>
+                  <p className="text-xl font-bold text-foreground">{fmt(d?.waste ?? 0)}</p>
                 </Card>
               </div>
 
@@ -354,7 +354,7 @@ export default function WarehouseDashboard() {
                   <Card className={cn("shadow-sm", !showProcurement && !showDistribution ? "col-span-1 md:col-span-2 lg:col-span-3" : "")}>
                     <CardHeader className="pb-3">
                       <CardTitle className="text-sm flex items-center gap-2">
-                        <ClipboardList className="h-4 w-4 text-purple-500" />
+                        <ClipboardList className="h-4 w-4 text-primary" />
                         {demandsLabel}
                       </CardTitle>
                     </CardHeader>
