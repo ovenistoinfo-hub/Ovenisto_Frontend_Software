@@ -79,7 +79,7 @@ export function DatePicker({
             variant="outline"
             disabled={disabled}
             className={cn(
-              "w-full h-10 justify-start gap-2 px-3 text-xs font-mono font-medium",
+              "w-full h-10 justify-start gap-2 px-3 text-sm font-normal tabular-nums",
               "border-border/70 bg-muted/20 hover:bg-muted/40 hover:border-primary/40",
               !selected && "text-muted-foreground font-sans",
               clearable && selected && "pr-9",
