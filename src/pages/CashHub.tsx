@@ -456,7 +456,7 @@ const CashHub = () => {
             <Coins className="h-4 w-4" />
             Live Balances
             {activeStaffCount > 0 && (
-              <Badge className="ml-1 px-1.5 py-0.5 text-[10px] bg-warning text-black font-semibold rounded-full border-none">
+              <Badge className="ml-1 px-1.5 py-0.5 text-[10px] bg-warning text-warning-foreground font-semibold rounded-full border-none">
                 {activeStaffCount}
               </Badge>
             )}

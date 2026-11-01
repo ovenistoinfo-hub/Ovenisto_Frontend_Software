@@ -1399,7 +1399,7 @@ const SelfOrder = () => {
 
                     <div
                       className={cn(
-                        "flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-extrabold border",
+                        "flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border",
                         declined && "bg-destructive/10 text-destructive border-destructive/20",
                         paid && "bg-success/10 text-success border-success/20",
                         confirmed && "bg-success/15 text-success border-success/30 animate-pulse",
@@ -1463,7 +1463,7 @@ const SelfOrder = () => {
 
               <span
                 className={cn(
-                  "text-[10px] font-extrabold px-2.5 py-0.5 rounded-full border inline-flex items-center gap-1",
+                  "text-[10px] font-semibold px-2.5 py-0.5 rounded-full border inline-flex items-center gap-1",
                   isSittingFullyPaid
                     ? "bg-success/15 text-success border-success/30"
                     : "bg-warning/15 text-warning-foreground border-warning/30"
@@ -1490,7 +1490,7 @@ const SelfOrder = () => {
                 <span>{taxName} ({taxRate}%)</span>
                 <span>{currency} {sittingTax.toLocaleString()}</span>
               </div>
-              <div className="flex justify-between font-extrabold text-base pt-2 border-t border-border/60 text-foreground">
+              <div className="flex justify-between font-semibold text-base pt-2 border-t border-border/60 text-foreground">
                 <span>Total Bill Amount</span>
                 <span className="text-primary">{currency} {sittingGrandTotal.toLocaleString()}</span>
               </div>
@@ -1611,7 +1611,7 @@ const SelfOrder = () => {
                     <span>{taxName} ({taxRate}%)</span>
                     <span>{currency} {sittingTax.toLocaleString()}</span>
                   </div>
-                  <div className="flex justify-between font-extrabold text-sm pt-2 border-t border-dashed border-border/80 text-foreground">
+                  <div className="flex justify-between font-semibold text-sm pt-2 border-t border-dashed border-border/80 text-foreground">
                     <span>GRAND TOTAL</span>
                     <span className="text-primary">{currency} {sittingGrandTotal.toLocaleString()}</span>
                   </div>
@@ -1664,7 +1664,7 @@ const SelfOrder = () => {
               <Flame className="h-9 w-9" />
             </div>
             <div>
-              <h1 className="font-extrabold text-2xl text-foreground tracking-tight">
+              <h1 className="font-semibold text-2xl text-foreground tracking-tight">
                 {restaurantName || "Welcome"}
               </h1>
               <div className="inline-flex items-center gap-1.5 mt-1 px-3 py-1 rounded-full bg-primary/10 text-primary border border-primary/20 text-xs font-bold">
@@ -1717,7 +1717,7 @@ const SelfOrder = () => {
                   >
                     <Minus className="h-4 w-4" />
                   </Button>
-                  <span className="font-extrabold text-lg text-foreground w-12 text-center">
+                  <span className="font-semibold text-lg text-foreground w-12 text-center">
                     {guestCount}
                   </span>
                   <Button
@@ -1965,7 +1965,7 @@ const SelfOrder = () => {
                               {pricing.regularStrike ? pricing.regularLabel : `was ${pricing.regularLabel}`}
                             </span>
                           )}
-                          <span className="font-extrabold text-primary text-base">{pricing.priceLabel}</span>
+                          <span className="font-semibold text-primary text-base">{pricing.priceLabel}</span>
                         </div>
                         {pricing.savingsPercent > 0 && (
                           <span className="text-[10px] font-bold text-primary bg-primary/10 border border-primary/30 px-2 py-1 rounded-lg shrink-0">
@@ -2045,7 +2045,7 @@ const SelfOrder = () => {
                           ) : !item.available ? (
                             <p className="font-bold text-destructive text-xs mt-1 uppercase tracking-wide">Out of Stock</p>
                           ) : (
-                            <p className="font-extrabold text-primary text-base mt-1">
+                            <p className="font-semibold text-primary text-base mt-1">
                               {hasVariants
                                 ? `${currency} ${item.variants[0].price.toLocaleString()} – ${currency} ${item.variants[item.variants.length - 1].price.toLocaleString()}`
                                 : `${currency} ${item.price.toLocaleString()}`}
@@ -2065,7 +2065,7 @@ const SelfOrder = () => {
                               >
                                 <Minus className="h-3.5 w-3.5" />
                               </Button>
-                              <span className="font-extrabold text-xs text-primary w-5 text-center">
+                              <span className="font-semibold text-xs text-primary w-5 text-center">
                                 {inCart.qty}
                               </span>
                               <Button
@@ -2224,13 +2224,13 @@ const SelfOrder = () => {
             <div className="flex items-center gap-3">
               <div className="relative h-11 w-11 rounded-xl gradient-primary flex items-center justify-center text-primary-foreground shadow-md shadow-primary/30">
                 <ShoppingCart className="h-5 w-5" />
-                <span className="absolute -top-1.5 -right-1.5 bg-foreground text-background font-extrabold text-[10px] h-5 w-5 rounded-full flex items-center justify-center border-2 border-card shadow-xs animate-bounce">
+                <span className="absolute -top-1.5 -right-1.5 bg-foreground text-background font-semibold text-[10px] h-5 w-5 rounded-full flex items-center justify-center border-2 border-card shadow-xs animate-bounce">
                   {cartCount}
                 </span>
               </div>
               <div>
                 <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Total Order</p>
-                <p className="text-base font-extrabold text-foreground leading-tight">
+                <p className="text-base font-semibold text-foreground leading-tight">
                   {currency} {cartTotal.toLocaleString()}
                 </p>
               </div>
@@ -2276,7 +2276,7 @@ const SelfOrder = () => {
                       <div className="flex items-start justify-between gap-2">
                         <div className="space-y-0.5 min-w-0 flex-1">
                           <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className="inline-flex items-center gap-1 text-[10px] font-extrabold text-primary uppercase tracking-wider bg-primary/10 border border-primary/30 px-1.5 py-0.5 rounded-full">
+                            <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-primary uppercase tracking-wider bg-primary/10 border border-primary/30 px-1.5 py-0.5 rounded-full">
                               <Gift className="h-2.5 w-2.5" /> Deal
                             </span>
                             {discount > 0 && (
@@ -2501,7 +2501,7 @@ const SelfOrder = () => {
                 <span>{taxName} ({taxRate}%)</span>
                 <span className="font-mono">{currency} {Math.round(tax).toLocaleString()}</span>
               </div>
-              <div className="flex justify-between font-extrabold text-sm pt-2 border-t border-border/60 text-foreground">
+              <div className="flex justify-between font-semibold text-sm pt-2 border-t border-border/60 text-foreground">
                 <span>Total Amount</span>
                 <span className="text-primary text-base font-mono font-bold">{currency} {Math.round(grandTotal).toLocaleString()}</span>
               </div>

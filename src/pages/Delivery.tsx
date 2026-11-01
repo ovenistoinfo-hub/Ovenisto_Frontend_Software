@@ -223,7 +223,7 @@ const Delivery = () => {
             <Package className="h-4 w-4" />
             Active Orders
             {(pendingOrders.length + activeAssignments.length) > 0 && (
-              <Badge className="h-5 px-1.5 text-[11px] bg-warning text-black font-semibold rounded-full">
+              <Badge className="h-5 px-1.5 text-[11px] bg-warning text-warning-foreground font-semibold rounded-full">
                 {pendingOrders.length + activeAssignments.length}
               </Badge>
             )}
@@ -303,7 +303,7 @@ const Delivery = () => {
 
                           <Button
                             size="sm"
-                            className="w-full bg-warning hover:bg-warning text-black font-bold gap-1.5 shadow-sm"
+                            className="w-full bg-warning hover:bg-warning text-warning-foreground font-bold gap-1.5 shadow-sm"
                             onClick={e => { e.stopPropagation(); openAssignDialog(o.id); }}>
                             <Bike className="h-4 w-4" />
                             Assign Rider
@@ -576,7 +576,7 @@ const Delivery = () => {
           <DialogFooter className="gap-2 sm:gap-0">
             <Button variant="outline" onClick={() => setShowAssign(null)}>Cancel</Button>
             <Button
-              className="bg-warning hover:bg-warning text-black font-bold gap-1.5"
+              className="bg-warning hover:bg-warning text-warning-foreground font-bold gap-1.5"
               disabled={!selectedRider || assigning}
               onClick={handleAssign}>
               {assigning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Bike className="h-4 w-4" />}
@@ -611,7 +611,7 @@ const Delivery = () => {
                 {(detailItem?.order as any)?.phone && (
                   <a
                     href={`tel:${(detailItem?.order as any)?.phone}`}
-                    className="inline-flex items-center gap-1 text-xs font-bold text-warning bg-warning/10 px-2 py-1 rounded-md border border-warning/20 hover:bg-warning hover:text-black transition-all">
+                    className="inline-flex items-center gap-1 text-xs font-bold text-warning bg-warning/10 px-2 py-1 rounded-md border border-warning/20 hover:bg-warning hover:text-warning-foreground transition-all">
                     <Phone className="h-3 w-3" />
                     Call
                   </a>
@@ -711,7 +711,7 @@ const Delivery = () => {
           <DialogFooter className="gap-2">
             {!detailItem?.assignment && detailItem?.order && (
               <Button
-                className="bg-warning hover:bg-warning text-black font-bold gap-1.5"
+                className="bg-warning hover:bg-warning text-warning-foreground font-bold gap-1.5"
                 onClick={() => {
                   const orderId = detailItem.order!.id;
                   setDetailItem(null);

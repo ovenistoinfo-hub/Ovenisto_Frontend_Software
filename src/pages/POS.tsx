@@ -141,14 +141,14 @@ function StatusFilterTile({ status, label, icon: Icon, count, active, onClick }:
       className={cn(
         "p-3 rounded-2xl border text-center transition-all cursor-pointer flex flex-col items-center justify-center gap-1.5 font-bold",
         active
-          ? cn(tone.tile, "font-extrabold ring-1 ring-current shadow-md scale-[1.02]")
+          ? cn(tone.tile, "font-semibold ring-1 ring-current shadow-md scale-[1.02]")
           : cn("bg-muted/40 border-border/70 text-muted-foreground", STATUS_TILE_HOVER[status])
       )}
     >
-      <div className={cn("flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wider", tone.text)}>
+      <div className={cn("flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider", tone.text)}>
         <Icon className="h-3.5 w-3.5" /> {label}
       </div>
-      <span className={cn("text-xl font-black", tone.text)}>{count}</span>
+      <span className={cn("text-xl font-bold", tone.text)}>{count}</span>
     </button>
   );
 }
@@ -2924,7 +2924,7 @@ const POS = () => {
               </div>
               <div>
                 <span className="font-bold text-foreground text-sm tracking-tight">Ovenisto</span>
-                <span className="text-primary font-extrabold text-sm ml-0.5">POS</span>
+                <span className="text-primary font-semibold text-sm ml-0.5">POS</span>
               </div>
             </div>
           </div>
@@ -2981,7 +2981,7 @@ const POS = () => {
                       className="w-full text-left p-2.5 rounded-2xl border border-border/60 bg-muted/20 hover:bg-muted/40 hover:border-border/90 transition-all duration-200 text-xs space-y-2 shadow-2xs"
                     >
                       <div className="flex items-center justify-between gap-1">
-                        <span className="font-mono font-black text-xs tracking-tight text-foreground">#{o.orderNumber}</span>
+                        <span className="font-mono font-bold text-xs tracking-tight text-foreground">#{o.orderNumber}</span>
                         <span className={cn("text-[9px] px-1.5 py-0.5 rounded-full capitalize font-bold", statusTone(stage).badge)}>{stage}</span>
                       </div>
                       <div className="flex items-center justify-between gap-1 text-[11px]">
@@ -3018,7 +3018,7 @@ const POS = () => {
                 >
                   {/* Top Line: Order Number, Status Badge & Print Icon */}
                   <div className="flex items-center justify-between gap-1">
-                    <span className="font-mono font-black text-xs tracking-tight text-foreground group-hover:text-primary transition-colors">
+                    <span className="font-mono font-bold text-xs tracking-tight text-foreground group-hover:text-primary transition-colors">
                       #{o.orderNumber}
                     </span>
                     <div className="flex items-center gap-1 shrink-0">
@@ -3335,7 +3335,7 @@ const POS = () => {
                             <div className="flex items-center gap-1.5 flex-wrap">
                               <Badge
                                 variant="outline"
-                                className="text-[10px] font-extrabold text-primary border-primary/30 bg-primary/10 px-1.5 py-0 h-4 uppercase tracking-wider gap-1 shrink-0"
+                                className="text-[10px] font-semibold text-primary border-primary/30 bg-primary/10 px-1.5 py-0 h-4 uppercase tracking-wider gap-1 shrink-0"
                               >
                                 <Gift className="h-2.5 w-2.5" /> Deal
                               </Badge>
@@ -3545,7 +3545,7 @@ const POS = () => {
                 <span className="text-sm font-semibold text-muted-foreground">Total</span>
                 <span className="text-xs text-muted-foreground font-medium">({cart.reduce((s, c) => s + c.qty, 0)} items)</span>
               </div>
-              <span className="text-xl sm:text-2xl font-extrabold text-primary tracking-tight">Rs. {total.toLocaleString()}</span>
+              <span className="text-xl sm:text-2xl font-semibold text-primary tracking-tight">Rs. {total.toLocaleString()}</span>
             </div>
 
             {/* Advance Payment Banner — shown when a future order is loaded */}
@@ -3588,7 +3588,7 @@ const POS = () => {
               </div>
               {/* Primary Order Button Row */}
               <Button
-                className="w-full gradient-primary text-primary-foreground text-sm h-10 font-extrabold rounded-xl shadow-lg hover:shadow-xl transition-all duration-200"
+                className="w-full gradient-primary text-primary-foreground text-sm h-10 font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all duration-200"
                 onClick={handlePlaceOrder}
                 disabled={!canSubmitOrder || isSubmitting}
                 title={
@@ -3810,7 +3810,7 @@ const POS = () => {
                             <div className="p-2.5 rounded-full bg-primary/10 border border-primary/20 shadow-inner group-hover:scale-110 group-hover:bg-primary/20 transition-all duration-300">
                               <Gift className="h-6 w-6 text-primary group-hover:text-primary transition-colors" />
                             </div>
-                            <span className="absolute bottom-1.5 right-1.5 text-[9px] font-extrabold tracking-wider bg-background/85 text-primary px-1.5 py-0.5 rounded-md border border-primary/25 backdrop-blur-xs shadow-xs uppercase">
+                            <span className="absolute bottom-1.5 right-1.5 text-[9px] font-semibold tracking-wider bg-background/85 text-primary px-1.5 py-0.5 rounded-md border border-primary/25 backdrop-blur-xs shadow-xs uppercase">
                               {deal.name.slice(0, 3)}
                             </span>
                           </div>
@@ -3851,10 +3851,10 @@ const POS = () => {
                                 {pricing.regularStrike ? pricing.regularLabel : `was ${pricing.regularLabel}`}
                               </span>
                             )}
-                            <span className="font-mono font-extrabold text-xs sm:text-sm text-primary">{pricing.priceLabel}</span>
+                            <span className="font-mono font-semibold text-xs sm:text-sm text-primary">{pricing.priceLabel}</span>
                           </div>
                           {pricing.savingsPercent > 0 && (
-                            <span className="text-[9px] font-extrabold text-success bg-success/10 border border-success/30 px-1.5 py-0.5 rounded shrink-0 shadow-2xs">
+                            <span className="text-[9px] font-semibold text-success bg-success/10 border border-success/30 px-1.5 py-0.5 rounded shrink-0 shadow-2xs">
                               SAVE {pricing.savingsPercent}%
                             </span>
                           )}
@@ -3893,7 +3893,7 @@ const POS = () => {
                       ) : (
                         <div className="w-full h-full bg-muted/40 flex flex-col items-center justify-center relative overflow-hidden group-hover:from-card group-hover:to-primary/20 transition-colors">
                           <Utensils className="h-9 w-9 text-primary/20 group-hover:text-primary/35 group-hover:scale-110 transition-all duration-300" />
-                          <span className="absolute bottom-1.5 right-1.5 text-[11px] font-extrabold tracking-wider bg-background/80 text-primary px-2 py-0.5 rounded-md border border-primary/20 backdrop-blur-xs shadow-xs">
+                          <span className="absolute bottom-1.5 right-1.5 text-[11px] font-semibold tracking-wider bg-background/80 text-primary px-2 py-0.5 rounded-md border border-primary/20 backdrop-blur-xs shadow-xs">
                             {item.name.charAt(0)}
                           </span>
                         </div>
@@ -3923,7 +3923,7 @@ const POS = () => {
                     <div>
                       <p className="text-xs font-bold text-foreground truncate group-hover:text-primary transition-colors">{item.name}</p>
                       <div className="flex items-center justify-between mt-1">
-                        <p className="text-xs text-primary font-extrabold">{effectiveSettings.currency} {resolvePrice(item, orderType)}</p>
+                        <p className="text-xs text-primary font-semibold">{effectiveSettings.currency} {resolvePrice(item, orderType)}</p>
                         {(item as any).cookingTime > 0 && (
                           <span className="text-[9px] text-muted-foreground flex items-center gap-0.5 font-medium bg-muted/50 px-1.5 py-0.5 rounded-md"><Timer className="h-2.5 w-2.5" />{(item as any).cookingTime}m</span>
                         )}
@@ -3986,7 +3986,7 @@ const POS = () => {
                                   )}
                                 >
                                   {v.name} <span className="text-muted-foreground ml-1">{effectiveSettings.currency}{resolvePrice(v, orderType)}</span>
-                                  {isOutOfStock && <span className="text-[10px] text-destructive font-extrabold ml-1">(Out of Stock)</span>}
+                                  {isOutOfStock && <span className="text-[10px] text-destructive font-semibold ml-1">(Out of Stock)</span>}
                                 </button>
                               );
                             })}
@@ -4355,7 +4355,7 @@ const POS = () => {
                   <div className="bg-muted/60 p-3 rounded-xl border border-border/60 space-y-1.5 text-xs text-foreground mt-2">
                     <div className="flex justify-between"><span>Gross Order Total:</span><span className="font-mono font-bold">Rs. {total.toLocaleString()}</span></div>
                     <div className="flex justify-between text-success font-semibold"><span>Advance Deposit Paid ({loadedAdvanceMethod}):</span><span className="font-mono">- Rs. {loadedAdvancePayment.toLocaleString()}</span></div>
-                    <div className="flex justify-between font-extrabold text-sm pt-1.5 border-t border-border text-primary"><span>Net Payable:</span><span className="font-mono">Rs. {netPayable.toLocaleString()}</span></div>
+                    <div className="flex justify-between font-semibold text-sm pt-1.5 border-t border-border text-primary"><span>Net Payable:</span><span className="font-mono">Rs. {netPayable.toLocaleString()}</span></div>
                   </div>
                 ) : (
                   <p className="text-lg font-bold text-primary">Total: Rs. {total.toLocaleString()}</p>
@@ -4426,7 +4426,7 @@ const POS = () => {
                         <div key={row.dealLineId} className="space-y-1 pb-2 border-b border-border/30 last:border-0 last:pb-0">
                           <div className="flex justify-between items-center text-xs">
                             <div className="flex items-center gap-1.5 min-w-0 pr-2">
-                              <Badge variant="outline" className="text-[9px] font-extrabold text-primary border-primary/30 bg-primary/10 px-1.5 py-0 h-4 uppercase tracking-wider shrink-0 gap-0.5">
+                              <Badge variant="outline" className="text-[9px] font-semibold text-primary border-primary/30 bg-primary/10 px-1.5 py-0 h-4 uppercase tracking-wider shrink-0 gap-0.5">
                                 <Gift className="h-2.5 w-2.5" /> Deal
                               </Badge>
                               <span className="font-bold text-foreground truncate">{row.dealName}</span>
@@ -4507,7 +4507,7 @@ const POS = () => {
                 )}
                 <div className="flex justify-between items-center pt-2.5 border-t border-border/60">
                   <span className="uppercase tracking-wider text-xs font-bold text-muted-foreground">Order Total</span>
-                  <span className="text-2xl lg:text-3xl font-black text-primary font-mono tracking-tight tabular-nums">
+                  <span className="text-2xl lg:text-3xl font-bold text-primary font-mono tracking-tight tabular-nums">
                     {effectiveSettings.currency} {netPayable.toLocaleString()}
                   </span>
                 </div>
@@ -4752,7 +4752,7 @@ const POS = () => {
                       className={cn(
                         "w-full h-12 text-sm font-bold rounded-2xl gap-2 transition-all active:scale-[0.99] shadow-md",
                         isReady && !isSubmitting
-                          ? "gradient-primary text-primary-foreground font-extrabold shadow-primary/20"
+                          ? "gradient-primary text-primary-foreground font-semibold shadow-primary/20"
                           : "bg-muted text-muted-foreground opacity-50 cursor-not-allowed"
                       )}
                       onClick={handleFinalizeSubmit}
@@ -4820,7 +4820,7 @@ const POS = () => {
                 <>
                   <div className="flex justify-between text-success font-semibold"><span>Advance Deposit ({loadedAdvanceMethod})</span><span>- Rs. {loadedAdvancePayment.toLocaleString()}</span></div>
                   <Separator />
-                  <div className="flex justify-between font-extrabold text-base"><span>Net Payable / Balance</span><span className="text-primary">Rs. {netPayable.toLocaleString()}</span></div>
+                  <div className="flex justify-between font-semibold text-base"><span>Net Payable / Balance</span><span className="text-primary">Rs. {netPayable.toLocaleString()}</span></div>
                 </>
               )}
             </div>
@@ -4969,7 +4969,7 @@ const POS = () => {
                 className={cn(
                   "flex-1 py-1.5 px-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 shrink-0",
                   orderStatusTypeFilter === "all"
-                    ? "bg-card text-foreground shadow-xs border border-border font-extrabold scale-[1.01]"
+                    ? "bg-card text-foreground shadow-xs border border-border font-semibold scale-[1.01]"
                     : "text-muted-foreground hover:text-foreground hover:bg-card/40"
                 )}
               >
@@ -4993,7 +4993,7 @@ const POS = () => {
                     className={cn(
                       "flex-1 py-1.5 px-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 shrink-0",
                       orderStatusTypeFilter === type
-                        ? "bg-card text-foreground shadow-xs border border-border font-extrabold scale-[1.01]"
+                        ? "bg-card text-foreground shadow-xs border border-border font-semibold scale-[1.01]"
                         : "text-muted-foreground hover:text-foreground hover:bg-card/40"
                     )}
                   >
@@ -5039,10 +5039,10 @@ const POS = () => {
                         )}>
                           <div className="flex justify-between items-start border-b border-border/40 pb-2.5">
                             <div>
-                              <span className="font-extrabold text-base text-foreground">{order.orderNumber}</span>
+                              <span className="font-semibold text-base text-foreground">{order.orderNumber}</span>
                               <span className="text-muted-foreground text-xs ml-2 font-medium">{order.time}</span>
                             </div>
-                            <Badge variant="outline" className={cn("text-xs font-extrabold capitalize px-2.5 py-0.5 rounded-xl flex items-center gap-1",
+                            <Badge variant="outline" className={cn("text-xs font-semibold capitalize px-2.5 py-0.5 rounded-xl flex items-center gap-1",
                               statusTone(status).badge
                             )}>
                               {status === "pending" ? <Clock className="h-3 w-3" /> :
@@ -5066,7 +5066,7 @@ const POS = () => {
                             <div className="bg-primary/10 p-2.5 rounded-xl border border-primary/20 flex items-center justify-between font-semibold">
                               <span className="flex items-center gap-1.5 text-foreground">
                                 <Utensils className="h-4 w-4 text-primary" />
-                                Table: <strong className="text-primary font-extrabold">Table {order.tableNumber}</strong>
+                                Table: <strong className="text-primary font-semibold">Table {order.tableNumber}</strong>
                               </span>
                               <Badge variant="secondary" className="text-[10px] font-bold bg-primary/20 text-primary border-primary/30">{order.type || "Dine In"}</Badge>
                             </div>
@@ -5083,7 +5083,7 @@ const POS = () => {
                           )}
 
                           <div className="bg-muted/40 rounded-xl p-3 border border-border/40 space-y-1.5">
-                            <p className="text-[10px] font-extrabold text-muted-foreground uppercase tracking-wider">Order Items</p>
+                            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Order Items</p>
                             {order.items.map((item, idx) => (
                               <div key={idx} className="flex justify-between items-center text-xs">
                                 <span className="text-foreground font-medium">
@@ -5092,7 +5092,7 @@ const POS = () => {
                                 <span className="text-foreground font-bold font-mono">Rs.{item.price * item.qty}</span>
                               </div>
                             ))}
-                            <div className="border-t border-border/50 pt-1.5 mt-1 flex justify-between font-extrabold text-sm text-foreground">
+                            <div className="border-t border-border/50 pt-1.5 mt-1 flex justify-between font-semibold text-sm text-foreground">
                               <span>Total</span>
                               <span className="text-primary font-mono">Rs.{order.total}</span>
                             </div>
@@ -5620,7 +5620,7 @@ const POS = () => {
                       {/* Status Badge */}
                       <span
                         className={cn(
-                          "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wide shrink-0",
+                          "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold uppercase tracking-wide shrink-0",
                           item.status === 'out_of_stock'
                             ? "bg-destructive/15 text-destructive border border-destructive/30"
                             : "bg-warning/15 text-warning border border-warning/30"
@@ -5637,7 +5637,7 @@ const POS = () => {
                         <span className="text-muted-foreground text-[11px] font-medium">Available:</span>
                         <span
                           className={cn(
-                            "font-mono font-extrabold px-2 py-0.5 rounded-lg text-xs",
+                            "font-mono font-semibold px-2 py-0.5 rounded-lg text-xs",
                             item.status === 'out_of_stock'
                               ? "bg-destructive/15 text-destructive border border-destructive/20"
                               : "bg-warning/15 text-warning border border-warning/20"
@@ -5721,7 +5721,7 @@ const POS = () => {
                         {/* Status Badge */}
                         <span
                           className={cn(
-                            "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wide shrink-0",
+                            "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold uppercase tracking-wide shrink-0",
                             isOutOfStock
                               ? "bg-destructive/15 text-destructive border border-destructive/30"
                               : "bg-warning/15 text-warning border border-warning/30"
@@ -5736,7 +5736,7 @@ const POS = () => {
                       <div className="grid grid-cols-3 gap-2 bg-background/70 p-2 rounded-xl border border-border/50 text-center">
                         <div>
                           <p className="text-[10px] text-muted-foreground font-medium">Current Stock</p>
-                          <p className={cn("text-xs font-mono font-extrabold mt-0.5", isOutOfStock ? "text-destructive" : "text-warning")}>
+                          <p className={cn("text-xs font-mono font-semibold mt-0.5", isOutOfStock ? "text-destructive" : "text-warning")}>
                             {curr} <span className="text-[10px] font-normal text-muted-foreground">{item.unit}</span>
                           </p>
                         </div>
@@ -5797,7 +5797,7 @@ const POS = () => {
                 className={cn(
                   "py-2.5 px-2 rounded-xl transition-all text-center flex items-center justify-center gap-1.5 font-bold",
                   posReservationTab === "dine_in"
-                    ? "bg-background text-foreground shadow-xs font-extrabold ring-1 ring-border"
+                    ? "bg-background text-foreground shadow-xs font-semibold ring-1 ring-border"
                     : "text-muted-foreground hover:text-foreground hover:bg-background/50"
                 )}
               >
@@ -5809,7 +5809,7 @@ const POS = () => {
                 className={cn(
                   "py-2.5 px-2 rounded-xl transition-all text-center flex items-center justify-center gap-1.5 font-bold",
                   posReservationTab === "take_away"
-                    ? "bg-background text-foreground shadow-xs font-extrabold ring-1 ring-border"
+                    ? "bg-background text-foreground shadow-xs font-semibold ring-1 ring-border"
                     : "text-muted-foreground hover:text-foreground hover:bg-background/50"
                 )}
               >
@@ -5821,7 +5821,7 @@ const POS = () => {
                 className={cn(
                   "py-2.5 px-2 rounded-xl transition-all text-center flex items-center justify-center gap-1.5 font-bold",
                   posReservationTab === "delivery"
-                    ? "bg-background text-foreground shadow-xs font-extrabold ring-1 ring-border"
+                    ? "bg-background text-foreground shadow-xs font-semibold ring-1 ring-border"
                     : "text-muted-foreground hover:text-foreground hover:bg-background/50"
                 )}
               >
@@ -5874,7 +5874,7 @@ const POS = () => {
                     {/* Header line: Customer Name & Phone, Status Badge */}
                     <div className="flex items-start justify-between gap-2 border-b border-border/40 pb-3">
                       <div>
-                        <h3 className="font-extrabold text-base text-foreground flex items-center gap-2">
+                        <h3 className="font-semibold text-base text-foreground flex items-center gap-2">
                           <User className="h-4 w-4 text-primary" />
                           {res.customerName}
                         </h3>
@@ -5884,7 +5884,7 @@ const POS = () => {
                           </p>
                         )}
                       </div>
-                      <Badge variant="outline" className={cn("text-xs font-extrabold capitalize px-3 py-1 rounded-xl border flex items-center gap-1 shrink-0",
+                      <Badge variant="outline" className={cn("text-xs font-semibold capitalize px-3 py-1 rounded-xl border flex items-center gap-1 shrink-0",
                         effStatus === "not_arrived" ? "bg-destructive/15 text-destructive border-destructive/30" :
                         effStatus === "confirmed" ? "bg-info/10 text-info border-info/30" :
                         effStatus === "seated" ? "bg-success/10 text-success border-success/30" :
@@ -5920,7 +5920,7 @@ const POS = () => {
                       <div className="bg-muted/50 p-3 rounded-xl border border-border/40 flex items-center justify-between text-xs font-semibold">
                         <span className="flex items-center gap-1.5 text-foreground">
                           <Utensils className="h-4 w-4 text-primary" />
-                          Table: <strong className="text-primary font-extrabold">{res.tableNumber ? `Table ${res.tableNumber}` : "Unassigned"}</strong>
+                          Table: <strong className="text-primary font-semibold">{res.tableNumber ? `Table ${res.tableNumber}` : "Unassigned"}</strong>
                         </span>
                         <span className="flex items-center gap-1.5 text-muted-foreground">
                           <Users className="h-3.5 w-3.5" /> {res.guestCount} Pax
@@ -5944,7 +5944,7 @@ const POS = () => {
                           <span className="flex items-center gap-1.5 text-foreground">
                             <Utensils className="h-4 w-4 text-primary" /> Pre-Order Food ({preOrderCount} items)
                           </span>
-                          <span className="text-primary font-extrabold text-sm">{effectiveSettings.currency} {foodSubtotal.toLocaleString()}</span>
+                          <span className="text-primary font-semibold text-sm">{effectiveSettings.currency} {foodSubtotal.toLocaleString()}</span>
                         </div>
                         <div className="text-xs text-muted-foreground space-y-1 max-h-32 overflow-y-auto divide-y divide-border/30 pt-1">
                           {res.preOrderItems?.map((item, idx) => (
@@ -5963,7 +5963,7 @@ const POS = () => {
                         <span className="flex items-center gap-1.5">
                           <Check className="h-4 w-4 text-success" /> Advance Deposit Paid
                         </span>
-                        <span className="font-extrabold text-sm">{effectiveSettings.currency} {Number(res.advancePaid).toLocaleString()}</span>
+                        <span className="font-semibold text-sm">{effectiveSettings.currency} {Number(res.advancePaid).toLocaleString()}</span>
                       </div>
                     ) : null}
 
@@ -5972,7 +5972,7 @@ const POS = () => {
                       <Button
                         type="button"
                         onClick={() => loadReservationToPOSCart(res)}
-                        className="w-full h-11 text-xs sm:text-sm gradient-primary text-primary-foreground font-extrabold rounded-xl flex items-center justify-center gap-2 shadow-md hover:scale-[1.01] active:scale-[0.99] transition-all"
+                        className="w-full h-11 text-xs sm:text-sm gradient-primary text-primary-foreground font-semibold rounded-xl flex items-center justify-center gap-2 shadow-md hover:scale-[1.01] active:scale-[0.99] transition-all"
                       >
                         <ShoppingCart className="h-4 w-4" /> Load Order into POS Cart
                       </Button>
@@ -6114,7 +6114,7 @@ const POS = () => {
                 <>
                   <div className="flex justify-between text-success font-semibold"><span>Advance Deposit ({loadedAdvanceMethod})</span><span>-{effectiveSettings.currency} {loadedAdvancePayment.toLocaleString()}</span></div>
                   <Separator />
-                  <div className="flex justify-between font-extrabold text-base"><span>Net Estimated Payable</span><span className="text-primary">{effectiveSettings.currency} {netPayable.toLocaleString()}</span></div>
+                  <div className="flex justify-between font-semibold text-base"><span>Net Estimated Payable</span><span className="text-primary">{effectiveSettings.currency} {netPayable.toLocaleString()}</span></div>
                 </>
               )}
             </div>
@@ -6184,7 +6184,7 @@ const POS = () => {
             {/* Total Card */}
             <div className="p-4 rounded-xl bg-success/10 border border-success/20 text-center">
               <span className="text-xs text-muted-foreground uppercase tracking-wider font-semibold block">Total Expected Collection</span>
-              <span className="text-2xl font-black text-success font-mono">
+              <span className="text-2xl font-bold text-success font-mono">
                 {effectiveSettings.currency} {(myActiveCash?.totalExpected || 0).toLocaleString()}
               </span>
             </div>
@@ -6255,7 +6255,7 @@ const POS = () => {
         <DialogContent className="max-w-[95vw] sm:max-w-4xl lg:max-w-5xl xl:max-w-6xl max-h-[92vh] overflow-y-auto p-4 sm:p-6 lg:p-8">
           <DialogHeader className="border-b border-border/60 pb-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <DialogTitle className="flex items-center gap-2.5 text-xl sm:text-2xl font-black tracking-tight text-foreground">
+              <DialogTitle className="flex items-center gap-2.5 text-xl sm:text-2xl font-bold tracking-tight text-foreground">
                 <div className="h-10 w-10 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary shrink-0 shadow-sm">
                   <Banknote className="h-5 w-5" />
                 </div>
@@ -6287,7 +6287,7 @@ const POS = () => {
                     <Banknote className="h-4 w-4" />
                   </div>
                 </div>
-                <p className="font-black text-2xl sm:text-3xl text-foreground mt-3 font-mono">
+                <p className="font-bold text-2xl sm:text-3xl text-foreground mt-3 font-mono">
                   {effectiveSettings.currency} {Math.round(activeShift?.openingCash || 0).toLocaleString()}
                 </p>
               </Card>
@@ -6299,7 +6299,7 @@ const POS = () => {
                     <Wallet className="h-4 w-4" />
                   </div>
                 </div>
-                <p className="font-black text-2xl sm:text-3xl text-success mt-3 font-mono">
+                <p className="font-bold text-2xl sm:text-3xl text-success mt-3 font-mono">
                   {effectiveSettings.currency} {Math.round((activeShift?.openingCash || 0) + shiftSales.pos.cash).toLocaleString()}
                 </p>
               </Card>
@@ -6308,7 +6308,7 @@ const POS = () => {
             {/* HERO RECONCILIATION CARD (PHYSICAL DRAWER COUNT & VARIANCE) */}
             <div className="bg-success/5 rounded-3xl p-5 border border-success/30 shadow-sm space-y-4">
               <div className="flex items-center justify-between border-b border-border/50 pb-3">
-                <h3 className="font-black text-sm flex items-center gap-2 text-foreground uppercase tracking-wide">
+                <h3 className="font-bold text-sm flex items-center gap-2 text-foreground uppercase tracking-wide">
                   <Coins className="h-4 w-4 text-success" />
                   Physical Cash Drawer Count & Reconciliation
                 </h3>
@@ -6319,7 +6319,7 @@ const POS = () => {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <Label className="text-xs font-extrabold flex items-center gap-1.5 text-foreground">
+                  <Label className="text-xs font-semibold flex items-center gap-1.5 text-foreground">
                     <Banknote className="h-4 w-4 text-success" />
                     Actual Physical Cash in Drawer ({effectiveSettings.currency}) *
                   </Label>
@@ -6328,12 +6328,12 @@ const POS = () => {
                     value={closingCashInput}
                     onChange={e => setClosingCashInput(e.target.value)}
                     placeholder="Count and enter physical cash..."
-                    className="h-12 text-lg font-black font-mono rounded-xl border-success/40 focus:border-success bg-background"
+                    className="h-12 text-lg font-bold font-mono rounded-xl border-success/40 focus:border-success bg-background"
                     min="0"
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-xs font-extrabold flex items-center gap-1.5 text-foreground">
+                  <Label className="text-xs font-semibold flex items-center gap-1.5 text-foreground">
                     <StickyNote className="h-4 w-4 text-muted-foreground" />
                     Shift Notes / Variance Explanation (Optional)
                   </Label>
@@ -6380,7 +6380,7 @@ const POS = () => {
                         </>
                       )}
                     </span>
-                    <span className="font-black text-sm sm:text-base font-mono self-end sm:self-auto">
+                    <span className="font-bold text-sm sm:text-base font-mono self-end sm:self-auto">
                       Difference: {effectiveSettings.currency} {diff.toLocaleString()}
                     </span>
                   </div>
@@ -6391,7 +6391,7 @@ const POS = () => {
             {/* POS COUNTER SALES BREAKDOWN */}
             <div className="space-y-4 bg-card rounded-3xl p-5 border border-border/70 shadow-sm">
               <div className="flex items-center justify-between border-b border-border/50 pb-3">
-                <h3 className="font-black text-sm flex items-center gap-2 text-foreground uppercase tracking-wide">
+                <h3 className="font-bold text-sm flex items-center gap-2 text-foreground uppercase tracking-wide">
                   <Flame className="h-4 w-4 text-primary" />
                   POS Counter Sales Breakdown
                 </h3>
@@ -6401,31 +6401,31 @@ const POS = () => {
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <div className="p-3.5 rounded-2xl bg-muted/40 border border-border/50">
                   <span className="text-[11px] text-muted-foreground font-bold block uppercase tracking-wider">Total POS Sales</span>
-                  <span className="font-extrabold text-base text-foreground font-mono mt-1 block">
+                  <span className="font-semibold text-base text-foreground font-mono mt-1 block">
                     {effectiveSettings.currency} {Math.round(shiftSales.pos.total).toLocaleString()}
                   </span>
                 </div>
                 <div className="p-3.5 rounded-2xl bg-success/10 border border-success/20">
                   <span className="text-[11px] text-success font-bold block uppercase tracking-wider">POS Cash Sales</span>
-                  <span className="font-extrabold text-base text-success font-mono mt-1 block">
+                  <span className="font-semibold text-base text-success font-mono mt-1 block">
                     {effectiveSettings.currency} {Math.round(shiftSales.pos.cash).toLocaleString()}
                   </span>
                 </div>
                 <div className="p-3.5 rounded-2xl bg-info/10 border border-info/20">
                   <span className="text-[11px] text-info font-bold block uppercase tracking-wider">POS Online Sales</span>
-                  <span className="font-extrabold text-base text-info font-mono mt-1 block">
+                  <span className="font-semibold text-base text-info font-mono mt-1 block">
                     {effectiveSettings.currency} {Math.round(shiftSales.pos.nonCash).toLocaleString()}
                   </span>
                 </div>
                 <div className="p-3.5 rounded-2xl bg-muted/40 border border-border/50">
                   <span className="text-[11px] text-muted-foreground font-bold block uppercase tracking-wider">Order Volume</span>
-                  <span className="font-extrabold text-base text-foreground mt-1 block">{shiftSales.pos.count} orders</span>
+                  <span className="font-semibold text-base text-foreground mt-1 block">{shiftSales.pos.count} orders</span>
                 </div>
               </div>
 
               {/* POS Online Payment Methods pills */}
               <div className="pt-1">
-                <p className="text-[11px] font-extrabold text-muted-foreground uppercase tracking-wider mb-2.5 flex items-center gap-1.5">
+                <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2.5 flex items-center gap-1.5">
                   <CreditCard className="h-3.5 w-3.5 text-primary" />
                   POS Online Sales by Payment Method
                 </p>
@@ -6450,7 +6450,7 @@ const POS = () => {
                           <div key={method} className="flex items-center gap-2 bg-muted/50 border border-border/70 rounded-2xl px-3.5 py-2 text-xs font-bold shadow-xs">
                             {mLower.includes("card") ? <CreditCard className="h-3.5 w-3.5 text-info" /> : <Smartphone className="h-3.5 w-3.5 text-primary" />}
                             <span className="text-muted-foreground">{method}:</span>
-                            <span className="font-extrabold text-foreground font-mono">
+                            <span className="font-semibold text-foreground font-mono">
                               {effectiveSettings.currency} {Math.round(amount).toLocaleString()}
                             </span>
                           </div>
@@ -6468,7 +6468,7 @@ const POS = () => {
               <RotateCcw className="h-3.5 w-3.5 mr-1.5" /> Continue Working
             </Button>
             <Button
-              className="gradient-primary text-primary-foreground h-11 text-xs sm:text-sm font-extrabold rounded-2xl shadow-md hover:shadow-xl transition-all active:scale-95"
+              className="gradient-primary text-primary-foreground h-11 text-xs sm:text-sm font-semibold rounded-2xl shadow-md hover:shadow-xl transition-all active:scale-95"
               disabled={!closingCashInput || !activeShift}
               onClick={async () => {
                 if (!activeShift) return;
@@ -6519,14 +6519,14 @@ const POS = () => {
                 className={cn(
                   "p-3 rounded-2xl border text-center transition-all cursor-pointer flex flex-col items-center justify-center gap-1.5 font-bold",
                   posKitchenTab === "all"
-                    ? "bg-primary text-primary-foreground border-primary shadow-md font-extrabold ring-2 ring-primary/40 scale-[1.02]"
+                    ? "bg-primary text-primary-foreground border-primary shadow-md font-semibold ring-2 ring-primary/40 scale-[1.02]"
                     : "bg-muted/40 border-border/70 text-muted-foreground hover:bg-muted hover:text-foreground"
                 )}
               >
-                <div className="flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wider">
+                <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider">
                   <Flame className="h-3.5 w-3.5" /> All
                 </div>
-                <span className="text-xl font-black">{activeOrdersCount}</span>
+                <span className="text-xl font-bold">{activeOrdersCount}</span>
               </button>
 
               <StatusFilterTile status="pending" label="Pending" icon={Clock} count={ordersByStatus.pending.length} active={posKitchenTab === "pending"} onClick={() => setPosKitchenTab("pending")} />
@@ -6563,7 +6563,7 @@ const POS = () => {
                 )}>
                   <div className="flex justify-between items-start border-b border-border/40 pb-2.5">
                     <div className="flex items-center gap-2">
-                      <span className="font-extrabold text-base text-foreground">{order.orderNumber}</span>
+                      <span className="font-semibold text-base text-foreground">{order.orderNumber}</span>
                       <span className="text-muted-foreground text-xs font-medium">{order.time}</span>
                       {order.isUrgent && (
                         <Badge className="bg-destructive text-destructive-foreground text-[10px] font-bold">
@@ -6571,7 +6571,7 @@ const POS = () => {
                         </Badge>
                       )}
                     </div>
-                    <Badge variant="outline" className={cn("text-xs font-extrabold capitalize px-2.5 py-0.5 rounded-xl flex items-center gap-1",
+                    <Badge variant="outline" className={cn("text-xs font-semibold capitalize px-2.5 py-0.5 rounded-xl flex items-center gap-1",
                       statusTone(order.status === "pending" || order.status === "preparing" ? order.status : "ready").badge
                     )}>
                       {order.status === "pending" ? <Clock className="h-3 w-3" /> :
@@ -6595,7 +6595,7 @@ const POS = () => {
                     <div className="bg-muted/50 p-2.5 rounded-xl border border-border/40 flex items-center justify-between font-semibold text-xs">
                       <span className="flex items-center gap-1.5 text-foreground">
                         <Utensils className="h-4 w-4 text-primary" />
-                        Table: <strong className="text-primary font-extrabold">Table {order.tableNumber}</strong>
+                        Table: <strong className="text-primary font-semibold">Table {order.tableNumber}</strong>
                       </span>
                       <Badge variant="secondary" className="text-[10px]">{order.type}</Badge>
                     </div>
@@ -6613,7 +6613,7 @@ const POS = () => {
 
                   {/* Kitchen Food Items List */}
                   <div className="bg-muted/40 rounded-xl p-3 border border-border/40 space-y-1.5">
-                    <p className="text-[10px] font-extrabold text-muted-foreground uppercase tracking-wider">Kitchen Items</p>
+                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Kitchen Items</p>
                     {order.items.map((item, idx) => (
                       <div key={idx} className="flex justify-between items-center text-xs">
                         <span className="text-foreground font-medium">

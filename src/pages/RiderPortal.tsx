@@ -167,7 +167,7 @@ const RiderPortal = () => {
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <span className="font-extrabold text-base text-foreground">{user?.name || "Rider"}</span>
+              <span className="font-semibold text-base text-foreground">{user?.name || "Rider"}</span>
               {rider && (
                 <Badge variant="outline" className={cn("text-[10px] font-bold px-2 py-0.5",
                   rider.status === "available" ? "bg-success/10 text-success border-success/30" : "bg-warning/10 text-warning border-warning/30"
@@ -200,7 +200,7 @@ const RiderPortal = () => {
                 <Wallet className="h-3.5 w-3.5" />
                 Delivery Collections
               </p>
-              <p className="text-xl font-black text-foreground font-mono">
+              <p className="text-xl font-bold text-foreground font-mono">
                 {currency} {(myActiveCash?.totalExpected || 0).toLocaleString()}
               </p>
             </div>
@@ -220,7 +220,7 @@ const RiderPortal = () => {
             <Card className="shadow-sm border-border bg-card">
               <CardContent className="p-3 text-center space-y-0.5">
                 <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Today</p>
-                <p className="text-2xl font-black text-warning">{stats.todayOrders}</p>
+                <p className="text-2xl font-bold text-warning">{stats.todayOrders}</p>
                 <p className="text-[10px] text-muted-foreground font-medium">Deliveries</p>
               </CardContent>
             </Card>
@@ -228,7 +228,7 @@ const RiderPortal = () => {
             <Card className="shadow-sm border-border bg-card">
               <CardContent className="p-3 text-center space-y-0.5">
                 <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Sales</p>
-                <p className="text-lg font-black text-success">{currency} {stats.todaySales.toLocaleString()}</p>
+                <p className="text-lg font-bold text-success">{currency} {stats.todaySales.toLocaleString()}</p>
                 <p className="text-[10px] text-muted-foreground font-medium">Earned</p>
               </CardContent>
             </Card>
@@ -239,7 +239,7 @@ const RiderPortal = () => {
                   <Coins className="h-3.5 w-3.5 text-warning" />
                   Today's Earned Commissions
                 </p>
-                <p className="text-xl font-black text-success">{currency} {todayCommissions.toLocaleString()}</p>
+                <p className="text-xl font-bold text-success">{currency} {todayCommissions.toLocaleString()}</p>
               </CardContent>
             </Card>
           </div>
@@ -253,7 +253,7 @@ const RiderPortal = () => {
             <Package className="h-4 w-4" />
             Active Runs
             {assignments.filter(a => a.status !== "delivered").length > 0 && (
-              <Badge className="h-5 px-1.5 text-[10px] bg-warning text-black font-extrabold rounded-full ml-1">
+              <Badge className="h-5 px-1.5 text-[10px] bg-warning text-warning-foreground font-semibold rounded-full ml-1">
                 {assignments.filter(a => a.status !== "delivered").length}
               </Badge>
             )}
@@ -273,7 +273,7 @@ const RiderPortal = () => {
               <div className="flex items-center gap-2">
                 <Bell className="h-5 w-5 text-warning animate-bounce" />
                 <div>
-                  <h4 className="text-sm font-extrabold text-warning uppercase tracking-wide">
+                  <h4 className="text-sm font-semibold text-warning uppercase tracking-wide">
                     Unassigned Kitchen Orders ({pendingOrders.length})
                   </h4>
                   <p className="text-xs text-muted-foreground">Tap below to claim and accept any order yourself!</p>
@@ -284,8 +284,8 @@ const RiderPortal = () => {
                 {pendingOrders.map((o) => (
                   <div key={o.id} className="bg-card border border-warning/30 rounded-xl p-3 space-y-2 text-xs shadow-sm">
                     <div className="flex items-center justify-between">
-                      <span className="font-black text-base text-foreground">#{o.orderNumber}</span>
-                      <span className="font-extrabold text-warning text-sm">{currency} {Number(o.total).toLocaleString()}</span>
+                      <span className="font-bold text-base text-foreground">#{o.orderNumber}</span>
+                      <span className="font-semibold text-warning text-sm">{currency} {Number(o.total).toLocaleString()}</span>
                     </div>
 
                     <div className="space-y-1">
@@ -298,7 +298,7 @@ const RiderPortal = () => {
 
                     <Button
                       size="sm"
-                      className="w-full bg-warning hover:bg-warning text-black font-extrabold text-xs h-10 gap-1.5 shadow-md active:scale-95 transition-all mt-1"
+                      className="w-full bg-warning hover:bg-warning text-warning-foreground font-semibold text-xs h-10 gap-1.5 shadow-md active:scale-95 transition-all mt-1"
                       disabled={claimingId === o.id}
                       onClick={() => claimOrder(o.id, o.orderNumber)}>
                       {claimingId === o.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4 fill-black text-black" />}
@@ -345,9 +345,9 @@ const RiderPortal = () => {
                     <div className="flex items-center justify-between border-b border-border/60 pb-3">
                       <div>
                         <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">ORDER NUMBER</span>
-                        <h3 className="text-2xl font-black text-foreground tracking-tight">#{a.order?.orderNumber}</h3>
+                        <h3 className="text-2xl font-bold text-foreground tracking-tight">#{a.order?.orderNumber}</h3>
                       </div>
-                      <Badge variant="outline" className={cn("font-black text-xs px-3 py-1 tracking-wider rounded-lg", statusCfg.class)}>
+                      <Badge variant="outline" className={cn("font-bold text-xs px-3 py-1 tracking-wider rounded-lg", statusCfg.class)}>
                         {statusCfg.label}
                       </Badge>
                     </div>
@@ -364,7 +364,7 @@ const RiderPortal = () => {
                                 <CheckCircle2 className="h-4 w-4 text-success shrink-0" />
                                 Kitchen Status: FOOD READY FOR PICKUP
                               </span>
-                              <Badge className="bg-success text-black text-[10px] font-extrabold uppercase">Ready</Badge>
+                              <Badge className="bg-success text-black text-[10px] font-semibold uppercase">Ready</Badge>
                             </div>
                           ) : (
                             <div className="bg-warning/10 border border-warning/30 text-warning p-2.5 flex items-center justify-between text-xs font-bold rounded-xl animate-pulse">
@@ -372,7 +372,7 @@ const RiderPortal = () => {
                                 <Clock className="h-4 w-4 text-warning shrink-0" />
                                 Kitchen Status: {kStatus === "preparing" ? "FOOD PREPARING..." : "PENDING KITCHEN"}
                               </span>
-                              <Badge variant="outline" className="border-warning/40 text-warning text-[10px] font-extrabold uppercase">
+                              <Badge variant="outline" className="border-warning/40 text-warning text-[10px] font-semibold uppercase">
                                 {kStatus === "preparing" ? "Preparing" : "Pending"}
                               </Badge>
                             </div>
@@ -386,7 +386,7 @@ const RiderPortal = () => {
                       <div className="flex items-start justify-between">
                         <div>
                           <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">CUSTOMER</p>
-                          <p className="text-base font-extrabold text-foreground">{a.order?.customerName || "Walk-in Guest"}</p>
+                          <p className="text-base font-semibold text-foreground">{a.order?.customerName || "Walk-in Guest"}</p>
                         </div>
                       </div>
 
@@ -437,11 +437,11 @@ const RiderPortal = () => {
                       {(mode === "cod" || mode === "advance") ? (
                         <div className="bg-muted/40 border-2 border-warning/40 p-3.5 flex items-center justify-between shadow-inner">
                           <div>
-                            <p className="text-xs font-extrabold text-warning uppercase tracking-wide flex items-center gap-1.5">
+                            <p className="text-xs font-semibold text-warning uppercase tracking-wide flex items-center gap-1.5">
                               <Banknote className="h-4 w-4" />
                               CASH TO COLLECT FROM CUSTOMER
                             </p>
-                            <p className="text-2xl font-black text-warning mt-0.5">
+                            <p className="text-2xl font-bold text-warning mt-0.5">
                               {currency} {toCollect.toLocaleString()}
                             </p>
                           </div>
@@ -452,7 +452,7 @@ const RiderPortal = () => {
                       ) : (
                         <div className="bg-success/15 border-2 border-success/30 p-3 flex items-center justify-between">
                           <div>
-                            <p className="text-xs font-extrabold text-success uppercase tracking-wide flex items-center gap-1.5">
+                            <p className="text-xs font-semibold text-success uppercase tracking-wide flex items-center gap-1.5">
                               <CheckCircle2 className="h-4 w-4" />
                               PREPAID ORDER — DO NOT COLLECT CASH
                             </p>
@@ -466,7 +466,7 @@ const RiderPortal = () => {
                     <div className="pt-2">
                       {a.status === "pending" && (
                         <Button
-                          className="w-full h-14 bg-warning hover:bg-warning text-black font-black text-base rounded-2xl shadow-lg gap-2 active:scale-95 transition-all"
+                          className="w-full h-14 bg-warning hover:bg-warning text-warning-foreground font-bold text-base rounded-2xl shadow-lg gap-2 active:scale-95 transition-all"
                           disabled={isActionLoading}
                           onClick={() => doAction(a.id, "accepted")}>
                           {isActionLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : <CheckCircle2 className="h-5 w-5" />}
@@ -480,7 +480,7 @@ const RiderPortal = () => {
                         return (
                           <Button
                             className={cn(
-                              "w-full h-14 font-black text-base rounded-2xl shadow-lg gap-2 active:scale-95 transition-all",
+                              "w-full h-14 font-bold text-base rounded-2xl shadow-lg gap-2 active:scale-95 transition-all",
                               isFoodReady
                                 ? "bg-info hover:bg-info text-white"
                                 : "bg-muted/80 text-muted-foreground border border-border cursor-not-allowed opacity-80"
@@ -502,7 +502,7 @@ const RiderPortal = () => {
                       {a.status === "dispatched" && (
                         <div className="space-y-2">
                           <Button
-                            className="w-full h-14 bg-success hover:bg-success text-black font-black text-base rounded-2xl shadow-lg gap-2 active:scale-95 transition-all"
+                            className="w-full h-14 bg-success hover:bg-success text-black font-bold text-base rounded-2xl shadow-lg gap-2 active:scale-95 transition-all"
                             disabled={isActionLoading}
                             onClick={() => {
                               if (toCollect > 0) {
@@ -569,19 +569,19 @@ const RiderPortal = () => {
                 <>
                   <div className="grid grid-cols-2 gap-3">
                     <div className="bg-muted/40 border border-border/50 rounded-xl p-3.5 text-center">
-                      <p className="text-2xl font-black text-warning">{stats.todayOrders}</p>
+                      <p className="text-2xl font-bold text-warning">{stats.todayOrders}</p>
                       <p className="text-xs text-muted-foreground font-semibold">Today's Deliveries</p>
                     </div>
                     <div className="bg-muted/40 border border-border/50 rounded-xl p-3.5 text-center">
-                      <p className="text-2xl font-black text-success">{currency} {stats.todaySales.toLocaleString()}</p>
+                      <p className="text-2xl font-bold text-success">{currency} {stats.todaySales.toLocaleString()}</p>
                       <p className="text-xs text-muted-foreground font-semibold">Today's Total Revenue</p>
                     </div>
                     <div className="bg-muted/40 border border-border/50 rounded-xl p-3.5 text-center">
-                      <p className="text-2xl font-black text-foreground">{stats.totalOrders}</p>
+                      <p className="text-2xl font-bold text-foreground">{stats.totalOrders}</p>
                       <p className="text-xs text-muted-foreground font-semibold">All-Time Deliveries</p>
                     </div>
                     <div className="bg-muted/40 border border-border/50 rounded-xl p-3.5 text-center">
-                      <p className="text-2xl font-black text-success">{currency} {stats.totalSales.toLocaleString()}</p>
+                      <p className="text-2xl font-bold text-success">{currency} {stats.totalSales.toLocaleString()}</p>
                       <p className="text-xs text-muted-foreground font-semibold">All-Time Revenue</p>
                     </div>
                   </div>
@@ -592,7 +592,7 @@ const RiderPortal = () => {
                         <Banknote className="h-5 w-5" />
                       </div>
                       <div>
-                        <p className="text-sm font-extrabold text-warning">{currency} {stats.pendingCash.toLocaleString()} Pending Handover</p>
+                        <p className="text-sm font-semibold text-warning">{currency} {stats.pendingCash.toLocaleString()} Pending Handover</p>
                         <p className="text-xs text-muted-foreground">Please submit this cash to your outlet manager at shift end.</p>
                       </div>
                     </div>
@@ -614,7 +614,7 @@ const RiderPortal = () => {
         }}>
         <DialogContent className="sm:max-w-md bg-card border-border">
           <DialogHeader>
-            <DialogTitle className="text-lg font-black text-foreground">
+            <DialogTitle className="text-lg font-bold text-foreground">
               Order #{deliveryConfirmModalItem?.orderNumber} — Confirm Delivery
             </DialogTitle>
             <DialogDescription className="text-xs text-muted-foreground">
@@ -627,7 +627,7 @@ const RiderPortal = () => {
               <div className="bg-muted/50 border border-border rounded-xl p-3.5 space-y-2">
                 <div>
                   <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Customer Name</p>
-                  <p className="font-extrabold text-foreground">{deliveryConfirmModalItem.customerName}</p>
+                  <p className="font-semibold text-foreground">{deliveryConfirmModalItem.customerName}</p>
                 </div>
                 <div>
                   <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Delivery Address</p>
@@ -637,14 +637,14 @@ const RiderPortal = () => {
                   </p>
                 </div>
                 <div className="pt-2 border-t border-border/60">
-                  <p className="text-base font-black text-warning">
+                  <p className="text-base font-bold text-warning">
                     COD Amount to Collect: {currency} {deliveryConfirmModalItem.amountToCollect.toLocaleString()}
                   </p>
                 </div>
               </div>
 
               <div className="space-y-2">
-                <p className="text-xs font-extrabold text-foreground uppercase tracking-wider">
+                <p className="text-xs font-semibold text-foreground uppercase tracking-wider">
                   Payment Method Received
                 </p>
                 <div className="grid grid-cols-2 gap-2">
@@ -691,7 +691,7 @@ const RiderPortal = () => {
             </Button>
             <Button
               type="button"
-              className="rounded-xl bg-success hover:bg-success text-black font-extrabold text-xs h-11 gap-1.5 shadow-md"
+              className="rounded-xl bg-success hover:bg-success text-black font-semibold text-xs h-11 gap-1.5 shadow-md"
               disabled={!deliveryConfirmModalItem || actionIds.has(deliveryConfirmModalItem.assignmentId)}
               onClick={() => {
                 if (deliveryConfirmModalItem) {
@@ -728,7 +728,7 @@ const RiderPortal = () => {
             {/* Total Card */}
             <div className="p-4 rounded-xl bg-success/10 border border-success/20 text-center">
               <span className="text-xs text-muted-foreground uppercase tracking-wider font-semibold block">Total Expected Collection</span>
-              <span className="text-2xl font-black text-success font-mono">
+              <span className="text-2xl font-bold text-success font-mono">
                 {currency} {(myActiveCash?.totalExpected || 0).toLocaleString()}
               </span>
             </div>

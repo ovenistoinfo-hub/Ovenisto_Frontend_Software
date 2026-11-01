@@ -106,7 +106,7 @@ const ItemStatusPill = ({ status }: { status: ItemKitchenStatus }) => {
   return (
     <span
       className={cn(
-        "px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider shrink-0 flex items-center gap-1",
+        "px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider shrink-0 flex items-center gap-1",
         statusTone(status).badge,
       )}
     >
@@ -120,7 +120,7 @@ const ItemStatusPill = ({ status }: { status: ItemKitchenStatus }) => {
 const ItemTimerPill = ({ status, cook, compact = false }: { status: ItemKitchenStatus; cook: ItemCookInfo; compact?: boolean }) => {
   const iconCls = compact ? "h-3 w-3" : "h-3.5 w-3.5";
   const base = cn(
-    "font-mono font-black rounded-md border flex items-center gap-1 shadow-xs",
+    "font-mono font-bold rounded-md border flex items-center gap-1 shadow-xs",
     compact ? "text-[11px] px-1.5 py-0.5" : "text-xs px-2 py-0.5",
   );
 
@@ -710,7 +710,7 @@ const OrderStatusBoard = () => {
           {/* Card Top Banner with Order Number, Type, Table, Elapsed Time & Print Button */}
           <div className="px-3.5 py-2.5 flex items-center justify-between border-b border-border/50 bg-muted/20">
             <div className="flex items-center gap-1.5 flex-wrap">
-              <span className="font-extrabold text-sm tracking-tight text-foreground">{order.orderNumber}</span>
+              <span className="font-semibold text-sm tracking-tight text-foreground">{order.orderNumber}</span>
               <Badge variant="outline" className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-background/80 border-border/60">
                 {order.type}
               </Badge>
@@ -718,7 +718,7 @@ const OrderStatusBoard = () => {
                 const sameTableOrders = allOrders.filter(o => o.tableNumber === order.tableNumber && o.status !== "cancelled");
                 const orderIdx = sameTableOrders.findIndex(o => o.id === order.id);
                 return (
-                  <Badge className="text-[10px] font-extrabold px-1.5 py-0.5 rounded-md bg-primary text-primary-foreground">
+                  <Badge className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-primary text-primary-foreground">
                     T-{order.tableNumber}{sameTableOrders.length > 1 ? ` (${orderIdx + 1}/${sameTableOrders.length})` : ""}
                   </Badge>
                 );
@@ -773,11 +773,11 @@ const OrderStatusBoard = () => {
                         <div className="flex items-center gap-1.5 truncate min-w-0">
                           <Badge
                             variant="outline"
-                            className="text-[9px] font-extrabold text-primary border-primary/30 bg-primary/10 px-1.5 py-0 h-4 uppercase tracking-wider shrink-0 gap-0.5"
+                            className="text-[9px] font-semibold text-primary border-primary/30 bg-primary/10 px-1.5 py-0 h-4 uppercase tracking-wider shrink-0 gap-0.5"
                           >
                             <Gift className="h-2.5 w-2.5" /> Deal
                           </Badge>
-                          <span className="font-extrabold text-xs text-foreground truncate">{row.dealName}</span>
+                          <span className="font-semibold text-xs text-foreground truncate">{row.dealName}</span>
                         </div>
                         <span className="text-[10px] font-mono text-muted-foreground shrink-0">
                           {row.items.length} items
@@ -798,7 +798,7 @@ const OrderStatusBoard = () => {
                               {/* Left: Sub-item Status Badge + Qty + Name */}
                               <div className="flex items-center gap-1.5 truncate min-w-0">
                                 <ItemStatusPill status={subStatus} />
-                                <span className="font-black text-xs text-foreground shrink-0">{subItem.qty}×</span>
+                                <span className="font-bold text-xs text-foreground shrink-0">{subItem.qty}×</span>
                                 <span className="truncate font-semibold text-foreground text-xs">{subItem.name}</span>
                               </div>
 
@@ -823,8 +823,8 @@ const OrderStatusBoard = () => {
                     {/* Left: Status Badge + Qty + Name */}
                     <div className="flex items-center gap-1.5 truncate min-w-0">
                       <ItemStatusPill status={itemStatus} />
-                      <span className="font-black text-xs text-foreground shrink-0">{item.qty}×</span>
-                      <span className="truncate font-extrabold text-foreground text-xs">{item.name}</span>
+                      <span className="font-bold text-xs text-foreground shrink-0">{item.qty}×</span>
+                      <span className="truncate font-semibold text-foreground text-xs">{item.name}</span>
                     </div>
 
                     {/* Right side: Countdown Timer */}
@@ -934,7 +934,7 @@ const OrderStatusBoard = () => {
               <BarChart3 className="h-4 w-4 text-primary-foreground" />
             </div>
             <div>
-              <h1 className="text-sm font-extrabold tracking-tight text-foreground flex items-center gap-2">
+              <h1 className="text-sm font-semibold tracking-tight text-foreground flex items-center gap-2">
                 Order Status Console
                 <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold bg-primary/10 text-primary border border-primary/20">
                   <Sparkles className="h-2.5 w-2.5 mr-1" /> Live
@@ -963,7 +963,7 @@ const OrderStatusBoard = () => {
               <Globe className="h-4 w-4 shrink-0" />
               <span className="hidden sm:inline">Website Orders</span>
               <span className={cn(
-                "inline-flex h-6 min-w-[1.5rem] items-center justify-center rounded-md px-1.5 font-mono text-[11px] font-black",
+                "inline-flex h-6 min-w-[1.5rem] items-center justify-center rounded-md px-1.5 font-mono text-[11px] font-bold",
                 showWebsite ? "bg-white/20 text-primary-foreground" : websitePending > 0 ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
               )}>
                 {websitePending}
@@ -1046,7 +1046,7 @@ const OrderStatusBoard = () => {
                 )}
               >
                 <div className="flex items-center justify-between relative z-10">
-                  <span className={cn("text-xs font-extrabold uppercase tracking-wider", isActive ? cfg.text : "text-muted-foreground")}>
+                  <span className={cn("text-xs font-semibold uppercase tracking-wider", isActive ? cfg.text : "text-muted-foreground")}>
                     {cfg.label}
                   </span>
                   <div className={cn("h-7 w-7 rounded-lg flex items-center justify-center transition-transform group-hover:scale-105", cfg.iconBg)}>
@@ -1056,7 +1056,7 @@ const OrderStatusBoard = () => {
 
                 <div className="mt-1.5 flex items-baseline justify-between relative z-10">
                   {hasLoaded ? (
-                    <span className={cn("text-2xl font-black font-mono tracking-tight", isActive ? "text-foreground" : "text-foreground/80")}>
+                    <span className={cn("text-2xl font-bold font-mono tracking-tight", isActive ? "text-foreground" : "text-foreground/80")}>
                       {count}
                     </span>
                   ) : (
@@ -1128,7 +1128,7 @@ const OrderStatusBoard = () => {
             <div className="h-16 w-16 rounded-2xl bg-muted/40 flex items-center justify-center mb-3 border border-border/60">
               <ShoppingBag className="h-8 w-8 text-muted-foreground/75" />
             </div>
-            <h2 className="text-base font-extrabold text-foreground mb-1">No Orders Found</h2>
+            <h2 className="text-base font-semibold text-foreground mb-1">No Orders Found</h2>
             <p className="text-xs text-muted-foreground max-w-sm">
               There are currently no <strong className="text-foreground uppercase">{activeStatus}</strong> orders.
             </p>
@@ -1150,7 +1150,7 @@ const OrderStatusBoard = () => {
                         <ColIcon className="h-4 w-4" />
                       </div>
                       <div>
-                        <h3 className="font-extrabold text-sm text-foreground tracking-tight flex items-center gap-1.5">
+                        <h3 className="font-semibold text-sm text-foreground tracking-tight flex items-center gap-1.5">
                           {col.title}
                         </h3>
                         <p className="text-[10px] text-muted-foreground font-medium">{col.subtitle}</p>
@@ -1158,7 +1158,7 @@ const OrderStatusBoard = () => {
                     </div>
 
                     <div className="text-right">
-                      <Badge variant="outline" className={cn("text-xs font-extrabold px-2 py-0.5 rounded-md gap-1", col.badgeBg)}>
+                      <Badge variant="outline" className={cn("text-xs font-semibold px-2 py-0.5 rounded-md gap-1", col.badgeBg)}>
                         <ColIcon className="h-3 w-3" />
                         {colOrders.length} Orders
                       </Badge>
@@ -1201,7 +1201,7 @@ const OrderStatusBoard = () => {
           </div>
           <div>
             <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider">Today's Orders</p>
-            <p className="text-xs font-extrabold text-foreground">{todayOrders.length} total orders</p>
+            <p className="text-xs font-semibold text-foreground">{todayOrders.length} total orders</p>
           </div>
         </div>
 
@@ -1213,7 +1213,7 @@ const OrderStatusBoard = () => {
           </div>
           <div>
             <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider">Today's Revenue</p>
-            <p className="text-xs font-extrabold text-foreground font-mono">Rs. {todayRevenue.toLocaleString()}</p>
+            <p className="text-xs font-semibold text-foreground font-mono">Rs. {todayRevenue.toLocaleString()}</p>
           </div>
         </div>
 
@@ -1225,7 +1225,7 @@ const OrderStatusBoard = () => {
           </div>
           <div>
             <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider">Active Pending</p>
-            <p className={cn("text-xs font-extrabold font-mono", statusTone("pending").text)}>{statusCounts.pending}</p>
+            <p className={cn("text-xs font-semibold font-mono", statusTone("pending").text)}>{statusCounts.pending}</p>
           </div>
         </div>
 
@@ -1237,7 +1237,7 @@ const OrderStatusBoard = () => {
           </div>
           <div>
             <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider">In Kitchen</p>
-            <p className={cn("text-xs font-extrabold font-mono", statusTone("preparing").text)}>{statusCounts.preparing}</p>
+            <p className={cn("text-xs font-semibold font-mono", statusTone("preparing").text)}>{statusCounts.preparing}</p>
           </div>
         </div>
       </footer>
@@ -1254,12 +1254,12 @@ const OrderStatusBoard = () => {
                 <DialogHeader className="border-b pb-3">
                   <DialogTitle className="flex items-center justify-between gap-2 flex-wrap">
                     <div className="flex items-center gap-2">
-                      <span className="font-black text-xl tracking-tight text-foreground">{selectedOrder.orderNumber}</span>
-                      <Badge variant="outline" className="text-xs font-extrabold px-2.5 py-0.5 rounded-md bg-primary/15 text-primary border border-primary/20">
+                      <span className="font-bold text-xl tracking-tight text-foreground">{selectedOrder.orderNumber}</span>
+                      <Badge variant="outline" className="text-xs font-semibold px-2.5 py-0.5 rounded-md bg-primary/15 text-primary border border-primary/20">
                         {selectedOrder.type}
                       </Badge>
                     </div>
-                    <Badge variant="outline" className={cn("text-xs font-extrabold rounded-full px-3 py-1", orderTone.badge)}>
+                    <Badge variant="outline" className={cn("text-xs font-semibold rounded-full px-3 py-1", orderTone.badge)}>
                       {orderTone.label || selectedOrder.status}
                     </Badge>
                   </DialogTitle>
@@ -1276,7 +1276,7 @@ const OrderStatusBoard = () => {
                       <p><span className="text-muted-foreground">Staff:</span> <strong className="text-foreground">{selectedOrder.staff}</strong></p>
                     )}
                     {selectedOrder.tableNumber && (
-                      <p><span className="text-muted-foreground">Table:</span> <strong className="text-primary font-extrabold">#{selectedOrder.tableNumber}</strong></p>
+                      <p><span className="text-muted-foreground">Table:</span> <strong className="text-primary font-semibold">#{selectedOrder.tableNumber}</strong></p>
                     )}
                     {selectedOrder.deliveryAddress && (
                       <div className="col-span-2 flex flex-col items-start gap-1">
@@ -1302,12 +1302,12 @@ const OrderStatusBoard = () => {
                     <p>
                       <span className="text-muted-foreground">Payment Status:</span>{" "}
                       {paid
-                        ? <strong className={cn("font-extrabold", statusTone("completed").text)}>{selectedOrder.paymentMethod}</strong>
-                        : <strong className={cn("font-extrabold", statusTone("pending").text)}>Unpaid</strong>
+                        ? <strong className={cn("font-semibold", statusTone("completed").text)}>{selectedOrder.paymentMethod}</strong>
+                        : <strong className={cn("font-semibold", statusTone("pending").text)}>Unpaid</strong>
                       }
                     </p>
                     {selectedOrder.advancePayment > 0 && (
-                      <p><span className="text-muted-foreground">Advance Paid:</span> <strong className="text-foreground font-extrabold">Rs. {selectedOrder.advancePayment.toLocaleString()}</strong></p>
+                      <p><span className="text-muted-foreground">Advance Paid:</span> <strong className="text-foreground font-semibold">Rs. {selectedOrder.advancePayment.toLocaleString()}</strong></p>
                     )}
                   </div>
 
@@ -1333,10 +1333,10 @@ const OrderStatusBoard = () => {
                                 <TableRow className="bg-primary/[0.04] hover:bg-primary/[0.07] font-bold border-b border-border/60">
                                   <TableCell className="text-xs py-2">
                                     <div className="flex items-center gap-1.5">
-                                      <Badge variant="outline" className="text-[9px] font-extrabold text-primary border-primary/30 bg-primary/10 px-1.5 py-0 h-4 uppercase tracking-wider shrink-0 gap-0.5">
+                                      <Badge variant="outline" className="text-[9px] font-semibold text-primary border-primary/30 bg-primary/10 px-1.5 py-0 h-4 uppercase tracking-wider shrink-0 gap-0.5">
                                         <Gift className="h-2.5 w-2.5" /> Deal
                                       </Badge>
-                                      <span className="font-extrabold text-foreground">{row.dealName}</span>
+                                      <span className="font-semibold text-foreground">{row.dealName}</span>
                                     </div>
                                   </TableCell>
                                   <TableCell className="text-xs text-center py-2">
@@ -1408,7 +1408,7 @@ const OrderStatusBoard = () => {
                     )}
                     <div className="flex justify-between"><span className="text-muted-foreground">Tax</span><span className="font-mono font-semibold">Rs. {Number(selectedOrder.tax).toLocaleString()}</span></div>
                     <Separator className="my-1" />
-                    <div className="flex justify-between font-extrabold text-base pt-0.5">
+                    <div className="flex justify-between font-semibold text-base pt-0.5">
                       <span>Total Amount</span>
                       <span className="text-primary font-mono">Rs. {selectedOrder.total.toLocaleString()}</span>
                     </div>
@@ -1429,7 +1429,7 @@ const OrderStatusBoard = () => {
                   {selectedOrder.status === "ready" && (
                     <Button
                       disabled={updatingOrderId === selectedOrder.id}
-                      className="w-full sm:w-auto h-10 gradient-primary text-primary-foreground hover:opacity-90 font-extrabold rounded-xl shadow-md flex items-center justify-center gap-1.5"
+                      className="w-full sm:w-auto h-10 gradient-primary text-primary-foreground hover:opacity-90 font-semibold rounded-xl shadow-md flex items-center justify-center gap-1.5"
                       onClick={() => handleStatusUpdate(selectedOrder.id, "completed")}
                     >
                       {updatingOrderId === selectedOrder.id ? (

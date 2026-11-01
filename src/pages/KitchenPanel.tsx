@@ -109,7 +109,7 @@ const DishRow = ({ item, isUpdating, clock, onAdvance }: DishRowProps) => {
     <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-2 p-2 rounded-xl bg-muted/20 border border-border/60 hover:border-primary/40 transition-all text-xs">
       {/* Item Qty & Name — the controls wrap onto their own line on narrow cards instead of squeezing the name */}
       <div className="flex items-start gap-1.5 min-w-0 grow basis-32">
-        <span className="font-black text-primary font-mono text-xs shrink-0">{item.qty}×</span>
+        <span className="font-bold text-primary font-mono text-xs shrink-0">{item.qty}×</span>
         <div className="min-w-0">
           <span className="font-bold text-foreground text-xs break-words">{item.name}</span>
           {item.modifiers && item.modifiers.length > 0 && (
@@ -672,9 +672,9 @@ const KitchenPanel = () => {
                           )}>
                             <StatusIcon className="h-3.5 w-3.5" />
                           </div>
-                          <span className="text-base font-extrabold tracking-tight text-foreground">{order.orderNumber}</span>
+                          <span className="text-base font-semibold tracking-tight text-foreground">{order.orderNumber}</span>
                           {order.tableNumber && (
-                            <Badge className="text-xs font-extrabold px-1.5 py-0.5 bg-primary text-primary-foreground rounded-md">
+                            <Badge className="text-xs font-semibold px-1.5 py-0.5 bg-primary text-primary-foreground rounded-md">
                               T-{order.tableNumber}
                             </Badge>
                           )}
@@ -709,10 +709,10 @@ const KitchenPanel = () => {
                             {/* Deal Header */}
                             <div className="flex items-center justify-between text-xs pb-1 border-b border-primary/20">
                               <div className="flex items-center gap-1.5 truncate min-w-0">
-                                <Badge variant="outline" className="text-xs font-extrabold text-primary border-primary/30 bg-primary/10 px-1.5 py-0 h-5 uppercase tracking-wider shrink-0 gap-1">
+                                <Badge variant="outline" className="text-xs font-semibold text-primary border-primary/30 bg-primary/10 px-1.5 py-0 h-5 uppercase tracking-wider shrink-0 gap-1">
                                   <Gift className="h-3 w-3" /> Deal
                                 </Badge>
-                                <span className="font-extrabold text-xs text-foreground truncate">{group.dealName}</span>
+                                <span className="font-semibold text-xs text-foreground truncate">{group.dealName}</span>
                               </div>
                             </div>
 

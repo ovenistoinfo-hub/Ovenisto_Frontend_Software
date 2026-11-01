@@ -2127,7 +2127,7 @@ const WaiterPanel = () => {
                 {/* Header info */}
                 <div className="flex items-center justify-between border-b border-border pb-2.5 shrink-0">
                   <div className="space-y-0.5">
-                    <h3 className="font-extrabold text-base text-foreground tracking-tight">Table {selectedTable.number}</h3>
+                    <h3 className="font-semibold text-base text-foreground tracking-tight">Table {selectedTable.number}</h3>
                     <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">{selectedTable.floor || "Main Hall"}</p>
                     {tableStatus !== "available" && selectedTable.occupiedByName && (
                       <p className="text-[11px] text-primary/85 font-semibold mt-0.5">
@@ -2357,7 +2357,7 @@ const WaiterPanel = () => {
                                     "text-[9px] px-1.5 py-0.2 rounded-full font-bold uppercase",
                                     statusTone(o.status).badge,
                                     o.status === "ready" && "animate-pulse",
-                                    o.status === "completed" && "font-black",
+                                    o.status === "completed" && "font-bold",
                                   )}>
                                     {o.status === "completed" ? "SERVED" : o.status}
                                   </Badge>
@@ -2402,7 +2402,7 @@ const WaiterPanel = () => {
                       const netDue = Math.max(0, grandTotal - currentAdvancePayment);
                       return (
                         <div className="bg-warning/10 border border-warning/20 text-warning rounded-xl p-2 text-center text-xs font-bold flex flex-col items-center justify-center gap-0.5 select-none shrink-0">
-                          <div className="flex items-center gap-1.5 font-extrabold text-[11px]">
+                          <div className="flex items-center gap-1.5 font-semibold text-[11px]">
                             <CreditCard className="h-3.5 w-3.5" /> Advance Paid: {currency} {currentAdvancePayment.toLocaleString()}
                           </div>
                           <span className="text-[10px] font-medium text-warning/90">
@@ -2415,14 +2415,14 @@ const WaiterPanel = () => {
                     {isSessionPaid && (() => {
                       const hasUnservedFood = activeTableOrders.some(o => o.status === "pending" || o.status === "preparing");
                       return (
-                        <div className="bg-success/10 border border-success/20 text-success rounded-xl p-2 text-center text-xs font-extrabold flex items-center justify-center gap-1.5 select-none animate-pulse shrink-0">
+                        <div className="bg-success/10 border border-success/20 text-success rounded-xl p-2 text-center text-xs font-semibold flex items-center justify-center gap-1.5 select-none animate-pulse shrink-0">
                           <Check className="h-3.5 w-3.5" /> {hasUnservedFood ? "Billing Paid" : "Billing Paid — Awaiting End Sitting"}
                         </div>
                       );
                     })()}
 
                     {hasPendingCancellationOnTable && (
-                      <div className="bg-warning/15 border border-warning/30 text-warning rounded-xl p-2 text-center text-[11px] font-extrabold flex items-center justify-center gap-1.5 select-none shrink-0 animate-pulse">
+                      <div className="bg-warning/15 border border-warning/30 text-warning rounded-xl p-2 text-center text-[11px] font-semibold flex items-center justify-center gap-1.5 select-none shrink-0 animate-pulse">
                         <Clock className="h-3.5 w-3.5 text-warning shrink-0" />
                         Cancellation Pending Approval — Bill Locked
                       </div>
@@ -2530,9 +2530,9 @@ const WaiterPanel = () => {
                           </div>
                         )}
                         <Separator className="bg-border my-1" />
-                        <div className="flex justify-between text-xs font-extrabold text-foreground">
+                        <div className="flex justify-between text-xs font-semibold text-foreground">
                           <span>{advanceSum > 0 ? "Net Amount Due" : "Grand Total"}</span>
-                          <span className="text-primary font-black text-sm">
+                          <span className="text-primary font-bold text-sm">
                             {currency} {netPayable.toLocaleString()}
                           </span>
                         </div>
@@ -2599,7 +2599,7 @@ const WaiterPanel = () => {
                             <div className="flex items-center gap-1.5 flex-wrap">
                               <Badge
                                 variant="outline"
-                                className="text-[9px] font-extrabold text-primary border-primary/30 bg-primary/10 px-1.5 py-0 h-4 uppercase tracking-wider gap-0.5 shrink-0"
+                                className="text-[9px] font-semibold text-primary border-primary/30 bg-primary/10 px-1.5 py-0 h-4 uppercase tracking-wider gap-0.5 shrink-0"
                               >
                                 <Gift className="h-2.5 w-2.5" /> Deal
                               </Badge>
@@ -2761,7 +2761,7 @@ const WaiterPanel = () => {
             )}
             <div className="flex justify-between items-center text-xs">
               <span className="text-muted-foreground font-semibold">Total Amount</span>
-              <span className="text-base font-extrabold text-primary font-mono">{currency} {Math.round(Math.max(0, cartTotal - dealDiscount)).toLocaleString()}</span>
+              <span className="text-base font-semibold text-primary font-mono">{currency} {Math.round(Math.max(0, cartTotal - dealDiscount)).toLocaleString()}</span>
             </div>
             <Button
               onClick={handlePlaceOrderClick}
@@ -2819,7 +2819,7 @@ const WaiterPanel = () => {
                       <Icon className={cn("h-3.5 w-3.5", color)} />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className={cn("text-base lg:text-lg font-black tracking-tight leading-none truncate", color)}>{count}</p>
+                      <p className={cn("text-base lg:text-lg font-bold tracking-tight leading-none truncate", color)}>{count}</p>
                       <p className="text-[10px] text-muted-foreground font-semibold truncate mt-0.5">{label}</p>
                     </div>
                   </CardContent>
@@ -2838,9 +2838,9 @@ const WaiterPanel = () => {
                   <Bell className="h-4 w-4" />
                 </div>
                 <div>
-                  <h3 className="font-extrabold text-foreground text-sm leading-tight flex items-center gap-2">
+                  <h3 className="font-semibold text-foreground text-sm leading-tight flex items-center gap-2">
                     Self-Order Customer Requests
-                    <span className="bg-warning text-warning-foreground font-extrabold text-[10px] px-2 py-0.5 rounded-full shadow-xs">
+                    <span className="bg-warning text-warning-foreground font-semibold text-[10px] px-2 py-0.5 rounded-full shadow-xs">
                       {pendingSelfOrders.length} New
                     </span>
                   </h3>
@@ -2860,7 +2860,7 @@ const WaiterPanel = () => {
                   <div className="space-y-1.5">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-1.5">
-                        <span className="font-extrabold text-xs px-2 py-0.5 rounded-lg bg-primary/10 text-primary border border-primary/20">
+                        <span className="font-semibold text-xs px-2 py-0.5 rounded-lg bg-primary/10 text-primary border border-primary/20">
                           Table {order.tableNumber}
                         </span>
                         {order.guestCount && (
@@ -2869,7 +2869,7 @@ const WaiterPanel = () => {
                           </span>
                         )}
                       </div>
-                      <span className="font-extrabold text-primary text-sm">
+                      <span className="font-semibold text-primary text-sm">
                         {currency} {order.total.toLocaleString()}
                       </span>
                     </div>
@@ -3075,11 +3075,11 @@ const WaiterPanel = () => {
                                 "h-2.5 w-2.5 rounded-full shrink-0",
                                 statusDotColor
                               )} />
-                              <span className="text-sm font-black uppercase tracking-wider text-foreground">TABLE {t.number}</span>
+                              <span className="text-sm font-bold uppercase tracking-wider text-foreground">TABLE {t.number}</span>
                             </div>
 
                             {status === "bill-requested" ? (
-                              <Badge className="bg-destructive text-destructive-foreground font-extrabold text-[10px] animate-pulse gap-1 px-2 py-0.5 shadow-xs border-none">
+                              <Badge className="bg-destructive text-destructive-foreground font-semibold text-[10px] animate-pulse gap-1 px-2 py-0.5 shadow-xs border-none">
                                 <Receipt className="h-3 w-3" /> Bill Req.
                               </Badge>
                             ) : isTablePaid ? (
@@ -3128,10 +3128,10 @@ const WaiterPanel = () => {
                                   <div className="flex items-center justify-between">
                                     <span className="font-bold text-xs text-foreground tracking-tight">Order #{latestOrder.orderNumber}</span>
                                     <Badge variant="outline" className={cn(
-                                      "text-[9px] px-1.5 py-0.2 rounded-md font-extrabold uppercase",
+                                      "text-[9px] px-1.5 py-0.2 rounded-md font-semibold uppercase",
                                       statusTone(latestOrder.status).badge,
                                       latestOrder.status === "ready" && "animate-pulse",
-                                      latestOrder.status === "completed" && "font-black",
+                                      latestOrder.status === "completed" && "font-bold",
                                     )}>
                                       {latestOrder.status === "completed" ? "SERVED" : latestOrder.status}
                                     </Badge>
@@ -3203,7 +3203,7 @@ const WaiterPanel = () => {
                             <span className={cn(
                               "text-[10px] font-bold uppercase tracking-wider flex items-center gap-1",
                               status === "bill-requested" ? "text-destructive" :
-                              isTablePaid ? "text-success font-extrabold" :
+                              isTablePaid ? "text-success font-semibold" :
                               isOccupiedState ? "text-primary" :
                               status === "reserved" ? "text-warning" :
                               "text-success"
@@ -3346,7 +3346,7 @@ const WaiterPanel = () => {
                                     <div className="p-2.5 rounded-full bg-primary/10 border border-primary/20 shadow-inner group-hover:scale-110 group-hover:bg-primary/20 transition-all duration-300">
                                       <Gift className="h-6 w-6 text-primary group-hover:text-primary transition-colors" />
                                     </div>
-                                    <span className="absolute bottom-1.5 right-1.5 text-[9px] font-extrabold tracking-wider bg-background/85 text-primary px-1.5 py-0.5 rounded-md border border-primary/25 backdrop-blur-xs shadow-xs uppercase">
+                                    <span className="absolute bottom-1.5 right-1.5 text-[9px] font-semibold tracking-wider bg-background/85 text-primary px-1.5 py-0.5 rounded-md border border-primary/25 backdrop-blur-xs shadow-xs uppercase">
                                       {deal.name.slice(0, 3)}
                                     </span>
                                   </div>
@@ -3383,10 +3383,10 @@ const WaiterPanel = () => {
                                         {pricing.regularStrike ? pricing.regularLabel : `was ${pricing.regularLabel}`}
                                       </span>
                                     )}
-                                    <span className="font-mono font-extrabold text-xs sm:text-sm text-primary">{pricing.priceLabel}</span>
+                                    <span className="font-mono font-semibold text-xs sm:text-sm text-primary">{pricing.priceLabel}</span>
                                   </div>
                                   {pricing.savingsPercent > 0 && (
-                                    <span className="text-[9px] font-extrabold text-success bg-success/10 border border-success/30 px-1.5 py-0.5 rounded shrink-0 shadow-2xs">
+                                    <span className="text-[9px] font-semibold text-success bg-success/10 border border-success/30 px-1.5 py-0.5 rounded shrink-0 shadow-2xs">
                                       SAVE {pricing.savingsPercent}%
                                     </span>
                                   )}
@@ -3434,7 +3434,7 @@ const WaiterPanel = () => {
                                 ) : (
                                   <div className="w-full h-full bg-muted/40 flex flex-col items-center justify-center relative overflow-hidden group-hover:from-card group-hover:to-primary/20 transition-colors">
                                     <Utensils className="h-8 w-8 text-primary/25 group-hover:text-primary/40 group-hover:scale-110 transition-all duration-300" />
-                                    <span className="absolute bottom-1.5 right-1.5 text-[10px] font-extrabold tracking-wider bg-background/80 text-primary px-1.5 py-0.5 rounded-md border border-primary/20 backdrop-blur-xs shadow-xs">
+                                    <span className="absolute bottom-1.5 right-1.5 text-[10px] font-semibold tracking-wider bg-background/80 text-primary px-1.5 py-0.5 rounded-md border border-primary/20 backdrop-blur-xs shadow-xs">
                                       {item.name.charAt(0)}
                                     </span>
                                   </div>
@@ -3460,7 +3460,7 @@ const WaiterPanel = () => {
                               <div>
                                 <p className="text-xs font-bold text-foreground truncate group-hover:text-primary transition-colors">{item.name}</p>
                                 <div className="flex items-center justify-between mt-1">
-                                  <p className="text-xs text-primary font-extrabold">
+                                  <p className="text-xs text-primary font-semibold">
                                     {hasVariants
                                       ? `${currency} ${variantDineInPrice(item.variants[0])}–${variantDineInPrice(item.variants[item.variants.length - 1])}`
                                       : `${currency} ${baseItemPrice.toLocaleString()}`}
@@ -3485,7 +3485,7 @@ const WaiterPanel = () => {
                                   )}
                                   <div>
                                     <p className="font-bold text-sm text-foreground">{item.name}</p>
-                                    <p className="text-primary font-extrabold text-sm">
+                                    <p className="text-primary font-semibold text-sm">
                                       {currency} {((selectedVariant ? selectedVariant.price : baseItemPrice) + Object.entries(selectedModifierQtys).reduce((s, [mId, q]) => {
                                         const m = itemMods.find((x: any) => x.id === mId || x.modifierId === mId);
                                         return s + (resolveModifierPrice(m, selectedVariant?.id) * q);
@@ -3891,7 +3891,7 @@ const WaiterPanel = () => {
               <div className="flex items-center justify-between pb-2.5 border-b border-border/40">
                 <div className="space-y-0.5">
                   <div className="flex items-center gap-2">
-                    <span className="font-mono font-extrabold text-sm text-foreground">
+                    <span className="font-mono font-semibold text-sm text-foreground">
                       Order #{o.orderNumber}
                     </span>
                     {isPaid ? (
@@ -3914,7 +3914,7 @@ const WaiterPanel = () => {
                 <Badge
                   variant="outline"
                   className={cn(
-                    "text-[10px] font-extrabold uppercase tracking-wider px-2.5 py-1 rounded-full shadow-2xs",
+                    "text-[10px] font-semibold uppercase tracking-wider px-2.5 py-1 rounded-full shadow-2xs",
                     statusTone(o.status).badge
                   )}
                 >
@@ -3930,7 +3930,7 @@ const WaiterPanel = () => {
                       <div key={row.dealKey || idx} className="space-y-1 pb-1.5 border-b border-border/30 last:border-0 last:pb-0">
                         <div className="flex justify-between items-center text-xs">
                           <div className="flex items-center gap-1.5 min-w-0 pr-2">
-                            <Badge variant="outline" className="text-[9px] font-extrabold text-primary border-primary/30 bg-primary/10 px-1.5 py-0 h-4 uppercase tracking-wider shrink-0 gap-0.5">
+                            <Badge variant="outline" className="text-[9px] font-semibold text-primary border-primary/30 bg-primary/10 px-1.5 py-0 h-4 uppercase tracking-wider shrink-0 gap-0.5">
                               <Gift className="h-2.5 w-2.5" /> Deal
                             </Badge>
                             <span className="font-bold text-foreground truncate">{row.dealName}</span>
@@ -3983,7 +3983,7 @@ const WaiterPanel = () => {
                   Subtotal: {currency} {Math.round(o.subtotal).toLocaleString()} · Tax: {currency} {Math.round(o.tax).toLocaleString()}
                 </span>
                 <span className="font-mono font-bold text-foreground">
-                  Total: <span className="text-primary font-black text-sm">{currency} {Math.round(o.total).toLocaleString()}</span>
+                  Total: <span className="text-primary font-bold text-sm">{currency} {Math.round(o.total).toLocaleString()}</span>
                 </span>
               </div>
             </div>
@@ -4042,7 +4042,7 @@ const WaiterPanel = () => {
             {/* Header info */}
             <div className="text-center space-y-1 py-1">
               <UtensilsCrossed className="h-7 w-7 mx-auto text-primary animate-pulse" />
-              <p className="font-extrabold text-base tracking-tight text-foreground">{settings.restaurantName || "OVENISTO"}</p>
+              <p className="font-semibold text-base tracking-tight text-foreground">{settings.restaurantName || "OVENISTO"}</p>
               <p className="text-[11px] text-muted-foreground leading-tight">
                 {settings.address || "164-J LDA AVENUE-1 Lahore"}<br/>
                 Tel: {settings.phone || "0320-111 98 98"}
@@ -4089,7 +4089,7 @@ const WaiterPanel = () => {
                           )}
                         </TableCell>
                         <TableCell className="text-center font-semibold text-foreground py-2 text-[11px]">{item.qty}</TableCell>
-                        <TableCell className="text-right font-extrabold text-foreground py-2 text-[11px]">{currency} {itemTotal.toLocaleString()}</TableCell>
+                        <TableCell className="text-right font-semibold text-foreground py-2 text-[11px]">{currency} {itemTotal.toLocaleString()}</TableCell>
                       </TableRow>
                     );
                   })}
@@ -4116,7 +4116,7 @@ const WaiterPanel = () => {
                 <span className="font-semibold text-foreground">{currency} {activeTableOrders.reduce((s, o) => s + Number(o.tax), 0).toLocaleString()}</span>
               </div>
               <Separator className="bg-border my-1" />
-              <div className="flex justify-between font-extrabold text-sm text-foreground">
+              <div className="flex justify-between font-semibold text-sm text-foreground">
                 <span>Grand Total</span>
                 <span className={currentAdvancePayment > 0 ? "text-foreground font-bold" : "text-primary"}>
                   {currency} {activeTableOrders.reduce((s, o) => s + Number(o.total), 0).toLocaleString()}
@@ -4129,9 +4129,9 @@ const WaiterPanel = () => {
                     <span>- {currency} {currentAdvancePayment.toLocaleString()}</span>
                   </div>
                   <Separator className="bg-border my-1" />
-                  <div className="flex justify-between font-extrabold text-sm text-foreground">
+                  <div className="flex justify-between font-semibold text-sm text-foreground">
                     <span>Net Payable</span>
-                    <span className="text-primary font-black text-base">
+                    <span className="text-primary font-bold text-base">
                       {currency} {Math.max(0, activeTableOrders.reduce((s, o) => s + Number(o.total), 0) - currentAdvancePayment).toLocaleString()}
                     </span>
                   </div>
@@ -4142,7 +4142,7 @@ const WaiterPanel = () => {
             {isSessionPaid && (
               <div className="bg-success/5 border border-success/20 rounded-xl p-3 text-center space-y-1">
                 <p className="text-[10px] font-bold text-success uppercase tracking-wider">Payment Details</p>
-                <p className="font-extrabold text-foreground text-xs">
+                <p className="font-semibold text-foreground text-xs">
                   Settled via {activeTableOrders[0]?.paymentMethod || "Settle Completed"}
                 </p>
               </div>
@@ -4224,7 +4224,7 @@ const WaiterPanel = () => {
                             <div key={row.dealKey || idx} className="space-y-1 pb-2 border-b border-border/30 last:border-0 last:pb-0">
                               <div className="flex justify-between items-center text-xs">
                                 <div className="flex items-center gap-1.5 min-w-0 pr-2">
-                                  <Badge variant="outline" className="text-[9px] font-extrabold text-primary border-primary/30 bg-primary/10 px-1.5 py-0 h-4 uppercase tracking-wider shrink-0 gap-0.5">
+                                  <Badge variant="outline" className="text-[9px] font-semibold text-primary border-primary/30 bg-primary/10 px-1.5 py-0 h-4 uppercase tracking-wider shrink-0 gap-0.5">
                                     <Gift className="h-2.5 w-2.5" /> Deal
                                   </Badge>
                                   <span className="font-bold text-foreground truncate">{row.dealName}</span>
@@ -4306,7 +4306,7 @@ const WaiterPanel = () => {
 
                     <div className="flex justify-between items-center pt-2 border-t border-border/60 font-bold">
                       <span className="uppercase tracking-wider text-[11px] text-muted-foreground">Order Total</span>
-                      <span className="text-2xl lg:text-3xl font-black text-primary font-mono tracking-tight tabular-nums">
+                      <span className="text-2xl lg:text-3xl font-bold text-primary font-mono tracking-tight tabular-nums">
                         {currency} {netAmountDue.toLocaleString()}
                       </span>
                     </div>
@@ -4503,7 +4503,7 @@ const WaiterPanel = () => {
                 <Minus className="h-4 w-4" />
               </Button>
               <div className="w-16 text-center">
-                <span className="text-3xl font-extrabold text-foreground tracking-tight select-none">
+                <span className="text-3xl font-semibold text-foreground tracking-tight select-none">
                   {guestsCount}
                 </span>
                 <span className="text-[10px] text-muted-foreground block font-semibold uppercase tracking-wider mt-0.5">Pax</span>
@@ -4588,7 +4588,7 @@ const WaiterPanel = () => {
                         >
                           <div className="flex flex-col gap-1.5 w-full text-left">
                             <div className="font-bold text-xs flex items-center justify-between gap-2">
-                              <span className="font-extrabold text-foreground flex items-center gap-1.5">
+                              <span className="font-semibold text-foreground flex items-center gap-1.5">
                                 <User className="h-3.5 w-3.5 text-primary" /> {r.customerName}
                               </span>
                               {r.customerPhone && (
@@ -4630,11 +4630,11 @@ const WaiterPanel = () => {
                   const preOrderCount = selRes.preOrderItems ? selRes.preOrderItems.length : 0;
                   return (
                     <div className="p-3.5 rounded-xl bg-warning/10 border border-warning/30 text-xs space-y-2 mt-2 shadow-2xs">
-                      <div className="flex items-center justify-between font-extrabold text-foreground">
+                      <div className="flex items-center justify-between font-semibold text-foreground">
                         <span className="flex items-center gap-1.5">
                           <User className="h-4 w-4 text-warning" /> Linked: {selRes.customerName}
                         </span>
-                        <span className="text-warning font-extrabold flex items-center gap-1">
+                        <span className="text-warning font-semibold flex items-center gap-1">
                           <Clock className="h-3.5 w-3.5" /> {selRes.time}
                         </span>
                       </div>
@@ -4812,7 +4812,7 @@ const WaiterPanel = () => {
                           </Badge>
                         )}
                         {effStatus === "not_arrived" && (
-                          <Badge variant="outline" className="text-[11px] font-extrabold px-2.5 py-0.5 rounded-lg border bg-destructive/15 text-destructive border-destructive/30 flex items-center gap-1">
+                          <Badge variant="outline" className="text-[11px] font-semibold px-2.5 py-0.5 rounded-lg border bg-destructive/15 text-destructive border-destructive/30 flex items-center gap-1">
                             <AlertCircle className="h-3 w-3" /> Not Arrived
                           </Badge>
                         )}
@@ -4846,7 +4846,7 @@ const WaiterPanel = () => {
                     <div className="bg-muted/40 p-2 rounded-lg border border-border/30 flex items-center justify-between text-xs font-semibold">
                       <span className="flex items-center gap-1.5 text-foreground">
                         <Utensils className="h-3.5 w-3.5 text-warning" />
-                        Table: <strong className="text-warning font-extrabold">{r.tableNumber ? `Table ${r.tableNumber}` : "Unassigned"}</strong>
+                        Table: <strong className="text-warning font-semibold">{r.tableNumber ? `Table ${r.tableNumber}` : "Unassigned"}</strong>
                       </span>
                       <span className="flex items-center gap-1 text-muted-foreground">
                         <Users className="h-3 w-3" /> {r.guestCount} Pax
@@ -4879,7 +4879,7 @@ const WaiterPanel = () => {
                         <span className="flex items-center gap-1">
                           <Check className="h-3.5 w-3.5 text-success" /> Advance Deposit Paid
                         </span>
-                        <span className="font-extrabold">PKR {Number(r.advancePaid).toLocaleString()}</span>
+                        <span className="font-semibold">PKR {Number(r.advancePaid).toLocaleString()}</span>
                       </div>
                     ) : null}
 
@@ -4923,7 +4923,7 @@ const WaiterPanel = () => {
             {/* Total Card */}
             <div className="p-4 rounded-xl bg-success/10 border border-success/20 text-center">
               <span className="text-xs text-muted-foreground uppercase tracking-wider font-semibold block">Total Expected Collection</span>
-              <span className="text-2xl font-black text-success font-mono">
+              <span className="text-2xl font-bold text-success font-mono">
                 {currency} {(myActiveCash?.totalExpected || 0).toLocaleString()}
               </span>
             </div>

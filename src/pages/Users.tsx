@@ -793,7 +793,7 @@ const Users = () => {
             </Button>
             <Button
               size="sm"
-              className="bg-warning hover:bg-warning text-black font-semibold gap-1.5 shadow-md active:scale-95 transition-all"
+              className="bg-warning hover:bg-warning text-warning-foreground font-semibold gap-1.5 shadow-md active:scale-95 transition-all"
               onClick={handleSave}
               disabled={saving || (!editingId && accountMode === "employee" && selectedEmployeeId === "none")}
             >
