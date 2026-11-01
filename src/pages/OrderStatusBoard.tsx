@@ -69,7 +69,7 @@ const statusConfig: Record<FilterStatus, StatusConfigItem> = {
     text: "text-primary",
     iconBg: "bg-primary/15 text-primary",
     icon: Flame,
-    pill: "bg-primary/15 text-primary border border-primary/30",
+    pill: "bg-primary text-primary-foreground",
   },
   pending: buildStatusConfig("pending", AlertCircle),
   preparing: buildStatusConfig("preparing", ChefHat),

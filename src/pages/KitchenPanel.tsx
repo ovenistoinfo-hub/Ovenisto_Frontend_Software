@@ -563,8 +563,8 @@ const KitchenPanel = () => {
   return (
     <div className="fixed inset-0 z-50 bg-background flex flex-col">
       {/* ── Header ── */}
-      <div className="h-16 bg-card border-b-2 border-primary/15 flex items-center justify-between px-5 shrink-0 shadow-sm">
-        <div className="flex items-center gap-4">
+      <div className="min-h-16 bg-card border-b-2 border-primary/15 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-3 sm:px-5 py-2 shrink-0 shadow-sm">
+        <div className="flex items-center gap-2 sm:gap-4">
           <Button variant="ghost" size="sm" className="rounded-lg hover:bg-primary/10 cursor-pointer" asChild>
             <Link to="/kitchens"><ArrowLeft className="h-4 w-4 mr-1.5" />Back</Link>
           </Button>
@@ -580,7 +580,7 @@ const KitchenPanel = () => {
           </div>
         </div>
 
-        <div className="flex items-center gap-5">
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
           {/* Status Filter Buttons */}
           <div className="flex gap-1.5 bg-muted/50 p-1 rounded-xl">
             {(["all", "new", "preparing"] as const).map((s) => (

@@ -3,7 +3,7 @@
 
 export const ORDER_TYPE_COLORS: Record<string, string> = {
   "Dine In": "bg-primary/10 text-primary border-primary/30",
-  "Take Away": "bg-accent/10 text-accent border-accent/30",
+  "Take Away": "bg-muted text-foreground border-border",
   Delivery: "bg-info/10 text-info border-info/30",
   Online: "bg-gold/10 text-gold border-gold/30",
 };
