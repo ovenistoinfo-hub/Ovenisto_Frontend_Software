@@ -321,13 +321,13 @@ const Users = () => {
   return (
     <div className="space-y-6">
       <PageHeader
-        icon={<Shield className="h-5 w-5 text-warning" />}
+        icon={<Shield className="h-5 w-5" />}
         title="Users & Permissions"
         subtitle="Manage login accounts, branch access, and security permissions"
         actions={
           (isAdminOrHigher || isManager) ? (
-            <Button size="sm" className="bg-warning hover:bg-warning text-black font-extrabold gap-1.5 shadow-md active:scale-95 transition-all" onClick={openAdd}>
-              <Plus className="h-4 w-4 stroke-[3]" /> Add User Account
+            <Button size="sm" className="gap-1.5 active:scale-95 transition-all" onClick={openAdd}>
+              <Plus className="h-4 w-4" /> Add User Account
             </Button>
           ) : undefined
         }
@@ -335,58 +335,29 @@ const Users = () => {
 
       {/* Summary KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
-        <Card className="shadow-sm border-border/60 bg-muted/40">
-          <CardContent className="p-4 flex items-center justify-between">
-            <div>
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Total Accounts</p>
-              <h3 className="text-2xl font-black font-mono text-foreground mt-0.5">{stats.total}</h3>
-            </div>
-            <div className="p-2.5 rounded-xl bg-warning/10 text-warning">
-              <UsersIcon className="h-5 w-5" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="shadow-sm border-border/60 bg-muted/40">
-          <CardContent className="p-4 flex items-center justify-between">
-            <div>
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Active Staff</p>
-              <h3 className="text-2xl font-black font-mono text-success mt-0.5">{stats.active}</h3>
-            </div>
-            <div className="p-2.5 rounded-xl bg-success/10 text-success">
-              <CheckCircle2 className="h-5 w-5" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="shadow-sm border-border/60 bg-muted/40">
-          <CardContent className="p-4 flex items-center justify-between">
-            <div>
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Admin / Owners</p>
-              <h3 className="text-2xl font-black font-mono text-purple-600 dark:text-purple-400 mt-0.5">{stats.adminCount}</h3>
-            </div>
-            <div className="p-2.5 rounded-xl bg-purple-500/10 text-purple-600 dark:text-purple-400">
-              <Crown className="h-5 w-5" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="shadow-sm border-border/60 bg-muted/40">
-          <CardContent className="p-4 flex items-center justify-between">
-            <div>
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Pending Logins</p>
-              <h3 className="text-2xl font-black font-mono text-info mt-0.5">{stats.unlinkedCount}</h3>
-            </div>
-            <div className="p-2.5 rounded-xl bg-info/10 text-info">
-              <UserPlus className="h-5 w-5" />
-            </div>
-          </CardContent>
-        </Card>
+        {[
+          { label: "Total Accounts", value: stats.total, icon: UsersIcon, tone: "text-foreground" },
+          { label: "Active Staff", value: stats.active, icon: CheckCircle2, tone: "text-success" },
+          { label: "Admin / Owners", value: stats.adminCount, icon: Crown, tone: "text-foreground" },
+          { label: "Pending Logins", value: stats.unlinkedCount, icon: UserPlus, tone: "text-foreground" },
+        ].map(({ label, value, icon: Icon, tone }) => (
+          <Card key={label}>
+            <CardContent className="p-4 flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{label}</p>
+                <p className={cn("text-3xl font-semibold tabular-nums leading-none mt-2", tone)}>{value}</p>
+              </div>
+              <div className="h-10 w-10 shrink-0 rounded-xl bg-muted text-muted-foreground flex items-center justify-center">
+                <Icon className="h-5 w-5" />
+              </div>
+            </CardContent>
+          </Card>
+        ))}
       </div>
 
       {/* Main Table Card */}
-      <Card className="shadow-sm">
-        <CardHeader className="pb-3">
+      <Card className="overflow-hidden">
+        <CardHeader className="pb-4">
           <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
             <div className="relative flex-1 max-w-md">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -416,7 +387,7 @@ const Users = () => {
               <Shield className="h-12 w-12 text-muted-foreground mx-auto mb-3 opacity-30" />
               <p className="text-sm font-semibold text-foreground">No matching user accounts found</p>
               <p className="text-xs text-muted-foreground mt-1">Try adjusting your search query or role filter.</p>
-              <Button size="sm" className="bg-warning hover:bg-warning text-black font-extrabold mt-4 gap-1.5" onClick={openAdd}>
+              <Button size="sm" className="mt-4 gap-1.5" onClick={openAdd}>
                 <Plus className="h-4 w-4" /> Add User
               </Button>
             </div>
@@ -424,7 +395,7 @@ const Users = () => {
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
-                  <TableRow className="bg-muted/50 hover:bg-muted/50">
+                  <TableRow className="hover:bg-transparent">
                     <TableHead className="w-12 text-center">#</TableHead>
                     <TableHead>Staff Member</TableHead>
                     <TableHead>Email</TableHead>
@@ -439,9 +410,9 @@ const Users = () => {
                   {filtered.map((u, i) => (
                     <TableRow key={u.id} className="hover:bg-muted/30 transition-colors">
                       <TableCell className="text-center font-mono text-xs text-muted-foreground">{i + 1}</TableCell>
-                      <TableCell className="font-semibold text-xs text-foreground">
-                        <div className="flex items-center gap-2.5">
-                          <div className="h-7 w-7 rounded-full bg-warning/10 border border-warning/20 text-warning flex items-center justify-center font-bold text-xs shrink-0">
+                      <TableCell className="font-semibold text-sm text-foreground">
+                        <div className="flex items-center gap-3">
+                          <div className="h-8 w-8 rounded-full bg-primary/10 ring-1 ring-primary/20 text-primary flex items-center justify-center font-semibold text-xs shrink-0">
                             {u.name.charAt(0).toUpperCase()}
                           </div>
                           <span>{u.name}</span>
@@ -463,7 +434,7 @@ const Users = () => {
                         ) : u.branch || "Chain-wide / All"}
                       </TableCell>
                       <TableCell>
-                        <Badge variant="secondary" className={cn("text-[10px] uppercase tracking-wider font-bold", u.status === "active" ? "bg-success/15 text-success border-success/30" : "bg-destructive/15 text-destructive border-destructive/30")}>
+                        <Badge variant="secondary" className={cn("text-[10px] uppercase tracking-wider font-semibold", u.status === "active" ? "bg-success/15 text-success border-success/30" : "bg-destructive/15 text-destructive border-destructive/30")}>
                           {u.status}
                         </Badge>
                       </TableCell>
