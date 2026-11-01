@@ -1540,7 +1540,7 @@ const Dashboard = () => {
                   if (groupItems.length === 0) return null;
                   return (
                     <div key={group} className="pt-2">
-                      <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70 px-2.5 pb-1 flex items-center justify-between">
+                      <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground px-2.5 pb-1 flex items-center justify-between">
                         <span>{group}</span>
                         <span className="text-[9px] font-normal text-muted-foreground">{groupItems.length}</span>
                       </div>
@@ -1730,7 +1730,7 @@ const Dashboard = () => {
                   </div>
                 </div>
 
-                <span className="text-[11px] text-muted-foreground/70">Click a branch to view its own Dashboard.</span>
+                <span className="text-[11px] text-muted-foreground">Click a branch to view its own Dashboard.</span>
               </div>
           </div>
 
@@ -1780,7 +1780,7 @@ const Dashboard = () => {
                               {r.marginPct}%
                             </TableCell>
                             <TableCell className="w-8">
-                              {r.outletId && <ChevronRight className="h-4 w-4 text-muted-foreground/75 transition-all group-hover/row:text-primary group-hover/row:translate-x-0.5" />}
+                              {r.outletId && <ChevronRight className="h-4 w-4 text-muted-foreground transition-all group-hover/row:text-primary group-hover/row:translate-x-0.5" />}
                             </TableCell>
                           </TableRow>
                         ))}
@@ -2095,7 +2095,7 @@ const Dashboard = () => {
                                 key={r.title}
                                 className={cn(
                                   "cursor-pointer transition-colors group/row",
-                                  empty ? "opacity-60 hover:opacity-100 hover:bg-muted/40" : "hover:bg-primary/5"
+                                  empty ? "hover:bg-muted/40" : "hover:bg-primary/5"
                                 )}
                                 onClick={() => goToChannelSales(r.salesTypeParam)}
                                 title={`View ${r.title} orders`}
@@ -2107,7 +2107,7 @@ const Dashboard = () => {
                                     </div>
                                     <span className="font-semibold">{r.title}</span>
                                     {empty && (
-                                      <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground/70">
+                                      <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
                                         no sales
                                       </span>
                                     )}
@@ -2123,7 +2123,7 @@ const Dashboard = () => {
                                   {empty ? "—" : `${r.marginPct}%`}
                                 </TableCell>
                                 <TableCell className="w-8">
-                                  <ChevronRight className="h-4 w-4 text-muted-foreground/75 transition-all group-hover/row:text-primary group-hover/row:translate-x-0.5" />
+                                  <ChevronRight className="h-4 w-4 text-muted-foreground transition-all group-hover/row:text-primary group-hover/row:translate-x-0.5" />
                                 </TableCell>
                               </TableRow>
                             );
@@ -2157,7 +2157,7 @@ const Dashboard = () => {
                                 {combined.marginPct}%
                               </TableCell>
                               <TableCell className="w-8">
-                                <ChevronRight className="h-4 w-4 text-muted-foreground/75 transition-all group-hover/row:text-primary group-hover/row:translate-x-0.5" />
+                                <ChevronRight className="h-4 w-4 text-muted-foreground transition-all group-hover/row:text-primary group-hover/row:translate-x-0.5" />
                               </TableCell>
                             </TableRow>
                           );
@@ -2434,13 +2434,13 @@ const Dashboard = () => {
                             key={c.name}
                             className={cn(
                               "cursor-pointer transition-colors group/row",
-                              empty ? "opacity-55 hover:opacity-100 hover:bg-muted/40" : "hover:bg-primary/5"
+                              empty ? "hover:bg-muted/40" : "hover:bg-primary/5"
                             )}
                             onClick={() => goToCategorySales(c.name)}
                           >
                             <TableCell className="font-medium">
                               {c.name}
-                              {empty && <span className="ml-2 text-[10px] font-medium uppercase tracking-wide text-muted-foreground/70">no sales</span>}
+                              {empty && <span className="ml-2 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">no sales</span>}
                             </TableCell>
                             <TableCell className="text-right text-muted-foreground">{c.orders}</TableCell>
                             <TableCell className="text-right font-medium">{currency} {c.sale.toLocaleString()}</TableCell>
@@ -2452,7 +2452,7 @@ const Dashboard = () => {
                               {empty ? "—" : `${c.marginPct}%`}
                             </TableCell>
                             <TableCell className="w-8">
-                              <ChevronRight className="h-4 w-4 text-muted-foreground/75 transition-all group-hover/row:text-primary group-hover/row:translate-x-0.5" />
+                              <ChevronRight className="h-4 w-4 text-muted-foreground transition-all group-hover/row:text-primary group-hover/row:translate-x-0.5" />
                             </TableCell>
                           </TableRow>
                           );
@@ -2782,7 +2782,7 @@ const Dashboard = () => {
                             key={m.method}
                             className={cn(
                               "cursor-pointer transition-colors group/row",
-                              empty ? "opacity-55 hover:opacity-100 hover:bg-muted/40" : "hover:bg-primary/5"
+                              empty ? "hover:bg-muted/40" : "hover:bg-primary/5"
                             )}
                             onClick={() => goToPaymentSales(m.method)}
                           >
@@ -2795,14 +2795,14 @@ const Dashboard = () => {
                                   )}
                                 />
                                 {m.method}
-                                {empty && <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground/70">no sales</span>}
+                                {empty && <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">no sales</span>}
                               </span>
                             </TableCell>
                             <TableCell className="text-right text-muted-foreground">{m.orders}</TableCell>
                             <TableCell className="text-right font-medium">{currency} {m.amount.toLocaleString()}</TableCell>
                             <TableCell className="text-right text-muted-foreground">{empty ? "—" : `${m.sharePct}%`}</TableCell>
                             <TableCell className="w-8">
-                              <ChevronRight className="h-4 w-4 text-muted-foreground/75 transition-all group-hover/row:text-primary group-hover/row:translate-x-0.5" />
+                              <ChevronRight className="h-4 w-4 text-muted-foreground transition-all group-hover/row:text-primary group-hover/row:translate-x-0.5" />
                             </TableCell>
                           </TableRow>
                           );
@@ -3152,7 +3152,7 @@ const Dashboard = () => {
                   </div>
                 </div>
 
-                <span className="text-[11px] text-muted-foreground/70">No time-of-day filter — expenses &amp; waste aren't hourly.</span>
+                <span className="text-[11px] text-muted-foreground">No time-of-day filter — expenses &amp; waste aren't hourly.</span>
               </div>
           </div>
 
@@ -3206,7 +3206,7 @@ const Dashboard = () => {
                     >
                       <span className="text-foreground inline-flex items-center gap-1">
                         Revenue
-                        <ChevronRight className="h-3 w-3 text-muted-foreground/75 transition-transform group-hover/row:translate-x-0.5" />
+                        <ChevronRight className="h-3 w-3 text-muted-foreground transition-transform group-hover/row:translate-x-0.5" />
                       </span>
                       <span className="font-medium tabular-nums">{money(np.revenue)}</span>
                     </div>
@@ -3227,7 +3227,7 @@ const Dashboard = () => {
                     >
                       <span className="text-muted-foreground inline-flex items-center gap-1">
                         − Food Loss <span className="text-[11px]">(expired / damaged / wasted stock)</span>
-                        <ChevronRight className="h-3 w-3 text-muted-foreground/75 transition-transform group-hover/row:translate-x-0.5" />
+                        <ChevronRight className="h-3 w-3 text-muted-foreground transition-transform group-hover/row:translate-x-0.5" />
                       </span>
                       <span className="tabular-nums text-muted-foreground">− {money(np.foodLoss)}</span>
                     </div>
@@ -3238,7 +3238,7 @@ const Dashboard = () => {
                     >
                       <span className="text-muted-foreground inline-flex items-center gap-1">
                         − Expenses <span className="text-[11px]">(rent / salary / utilities)</span>
-                        <ChevronRight className="h-3 w-3 text-muted-foreground/75 transition-transform group-hover/row:translate-x-0.5" />
+                        <ChevronRight className="h-3 w-3 text-muted-foreground transition-transform group-hover/row:translate-x-0.5" />
                       </span>
                       <span className="tabular-nums text-muted-foreground">− {money(np.expenses)}</span>
                     </div>
@@ -3313,7 +3313,7 @@ const Dashboard = () => {
                             >
                               <span className="text-muted-foreground truncate inline-flex items-center gap-1">
                                 {e.name}
-                                <ChevronRight className="h-3 w-3 text-muted-foreground/75 transition-transform group-hover/row:translate-x-0.5" />
+                                <ChevronRight className="h-3 w-3 text-muted-foreground transition-transform group-hover/row:translate-x-0.5" />
                               </span>
                               <span className="tabular-nums font-medium">{money(e.value)}</span>
                             </div>
@@ -3338,7 +3338,7 @@ const Dashboard = () => {
                             >
                               <span className="text-muted-foreground truncate inline-flex items-center gap-1">
                                 {w.name}
-                                <ChevronRight className="h-3 w-3 text-muted-foreground/75 transition-transform group-hover/row:translate-x-0.5" />
+                                <ChevronRight className="h-3 w-3 text-muted-foreground transition-transform group-hover/row:translate-x-0.5" />
                               </span>
                               <span className="tabular-nums font-medium text-destructive">{money(w.value)}</span>
                             </div>
@@ -3425,7 +3425,7 @@ const Dashboard = () => {
                   </div>
                 </div>
 
-                <span className="text-[11px] text-muted-foreground/70">No time-of-day filter — expenses aren't hourly.</span>
+                <span className="text-[11px] text-muted-foreground">No time-of-day filter — expenses aren't hourly.</span>
               </div>
           </div>
 
@@ -3497,7 +3497,7 @@ const Dashboard = () => {
                         </ResponsiveContainer>
                       </div>
                     )}
-                    <p className="text-[11px] text-muted-foreground/70 mt-2">Click a point to view that day's expenses.</p>
+                    <p className="text-[11px] text-muted-foreground mt-2">Click a point to view that day's expenses.</p>
                   </div>
 
                   {/* By category — chart + table, same clickable-row pattern as every other
@@ -3636,7 +3636,7 @@ const Dashboard = () => {
                   </div>
                 </div>
 
-                <span className="text-[11px] text-muted-foreground/70">No time-of-day filter — waste isn't hourly.</span>
+                <span className="text-[11px] text-muted-foreground">No time-of-day filter — waste isn't hourly.</span>
               </div>
           </div>
 
@@ -3708,7 +3708,7 @@ const Dashboard = () => {
                         </ResponsiveContainer>
                       </div>
                     )}
-                    <p className="text-[11px] text-muted-foreground/70 mt-2">Click a point to view that day's waste records.</p>
+                    <p className="text-[11px] text-muted-foreground mt-2">Click a point to view that day's waste records.</p>
                   </div>
 
                   {/* By reason — chart + table */}
@@ -3846,7 +3846,7 @@ const Dashboard = () => {
                   </div>
                 </div>
 
-                <span className="text-[11px] text-muted-foreground/70">No time-of-day filter — attendance is per-day.</span>
+                <span className="text-[11px] text-muted-foreground">No time-of-day filter — attendance is per-day.</span>
               </div>
           </div>
 
@@ -3975,7 +3975,7 @@ const Dashboard = () => {
                               <TableCell className="text-right tabular-nums text-destructive">{r.absent}</TableCell>
                               <TableCell className="text-right tabular-nums text-muted-foreground">{(r.overtimeMinutes / 60).toFixed(1)}h</TableCell>
                               <TableCell className="w-8">
-                                <ChevronRight className="h-4 w-4 text-muted-foreground/75 transition-all group-hover/row:text-primary group-hover/row:translate-x-0.5" />
+                                <ChevronRight className="h-4 w-4 text-muted-foreground transition-all group-hover/row:text-primary group-hover/row:translate-x-0.5" />
                               </TableCell>
                             </TableRow>
                           ))
@@ -4052,7 +4052,7 @@ const Dashboard = () => {
                   </div>
                 </div>
 
-                <span className="text-[11px] text-muted-foreground/70">No time-of-day filter — bookings are per-day.</span>
+                <span className="text-[11px] text-muted-foreground">No time-of-day filter — bookings are per-day.</span>
               </div>
           </div>
 
@@ -4113,7 +4113,7 @@ const Dashboard = () => {
                         </ResponsiveContainer>
                       </div>
                     )}
-                    <p className="text-[11px] text-muted-foreground/70 mt-2">Click a point to view that day's bookings.</p>
+                    <p className="text-[11px] text-muted-foreground mt-2">Click a point to view that day's bookings.</p>
                   </div>
 
                   {/* By status — chart + table */}
@@ -4447,7 +4447,7 @@ const Dashboard = () => {
                   </div>
                 </div>
 
-                <span className="text-[11px] text-muted-foreground/70">No time-of-day filter — settlements aren't hourly.</span>
+                <span className="text-[11px] text-muted-foreground">No time-of-day filter — settlements aren't hourly.</span>
               </div>
           </div>
 
@@ -4561,7 +4561,7 @@ const Dashboard = () => {
                                 {r.totalDifference < 0 ? "−" : ""}{money(r.totalDifference)}
                               </TableCell>
                               <TableCell className="w-8">
-                                <ChevronRight className="h-4 w-4 text-muted-foreground/75 transition-all group-hover/row:text-primary group-hover/row:translate-x-0.5" />
+                                <ChevronRight className="h-4 w-4 text-muted-foreground transition-all group-hover/row:text-primary group-hover/row:translate-x-0.5" />
                               </TableCell>
                             </TableRow>
                           ))
@@ -4647,7 +4647,7 @@ const Dashboard = () => {
                   </div>
                 </div>
 
-                <span className="text-[11px] text-muted-foreground/70">No time-of-day filter — deal usage isn't hourly.</span>
+                <span className="text-[11px] text-muted-foreground">No time-of-day filter — deal usage isn't hourly.</span>
               </div>
           </div>
 
@@ -4979,7 +4979,7 @@ const Dashboard = () => {
                               {r.marginPct}%
                             </TableCell>
                             <TableCell className="w-8">
-                              {r.staffId && <ChevronRight className="h-4 w-4 text-muted-foreground/75 transition-all group-hover/row:text-primary group-hover/row:translate-x-0.5" />}
+                              {r.staffId && <ChevronRight className="h-4 w-4 text-muted-foreground transition-all group-hover/row:text-primary group-hover/row:translate-x-0.5" />}
                             </TableCell>
                           </TableRow>
                         ))}
@@ -5138,7 +5138,7 @@ const Dashboard = () => {
                   </div>
                 </div>
 
-                <span className="text-[11px] text-muted-foreground/70">No time-of-day filter — cancellations aren't hourly.</span>
+                <span className="text-[11px] text-muted-foreground">No time-of-day filter — cancellations aren't hourly.</span>
               </div>
           </div>
 
@@ -5234,7 +5234,7 @@ const Dashboard = () => {
                               >
                                 <span className="text-muted-foreground truncate inline-flex items-center gap-1">
                                   {s.name}
-                                  <ChevronRight className="h-3 w-3 text-muted-foreground/75 transition-transform group-hover/row:translate-x-0.5" />
+                                  <ChevronRight className="h-3 w-3 text-muted-foreground transition-transform group-hover/row:translate-x-0.5" />
                                 </span>
                                 <span className="flex items-center gap-2">
                                   <span className="text-[11px] text-muted-foreground">{s.count} incident{s.count === 1 ? "" : "s"}</span>
@@ -5313,7 +5313,7 @@ const Dashboard = () => {
                   </div>
                 </div>
 
-                <span className="text-[11px] text-muted-foreground/70">No time-of-day filter — purchases aren't hourly.</span>
+                <span className="text-[11px] text-muted-foreground">No time-of-day filter — purchases aren't hourly.</span>
               </div>
           </div>
 
@@ -5414,7 +5414,7 @@ const Dashboard = () => {
                                   {money(r.due)}
                                 </TableCell>
                                 <TableCell className="w-8">
-                                  {r.id && <ChevronRight className="h-4 w-4 text-muted-foreground/75 transition-all group-hover/row:text-primary group-hover/row:translate-x-0.5" />}
+                                  {r.id && <ChevronRight className="h-4 w-4 text-muted-foreground transition-all group-hover/row:text-primary group-hover/row:translate-x-0.5" />}
                                 </TableCell>
                               </TableRow>
                             ))}
@@ -5568,7 +5568,7 @@ const Dashboard = () => {
                   </div>
                 </div>
 
-                <span className="text-[11px] text-muted-foreground/70">No time-of-day filter — customer acquisition isn't hourly.</span>
+                <span className="text-[11px] text-muted-foreground">No time-of-day filter — customer acquisition isn't hourly.</span>
               </div>
           </div>
 
@@ -5688,7 +5688,7 @@ const Dashboard = () => {
                                 </span>
                               </TableCell>
                               <TableCell className="w-8">
-                                <ChevronRight className="h-4 w-4 text-muted-foreground/75 transition-all group-hover/row:text-primary group-hover/row:translate-x-0.5" />
+                                <ChevronRight className="h-4 w-4 text-muted-foreground transition-all group-hover/row:text-primary group-hover/row:translate-x-0.5" />
                               </TableCell>
                             </TableRow>
                           ))
@@ -5765,7 +5765,7 @@ const Dashboard = () => {
                   </div>
                 </div>
 
-                <span className="text-[11px] text-muted-foreground/70">Hours/weekdays shown are PKT wall-clock time.</span>
+                <span className="text-[11px] text-muted-foreground">Hours/weekdays shown are PKT wall-clock time.</span>
               </div>
           </div>
 
