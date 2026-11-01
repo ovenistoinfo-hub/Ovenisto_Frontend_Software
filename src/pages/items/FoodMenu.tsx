@@ -123,7 +123,7 @@ const FoodMenu = () => {
                     <TableCell className="text-muted-foreground text-xs">{item.code || "—"}</TableCell>
                     <TableCell className="font-medium">Rs. {item.price}</TableCell>
                     <TableCell className="text-muted-foreground">{item.costPrice > 0 ? `Rs. ${item.costPrice.toFixed(0)}` : "—"}</TableCell>
-                    <TableCell>{item.costPrice > 0 ? <span className={margin >= 0 ? "text-emerald-500" : "text-destructive"}>{margin.toFixed(0)}%</span> : "—"}</TableCell>
+                    <TableCell>{item.costPrice > 0 ? <span className={margin >= 0 ? "text-success" : "text-destructive"}>{margin.toFixed(0)}%</span> : "—"}</TableCell>
                     <TableCell>{item.cookingTime > 0 ? <span className="flex items-center gap-1 text-xs text-muted-foreground"><Timer className="h-3 w-3" />{item.cookingTime} min</span> : <span className="text-xs text-muted-foreground">—</span>}</TableCell>
                     <TableCell>
                       {/* Portions-remaining threshold POS warns at. 0 is a real

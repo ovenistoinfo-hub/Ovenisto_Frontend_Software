@@ -343,7 +343,7 @@ const CashHub = () => {
     <div className="space-y-6 p-3 sm:p-5 lg:p-8 pb-16 w-full max-w-[1920px] mx-auto">
       {/* Page Header */}
       <PageHeader
-        icon={<Coins className="h-6 w-6 text-amber-500" />}
+        icon={<Coins className="h-6 w-6 text-warning" />}
         title="Collections & Cash Hub"
         subtitle="Active staff collections & settlement approvals"
         actions={
@@ -361,12 +361,12 @@ const CashHub = () => {
 
       {/* 4 Summary Stats Cards — Responsive Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3.5 sm:gap-5">
-        <Card className="bg-card/90 border border-amber-500/20 border-l-4 border-l-amber-500 shadow-sm hover:shadow-md transition-all">
+        <Card className="bg-card/90 border border-warning/20 border-l-4 border-l-amber-500 shadow-sm hover:shadow-md transition-all">
           <CardHeader className="flex flex-row items-center justify-between pb-1.5 pt-4">
             <CardTitle className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
               Uncleared Floor Collections
             </CardTitle>
-            <div className="h-8 w-8 rounded-xl bg-amber-500/10 text-amber-500 flex items-center justify-center shrink-0">
+            <div className="h-8 w-8 rounded-xl bg-warning/10 text-warning flex items-center justify-center shrink-0">
               <Wallet className="h-4 w-4" />
             </div>
           </CardHeader>
@@ -380,19 +380,19 @@ const CashHub = () => {
           </CardContent>
         </Card>
 
-        <Card className="bg-card/90 border border-blue-500/20 border-l-4 border-l-blue-500 shadow-sm hover:shadow-md transition-all">
+        <Card className="bg-card/90 border border-info/20 border-l-4 border-l-blue-500 shadow-sm hover:shadow-md transition-all">
           <CardHeader className="flex flex-row items-center justify-between pb-1.5 pt-4">
             <CardTitle className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
               Staff Holding Collections
             </CardTitle>
-            <div className="h-8 w-8 rounded-xl bg-blue-500/10 text-blue-500 flex items-center justify-center shrink-0">
+            <div className="h-8 w-8 rounded-xl bg-info/10 text-info flex items-center justify-center shrink-0">
               <UserCheck className="h-4 w-4" />
             </div>
           </CardHeader>
           <CardContent className="pb-4">
             <div className="flex items-baseline gap-2">
               <span className="text-2xl sm:text-3xl font-black text-foreground font-mono">{activeStaffCount}</span>
-              <Badge variant="outline" className="text-[10px] bg-blue-500/10 text-blue-400 border-blue-500/30 px-2 py-0.5 font-bold">
+              <Badge variant="outline" className="text-[10px] bg-info/10 text-info border-info/30 px-2 py-0.5 font-bold">
                 {activeStaffCount === 1 ? "1 Member" : `${activeStaffCount} Members`}
               </Badge>
             </div>
@@ -421,12 +421,12 @@ const CashHub = () => {
           </CardContent>
         </Card>
 
-        <Card className="bg-card/90 border border-indigo-500/20 border-l-4 border-l-indigo-500 shadow-sm hover:shadow-md transition-all">
+        <Card className="bg-card/90 border border-info/20 border-l-4 border-l-indigo-500 shadow-sm hover:shadow-md transition-all">
           <CardHeader className="flex flex-row items-center justify-between pb-1.5 pt-4">
             <CardTitle className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
               Today Net Difference
             </CardTitle>
-            <div className="h-8 w-8 rounded-xl bg-indigo-500/10 text-indigo-500 flex items-center justify-center shrink-0">
+            <div className="h-8 w-8 rounded-xl bg-info/10 text-info flex items-center justify-center shrink-0">
               {todayNetDifference >= 0 ? (
                 <TrendingUp className="h-4 w-4 text-success" />
               ) : (
@@ -452,16 +452,16 @@ const CashHub = () => {
       {/* Tabs Navigation */}
       <Tabs value={activeTab} onValueChange={(val) => setActiveTab(val as "active" | "history")}>
         <TabsList className="w-full sm:w-auto grid grid-cols-2 max-w-md h-11 bg-muted/60 p-1 border border-border/80 rounded-2xl">
-          <TabsTrigger value="active" className="gap-2 font-bold text-xs h-9 rounded-xl transition-all data-[state=active]:bg-card data-[state=active]:text-amber-500 data-[state=active]:shadow-sm">
+          <TabsTrigger value="active" className="gap-2 font-bold text-xs h-9 rounded-xl transition-all data-[state=active]:bg-card data-[state=active]:text-warning data-[state=active]:shadow-sm">
             <Coins className="h-4 w-4" />
             Live Balances
             {activeStaffCount > 0 && (
-              <Badge className="ml-1 px-1.5 py-0.5 text-[10px] bg-amber-500 text-black font-extrabold rounded-full border-none">
+              <Badge className="ml-1 px-1.5 py-0.5 text-[10px] bg-warning text-black font-extrabold rounded-full border-none">
                 {activeStaffCount}
               </Badge>
             )}
           </TabsTrigger>
-          <TabsTrigger value="history" className="gap-2 font-bold text-xs h-9 rounded-xl transition-all data-[state=active]:bg-card data-[state=active]:text-amber-500 data-[state=active]:shadow-sm">
+          <TabsTrigger value="history" className="gap-2 font-bold text-xs h-9 rounded-xl transition-all data-[state=active]:bg-card data-[state=active]:text-warning data-[state=active]:shadow-sm">
             <FileText className="h-4 w-4" />
             Audit Log
           </TabsTrigger>
@@ -546,13 +546,13 @@ const CashHub = () => {
                     <Card key={item.staffId} className="p-4 space-y-3 border-border bg-card shadow-sm">
                       <div className="flex items-start justify-between">
                         <div className="flex items-center gap-3">
-                          <div className="h-10 w-10 rounded-full bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-500 font-black text-sm shrink-0">
+                          <div className="h-10 w-10 rounded-full bg-warning/10 border border-warning/20 flex items-center justify-center text-warning font-black text-sm shrink-0">
                             {item.staffName.charAt(0).toUpperCase()}
                           </div>
                           <div>
                             <div className="flex items-center gap-2">
                               <span className="font-extrabold text-sm text-foreground">{item.staffName}</span>
-                              <Badge variant="outline" className="text-[10px] font-semibold px-2 py-0.5 bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30">
+                              <Badge variant="outline" className="text-[10px] font-semibold px-2 py-0.5 bg-warning/10 text-warning border-warning/30">
                                 {item.staffRole}
                               </Badge>
                             </div>
@@ -598,20 +598,20 @@ const CashHub = () => {
                       <div className="flex items-center justify-between pt-2 border-t border-border/60">
                         <div>
                           <span className="text-[11px] text-muted-foreground block font-medium uppercase tracking-wider">Total Expected</span>
-                          <span className="text-lg font-black text-amber-500 font-mono">
+                          <span className="text-lg font-black text-warning font-mono">
                             {currency} {item.totalExpected.toLocaleString()}
                           </span>
                         </div>
 
                         <div>
                           {isStale ? (
-                            <Badge variant="outline" className="text-[10px] bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30 font-semibold">
+                            <Badge variant="outline" className="text-[10px] bg-warning/10 text-warning border-warning/30 font-semibold">
                               <Clock className="h-3 w-3 mr-1" />
                               {Math.floor(oldestAgeHours / 24)}+ day{Math.floor(oldestAgeHours / 24) === 1 ? "" : "s"}
                             </Badge>
                           ) : oldestAgeHours > 0 ? (
                             <span className="text-xs text-muted-foreground font-medium flex items-center gap-1">
-                              <Clock className="h-3 w-3 text-muted-foreground/60" />
+                              <Clock className="h-3 w-3 text-muted-foreground" />
                               {Math.max(1, Math.floor(oldestAgeHours))}h ago
                             </span>
                           ) : null}
@@ -674,13 +674,13 @@ const CashHub = () => {
                             {/* Staff Info Column */}
                             <TableCell className="py-3.5">
                               <div className="flex items-center gap-3">
-                                <div className="h-10 w-10 rounded-full bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-500 font-extrabold text-sm shrink-0">
+                                <div className="h-10 w-10 rounded-full bg-warning/10 border border-warning/20 flex items-center justify-center text-warning font-extrabold text-sm shrink-0">
                                   {item.staffName.charAt(0).toUpperCase()}
                                 </div>
                                 <div>
                                   <div className="flex items-center gap-2">
                                     <span className="font-bold text-sm text-foreground">{item.staffName}</span>
-                                    <Badge variant="outline" className="text-[10px] font-semibold px-2 py-0.5 bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30">
+                                    <Badge variant="outline" className="text-[10px] font-semibold px-2 py-0.5 bg-warning/10 text-warning border-warning/30">
                                       {item.staffRole}
                                     </Badge>
                                   </div>
@@ -718,7 +718,7 @@ const CashHub = () => {
                                   {amt > 0 ? (
                                     <span className="text-foreground font-bold">{currency} {amt.toLocaleString()}</span>
                                   ) : (
-                                    <span className="text-muted-foreground/40">-</span>
+                                    <span className="text-muted-foreground/75">-</span>
                                   )}
                                 </TableCell>
                               );
@@ -726,7 +726,7 @@ const CashHub = () => {
 
                             {/* Total Expected Column */}
                             <TableCell className="text-right py-3.5">
-                              <span className="inline-flex items-center px-3 py-1 rounded-xl bg-amber-500/10 text-amber-500 border border-amber-500/20 font-black font-mono text-sm shadow-sm">
+                              <span className="inline-flex items-center px-3 py-1 rounded-xl bg-warning/10 text-warning border border-warning/20 font-black font-mono text-sm shadow-sm">
                                 {currency} {item.totalExpected.toLocaleString()}
                               </span>
                             </TableCell>
@@ -734,13 +734,13 @@ const CashHub = () => {
                             {/* Age / Holding Time Column */}
                             <TableCell className="text-center py-3.5">
                               {isStale ? (
-                                <Badge variant="outline" className="text-[11px] bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30 font-semibold">
+                                <Badge variant="outline" className="text-[11px] bg-warning/10 text-warning border-warning/30 font-semibold">
                                   <Clock className="h-3 w-3 mr-1" />
                                   {Math.floor(oldestAgeHours / 24)}+ day{Math.floor(oldestAgeHours / 24) === 1 ? "" : "s"}
                                 </Badge>
                               ) : oldestAgeHours > 0 ? (
                                 <span className="text-xs text-muted-foreground font-medium flex items-center justify-center gap-1">
-                                  <Clock className="h-3 w-3 text-muted-foreground/60" />
+                                  <Clock className="h-3 w-3 text-muted-foreground" />
                                   {Math.max(1, Math.floor(oldestAgeHours))}h ago
                                 </span>
                               ) : (
@@ -834,7 +834,7 @@ const CashHub = () => {
                 <div className="w-36">
                   <DatePicker value={rangeFrom} onChange={handleRangeFrom} placeholder="Start date" className="h-8 text-xs bg-background" />
                 </div>
-                <span className="text-xs text-muted-foreground/60 font-medium px-0.5">to</span>
+                <span className="text-xs text-muted-foreground font-medium px-0.5">to</span>
                 <div className="w-36">
                   <DatePicker value={rangeTo} onChange={handleRangeTo} min={rangeFrom || undefined} placeholder="End date" className="h-8 text-xs bg-background" />
                 </div>
@@ -862,7 +862,7 @@ const CashHub = () => {
               </div>
             ) : filteredHistory.length === 0 ? (
               <div className="p-12 text-center space-y-3">
-                <History className="h-12 w-12 text-muted-foreground/50 mx-auto" />
+                <History className="h-12 w-12 text-muted-foreground mx-auto" />
                 <h3 className="text-lg font-bold text-foreground">No settlement records</h3>
                 <p className="text-xs text-muted-foreground max-w-sm mx-auto">
                   Try adjusting the date range or filters.
@@ -897,7 +897,7 @@ const CashHub = () => {
                           <TableCell>
                             <div className="flex items-center gap-2">
                               <span className="font-bold text-sm text-foreground">{item.staffName}</span>
-                              <Badge variant="outline" className="text-[10px] font-semibold px-2 py-0.5 bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30">
+                              <Badge variant="outline" className="text-[10px] font-semibold px-2 py-0.5 bg-warning/10 text-warning border-warning/30">
                                 {item.staffRole}
                               </Badge>
                             </div>
@@ -946,7 +946,7 @@ const CashHub = () => {
         <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Coins className="h-5 w-5 text-amber-500" />
+              <Coins className="h-5 w-5 text-warning" />
               Settle Staff Collection
             </DialogTitle>
             <DialogDescription>

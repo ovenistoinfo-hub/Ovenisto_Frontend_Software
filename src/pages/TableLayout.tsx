@@ -321,31 +321,31 @@ const TableLayout = () => {
           const isMaint = t.status === "maintenance";
           
           const statusDotColor =
-            t.status === "available" ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)]" :
-            t.status === "occupied" ? "bg-orange-500 shadow-[0_0_8px_rgba(249,115,22,0.6)]" :
-            t.status === "bill-requested" ? "bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.8)]" :
-            "bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.6)]";
+            t.status === "available" ? "bg-success shadow-[0_0_8px_rgba(16,185,129,0.6)]" :
+            t.status === "occupied" ? "bg-primary shadow-[0_0_8px_rgba(249,115,22,0.6)]" :
+            t.status === "bill-requested" ? "bg-destructive shadow-[0_0_8px_rgba(239,68,68,0.8)]" :
+            "bg-warning shadow-[0_0_8px_rgba(245,158,11,0.6)]";
 
           const statusBorderClass =
-            t.status === "available" ? "border-emerald-500/50" :
-            t.status === "occupied" ? "border-orange-500/50" :
-            t.status === "bill-requested" ? "border-red-500/80" :
-            "border-amber-500/50";
+            t.status === "available" ? "border-success/50" :
+            t.status === "occupied" ? "border-primary/50" :
+            t.status === "bill-requested" ? "border-destructive/80" :
+            "border-warning/50";
 
           const cardStatusClass =
             t.status === "bill-requested"
-              ? "border-red-500/80 bg-red-950/20 shadow-[0_0_12px_rgba(239,68,68,0.25)] animate-pulse border-2 ring-1 ring-red-500/40"
+              ? "border-destructive/80 bg-destructive/20 shadow-[0_0_12px_rgba(239,68,68,0.25)] animate-pulse border-2 ring-1 ring-destructive/40"
               : t.status === "occupied"
-              ? "border-orange-500/50 bg-orange-950/10 hover:border-orange-400 dark:bg-orange-950/20"
+              ? "border-primary/50 bg-primary/10 hover:border-primary"
               : t.status === "reserved"
-              ? "border-amber-500/50 bg-amber-950/10 hover:border-amber-400 dark:bg-amber-950/20"
-              : "border-emerald-500/50 bg-emerald-950/10 hover:border-emerald-400 dark:bg-emerald-950/20";
+              ? "border-warning/50 bg-warning/10 hover:border-warning"
+              : "border-success/50 bg-success/10 hover:border-success";
 
           const chairBgClass =
-            t.status === "available" ? "bg-emerald-500/60" :
-            t.status === "occupied" ? "bg-orange-500/60" :
-            t.status === "bill-requested" ? "bg-red-500 animate-pulse" :
-            "bg-amber-500/60";
+            t.status === "available" ? "bg-success/60" :
+            t.status === "occupied" ? "bg-primary/60" :
+            t.status === "bill-requested" ? "bg-destructive animate-pulse" :
+            "bg-warning/60";
 
           return (
             <div key={t.id} className="p-1">

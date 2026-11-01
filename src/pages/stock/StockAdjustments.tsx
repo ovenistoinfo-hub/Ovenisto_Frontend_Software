@@ -410,7 +410,7 @@ const StockAdjustments = () => {
                 variant={mode === "correction" ? "default" : "outline"}
                 size="sm"
                 onClick={() => switchMode("correction")}
-                className={cn("h-9", mode === "correction" ? "bg-blue-600 hover:bg-blue-700 text-white" : "")}
+                className={cn("h-9", mode === "correction" ? "bg-info hover:bg-info text-white" : "")}
               >
                 Correction
               </Button>
@@ -605,7 +605,7 @@ const StockAdjustments = () => {
             </div>
             <div className="inline-flex items-center gap-1.5">
               <div className="w-36"><DatePicker value={dateFrom} onChange={handleDateFrom} placeholder="Start date" className="h-8 text-xs bg-background" /></div>
-              <span className="text-xs text-muted-foreground/60 font-medium px-0.5">to</span>
+              <span className="text-xs text-muted-foreground font-medium px-0.5">to</span>
               <div className="w-36"><DatePicker value={dateTo} onChange={handleDateTo} min={dateFrom || undefined} placeholder="End date" className="h-8 text-xs bg-background" /></div>
               {(dateFrom || dateTo) && (
                 <Button variant="ghost" size="sm" onClick={clearDates} className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-md" title="Clear date filter">
@@ -649,13 +649,13 @@ const StockAdjustments = () => {
                         <TableCell className="font-medium">{r.itemName || "—"}</TableCell>
                         <TableCell>
                           {r.kind === "correction"
-                            ? <Badge className="bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 text-[10px]">Correction</Badge>
+                            ? <Badge className="bg-info text-info text-[10px]">Correction</Badge>
                             : r.orderId
-                              ? <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 text-[10px]"><ShoppingBag className="h-3 w-3 mr-1" />Order Cancel</Badge>
+                              ? <Badge className="bg-warning text-warning text-[10px]"><ShoppingBag className="h-3 w-3 mr-1" />Order Cancel</Badge>
                               : <Badge variant="secondary" className="text-[10px]">Manual</Badge>
                           }
                         </TableCell>
-                        <TableCell className={r.kind === "correction" ? "text-blue-600 dark:text-blue-400 font-medium" : ""}>
+                        <TableCell className={r.kind === "correction" ? "text-info font-medium" : ""}>
                           {r.kind === "correction" ? "+" : ""}{r.quantity ?? "—"}
                         </TableCell>
                         <TableCell>{r.unit || "—"}</TableCell>
@@ -685,12 +685,12 @@ const StockAdjustments = () => {
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-3">
-              {showDetail?.kind === "correction" ? <Trash2 className="h-5 w-5 text-blue-600" /> : <Trash2 className="h-5 w-5 text-destructive" />}
+              {showDetail?.kind === "correction" ? <Trash2 className="h-5 w-5 text-info" /> : <Trash2 className="h-5 w-5 text-destructive" />}
               <span>{showDetail?.kind === "correction" ? "Stock Correction" : "Waste Record"}</span>
-              {showDetail?.kind === "correction" && <Badge className="bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">Correction</Badge>}
+              {showDetail?.kind === "correction" && <Badge className="bg-info text-info">Correction</Badge>}
               {showDetail?.kind === "waste" && (
                 showDetail.orderId
-                  ? <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300"><ShoppingBag className="h-3 w-3 mr-1" />Order Cancellation</Badge>
+                  ? <Badge className="bg-warning text-warning"><ShoppingBag className="h-3 w-3 mr-1" />Order Cancellation</Badge>
                   : <Badge variant="secondary">Manual Entry</Badge>
               )}
             </DialogTitle>
@@ -732,9 +732,9 @@ const StockAdjustments = () => {
                 </div>
 
                 {penalty?.hasPenalty && (
-                  <Card className={penalty.fullPenalty ? "border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-950/20" : "border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/20"}>
+                  <Card className={penalty.fullPenalty ? "border-success bg-success" : "border-warning bg-warning"}>
                     <CardHeader className="pb-2">
-                      <CardTitle className={`text-sm flex items-center gap-2 ${penalty.fullPenalty ? 'text-emerald-700 dark:text-emerald-400' : 'text-amber-700 dark:text-amber-400'}`}>
+                      <CardTitle className={`text-sm flex items-center gap-2 ${penalty.fullPenalty ? 'text-success' : 'text-warning'}`}>
                         <AlertCircle className="h-4 w-4" />
                         {penalty.noCostData
                           ? 'Penalty Charged — Recipe Cost Not Available'
@@ -746,13 +746,13 @@ const StockAdjustments = () => {
                     <CardContent className="space-y-2">
                       <div className="grid grid-cols-2 gap-3 text-sm">
                         <div><p className="text-xs text-muted-foreground">Responsible Staff</p><p className="font-semibold">{penalty.person}</p></div>
-                        <div><p className="text-xs text-muted-foreground">Penalty Charged</p><p className="font-semibold text-emerald-600 dark:text-emerald-400">{currency} {penalty.penaltyAmt}</p></div>
+                        <div><p className="text-xs text-muted-foreground">Penalty Charged</p><p className="font-semibold text-success">{currency} {penalty.penaltyAmt}</p></div>
                         {!penalty.noCostData && (
                           <>
                             <div><p className="text-xs text-muted-foreground">Total Preparation Cost</p><p className="font-medium">{currency} {penalty.totalCost}</p></div>
                             <div>
                               <p className="text-xs text-muted-foreground">Net Business Loss</p>
-                              <p className={`font-bold ${penalty.netLoss === '0' || Number(penalty.netLoss) === 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-destructive'}`}>{currency} {penalty.netLoss}</p>
+                              <p className={`font-bold ${penalty.netLoss === '0' || Number(penalty.netLoss) === 0 ? 'text-success' : 'text-destructive'}`}>{currency} {penalty.netLoss}</p>
                             </div>
                           </>
                         )}
@@ -819,8 +819,8 @@ const StockAdjustments = () => {
                         <TableCell className="font-medium">{a.ingredient?.name ?? "—"}</TableCell>
                         <TableCell className="text-sm text-muted-foreground">{a.ingredient?.category?.name ?? "—"}</TableCell>
                         <TableCell className="text-sm">{a.ingredient?.unit?.symbol || a.ingredient?.unit?.name || "—"}</TableCell>
-                        <TableCell><Badge className="bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">Correction</Badge></TableCell>
-                        <TableCell className="text-right text-lg font-bold text-blue-600 dark:text-blue-400">+{a.quantity} {a.ingredient?.unit?.symbol || a.ingredient?.unit?.name || ""}</TableCell>
+                        <TableCell><Badge className="bg-info text-info">Correction</Badge></TableCell>
+                        <TableCell className="text-right text-lg font-bold text-info">+{a.quantity} {a.ingredient?.unit?.symbol || a.ingredient?.unit?.name || ""}</TableCell>
                       </TableRow>
                     </TableBody>
                   </Table>

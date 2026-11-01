@@ -3366,7 +3366,7 @@ const POS = () => {
                               variant="ghost"
                               size="icon"
                               onClick={() => removeDealGroup(row.dealLineId)}
-                              className="h-10 w-10 rounded-md text-muted-foreground/60 hover:text-destructive hover:bg-destructive/10 transition-colors print:hidden"
+                              className="h-10 w-10 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors print:hidden"
                               title="Remove Deal"
                             >
                               <X className="h-4 w-4" />
@@ -3438,7 +3438,7 @@ const POS = () => {
                             variant="ghost"
                             size="icon"
                             onClick={() => removeItem(item.id)}
-                            className="h-10 w-10 rounded-md text-muted-foreground/60 hover:text-destructive hover:bg-destructive/10 transition-colors print:hidden"
+                            className="h-10 w-10 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors print:hidden"
                             title="Remove Item"
                           >
                             <X className="h-4 w-4" />
@@ -3806,7 +3806,7 @@ const POS = () => {
                         {deal.image ? (
                           <img src={deal.image} alt={deal.name} className={cn("w-full h-full object-cover group-hover:scale-105 transition-transform duration-300", outOfStock && "grayscale")} />
                         ) : (
-                          <div className="w-full h-full bg-gradient-to-br from-amber-500/10 via-primary/10 to-orange-500/20 flex flex-col items-center justify-center relative overflow-hidden group-hover:from-amber-500/20 group-hover:to-orange-500/30 transition-all duration-300">
+                          <div className="w-full h-full bg-muted/40 flex flex-col items-center justify-center relative overflow-hidden group-hover:from-amber-500/20 group-hover:to-orange-500/30 transition-all duration-300">
                             <div className="p-2.5 rounded-full bg-primary/10 border border-primary/20 shadow-inner group-hover:scale-110 group-hover:bg-primary/20 transition-all duration-300">
                               <Gift className="h-6 w-6 text-primary group-hover:text-primary transition-colors" />
                             </div>
@@ -3891,7 +3891,7 @@ const POS = () => {
                       {item.image ? (
                         <img src={item.image} alt={item.name} className={cn("w-full h-full object-cover group-hover:scale-105 transition-transform duration-300", (outOfStock || notServed) && "grayscale")} />
                       ) : (
-                        <div className="w-full h-full bg-gradient-to-br from-card via-muted/60 to-primary/10 flex flex-col items-center justify-center relative overflow-hidden group-hover:from-card group-hover:to-primary/20 transition-colors">
+                        <div className="w-full h-full bg-muted/40 flex flex-col items-center justify-center relative overflow-hidden group-hover:from-card group-hover:to-primary/20 transition-colors">
                           <Utensils className="h-9 w-9 text-primary/20 group-hover:text-primary/35 group-hover:scale-110 transition-all duration-300" />
                           <span className="absolute bottom-1.5 right-1.5 text-[11px] font-extrabold tracking-wider bg-background/80 text-primary px-2 py-0.5 rounded-md border border-primary/20 backdrop-blur-xs shadow-xs">
                             {item.name.charAt(0)}
@@ -4045,7 +4045,7 @@ const POS = () => {
                                           (+Rs.{unitPrice})
                                         </span>
                                       ) : (
-                                        <span className="text-muted-foreground/60 text-[10px]">Free</span>
+                                        <span className="text-muted-foreground text-[10px]">Free</span>
                                       )}
                                     </button>
 
@@ -5453,7 +5453,7 @@ const POS = () => {
       }}>
         <SheetContent side="right" className="w-full sm:max-w-none sm:w-[480px] md:w-[520px] p-0 flex flex-col bg-background/95 backdrop-blur-md">
           {/* Sheet Header */}
-          <div className="p-5 border-b border-border/70 bg-gradient-to-br from-card via-card/90 to-destructive/[0.04] space-y-3.5">
+          <div className="p-5 border-b border-border/70 bg-muted/40 space-y-3.5">
             <div className="flex items-start justify-between gap-3 pr-6">
               <div className="flex items-center gap-3">
                 <div className="h-10 w-10 rounded-2xl bg-destructive/15 border border-destructive/30 flex items-center justify-center text-destructive shadow-xs shrink-0">

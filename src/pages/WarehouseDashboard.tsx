@@ -44,17 +44,17 @@ function StatCard({
 }) {
   const colorMap = {
     default: "text-foreground",
-    success: "text-emerald-600 dark:text-emerald-400",
-    warning: "text-amber-600 dark:text-amber-400",
-    destructive: "text-red-600 dark:text-red-400",
-    info: "text-blue-600 dark:text-blue-400",
+    success: "text-success",
+    warning: "text-warning",
+    destructive: "text-destructive",
+    info: "text-info",
   };
   const bgMap = {
     default: "bg-muted/40",
-    success: "bg-emerald-50 dark:bg-emerald-950/30",
-    warning: "bg-amber-50 dark:bg-amber-950/30",
-    destructive: "bg-red-50 dark:bg-red-950/30",
-    info: "bg-blue-50 dark:bg-blue-950/30",
+    success: "bg-success",
+    warning: "bg-warning",
+    destructive: "bg-destructive",
+    info: "bg-info",
   };
 
   return (
@@ -272,27 +272,27 @@ export default function WarehouseDashboard() {
               )}>
                 <Card className="shadow-sm border-l-4 border-l-emerald-500 p-4 flex flex-col gap-1">
                   <div className="flex items-center gap-2 text-muted-foreground text-xs font-medium">
-                    <Layers className="h-3.5 w-3.5 text-emerald-500" /> Stock Value
+                    <Layers className="h-3.5 w-3.5 text-success" /> Stock Value
                   </div>
-                  <p className="text-xl font-black text-emerald-600 dark:text-emerald-400">{fmt(d?.inventoryValue ?? 0)}</p>
+                  <p className="text-xl font-black text-success">{fmt(d?.inventoryValue ?? 0)}</p>
                   <p className="text-[11px] text-muted-foreground truncate">{d?.costingTable.length ?? 0} items tracked</p>
                 </Card>
 
                 {showPayable && (
                   <Card className="shadow-sm border-l-4 border-l-red-500 p-4 flex flex-col gap-1">
                     <div className="flex items-center gap-2 text-muted-foreground text-xs font-medium">
-                      <Wallet className="h-3.5 w-3.5 text-red-500" /> Payable
+                      <Wallet className="h-3.5 w-3.5 text-destructive" /> Payable
                     </div>
-                    <p className="text-xl font-black text-red-600 dark:text-red-400">{fmt(d?.payable ?? 0)}</p>
+                    <p className="text-xl font-black text-destructive">{fmt(d?.payable ?? 0)}</p>
                   </Card>
                 )}
 
                 {showReceivable && (
                   <Card className="shadow-sm border-l-4 border-l-blue-500 p-4 flex flex-col gap-1">
                     <div className="flex items-center gap-2 text-muted-foreground text-xs font-medium">
-                      <HandCoins className="h-3.5 w-3.5 text-blue-500" /> Receivable
+                      <HandCoins className="h-3.5 w-3.5 text-info" /> Receivable
                     </div>
-                    <p className="text-xl font-black text-blue-600 dark:text-blue-400">{fmt(d?.receivable ?? 0)}</p>
+                    <p className="text-xl font-black text-info">{fmt(d?.receivable ?? 0)}</p>
                   </Card>
                 )}
 
@@ -311,7 +311,7 @@ export default function WarehouseDashboard() {
                   <Card className="shadow-sm">
                     <CardHeader className="pb-3">
                       <CardTitle className="text-sm flex items-center gap-2">
-                        <ShoppingBag className="h-4 w-4 text-blue-500" />
+                        <ShoppingBag className="h-4 w-4 text-info" />
                         Purchase Orders
                       </CardTitle>
                     </CardHeader>
@@ -333,7 +333,7 @@ export default function WarehouseDashboard() {
                   <Card className="shadow-sm">
                     <CardHeader className="pb-3">
                       <CardTitle className="text-sm flex items-center gap-2">
-                        <FileText className="h-4 w-4 text-emerald-500" />
+                        <FileText className="h-4 w-4 text-success" />
                         Invoices
                       </CardTitle>
                     </CardHeader>

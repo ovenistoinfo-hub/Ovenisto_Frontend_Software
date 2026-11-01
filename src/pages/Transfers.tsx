@@ -24,8 +24,8 @@ import { PageHeader } from "@/components/ui/page-header";
 import { useModuleEvents } from "@/hooks/use-module-events";
 
 const STATUS_STYLE: Record<string, string> = {
-  PENDING:    "bg-yellow-100 text-yellow-800",
-  DISPATCHED: "bg-blue-100 text-blue-800",
+  PENDING:    "bg-warning text-warning",
+  DISPATCHED: "bg-info text-info",
   RECEIVED:   "bg-success/10 text-success",
   CANCELLED:  "bg-muted text-muted-foreground",
 };
@@ -646,13 +646,13 @@ const Transfers = () => {
                     </Button>
                     {/* Dispatch — outgoing tab + role allowed + PENDING */}
                     {showDispatch && canDispatch && c.status === "PENDING" && (
-                      <Button variant="ghost" size="icon" className="h-7 w-7 text-blue-600 hover:text-blue-700 hover:bg-blue-50" onClick={() => setDispatchId(c.id)} title="Dispatch">
+                      <Button variant="ghost" size="icon" className="h-7 w-7 text-info hover:text-info hover:bg-info" onClick={() => setDispatchId(c.id)} title="Dispatch">
                         <Truck className="h-4 w-4" />
                       </Button>
                     )}
                     {/* Receive — incoming tab + role allowed + DISPATCHED */}
                     {showReceive && canReceive && c.status === "DISPATCHED" && (
-                      <Button variant="ghost" size="icon" className="h-7 w-7 text-green-600 hover:text-green-700 hover:bg-green-50" onClick={() => openReceiveForm(c)} title="Receive">
+                      <Button variant="ghost" size="icon" className="h-7 w-7 text-success hover:text-success hover:bg-success" onClick={() => openReceiveForm(c)} title="Receive">
                         <PackageCheck className="h-4 w-4" />
                       </Button>
                     )}
@@ -707,12 +707,12 @@ const Transfers = () => {
           <Card className="shadow-sm">
             <CardContent className="p-5">
               <div className="flex items-center gap-4">
-                <div className="h-11 w-11 rounded-xl bg-orange-500/10 flex items-center justify-center shrink-0">
-                  <CalendarDays className="h-5 w-5 text-orange-500" />
+                <div className="h-11 w-11 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                  <CalendarDays className="h-5 w-5 text-primary" />
                 </div>
                 <div className="min-w-0">
                   <p className="text-xs text-muted-foreground">{isSuperAdmin ? "Today's Transfers" : "Today's Receives"}</p>
-                  <p className="text-2xl font-bold tracking-tight text-orange-500">
+                  <p className="text-2xl font-bold tracking-tight text-primary">
                     {currency} {stats.today.toLocaleString()}
                   </p>
                 </div>
@@ -887,7 +887,7 @@ const Transfers = () => {
                         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                           <div className="space-y-1">
                             <Label className="text-xs text-muted-foreground">Available in Source</Label>
-                            <div className={`h-10 flex items-center px-3 text-sm font-semibold rounded-md border bg-muted/50 ${item.availableStock <= 0 ? "text-destructive" : "text-blue-600"}`}>
+                            <div className={`h-10 flex items-center px-3 text-sm font-semibold rounded-md border bg-muted/50 ${item.availableStock <= 0 ? "text-destructive" : "text-info"}`}>
                               {item.availableStock} {item.unit}
                             </div>
                           </div>
@@ -1161,15 +1161,15 @@ const Transfers = () => {
             <DialogTitle className="flex items-center gap-3 flex-wrap">
               {showDetail?.demand ? (
                 <>
-                  <ClipboardList className="h-5 w-5 text-orange-600" />
+                  <ClipboardList className="h-5 w-5 text-primary" />
                   <span>Stock Demand: {showDetail.demand.demandNo}</span>
                   <Badge variant="secondary" className={
                     showDetail.demand.status === "APPROVED" || showDetail.demand.status === "FULFILLED"
-                      ? "bg-green-100 text-green-800"
+                      ? "bg-success text-success"
                       : showDetail.demand.status === "REJECTED"
-                      ? "bg-red-100 text-red-800"
+                      ? "bg-destructive text-destructive"
                       : showDetail.demand.status === "PENDING"
-                      ? "bg-yellow-100 text-yellow-800"
+                      ? "bg-warning text-warning"
                       : ""
                   }>
                     Demand: {showDetail.demand.status}
@@ -1259,13 +1259,13 @@ const Transfers = () => {
               {(showDetail.dispatchedBy || showDetail.receivedBy) && (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {showDetail.dispatchedBy && (
-                    <Card className="shadow-sm border-blue-200">
+                    <Card className="shadow-sm border-info">
                       <CardHeader className="pb-2">
-                        <CardTitle className="text-xs text-blue-600 uppercase tracking-wider">Dispatched By</CardTitle>
+                        <CardTitle className="text-xs text-info uppercase tracking-wider">Dispatched By</CardTitle>
                       </CardHeader>
                       <CardContent className="space-y-1">
                         <div className="flex items-center gap-2">
-                          <Truck className="h-4 w-4 text-blue-500" />
+                          <Truck className="h-4 w-4 text-info" />
                           <span className="font-medium">{showDetail.dispatchedBy.name}</span>
                           {showDetail.dispatchedBy.role && <Badge variant="secondary" className="text-xs">{showDetail.dispatchedBy.role}</Badge>}
                         </div>
@@ -1284,13 +1284,13 @@ const Transfers = () => {
                     </Card>
                   )}
                   {showDetail.receivedBy && (
-                    <Card className="shadow-sm border-green-200">
+                    <Card className="shadow-sm border-success">
                       <CardHeader className="pb-2">
-                        <CardTitle className="text-xs text-green-600 uppercase tracking-wider">Received By</CardTitle>
+                        <CardTitle className="text-xs text-success uppercase tracking-wider">Received By</CardTitle>
                       </CardHeader>
                       <CardContent className="space-y-1">
                         <div className="flex items-center gap-2">
-                          <PackageCheck className="h-4 w-4 text-green-500" />
+                          <PackageCheck className="h-4 w-4 text-success" />
                           <span className="font-medium">{showDetail.receivedBy.name}</span>
                           {showDetail.receivedBy.role && <Badge variant="secondary" className="text-xs">{showDetail.receivedBy.role}</Badge>}
                         </div>
@@ -1538,13 +1538,13 @@ const Transfers = () => {
               {(showDetail.dispatchedBy || showDetail.receivedBy) && (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {showDetail.dispatchedBy && (
-                    <Card className="shadow-sm border-blue-200">
+                    <Card className="shadow-sm border-info">
                       <CardHeader className="pb-2">
-                        <CardTitle className="text-xs text-blue-600 uppercase tracking-wider">Dispatched By</CardTitle>
+                        <CardTitle className="text-xs text-info uppercase tracking-wider">Dispatched By</CardTitle>
                       </CardHeader>
                       <CardContent className="space-y-1">
                         <div className="flex items-center gap-2">
-                          <Truck className="h-4 w-4 text-blue-500" />
+                          <Truck className="h-4 w-4 text-info" />
                           <span className="font-medium">{showDetail.dispatchedBy.name}</span>
                           {showDetail.dispatchedBy.role && <Badge variant="secondary" className="text-xs">{showDetail.dispatchedBy.role}</Badge>}
                         </div>
@@ -1563,13 +1563,13 @@ const Transfers = () => {
                     </Card>
                   )}
                   {showDetail.receivedBy && (
-                    <Card className="shadow-sm border-green-200">
+                    <Card className="shadow-sm border-success">
                       <CardHeader className="pb-2">
-                        <CardTitle className="text-xs text-green-600 uppercase tracking-wider">Received By</CardTitle>
+                        <CardTitle className="text-xs text-success uppercase tracking-wider">Received By</CardTitle>
                       </CardHeader>
                       <CardContent className="space-y-1">
                         <div className="flex items-center gap-2">
-                          <PackageCheck className="h-4 w-4 text-green-500" />
+                          <PackageCheck className="h-4 w-4 text-success" />
                           <span className="font-medium">{showDetail.receivedBy.name}</span>
                           {showDetail.receivedBy.role && <Badge variant="secondary" className="text-xs">{showDetail.receivedBy.role}</Badge>}
                         </div>
@@ -1885,7 +1885,7 @@ const Transfers = () => {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDispatch} className="bg-blue-600 hover:bg-blue-700">{saving ? "Dispatching..." : "Dispatch"}</AlertDialogAction>
+            <AlertDialogAction onClick={handleDispatch} className="bg-info hover:bg-info">{saving ? "Dispatching..." : "Dispatch"}</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -1895,7 +1895,7 @@ const Transfers = () => {
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <PackageCheck className="h-5 w-5 text-green-600" />
+              <PackageCheck className="h-5 w-5 text-success" />
               Receive Challan: {receiveChallan?.demand?.demandNo ?? receiveChallan?.challanNo}
             </DialogTitle>
           </DialogHeader>
@@ -1916,7 +1916,7 @@ const Transfers = () => {
                   {receiveItems.map((ri, idx) => {
                     const netReceived = ri.receivedQty - ri.wasteQty;
                     return (
-                      <div key={ri.id} className="border rounded-lg p-3 space-y-2 border-l-2 border-l-green-400/60 bg-green-50/30 dark:bg-green-950/10">
+                      <div key={ri.id} className="border rounded-lg p-3 space-y-2 border-l-2 border-l-green-400/60 bg-success/30">
                         <div className="flex items-center justify-between gap-2 flex-wrap min-w-0">
                           <span className="font-medium text-sm truncate min-w-0">{ri.ingredientName}</span>
                           <Badge variant="secondary" className="text-xs shrink-0">

@@ -36,9 +36,9 @@ const slugTabMap: Record<string, string> = {
 };
 
 const TYPE_COLOR: Record<WarehouseType, string> = {
-  MAIN: "bg-blue-100 text-blue-800",
-  BRANCH: "bg-orange-100 text-orange-800",
-  KITCHEN: "bg-green-100 text-green-800",
+  MAIN: "bg-info text-info",
+  BRANCH: "bg-primary text-primary",
+  KITCHEN: "bg-success text-success",
 };
 
 function WarehousesTab() {

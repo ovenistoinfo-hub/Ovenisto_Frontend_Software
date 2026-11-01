@@ -560,7 +560,7 @@ const Shifts = () => {
             </CardContent></Card>
             <Card className="shadow-sm"><CardContent className="p-4 flex items-center justify-between">
               <div><p className="text-xs text-muted-foreground">Evening Shifts</p><p className="text-2xl font-bold">{weekSchedules.reduce((c, s) => c + s.shifts.filter(sh => sh.templateId === "st-evening").length, 0)}</p></div>
-              <div className="h-10 w-10 rounded-lg flex items-center justify-center bg-accent/10"><Clock className="h-5 w-5 text-accent" /></div>
+              <div className="h-10 w-10 rounded-lg flex items-center justify-center bg-primary/10"><Clock className="h-5 w-5 text-primary" /></div>
             </CardContent></Card>
             <Card className="shadow-sm"><CardContent className="p-4 flex items-center justify-between">
               <div><p className="text-xs text-muted-foreground">Days Off</p><p className="text-2xl font-bold">{weekSchedules.reduce((c, s) => c + s.shifts.filter(sh => sh.templateId === "st-off").length, 0)}</p></div>
@@ -618,7 +618,7 @@ const Shifts = () => {
                               {approvedLeave ? (
                                 <div
                                   title={`Approved ${approvedLeave.leaveType} leave (${approvedLeave.startDate} to ${approvedLeave.endDate})`}
-                                  className="w-full rounded-md px-2 py-1.5 text-xs font-semibold bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30 flex flex-col items-center justify-center cursor-default"
+                                  className="w-full rounded-md px-2 py-1.5 text-xs font-semibold bg-warning/15 text-warning border border-warning/30 flex flex-col items-center justify-center cursor-default"
                                 >
                                   <span>🌴 On Leave</span>
                                   <span className="text-[9px] opacity-80 capitalize">({approvedLeave.leaveType})</span>
@@ -805,7 +805,7 @@ const Shifts = () => {
             <DialogTitle>Close Shift</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
-            <div className="p-3 rounded-xl bg-blue-500/10 border border-blue-500/20 text-xs text-blue-600 dark:text-blue-400 font-medium">
+            <div className="p-3 rounded-xl bg-info/10 border border-info/20 text-xs text-info font-medium">
               ℹ️ <strong>Cash Drawer Scope:</strong> This register shift reconciles direct counter POS cash sales and opening drawer float. Waiter table sales and Delivery Rider COD cash are reconciled separately in <strong>Cash Hub (/cash-hub)</strong>.
             </div>
             <div className="rounded-lg bg-muted/50 p-3 text-sm space-y-1">

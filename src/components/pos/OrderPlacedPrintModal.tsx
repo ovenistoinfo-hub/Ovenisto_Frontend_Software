@@ -367,7 +367,7 @@ export const OrderPlacedPrintModal: React.FC<OrderPlacedPrintModalProps> = ({
             {/* Modal Header */}
             <div className="flex items-center justify-between pr-8">
               <div className="flex items-center gap-2.5">
-                <div className="h-9 w-9 rounded-xl bg-orange-500/10 border border-orange-500/20 flex items-center justify-center text-orange-500 shadow-inner">
+                <div className="h-9 w-9 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary shadow-inner">
                   <Printer className="h-4.5 w-4.5" />
                 </div>
                 <h2 className="text-base font-bold text-foreground tracking-tight">Order Placed</h2>
@@ -401,12 +401,12 @@ export const OrderPlacedPrintModal: React.FC<OrderPlacedPrintModalProps> = ({
               <button
                 type="button"
                 onClick={() => setPreviewMode("kot")}
-                className="group relative flex flex-col items-center justify-center p-4 py-5 rounded-2xl border border-border/60 bg-muted/20 hover:bg-amber-500/10 hover:border-amber-500/40 text-center transition-all duration-200 cursor-pointer active:scale-[0.97] shadow-xs"
+                className="group relative flex flex-col items-center justify-center p-4 py-5 rounded-2xl border border-border/60 bg-muted/20 hover:bg-warning/10 hover:border-warning/40 text-center transition-all duration-200 cursor-pointer active:scale-[0.97] shadow-xs"
               >
-                <div className="h-12 w-12 rounded-full bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-500 mb-3 group-hover:scale-110 group-hover:bg-amber-500/20 transition-all">
+                <div className="h-12 w-12 rounded-full bg-warning/10 border border-warning/30 flex items-center justify-center text-warning mb-3 group-hover:scale-110 group-hover:bg-warning/20 transition-all">
                   <ChefHat className="h-6 w-6" />
                 </div>
-                <span className="text-xs sm:text-sm font-bold text-foreground group-hover:text-amber-500 transition-colors">
+                <span className="text-xs sm:text-sm font-bold text-foreground group-hover:text-warning transition-colors">
                   Print KOT
                 </span>
               </button>
@@ -415,12 +415,12 @@ export const OrderPlacedPrintModal: React.FC<OrderPlacedPrintModalProps> = ({
               <button
                 type="button"
                 onClick={() => setPreviewMode("bill")}
-                className="group relative flex flex-col items-center justify-center p-4 py-5 rounded-2xl border border-border/60 bg-muted/20 hover:bg-blue-500/10 hover:border-blue-500/40 text-center transition-all duration-200 cursor-pointer active:scale-[0.97] shadow-xs"
+                className="group relative flex flex-col items-center justify-center p-4 py-5 rounded-2xl border border-border/60 bg-muted/20 hover:bg-info/10 hover:border-info/40 text-center transition-all duration-200 cursor-pointer active:scale-[0.97] shadow-xs"
               >
-                <div className="h-12 w-12 rounded-full bg-blue-500/10 border border-blue-500/30 flex items-center justify-center text-blue-500 mb-3 group-hover:scale-110 group-hover:bg-blue-500/20 transition-all">
+                <div className="h-12 w-12 rounded-full bg-info/10 border border-info/30 flex items-center justify-center text-info mb-3 group-hover:scale-110 group-hover:bg-info/20 transition-all">
                   <DollarSign className="h-6 w-6" />
                 </div>
-                <span className="text-xs sm:text-sm font-bold text-foreground group-hover:text-blue-500 transition-colors">
+                <span className="text-xs sm:text-sm font-bold text-foreground group-hover:text-info transition-colors">
                   Print Customer Bill
                 </span>
               </button>
@@ -644,7 +644,7 @@ export const OrderPlacedPrintModal: React.FC<OrderPlacedPrintModalProps> = ({
                 {directMode ? "Close" : "Back"}
               </Button>
               <Button
-                className="flex-1 h-10 px-5 rounded-xl bg-orange-600 hover:bg-orange-500 text-white font-bold gap-2 shadow-sm active:scale-[0.98] transition-all"
+                className="flex-1 h-10 px-5 rounded-xl bg-primary hover:bg-primary text-white font-bold gap-2 shadow-sm active:scale-[0.98] transition-all"
                 onClick={() => handlePrint(previewMode)}
               >
                 <Printer className="h-4 w-4" />

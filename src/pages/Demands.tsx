@@ -24,8 +24,8 @@ import { useOutletFilter } from "@/hooks/useOutletFilter";
 import { useModuleEvents } from "@/hooks/use-module-events";
 
 const STATUS_STYLE: Record<string, string> = {
-  PENDING: "bg-yellow-100 text-yellow-800",
-  APPROVED: "bg-blue-100 text-blue-800",
+  PENDING: "bg-warning text-warning",
+  APPROVED: "bg-info text-info",
   FULFILLED: "bg-success/10 text-success",
   REJECTED: "bg-muted text-muted-foreground",
   CANCELLED: "bg-muted text-muted-foreground",
@@ -401,7 +401,7 @@ const Demands = () => {
               <TableCell className="text-center text-sm">{d.items.length}</TableCell>
               <TableCell>
                 <Badge variant="secondary" className={STATUS_STYLE[d.status] || ""}>{d.status.charAt(0) + d.status.slice(1).toLowerCase()}</Badge>
-                {d.status === "APPROVED" && d.challanId && <div className="text-xs text-blue-600 font-medium mt-0.5">Challan linked</div>}
+                {d.status === "APPROVED" && d.challanId && <div className="text-xs text-info font-medium mt-0.5">Challan linked</div>}
               </TableCell>
               <TableCell>
                 <div className="flex gap-1">
@@ -689,7 +689,7 @@ const Demands = () => {
                 <div className="flex gap-4 text-sm flex-wrap">
                   <div><span className="text-muted-foreground">Requesting WH:</span> <span className="font-medium">{showDetail.requestingWH?.name}</span> <Badge variant="secondary" className="text-xs ml-1">{showDetail.requestingWH?.type}</Badge></div>
                   <div><span className="text-muted-foreground">Supplying WH:</span> <span className="font-medium">{showDetail.supplyingWH?.name}</span> <Badge variant="secondary" className="text-xs ml-1">{showDetail.supplyingWH?.type}</Badge></div>
-                  {showDetail.challanId && <div className="text-blue-600 font-medium text-xs self-center">✓ Challan linked</div>}
+                  {showDetail.challanId && <div className="text-info font-medium text-xs self-center">✓ Challan linked</div>}
                 </div>
               )}
 
@@ -733,7 +733,7 @@ const Demands = () => {
                       {canApproveThis(showDetail) && showDetail.status === "PENDING" && (
                         <>
                           <TableHead className="text-right">
-                            <span className="text-blue-600">Available in WH</span>
+                            <span className="text-info">Available in WH</span>
                           </TableHead>
                           <TableHead className="text-right">Approve Qty</TableHead>
                         </>
@@ -768,7 +768,7 @@ const Demands = () => {
                                 {loadingSupplyStock ? (
                                   <span className="text-xs text-muted-foreground animate-pulse">...</span>
                                 ) : (
-                                  <span className={`font-semibold ${availableInWH < item.requestedQty ? "text-destructive" : "text-blue-600"}`}>
+                                  <span className={`font-semibold ${availableInWH < item.requestedQty ? "text-destructive" : "text-info"}`}>
                                     {availableInWH}
                                     {availableInWH < item.requestedQty && (
                                       <AlertTriangle className="inline h-3 w-3 ml-1 -mt-0.5" />
@@ -833,7 +833,7 @@ const Demands = () => {
                 <Button variant="destructive" onClick={() => { setRejectTarget(showDetail); setRejectReason(""); setShowDetail(null); }}>
                   <XCircle className="h-4 w-4 mr-1" />Reject
                 </Button>
-                <Button className="bg-green-600 hover:bg-green-700 text-white" onClick={handleApprove} disabled={saving}>
+                <Button className="bg-success hover:bg-success text-white" onClick={handleApprove} disabled={saving}>
                   <CheckCircle2 className="h-4 w-4 mr-1" />{saving ? "Approving..." : "Approve & Create Challan"}
                 </Button>
               </>

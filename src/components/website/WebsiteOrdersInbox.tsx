@@ -304,7 +304,7 @@ export function WebsiteOrdersInbox({ onClose }: { onClose?: () => void }) {
         ) : orders.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center p-8 text-center">
             <div className="mb-3 flex h-16 w-16 items-center justify-center rounded-2xl border border-border/60 bg-muted/40">
-              <Inbox className="h-8 w-8 text-muted-foreground/40" />
+              <Inbox className="h-8 w-8 text-muted-foreground/75" />
             </div>
             <h3 className="mb-1 text-base font-extrabold text-foreground">No website orders waiting</h3>
             <p className="max-w-sm text-xs text-muted-foreground">A new order shows up here with an alert. Accepted orders are on the board.</p>

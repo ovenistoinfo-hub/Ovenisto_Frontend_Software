@@ -740,7 +740,7 @@ const Dashboard = () => {
     {
       title: "Dine In",
       icon: UtensilsCrossed,
-      color: "bg-blue-500/10 text-blue-500 border-blue-500/20",
+      color: "bg-info/10 text-info border-info/20",
       orders: channelData?.channels.dineIn.orders ?? 0,
       sale: channelData?.channels.dineIn.sale ?? 0,
       cost: channelData?.channels.dineIn.cost ?? 0,
@@ -755,7 +755,7 @@ const Dashboard = () => {
     {
       title: "Take Away",
       icon: ShoppingBag,
-      color: "bg-amber-500/10 text-amber-500 border-amber-500/20",
+      color: "bg-warning/10 text-warning border-warning/20",
       orders: channelData?.channels.takeaway.orders ?? 0,
       sale: channelData?.channels.takeaway.sale ?? 0,
       cost: channelData?.channels.takeaway.cost ?? 0,
@@ -785,7 +785,7 @@ const Dashboard = () => {
     {
       title: "Total (All Channels)",
       icon: TrendingUp,
-      color: "bg-emerald-500/10 text-emerald-500 border-emerald-500/20",
+      color: "bg-success/10 text-success border-success/20",
       orders: channelData?.combined.orders ?? 0,
       sale: channelData?.combined.sale ?? 0,
       cost: channelData?.combined.cost ?? 0,
@@ -908,10 +908,10 @@ const Dashboard = () => {
         <TableCell className="text-right text-muted-foreground">{it.qty}</TableCell>
         <TableCell className="text-right">{currency} {it.sale.toLocaleString()}</TableCell>
         <TableCell className="text-right">{currency} {it.cost.toLocaleString()}</TableCell>
-        <TableCell className={cn("text-right font-medium", it.profit >= 0 ? "text-emerald-500" : "text-destructive")}>
+        <TableCell className={cn("text-right font-medium", it.profit >= 0 ? "text-success" : "text-destructive")}>
           {currency} {it.profit.toLocaleString()}
         </TableCell>
-        <TableCell className={cn("text-right", it.marginPct >= 0 ? "text-emerald-500" : "text-destructive")}>
+        <TableCell className={cn("text-right", it.marginPct >= 0 ? "text-success" : "text-destructive")}>
           {it.marginPct}%
         </TableCell>
       </TableRow>
@@ -1426,13 +1426,13 @@ const Dashboard = () => {
               <ShoppingCart className="h-3.5 w-3.5 text-primary" /> POS
             </Link>
             <Link to="/sales" className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold text-muted-foreground hover:text-foreground hover:bg-card rounded-md transition-colors">
-              <Truck className="h-3.5 w-3.5 text-sky-500" /> Orders
+              <Truck className="h-3.5 w-3.5 text-info" /> Orders
             </Link>
             <Link to="/kitchens" className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold text-muted-foreground hover:text-foreground hover:bg-card rounded-md transition-colors">
-              <ChefHat className="h-3.5 w-3.5 text-amber-500" /> Kitchen
+              <ChefHat className="h-3.5 w-3.5 text-warning" /> Kitchen
             </Link>
             <Link to="/order-status" className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold text-muted-foreground hover:text-foreground hover:bg-card rounded-md transition-colors">
-              <BarChart3 className="h-3.5 w-3.5 text-emerald-500" /> Monitor
+              <BarChart3 className="h-3.5 w-3.5 text-success" /> Monitor
             </Link>
           </div>
 
@@ -1559,7 +1559,7 @@ const Dashboard = () => {
                     <div key={group} className="pt-2">
                       <div className="text-[10px] font-extrabold uppercase tracking-wider text-muted-foreground/70 px-2.5 pb-1 flex items-center justify-between">
                         <span>{group}</span>
-                        <span className="text-[9px] font-normal text-muted-foreground/60">{groupItems.length}</span>
+                        <span className="text-[9px] font-normal text-muted-foreground">{groupItems.length}</span>
                       </div>
                       <div className="space-y-0.5">
                         {groupItems.map((sec) => {
@@ -1735,7 +1735,7 @@ const Dashboard = () => {
                       className="h-8 text-xs bg-background"
                     />
                   </div>
-                  <span className="text-xs text-muted-foreground/60 font-medium px-0.5">to</span>
+                  <span className="text-xs text-muted-foreground font-medium px-0.5">to</span>
                   <div className="w-36">
                     <DatePicker
                       value={branchToStr}
@@ -1790,27 +1790,27 @@ const Dashboard = () => {
                             <TableCell className="text-right text-muted-foreground">{r.orders}</TableCell>
                             <TableCell className="text-right font-medium">{currency} {r.sale.toLocaleString()}</TableCell>
                             <TableCell className="text-right">{currency} {r.cost.toLocaleString()}</TableCell>
-                            <TableCell className={cn("text-right font-medium", r.profit >= 0 ? "text-emerald-500" : "text-destructive")}>
+                            <TableCell className={cn("text-right font-medium", r.profit >= 0 ? "text-success" : "text-destructive")}>
                               {currency} {r.profit.toLocaleString()}
                             </TableCell>
-                            <TableCell className={cn("text-right", r.marginPct >= 0 ? "text-emerald-500" : "text-destructive")}>
+                            <TableCell className={cn("text-right", r.marginPct >= 0 ? "text-success" : "text-destructive")}>
                               {r.marginPct}%
                             </TableCell>
                             <TableCell className="w-8">
-                              {r.outletId && <ChevronRight className="h-4 w-4 text-muted-foreground/40 transition-all group-hover/row:text-primary group-hover/row:translate-x-0.5" />}
+                              {r.outletId && <ChevronRight className="h-4 w-4 text-muted-foreground/75 transition-all group-hover/row:text-primary group-hover/row:translate-x-0.5" />}
                             </TableCell>
                           </TableRow>
                         ))}
                         {branchData?.combined && (
-                          <TableRow className="border-t-2 border-emerald-500/30 bg-emerald-500/[0.04] font-semibold">
+                          <TableRow className="border-t-2 border-success/30 bg-success/[0.04] font-semibold">
                             <TableCell className="font-bold">Total</TableCell>
                             <TableCell className="text-right">{branchData.combined.orders}</TableCell>
                             <TableCell className="text-right">{currency} {branchData.combined.sale.toLocaleString()}</TableCell>
                             <TableCell className="text-right">{currency} {branchData.combined.cost.toLocaleString()}</TableCell>
-                            <TableCell className={cn("text-right", branchData.combined.profit >= 0 ? "text-emerald-500" : "text-destructive")}>
+                            <TableCell className={cn("text-right", branchData.combined.profit >= 0 ? "text-success" : "text-destructive")}>
                               {currency} {branchData.combined.profit.toLocaleString()}
                             </TableCell>
-                            <TableCell className={cn("text-right", branchData.combined.marginPct >= 0 ? "text-emerald-500" : "text-destructive")}>
+                            <TableCell className={cn("text-right", branchData.combined.marginPct >= 0 ? "text-success" : "text-destructive")}>
                               {branchData.combined.marginPct}%
                             </TableCell>
                             <TableCell className="w-8" />
@@ -1851,7 +1851,7 @@ const Dashboard = () => {
                       <div className="flex items-center justify-between mb-3">
                         <p className="text-sm font-semibold text-foreground">Profit by Outlet</p>
                         <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
-                          <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-emerald-500" />Profit</span>
+                          <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-success" />Profit</span>
                           <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-destructive" />Loss</span>
                         </div>
                       </div>
@@ -1945,7 +1945,7 @@ const Dashboard = () => {
                       className="h-8 text-xs bg-background"
                     />
                   </div>
-                  <span className="text-xs text-muted-foreground/60 font-medium px-0.5">to</span>
+                  <span className="text-xs text-muted-foreground font-medium px-0.5">to</span>
                   <div className="w-36">
                     <DatePicker
                       value={channelToStr}
@@ -2133,14 +2133,14 @@ const Dashboard = () => {
                                 <TableCell className="text-right text-muted-foreground font-medium">{r.orders}</TableCell>
                                 <TableCell className="text-right font-medium">{currency} {r.sale.toLocaleString()}</TableCell>
                                 <TableCell className="text-right">{currency} {r.cost.toLocaleString()}</TableCell>
-                                <TableCell className={cn("text-right font-medium", empty ? "text-muted-foreground" : r.profit >= 0 ? "text-emerald-500" : "text-destructive")}>
+                                <TableCell className={cn("text-right font-medium", empty ? "text-muted-foreground" : r.profit >= 0 ? "text-success" : "text-destructive")}>
                                   {currency} {r.profit.toLocaleString()}
                                 </TableCell>
-                                <TableCell className={cn("text-right", empty ? "text-muted-foreground" : r.marginPct >= 0 ? "text-emerald-500" : "text-destructive")}>
+                                <TableCell className={cn("text-right", empty ? "text-muted-foreground" : r.marginPct >= 0 ? "text-success" : "text-destructive")}>
                                   {empty ? "—" : `${r.marginPct}%`}
                                 </TableCell>
                                 <TableCell className="w-8">
-                                  <ChevronRight className="h-4 w-4 text-muted-foreground/40 transition-all group-hover/row:text-primary group-hover/row:translate-x-0.5" />
+                                  <ChevronRight className="h-4 w-4 text-muted-foreground/75 transition-all group-hover/row:text-primary group-hover/row:translate-x-0.5" />
                                 </TableCell>
                               </TableRow>
                             );
@@ -2149,7 +2149,7 @@ const Dashboard = () => {
                           const combined = channelRows.find((r) => r.isCombined)!;
                           return (
                             <TableRow
-                              className="cursor-pointer border-t-2 border-emerald-500/30 bg-emerald-500/[0.04] hover:bg-emerald-500/[0.08] font-semibold group/row"
+                              className="cursor-pointer border-t-2 border-success/30 bg-success/[0.04] hover:bg-success/[0.08] font-semibold group/row"
                               onClick={() => goToChannelSales(combined.salesTypeParam)}
                               title="View all completed channel orders"
                             >
@@ -2159,7 +2159,7 @@ const Dashboard = () => {
                                     <TrendingUp className="h-3.5 w-3.5" />
                                   </div>
                                   <span>Total</span>
-                                  <span className="text-[10px] font-semibold uppercase tracking-wider text-emerald-500 ml-1.5">
+                                  <span className="text-[10px] font-semibold uppercase tracking-wider text-success ml-1.5">
                                     All Channels
                                   </span>
                                 </div>
@@ -2167,14 +2167,14 @@ const Dashboard = () => {
                               <TableCell className="text-right">{combined.orders}</TableCell>
                               <TableCell className="text-right">{currency} {combined.sale.toLocaleString()}</TableCell>
                               <TableCell className="text-right">{currency} {combined.cost.toLocaleString()}</TableCell>
-                              <TableCell className={cn("text-right", combined.profit >= 0 ? "text-emerald-500" : "text-destructive")}>
+                              <TableCell className={cn("text-right", combined.profit >= 0 ? "text-success" : "text-destructive")}>
                                 {currency} {combined.profit.toLocaleString()}
                               </TableCell>
-                              <TableCell className={cn("text-right", combined.marginPct >= 0 ? "text-emerald-500" : "text-destructive")}>
+                              <TableCell className={cn("text-right", combined.marginPct >= 0 ? "text-success" : "text-destructive")}>
                                 {combined.marginPct}%
                               </TableCell>
                               <TableCell className="w-8">
-                                <ChevronRight className="h-4 w-4 text-muted-foreground/40 transition-all group-hover/row:text-primary group-hover/row:translate-x-0.5" />
+                                <ChevronRight className="h-4 w-4 text-muted-foreground/75 transition-all group-hover/row:text-primary group-hover/row:translate-x-0.5" />
                               </TableCell>
                             </TableRow>
                           );
@@ -2216,7 +2216,7 @@ const Dashboard = () => {
                       <div className="flex items-center justify-between mb-3">
                         <p className="text-sm font-semibold text-foreground">Profit by Channel</p>
                         <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
-                          <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-emerald-500" />Profit</span>
+                          <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-success" />Profit</span>
                           <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-destructive" />Loss</span>
                         </div>
                       </div>
@@ -2301,7 +2301,7 @@ const Dashboard = () => {
                       className="h-8 text-xs bg-background"
                     />
                   </div>
-                  <span className="text-xs text-muted-foreground/60 font-medium px-0.5">to</span>
+                  <span className="text-xs text-muted-foreground font-medium px-0.5">to</span>
                   <div className="w-36">
                     <DatePicker
                       value={catToStr}
@@ -2462,38 +2462,38 @@ const Dashboard = () => {
                             <TableCell className="text-right text-muted-foreground">{c.orders}</TableCell>
                             <TableCell className="text-right font-medium">{currency} {c.sale.toLocaleString()}</TableCell>
                             <TableCell className="text-right">{currency} {c.cost.toLocaleString()}</TableCell>
-                            <TableCell className={cn("text-right font-medium", empty ? "text-muted-foreground" : c.profit >= 0 ? "text-emerald-500" : "text-destructive")}>
+                            <TableCell className={cn("text-right font-medium", empty ? "text-muted-foreground" : c.profit >= 0 ? "text-success" : "text-destructive")}>
                               {currency} {c.profit.toLocaleString()}
                             </TableCell>
-                            <TableCell className={cn("text-right", empty ? "text-muted-foreground" : c.marginPct >= 0 ? "text-emerald-500" : "text-destructive")}>
+                            <TableCell className={cn("text-right", empty ? "text-muted-foreground" : c.marginPct >= 0 ? "text-success" : "text-destructive")}>
                               {empty ? "—" : `${c.marginPct}%`}
                             </TableCell>
                             <TableCell className="w-8">
-                              <ChevronRight className="h-4 w-4 text-muted-foreground/40 transition-all group-hover/row:text-primary group-hover/row:translate-x-0.5" />
+                              <ChevronRight className="h-4 w-4 text-muted-foreground/75 transition-all group-hover/row:text-primary group-hover/row:translate-x-0.5" />
                             </TableCell>
                           </TableRow>
                           );
                         })}
                         {categoryCombined && (
                           <TableRow
-                            className="cursor-pointer border-t-2 border-emerald-500/30 bg-emerald-500/[0.04] hover:bg-emerald-500/[0.08] font-semibold group/row"
+                            className="cursor-pointer border-t-2 border-success/30 bg-success/[0.04] hover:bg-success/[0.08] font-semibold group/row"
                             onClick={() => goToCategorySales(null)}
                           >
                             <TableCell className="font-bold">
                               Total
-                              <span className="text-[10px] font-semibold uppercase tracking-wider text-emerald-500 ml-1.5">All Categories</span>
+                              <span className="text-[10px] font-semibold uppercase tracking-wider text-success ml-1.5">All Categories</span>
                             </TableCell>
                             <TableCell className="text-right">{categoryCombined.orders}</TableCell>
                             <TableCell className="text-right">{currency} {categoryCombined.sale.toLocaleString()}</TableCell>
                             <TableCell className="text-right">{currency} {categoryCombined.cost.toLocaleString()}</TableCell>
-                            <TableCell className={cn("text-right", categoryCombined.profit >= 0 ? "text-emerald-500" : "text-destructive")}>
+                            <TableCell className={cn("text-right", categoryCombined.profit >= 0 ? "text-success" : "text-destructive")}>
                               {currency} {categoryCombined.profit.toLocaleString()}
                             </TableCell>
-                            <TableCell className={cn("text-right", categoryCombined.marginPct >= 0 ? "text-emerald-500" : "text-destructive")}>
+                            <TableCell className={cn("text-right", categoryCombined.marginPct >= 0 ? "text-success" : "text-destructive")}>
                               {categoryCombined.marginPct}%
                             </TableCell>
                             <TableCell className="w-8">
-                              <ChevronRight className="h-4 w-4 text-emerald-500/50 transition-transform group-hover/row:translate-x-0.5" />
+                              <ChevronRight className="h-4 w-4 text-success/50 transition-transform group-hover/row:translate-x-0.5" />
                             </TableCell>
                           </TableRow>
                         )}
@@ -2537,7 +2537,7 @@ const Dashboard = () => {
                       <div className="flex items-center justify-between mb-3">
                         <p className="text-sm font-semibold text-foreground">Profit by Category</p>
                         <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
-                          <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-emerald-500" />Profit</span>
+                          <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-success" />Profit</span>
                           <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-destructive" />Loss</span>
                         </div>
                       </div>
@@ -2623,7 +2623,7 @@ const Dashboard = () => {
                       className="h-8 text-xs bg-background"
                     />
                   </div>
-                  <span className="text-xs text-muted-foreground/60 font-medium px-0.5">to</span>
+                  <span className="text-xs text-muted-foreground font-medium px-0.5">to</span>
                   <div className="w-36">
                     <DatePicker
                       value={payToStr}
@@ -2819,25 +2819,25 @@ const Dashboard = () => {
                             <TableCell className="text-right font-medium">{currency} {m.amount.toLocaleString()}</TableCell>
                             <TableCell className="text-right text-muted-foreground">{empty ? "—" : `${m.sharePct}%`}</TableCell>
                             <TableCell className="w-8">
-                              <ChevronRight className="h-4 w-4 text-muted-foreground/40 transition-all group-hover/row:text-primary group-hover/row:translate-x-0.5" />
+                              <ChevronRight className="h-4 w-4 text-muted-foreground/75 transition-all group-hover/row:text-primary group-hover/row:translate-x-0.5" />
                             </TableCell>
                           </TableRow>
                           );
                         })}
                         {payCombined && (
                           <TableRow
-                            className="cursor-pointer border-t-2 border-emerald-500/30 bg-emerald-500/[0.04] hover:bg-emerald-500/[0.08] font-semibold group/row"
+                            className="cursor-pointer border-t-2 border-success/30 bg-success/[0.04] hover:bg-success/[0.08] font-semibold group/row"
                             onClick={() => goToPaymentSales(null)}
                           >
                             <TableCell className="font-bold">
                               Total
-                              <span className="text-[10px] font-semibold uppercase tracking-wider text-emerald-500 ml-1.5">All Methods</span>
+                              <span className="text-[10px] font-semibold uppercase tracking-wider text-success ml-1.5">All Methods</span>
                             </TableCell>
                             <TableCell className="text-right">{payCombined.orders}</TableCell>
                             <TableCell className="text-right">{currency} {payCombined.amount.toLocaleString()}</TableCell>
                             <TableCell className="text-right">100%</TableCell>
                             <TableCell className="w-8">
-                              <ChevronRight className="h-4 w-4 text-emerald-500/50 transition-transform group-hover/row:translate-x-0.5" />
+                              <ChevronRight className="h-4 w-4 text-success/50 transition-transform group-hover/row:translate-x-0.5" />
                             </TableCell>
                           </TableRow>
                         )}
@@ -2938,7 +2938,7 @@ const Dashboard = () => {
                       className="h-8 text-xs bg-background"
                     />
                   </div>
-                  <span className="text-xs text-muted-foreground/60 font-medium px-0.5">to</span>
+                  <span className="text-xs text-muted-foreground font-medium px-0.5">to</span>
                   <div className="w-36">
                     <DatePicker
                       value={itemsToStr}
@@ -3068,8 +3068,8 @@ const Dashboard = () => {
               ) : (
                 <div className="grid grid-cols-1 gap-4">
                   <div className="rounded-xl border border-border/50 bg-card/40 overflow-hidden">
-                    <div className="px-4 py-2.5 bg-emerald-500/[0.06] border-b border-emerald-500/20 flex items-center gap-1.5">
-                      <TrendingUp className="h-3.5 w-3.5 text-emerald-500" />
+                    <div className="px-4 py-2.5 bg-success/[0.06] border-b border-success/20 flex items-center gap-1.5">
+                      <TrendingUp className="h-3.5 w-3.5 text-success" />
                       <p className="text-sm font-semibold text-foreground">Top Performers</p>
                       <span className="text-[11px] text-muted-foreground">highest profit</span>
                     </div>
@@ -3157,7 +3157,7 @@ const Dashboard = () => {
                       className="h-8 text-xs bg-background"
                     />
                   </div>
-                  <span className="text-xs text-muted-foreground/60 font-medium px-0.5">to</span>
+                  <span className="text-xs text-muted-foreground font-medium px-0.5">to</span>
                   <div className="w-36">
                     <DatePicker
                       value={npToStr}
@@ -3191,23 +3191,23 @@ const Dashboard = () => {
                     </div>
                     <div className="rounded-lg bg-background/70 border border-border/50 p-3.5">
                       <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Gross Profit</p>
-                      <p className={cn("text-xl font-bold tracking-tight mt-0.5", np.grossProfit >= 0 ? "text-emerald-500" : "text-destructive")}>
+                      <p className={cn("text-xl font-bold tracking-tight mt-0.5", np.grossProfit >= 0 ? "text-success" : "text-destructive")}>
                         {np.grossProfit < 0 ? "−" : ""}{money(np.grossProfit)}
                       </p>
                       <p className="text-[11px] text-muted-foreground mt-0.5">{np.grossMarginPct}% margin</p>
                     </div>
                     <div className={cn(
                       "rounded-lg border p-3.5",
-                      np.netProfit >= 0 ? "bg-emerald-500/[0.04] border-emerald-500/25" : "bg-destructive/[0.04] border-destructive/25"
+                      np.netProfit >= 0 ? "bg-success/[0.04] border-success/25" : "bg-destructive/[0.04] border-destructive/25"
                     )}>
                       <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Net Profit</p>
-                      <p className={cn("text-2xl font-bold tracking-tight mt-0.5", np.netProfit >= 0 ? "text-emerald-500" : "text-destructive")}>
+                      <p className={cn("text-2xl font-bold tracking-tight mt-0.5", np.netProfit >= 0 ? "text-success" : "text-destructive")}>
                         {np.netProfit < 0 ? "−" : ""}{money(np.netProfit)}
                       </p>
                     </div>
                     <div className="rounded-lg bg-background/70 border border-border/50 p-3.5">
                       <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Net Margin</p>
-                      <p className={cn("text-xl font-bold tracking-tight mt-0.5", np.netMarginPct >= 0 ? "text-emerald-500" : "text-destructive")}>
+                      <p className={cn("text-xl font-bold tracking-tight mt-0.5", np.netMarginPct >= 0 ? "text-success" : "text-destructive")}>
                         {np.netMarginPct}%
                       </p>
                     </div>
@@ -3223,7 +3223,7 @@ const Dashboard = () => {
                     >
                       <span className="text-foreground inline-flex items-center gap-1">
                         Revenue
-                        <ChevronRight className="h-3 w-3 text-muted-foreground/40 transition-transform group-hover/row:translate-x-0.5" />
+                        <ChevronRight className="h-3 w-3 text-muted-foreground/75 transition-transform group-hover/row:translate-x-0.5" />
                       </span>
                       <span className="font-medium tabular-nums">{money(np.revenue)}</span>
                     </div>
@@ -3233,7 +3233,7 @@ const Dashboard = () => {
                     </div>
                     <div className="flex items-center justify-between px-4 py-2.5 bg-muted/30">
                       <span className="font-semibold text-foreground">= Gross Profit</span>
-                      <span className={cn("font-semibold tabular-nums", np.grossProfit >= 0 ? "text-emerald-500" : "text-destructive")}>
+                      <span className={cn("font-semibold tabular-nums", np.grossProfit >= 0 ? "text-success" : "text-destructive")}>
                         {np.grossProfit < 0 ? "− " : ""}{money(np.grossProfit)} <span className="text-[11px] font-normal text-muted-foreground">({np.grossMarginPct}%)</span>
                       </span>
                     </div>
@@ -3244,7 +3244,7 @@ const Dashboard = () => {
                     >
                       <span className="text-muted-foreground inline-flex items-center gap-1">
                         − Food Loss <span className="text-[11px]">(expired / damaged / wasted stock)</span>
-                        <ChevronRight className="h-3 w-3 text-muted-foreground/40 transition-transform group-hover/row:translate-x-0.5" />
+                        <ChevronRight className="h-3 w-3 text-muted-foreground/75 transition-transform group-hover/row:translate-x-0.5" />
                       </span>
                       <span className="tabular-nums text-muted-foreground">− {money(np.foodLoss)}</span>
                     </div>
@@ -3255,16 +3255,16 @@ const Dashboard = () => {
                     >
                       <span className="text-muted-foreground inline-flex items-center gap-1">
                         − Expenses <span className="text-[11px]">(rent / salary / utilities)</span>
-                        <ChevronRight className="h-3 w-3 text-muted-foreground/40 transition-transform group-hover/row:translate-x-0.5" />
+                        <ChevronRight className="h-3 w-3 text-muted-foreground/75 transition-transform group-hover/row:translate-x-0.5" />
                       </span>
                       <span className="tabular-nums text-muted-foreground">− {money(np.expenses)}</span>
                     </div>
                     <div className={cn(
                       "flex items-center justify-between px-4 py-3",
-                      np.netProfit >= 0 ? "bg-emerald-500/[0.06]" : "bg-destructive/[0.06]"
+                      np.netProfit >= 0 ? "bg-success/[0.06]" : "bg-destructive/[0.06]"
                     )}>
                       <span className="font-bold text-foreground">= Net Profit</span>
-                      <span className={cn("font-bold text-base tabular-nums", np.netProfit >= 0 ? "text-emerald-500" : "text-destructive")}>
+                      <span className={cn("font-bold text-base tabular-nums", np.netProfit >= 0 ? "text-success" : "text-destructive")}>
                         {np.netProfit < 0 ? "− " : ""}{money(np.netProfit)} <span className="text-[11px] font-normal text-muted-foreground">({np.netMarginPct}%)</span>
                       </span>
                     </div>
@@ -3278,7 +3278,7 @@ const Dashboard = () => {
                     <div className="flex items-center justify-between mb-3">
                       <p className="text-sm font-semibold text-foreground">Net Profit Breakdown</p>
                       <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
-                        <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-emerald-500" />Result</span>
+                        <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-success" />Result</span>
                         <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-destructive/50" />Cost</span>
                       </div>
                     </div>
@@ -3330,7 +3330,7 @@ const Dashboard = () => {
                             >
                               <span className="text-muted-foreground truncate inline-flex items-center gap-1">
                                 {e.name}
-                                <ChevronRight className="h-3 w-3 text-muted-foreground/40 transition-transform group-hover/row:translate-x-0.5" />
+                                <ChevronRight className="h-3 w-3 text-muted-foreground/75 transition-transform group-hover/row:translate-x-0.5" />
                               </span>
                               <span className="tabular-nums font-medium">{money(e.value)}</span>
                             </div>
@@ -3355,7 +3355,7 @@ const Dashboard = () => {
                             >
                               <span className="text-muted-foreground truncate inline-flex items-center gap-1">
                                 {w.name}
-                                <ChevronRight className="h-3 w-3 text-muted-foreground/40 transition-transform group-hover/row:translate-x-0.5" />
+                                <ChevronRight className="h-3 w-3 text-muted-foreground/75 transition-transform group-hover/row:translate-x-0.5" />
                               </span>
                               <span className="tabular-nums font-medium text-destructive">{money(w.value)}</span>
                             </div>
@@ -3430,7 +3430,7 @@ const Dashboard = () => {
                       className="h-8 text-xs bg-background"
                     />
                   </div>
-                  <span className="text-xs text-muted-foreground/60 font-medium px-0.5">to</span>
+                  <span className="text-xs text-muted-foreground font-medium px-0.5">to</span>
                   <div className="w-36">
                     <DatePicker
                       value={expToStr}
@@ -3565,7 +3565,7 @@ const Dashboard = () => {
                             className={cn("border-border/40", c.amount > 0 && "cursor-pointer hover:bg-muted/30 transition-colors")}
                             onClick={() => c.amount > 0 && goToExpCategory(c.name)}
                           >
-                            <TableCell className={cn("font-medium", c.amount === 0 && "text-muted-foreground/60")}>
+                            <TableCell className={cn("font-medium", c.amount === 0 && "text-muted-foreground")}>
                               {c.name}
                             </TableCell>
                             <TableCell className="text-right tabular-nums">{c.count}</TableCell>
@@ -3641,7 +3641,7 @@ const Dashboard = () => {
                       className="h-8 text-xs bg-background"
                     />
                   </div>
-                  <span className="text-xs text-muted-foreground/60 font-medium px-0.5">to</span>
+                  <span className="text-xs text-muted-foreground font-medium px-0.5">to</span>
                   <div className="w-36">
                     <DatePicker
                       value={wasteToStr}
@@ -3775,7 +3775,7 @@ const Dashboard = () => {
                             className={cn("border-border/40", r.amount > 0 && "cursor-pointer hover:bg-muted/30 transition-colors")}
                             onClick={() => r.amount > 0 && goToWasteReason(r.name)}
                           >
-                            <TableCell className={cn("font-medium", r.amount === 0 && "text-muted-foreground/60")}>
+                            <TableCell className={cn("font-medium", r.amount === 0 && "text-muted-foreground")}>
                               {r.name}
                             </TableCell>
                             <TableCell className="text-right tabular-nums">{r.count}</TableCell>
@@ -3851,7 +3851,7 @@ const Dashboard = () => {
                       className="h-8 text-xs bg-background"
                     />
                   </div>
-                  <span className="text-xs text-muted-foreground/60 font-medium px-0.5">to</span>
+                  <span className="text-xs text-muted-foreground font-medium px-0.5">to</span>
                   <div className="w-36">
                     <DatePicker
                       value={attToStr}
@@ -3881,7 +3881,7 @@ const Dashboard = () => {
                   <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                     <div className="rounded-lg bg-background/70 border border-border/50 p-3.5">
                       <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Present</p>
-                      <p className="text-xl font-bold tracking-tight text-emerald-500 mt-0.5">{att.present.toLocaleString()}</p>
+                      <p className="text-xl font-bold tracking-tight text-success mt-0.5">{att.present.toLocaleString()}</p>
                     </div>
                     <div className="rounded-lg bg-background/70 border border-border/50 p-3.5">
                       <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Late</p>
@@ -3902,7 +3902,7 @@ const Dashboard = () => {
                     <div className="flex items-center justify-between mb-3">
                       <p className="text-sm font-semibold text-foreground">Daily Attendance</p>
                       <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
-                        <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-emerald-500" />Present</span>
+                        <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-success" />Present</span>
                         <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-warning" />Late</span>
                         <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-info" />Half Day</span>
                         <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-destructive" />Absent</span>
@@ -3986,13 +3986,13 @@ const Dashboard = () => {
                             >
                               <TableCell className="font-medium">{r.name}</TableCell>
                               <TableCell className="text-muted-foreground">{r.role}</TableCell>
-                              <TableCell className="text-right tabular-nums text-emerald-500">{r.present}</TableCell>
+                              <TableCell className="text-right tabular-nums text-success">{r.present}</TableCell>
                               <TableCell className="text-right tabular-nums text-warning">{r.late}</TableCell>
                               <TableCell className="text-right tabular-nums text-info">{r.halfday}</TableCell>
                               <TableCell className="text-right tabular-nums text-destructive">{r.absent}</TableCell>
                               <TableCell className="text-right tabular-nums text-muted-foreground">{(r.overtimeMinutes / 60).toFixed(1)}h</TableCell>
                               <TableCell className="w-8">
-                                <ChevronRight className="h-4 w-4 text-muted-foreground/40 transition-all group-hover/row:text-primary group-hover/row:translate-x-0.5" />
+                                <ChevronRight className="h-4 w-4 text-muted-foreground/75 transition-all group-hover/row:text-primary group-hover/row:translate-x-0.5" />
                               </TableCell>
                             </TableRow>
                           ))
@@ -4057,7 +4057,7 @@ const Dashboard = () => {
                       className="h-8 text-xs bg-background"
                     />
                   </div>
-                  <span className="text-xs text-muted-foreground/60 font-medium px-0.5">to</span>
+                  <span className="text-xs text-muted-foreground font-medium px-0.5">to</span>
                   <div className="w-36">
                     <DatePicker
                       value={resToStr}
@@ -4183,7 +4183,7 @@ const Dashboard = () => {
                             className={cn("border-border/40", r.count > 0 && "cursor-pointer hover:bg-muted/30 transition-colors")}
                             onClick={() => r.count > 0 && goToReservations(r.status)}
                           >
-                            <TableCell className={cn("font-medium", r.count === 0 && "text-muted-foreground/60")}>
+                            <TableCell className={cn("font-medium", r.count === 0 && "text-muted-foreground")}>
                               {RESERVATION_STATUS_LABELS[r.status] ?? r.status}
                             </TableCell>
                             <TableCell className="text-right tabular-nums">{r.count}</TableCell>
@@ -4259,7 +4259,7 @@ const Dashboard = () => {
                       className="h-8 text-xs bg-background"
                     />
                   </div>
-                  <span className="text-xs text-muted-foreground/60 font-medium px-0.5">to</span>
+                  <span className="text-xs text-muted-foreground font-medium px-0.5">to</span>
                   <div className="w-36">
                     <DatePicker
                       value={dlvToStr}
@@ -4452,7 +4452,7 @@ const Dashboard = () => {
                       className="h-8 text-xs bg-background"
                     />
                   </div>
-                  <span className="text-xs text-muted-foreground/60 font-medium px-0.5">to</span>
+                  <span className="text-xs text-muted-foreground font-medium px-0.5">to</span>
                   <div className="w-36">
                     <DatePicker
                       value={cshToStr}
@@ -4490,7 +4490,7 @@ const Dashboard = () => {
                     </div>
                     <div className="rounded-lg bg-background/70 border border-border/50 p-3.5">
                       <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Cash Difference</p>
-                      <p className={cn("text-xl font-bold tracking-tight mt-0.5", csh.totalDifference < 0 ? "text-destructive" : "text-emerald-500")}>
+                      <p className={cn("text-xl font-bold tracking-tight mt-0.5", csh.totalDifference < 0 ? "text-destructive" : "text-success")}>
                         {csh.totalDifference < 0 ? "−" : ""}{money(csh.totalDifference)}
                       </p>
                       <p className="text-[11px] text-muted-foreground mt-0.5">{csh.totalDifference < 0 ? "Shortage" : "Overage"}</p>
@@ -4578,7 +4578,7 @@ const Dashboard = () => {
                                 {r.totalDifference < 0 ? "−" : ""}{money(r.totalDifference)}
                               </TableCell>
                               <TableCell className="w-8">
-                                <ChevronRight className="h-4 w-4 text-muted-foreground/40 transition-all group-hover/row:text-primary group-hover/row:translate-x-0.5" />
+                                <ChevronRight className="h-4 w-4 text-muted-foreground/75 transition-all group-hover/row:text-primary group-hover/row:translate-x-0.5" />
                               </TableCell>
                             </TableRow>
                           ))
@@ -4652,7 +4652,7 @@ const Dashboard = () => {
                       className="h-8 text-xs bg-background"
                     />
                   </div>
-                  <span className="text-xs text-muted-foreground/60 font-medium px-0.5">to</span>
+                  <span className="text-xs text-muted-foreground font-medium px-0.5">to</span>
                   <div className="w-36">
                     <DatePicker
                       value={dpToStr}
@@ -4752,7 +4752,7 @@ const Dashboard = () => {
                                 <TableCell className="text-right tabular-nums text-muted-foreground">{r.cost !== null ? money(r.cost) : "—"}</TableCell>
                                 <TableCell className={cn(
                                   "text-right tabular-nums",
-                                  r.profit === null ? "text-muted-foreground" : r.profit >= 0 ? "text-emerald-500" : "text-destructive"
+                                  r.profit === null ? "text-muted-foreground" : r.profit >= 0 ? "text-success" : "text-destructive"
                                 )}>
                                   {r.profit !== null ? money(r.profit) : "—"}
                                 </TableCell>
@@ -4830,7 +4830,7 @@ const Dashboard = () => {
                       className="h-8 text-xs bg-background"
                     />
                   </div>
-                  <span className="text-xs text-muted-foreground/60 font-medium px-0.5">to</span>
+                  <span className="text-xs text-muted-foreground font-medium px-0.5">to</span>
                   <div className="w-36">
                     <DatePicker
                       value={staffToStr}
@@ -4989,27 +4989,27 @@ const Dashboard = () => {
                             <TableCell className="text-right text-muted-foreground">{r.orders}</TableCell>
                             <TableCell className="text-right font-medium">{currency} {r.sale.toLocaleString()}</TableCell>
                             <TableCell className="text-right">{currency} {r.cost.toLocaleString()}</TableCell>
-                            <TableCell className={cn("text-right font-medium", r.profit >= 0 ? "text-emerald-500" : "text-destructive")}>
+                            <TableCell className={cn("text-right font-medium", r.profit >= 0 ? "text-success" : "text-destructive")}>
                               {currency} {r.profit.toLocaleString()}
                             </TableCell>
-                            <TableCell className={cn("text-right", r.marginPct >= 0 ? "text-emerald-500" : "text-destructive")}>
+                            <TableCell className={cn("text-right", r.marginPct >= 0 ? "text-success" : "text-destructive")}>
                               {r.marginPct}%
                             </TableCell>
                             <TableCell className="w-8">
-                              {r.staffId && <ChevronRight className="h-4 w-4 text-muted-foreground/40 transition-all group-hover/row:text-primary group-hover/row:translate-x-0.5" />}
+                              {r.staffId && <ChevronRight className="h-4 w-4 text-muted-foreground/75 transition-all group-hover/row:text-primary group-hover/row:translate-x-0.5" />}
                             </TableCell>
                           </TableRow>
                         ))}
                         {staffData?.combined && (
-                          <TableRow className="border-t-2 border-emerald-500/30 bg-emerald-500/[0.04] font-semibold">
+                          <TableRow className="border-t-2 border-success/30 bg-success/[0.04] font-semibold">
                             <TableCell className="font-bold" colSpan={2}>Total</TableCell>
                             <TableCell className="text-right">{staffData.combined.orders}</TableCell>
                             <TableCell className="text-right">{currency} {staffData.combined.sale.toLocaleString()}</TableCell>
                             <TableCell className="text-right">{currency} {staffData.combined.cost.toLocaleString()}</TableCell>
-                            <TableCell className={cn("text-right", staffData.combined.profit >= 0 ? "text-emerald-500" : "text-destructive")}>
+                            <TableCell className={cn("text-right", staffData.combined.profit >= 0 ? "text-success" : "text-destructive")}>
                               {currency} {staffData.combined.profit.toLocaleString()}
                             </TableCell>
-                            <TableCell className={cn("text-right", staffData.combined.marginPct >= 0 ? "text-emerald-500" : "text-destructive")}>
+                            <TableCell className={cn("text-right", staffData.combined.marginPct >= 0 ? "text-success" : "text-destructive")}>
                               {staffData.combined.marginPct}%
                             </TableCell>
                             <TableCell className="w-8" />
@@ -5054,7 +5054,7 @@ const Dashboard = () => {
                       <div className="flex items-center justify-between mb-3">
                         <p className="text-sm font-semibold text-foreground">Profit by Staff</p>
                         <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
-                          <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-emerald-500" />Profit</span>
+                          <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-success" />Profit</span>
                           <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-destructive" />Loss</span>
                         </div>
                       </div>
@@ -5143,7 +5143,7 @@ const Dashboard = () => {
                       className="h-8 text-xs bg-background"
                     />
                   </div>
-                  <span className="text-xs text-muted-foreground/60 font-medium px-0.5">to</span>
+                  <span className="text-xs text-muted-foreground font-medium px-0.5">to</span>
                   <div className="w-36">
                     <DatePicker
                       value={crToStr}
@@ -5251,7 +5251,7 @@ const Dashboard = () => {
                               >
                                 <span className="text-muted-foreground truncate inline-flex items-center gap-1">
                                   {s.name}
-                                  <ChevronRight className="h-3 w-3 text-muted-foreground/40 transition-transform group-hover/row:translate-x-0.5" />
+                                  <ChevronRight className="h-3 w-3 text-muted-foreground/75 transition-transform group-hover/row:translate-x-0.5" />
                                 </span>
                                 <span className="flex items-center gap-2">
                                   <span className="text-[11px] text-muted-foreground">{s.count} incident{s.count === 1 ? "" : "s"}</span>
@@ -5318,7 +5318,7 @@ const Dashboard = () => {
                       className="h-8 text-xs bg-background"
                     />
                   </div>
-                  <span className="text-xs text-muted-foreground/60 font-medium px-0.5">to</span>
+                  <span className="text-xs text-muted-foreground font-medium px-0.5">to</span>
                   <div className="w-36">
                     <DatePicker
                       value={pToStr}
@@ -5431,11 +5431,11 @@ const Dashboard = () => {
                                   {money(r.due)}
                                 </TableCell>
                                 <TableCell className="w-8">
-                                  {r.id && <ChevronRight className="h-4 w-4 text-muted-foreground/40 transition-all group-hover/row:text-primary group-hover/row:translate-x-0.5" />}
+                                  {r.id && <ChevronRight className="h-4 w-4 text-muted-foreground/75 transition-all group-hover/row:text-primary group-hover/row:translate-x-0.5" />}
                                 </TableCell>
                               </TableRow>
                             ))}
-                            <TableRow className="border-t-2 border-emerald-500/30 bg-emerald-500/[0.04] font-semibold">
+                            <TableRow className="border-t-2 border-success/30 bg-success/[0.04] font-semibold">
                               <TableCell className="font-bold">Total</TableCell>
                               <TableCell className="text-right">{pData.purchaseCount}</TableCell>
                               <TableCell className="text-right">{money(pData.totalAmount)}</TableCell>
@@ -5573,7 +5573,7 @@ const Dashboard = () => {
                       className="h-8 text-xs bg-background"
                     />
                   </div>
-                  <span className="text-xs text-muted-foreground/60 font-medium px-0.5">to</span>
+                  <span className="text-xs text-muted-foreground font-medium px-0.5">to</span>
                   <div className="w-36">
                     <DatePicker
                       value={custToStr}
@@ -5699,13 +5699,13 @@ const Dashboard = () => {
                               <TableCell>
                                 <span className={cn(
                                   "text-[10px] font-semibold px-2 py-0.5 rounded-full border",
-                                  r.isNew ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/30" : "bg-muted text-muted-foreground border-border/50"
+                                  r.isNew ? "bg-success/10 text-success border-success/30" : "bg-muted text-muted-foreground border-border/50"
                                 )}>
                                   {r.isNew ? "New" : "Returning"}
                                 </span>
                               </TableCell>
                               <TableCell className="w-8">
-                                <ChevronRight className="h-4 w-4 text-muted-foreground/40 transition-all group-hover/row:text-primary group-hover/row:translate-x-0.5" />
+                                <ChevronRight className="h-4 w-4 text-muted-foreground/75 transition-all group-hover/row:text-primary group-hover/row:translate-x-0.5" />
                               </TableCell>
                             </TableRow>
                           ))
@@ -5770,7 +5770,7 @@ const Dashboard = () => {
                       className="h-8 text-xs bg-background"
                     />
                   </div>
-                  <span className="text-xs text-muted-foreground/60 font-medium px-0.5">to</span>
+                  <span className="text-xs text-muted-foreground font-medium px-0.5">to</span>
                   <div className="w-36">
                     <DatePicker
                       value={stToStr}

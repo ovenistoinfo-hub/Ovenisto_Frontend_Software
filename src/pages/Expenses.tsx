@@ -215,7 +215,7 @@ const Expenses = () => {
             </div>
             <div className="inline-flex items-center gap-1.5">
               <div className="w-36"><DatePicker value={dateFrom} onChange={handleDateFrom} placeholder="Start date" className="h-8 text-xs bg-background" /></div>
-              <span className="text-xs text-muted-foreground/60 font-medium px-0.5">to</span>
+              <span className="text-xs text-muted-foreground font-medium px-0.5">to</span>
               <div className="w-36"><DatePicker value={dateTo} onChange={handleDateTo} min={dateFrom || undefined} placeholder="End date" className="h-8 text-xs bg-background" /></div>
               {(dateFrom || dateTo) && (
                 <Button variant="ghost" size="sm" onClick={clearDates} className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-md" title="Clear date filter">

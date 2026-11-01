@@ -1449,7 +1449,7 @@ const SelfOrder = () => {
           </div>
 
           {/* Sitting Bill Summary Card */}
-          <div className="bg-card rounded-2xl border border-primary/30 p-4 space-y-3.5 shadow-xl bg-gradient-to-b from-card to-primary/5">
+          <div className="bg-card rounded-2xl border border-primary/30 p-4 space-y-3.5 shadow-xl bg-muted/40">
             <div className="flex items-center justify-between border-b border-border/60 pb-2.5">
               <div className="flex items-center gap-2">
                 <div className="h-7 w-7 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
@@ -1624,7 +1624,7 @@ const SelfOrder = () => {
                   <p className="font-semibold text-foreground flex items-center justify-center gap-1.5">
                     {isSittingFullyPaid ? (
                       <>
-                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+                        <CheckCircle2 className="h-3.5 w-3.5 text-success shrink-0" />
                         Thank you for your payment!
                       </>
                     ) : (
@@ -1909,7 +1909,7 @@ const SelfOrder = () => {
           {catFilter === "__deals__" ? (
             sellableDeals.length === 0 ? (
               <div className="text-center py-16 px-4 space-y-2 bg-card/40 rounded-3xl border border-dashed border-border">
-                <Gift className="h-8 w-8 mx-auto text-muted-foreground/60" />
+                <Gift className="h-8 w-8 mx-auto text-muted-foreground" />
                 <p className="font-semibold text-foreground text-sm">No deals are running right now</p>
               </div>
             ) : (
@@ -1932,7 +1932,7 @@ const SelfOrder = () => {
                       {deal.image ? (
                         <img src={deal.image} alt={deal.name} className={cn("h-full w-full object-cover", outOfStock && "grayscale")} />
                       ) : (
-                        <div className="h-full w-full bg-gradient-to-br from-primary/10 to-accent/10 flex items-center justify-center text-primary/60">
+                        <div className="h-full w-full bg-muted/40 flex items-center justify-center text-primary/60">
                           <Gift className="h-8 w-8" />
                         </div>
                       )}
@@ -2017,7 +2017,7 @@ const SelfOrder = () => {
                             }}
                           />
                         ) : (
-                          <div className="h-full w-full bg-gradient-to-br from-primary/10 to-accent/10 flex items-center justify-center text-primary/60">
+                          <div className="h-full w-full bg-muted/40 flex items-center justify-center text-primary/60">
                             <Utensils className="h-7 w-7" />
                           </div>
                         )}
@@ -2201,7 +2201,7 @@ const SelfOrder = () => {
 
               {filtered.length === 0 && (
                 <div className="text-center py-16 px-4 space-y-2 bg-card/40 rounded-3xl border border-dashed border-border">
-                  <Search className="h-8 w-8 mx-auto text-muted-foreground/60" />
+                  <Search className="h-8 w-8 mx-auto text-muted-foreground" />
                   <p className="font-semibold text-foreground text-sm">No dishes match "{search}"</p>
                   <p className="text-xs text-muted-foreground">Try clearing search or picking another category.</p>
                   <Button variant="outline" size="sm" className="mt-2 rounded-xl text-xs" onClick={() => { setSearch(""); setCatFilter("All"); }}>
@@ -2280,7 +2280,7 @@ const SelfOrder = () => {
                               <Gift className="h-2.5 w-2.5" /> Deal
                             </span>
                             {discount > 0 && (
-                              <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
+                              <span className="text-[10px] font-bold text-success bg-success/10 px-1.5 py-0.5 rounded border border-success/20">
                                 Save {currency} {Math.round(discount).toLocaleString()}
                               </span>
                             )}
@@ -2303,7 +2303,7 @@ const SelfOrder = () => {
                           </div>
                           <button
                             onClick={() => removeDealGroup(row.dealLineId)}
-                            className="text-muted-foreground/60 hover:text-destructive hover:bg-destructive/10 p-1 rounded-lg transition-colors"
+                            className="text-muted-foreground hover:text-destructive hover:bg-destructive/10 p-1 rounded-lg transition-colors"
                             title="Remove Deal"
                           >
                             <X className="h-3.5 w-3.5" />
@@ -2366,7 +2366,7 @@ const SelfOrder = () => {
                         </div>
                         <button
                           onClick={() => removeCartItem(item.id)}
-                          className="text-muted-foreground/60 hover:text-destructive hover:bg-destructive/10 p-1 rounded-lg transition-colors"
+                          className="text-muted-foreground hover:text-destructive hover:bg-destructive/10 p-1 rounded-lg transition-colors"
                           title="Remove Item"
                         >
                           <X className="h-3.5 w-3.5" />

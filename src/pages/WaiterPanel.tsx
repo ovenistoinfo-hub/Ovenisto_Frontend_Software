@@ -126,7 +126,7 @@ const getPaymentIcon = (method: string) => {
 
 const statusConfig = {
   available:        { card: "border-success/40 hover:border-success",             dot: "bg-success",     bg: "bg-success/8",     icon: "text-success",     label: "Available" },
-  occupied:         { card: "border-accent/40 hover:border-accent",               dot: "bg-accent",       bg: "bg-accent/8",       icon: "text-accent",       label: "Occupied" },
+  occupied:         { card: "border-primary/40 hover:border-accent",               dot: "bg-accent",       bg: "bg-accent/8",       icon: "text-primary",       label: "Occupied" },
   "bill-requested": { card: "border-destructive/40 hover:border-destructive",     dot: "bg-destructive", bg: "bg-destructive/8", icon: "text-destructive", label: "Bill Req." },
   reserved:         { card: "border-warning/40 hover:border-warning",             dot: "bg-warning",     bg: "bg-warning/8",     icon: "text-warning",     label: "Reserved" },
   maintenance:      { card: "border-muted hover:border-muted",                     dot: "bg-muted",       bg: "bg-muted/8",       icon: "text-muted",       label: "Maintenance" },
@@ -2128,7 +2128,7 @@ const WaiterPanel = () => {
                 <div className="flex items-center justify-between border-b border-border pb-2.5 shrink-0">
                   <div className="space-y-0.5">
                     <h3 className="font-extrabold text-base text-foreground tracking-tight">Table {selectedTable.number}</h3>
-                    <p className="text-[10px] text-muted-foreground/60 font-semibold uppercase tracking-wider">{selectedTable.floor || "Main Hall"}</p>
+                    <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">{selectedTable.floor || "Main Hall"}</p>
                     {tableStatus !== "available" && selectedTable.occupiedByName && (
                       <p className="text-[11px] text-primary/85 font-semibold mt-0.5">
                         {selectedTable.occupiedByRole} : {selectedTable.occupiedByName}
@@ -2139,7 +2139,7 @@ const WaiterPanel = () => {
                     <Badge variant="secondary" className={cn(
                       "text-[9px] px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider leading-none border-none",
                       tableStatus === "available" && "bg-success/10 text-success hover:bg-success/10",
-                      tableStatus === "occupied" && "bg-accent/10 text-accent hover:bg-accent/10",
+                      tableStatus === "occupied" && "bg-primary/10 text-primary hover:bg-primary/10",
                       tableStatus === "bill-requested" && "bg-destructive/20 text-destructive hover:bg-destructive/20 animate-pulse",
                       tableStatus === "reserved" && "bg-warning/10 text-warning hover:bg-warning/10",
                       tableStatus === "maintenance" && "bg-muted text-muted-foreground hover:bg-muted",
@@ -2627,7 +2627,7 @@ const WaiterPanel = () => {
                             </div>
                             <button
                               onClick={() => removeDealGroup(row.dealLineId)}
-                              className="h-9 w-9 flex items-center justify-center text-muted-foreground/60 hover:text-destructive hover:bg-destructive/10 rounded-md transition-colors"
+                              className="h-9 w-9 flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-md transition-colors"
                               title="Remove Deal"
                               aria-label="Remove Deal"
                             >
@@ -2691,7 +2691,7 @@ const WaiterPanel = () => {
                           </div>
                           <button
                             onClick={() => removeCartItem(item.id)}
-                            className="h-9 w-9 flex items-center justify-center text-muted-foreground/60 hover:text-destructive hover:bg-destructive/10 rounded-md transition-colors"
+                            className="h-9 w-9 flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-md transition-colors"
                             title="Remove Item"
                             aria-label="Remove Item"
                           >
@@ -2787,7 +2787,7 @@ const WaiterPanel = () => {
             {[
               { key: "my_collection", count: `${currency} ${(myActiveCash?.totalExpected || 0).toLocaleString()}`, label: "My Collection", color: "text-success", bg: "bg-success/10", border: "border-success/30", Icon: Wallet },
               { key: "available",     count: stats.available,                              label: "Available",          color: "text-success",  bg: "bg-success/10",  border: "border-success/30",  Icon: CircleDot },
-              { key: "occupied",      count: stats.occupied,                               label: "Occupied",           color: "text-accent",   bg: "bg-accent/10",   border: "border-accent/30",   Icon: Users },
+              { key: "occupied",      count: stats.occupied,                               label: "Occupied",           color: "text-primary",   bg: "bg-primary/10",   border: "border-primary/30",   Icon: Users },
               { key: "capacity_pax",  count: `${totalFloorCapacity} / ${totalOccupiedPax}`, label: "Total / Seated Pax", color: "text-info",     bg: "bg-info/10",     border: "border-info/30",     Icon: UserCheck },
               { key: "reservations",  count: todayReservationsCount,                       label: "Today Reservations", color: "text-warning",  bg: "bg-warning/10",  border: "border-warning/30",  Icon: BookOpen },
             ].map(({ key, count, label, color, bg, border, Icon }) => {
@@ -2831,7 +2831,7 @@ const WaiterPanel = () => {
 
         {/* ── Self-Order Pending Requests Card ── */}
         {!isOrderingMode && pendingSelfOrders.length > 0 && (
-          <div className="bg-gradient-to-r from-warning/15 via-warning/5 to-card border border-warning/30 rounded-2xl p-3.5 shadow-xl space-y-3 animate-fadeInUp shrink-0">
+          <div className="bg-muted/40 border border-warning/30 rounded-2xl p-3.5 shadow-xl space-y-3 animate-fadeInUp shrink-0">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2.5">
                 <div className="h-8 w-8 rounded-xl bg-warning/20 text-warning flex items-center justify-center font-bold shadow-xs animate-bounce">
@@ -3026,7 +3026,7 @@ const WaiterPanel = () => {
                         ? "border-success/50 bg-success/[0.04] hover:border-success/80 ring-1 ring-success/30 shadow-[0_0_12px_hsl(var(--success)/0.15)]"
                         : isOccupiedState
                         ? cn(
-                            "border-accent/40 bg-accent/[0.04] hover:border-accent/80",
+                            "border-primary/40 bg-accent/[0.04] hover:border-accent/80",
                             hasFoodReady && "animate-pulse ring-2 ring-accent/80 shadow-[0_0_18px_hsl(var(--accent)/0.4)]"
                           )
                         : status === "reserved"
@@ -3103,8 +3103,8 @@ const WaiterPanel = () => {
                                 </div>
                               </div>
                             ) : isOccupiedState ? (
-                              <div className="flex items-center gap-1 text-[10px] font-bold text-accent bg-accent/10 px-2 py-0.5 rounded-full border border-accent/20">
-                                <Users className="h-3 w-3 text-accent shrink-0" />
+                              <div className="flex items-center gap-1 text-[10px] font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-full border border-primary/20">
+                                <Users className="h-3 w-3 text-primary shrink-0" />
                                 <span>{getGuestsCount(t)} Pax</span>
                               </div>
                             ) : status === "reserved" ? (
@@ -3172,7 +3172,7 @@ const WaiterPanel = () => {
                             ) : isOccupiedState ? (
                               <div className="space-y-1.5 w-full">
                                 <div className="bg-muted/50 rounded-xl p-2.5 border border-border shadow-2xs text-center">
-                                  <span className="text-xs font-bold text-accent">Sitting Active</span>
+                                  <span className="text-xs font-bold text-primary">Sitting Active</span>
                                   <p className="text-[10px] text-muted-foreground">Awaiting Order</p>
                                 </div>
                                 {elapsedStr && (
@@ -3204,7 +3204,7 @@ const WaiterPanel = () => {
                               "text-[10px] font-bold uppercase tracking-wider flex items-center gap-1",
                               status === "bill-requested" ? "text-destructive" :
                               isTablePaid ? "text-success font-extrabold" :
-                              isOccupiedState ? "text-accent" :
+                              isOccupiedState ? "text-primary" :
                               status === "reserved" ? "text-warning" :
                               "text-success"
                             )}>
@@ -3342,7 +3342,7 @@ const WaiterPanel = () => {
                                 {deal.image ? (
                                   <img src={deal.image} alt={deal.name} className={cn("w-full h-full object-cover group-hover:scale-105 transition-transform duration-300", outOfStock && "grayscale")} />
                                 ) : (
-                                  <div className="w-full h-full bg-gradient-to-br from-amber-500/10 via-primary/10 to-orange-500/20 flex flex-col items-center justify-center relative overflow-hidden group-hover:from-amber-500/20 group-hover:to-orange-500/30 transition-all duration-300">
+                                  <div className="w-full h-full bg-muted/40 flex flex-col items-center justify-center relative overflow-hidden group-hover:from-amber-500/20 group-hover:to-orange-500/30 transition-all duration-300">
                                     <div className="p-2.5 rounded-full bg-primary/10 border border-primary/20 shadow-inner group-hover:scale-110 group-hover:bg-primary/20 transition-all duration-300">
                                       <Gift className="h-6 w-6 text-primary group-hover:text-primary transition-colors" />
                                     </div>
@@ -3432,7 +3432,7 @@ const WaiterPanel = () => {
                                 {item.image ? (
                                   <img src={item.image} alt={item.name} className={cn("w-full h-full object-cover group-hover:scale-105 transition-transform duration-300", (outOfStock || notServed) && "grayscale")} />
                                 ) : (
-                                  <div className="w-full h-full bg-gradient-to-br from-card via-muted/60 to-primary/10 flex flex-col items-center justify-center relative overflow-hidden group-hover:from-card group-hover:to-primary/20 transition-colors">
+                                  <div className="w-full h-full bg-muted/40 flex flex-col items-center justify-center relative overflow-hidden group-hover:from-card group-hover:to-primary/20 transition-colors">
                                     <Utensils className="h-8 w-8 text-primary/25 group-hover:text-primary/40 group-hover:scale-110 transition-all duration-300" />
                                     <span className="absolute bottom-1.5 right-1.5 text-[10px] font-extrabold tracking-wider bg-background/80 text-primary px-1.5 py-0.5 rounded-md border border-primary/20 backdrop-blur-xs shadow-xs">
                                       {item.name.charAt(0)}
@@ -4148,7 +4148,7 @@ const WaiterPanel = () => {
               </div>
             )}
 
-            <div className="text-center text-[10px] text-muted-foreground/60 leading-tight pt-1">
+            <div className="text-center text-[10px] text-muted-foreground leading-tight pt-1">
               Thank you for dining with us!<br/>
               Powered by Ovenisto POS
             </div>
@@ -4521,11 +4521,11 @@ const WaiterPanel = () => {
             {confirmedReservations.filter(r => r.status !== "completed" && r.status !== "cancelled" && r.status !== "seated").length > 0 && (
               <div className="text-left space-y-2 pt-3 border-t border-border/80">
                 <div className="flex items-center justify-between">
-                  <Label className="text-xs font-bold text-amber-500 flex items-center gap-1.5">
+                  <Label className="text-xs font-bold text-warning flex items-center gap-1.5">
                     <BookOpen className="h-4 w-4" /> Link Today's Booking / Reservation
                   </Label>
                   {selectedReservationForSitting && (
-                    <Badge variant="outline" className="text-[10px] bg-amber-500/10 text-amber-500 border-amber-500/30 font-bold px-2 py-0.5 gap-1">
+                    <Badge variant="outline" className="text-[10px] bg-warning/10 text-warning border-warning/30 font-bold px-2 py-0.5 gap-1">
                       <Check className="h-3 w-3" /> Linked
                     </Badge>
                   )}
@@ -4544,7 +4544,7 @@ const WaiterPanel = () => {
                     }
                   }}
                 >
-                  <SelectTrigger className="h-11 text-xs rounded-xl border-amber-500/30 bg-amber-500/5 hover:bg-amber-500/10 text-foreground font-semibold transition-all shadow-2xs">
+                  <SelectTrigger className="h-11 text-xs rounded-xl border-warning/30 bg-warning/5 hover:bg-warning/10 text-foreground font-semibold transition-all shadow-2xs">
                     <SelectValue placeholder="Walk-in Customer (No reservation)">
                       {selectedReservationForSitting && selectedReservationForSitting !== "none" ? (() => {
                         const selRes = confirmedReservations.find(r => r.id === selectedReservationForSitting);
@@ -4556,9 +4556,9 @@ const WaiterPanel = () => {
                         );
                         return (
                           <span className="flex items-center gap-2 font-bold text-foreground truncate">
-                            <User className="h-4 w-4 text-amber-500 shrink-0" />
+                            <User className="h-4 w-4 text-warning shrink-0" />
                             <span>{selRes.customerName}</span>
-                            <span className="text-amber-500 font-mono">({selRes.time})</span>
+                            <span className="text-warning font-mono">({selRes.time})</span>
                             {selRes.tableNumber && <span className="text-muted-foreground font-normal">• Table {selRes.tableNumber}</span>}
                           </span>
                         );
@@ -4584,7 +4584,7 @@ const WaiterPanel = () => {
                           key={r.id}
                           value={r.id}
                           textValue={`${r.customerName} (${r.time})`}
-                          className="py-2.5 px-3 rounded-xl cursor-pointer my-1 border border-transparent hover:border-amber-500/30"
+                          className="py-2.5 px-3 rounded-xl cursor-pointer my-1 border border-transparent hover:border-warning/30"
                         >
                           <div className="flex flex-col gap-1.5 w-full text-left">
                             <div className="font-bold text-xs flex items-center justify-between gap-2">
@@ -4598,7 +4598,7 @@ const WaiterPanel = () => {
                               )}
                             </div>
                             <div className="flex items-center gap-1.5 text-[10px] font-semibold flex-wrap">
-                              <span className="bg-amber-500/10 text-amber-500 border border-amber-500/20 px-2 py-0.5 rounded-md font-bold flex items-center gap-1">
+                              <span className="bg-warning/10 text-warning border border-warning/20 px-2 py-0.5 rounded-md font-bold flex items-center gap-1">
                                 <Clock className="h-3 w-3" /> {r.time}
                               </span>
                               {r.tableNumber && (
@@ -4607,7 +4607,7 @@ const WaiterPanel = () => {
                                 </span>
                               )}
                               {r.advancePaid ? (
-                                <span className="bg-emerald-500/10 text-emerald-500 border border-emerald-500/30 px-2 py-0.5 rounded-md font-bold flex items-center gap-1">
+                                <span className="bg-success/10 text-success border border-success/30 px-2 py-0.5 rounded-md font-bold flex items-center gap-1">
                                   <Check className="h-3 w-3" /> Adv PKR {r.advancePaid}
                                 </span>
                               ) : null}
@@ -4629,18 +4629,18 @@ const WaiterPanel = () => {
                   if (!selRes) return null;
                   const preOrderCount = selRes.preOrderItems ? selRes.preOrderItems.length : 0;
                   return (
-                    <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs space-y-2 mt-2 shadow-2xs">
+                    <div className="p-3.5 rounded-xl bg-warning/10 border border-warning/30 text-xs space-y-2 mt-2 shadow-2xs">
                       <div className="flex items-center justify-between font-extrabold text-foreground">
                         <span className="flex items-center gap-1.5">
-                          <User className="h-4 w-4 text-amber-500" /> Linked: {selRes.customerName}
+                          <User className="h-4 w-4 text-warning" /> Linked: {selRes.customerName}
                         </span>
-                        <span className="text-amber-500 font-extrabold flex items-center gap-1">
+                        <span className="text-warning font-extrabold flex items-center gap-1">
                           <Clock className="h-3.5 w-3.5" /> {selRes.time}
                         </span>
                       </div>
                       <div className="flex items-center gap-2 text-[11px] font-medium flex-wrap">
                         {selRes.advancePaid ? (
-                          <span className="text-emerald-500 font-bold bg-emerald-500/10 px-2 py-0.5 rounded-md border border-emerald-500/20 flex items-center gap-1">
+                          <span className="text-success font-bold bg-success/10 px-2 py-0.5 rounded-md border border-success/20 flex items-center gap-1">
                             <Check className="h-3 w-3" /> Deposit Paid: PKR {selRes.advancePaid}
                           </span>
                         ) : null}
@@ -4770,7 +4770,7 @@ const WaiterPanel = () => {
       <Dialog open={showTodayReservationsDialog} onOpenChange={setShowTodayReservationsDialog}>
         <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto rounded-2xl p-5">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-amber-500 font-bold text-base">
+            <DialogTitle className="flex items-center gap-2 text-warning font-bold text-base">
               <BookOpen className="h-4.5 w-4.5" />
               Today's Reservations ({confirmedReservations.length})
             </DialogTitle>
@@ -4807,17 +4807,17 @@ const WaiterPanel = () => {
                           </Badge>
                         )}
                         {effStatus === "seated" && (
-                          <Badge variant="outline" className="text-[11px] font-bold px-2.5 py-0.5 rounded-lg border bg-emerald-500/10 text-emerald-500 border-emerald-500/30 flex items-center gap-1">
+                          <Badge variant="outline" className="text-[11px] font-bold px-2.5 py-0.5 rounded-lg border bg-success/10 text-success border-success/30 flex items-center gap-1">
                             <Utensils className="h-3 w-3" /> Seated
                           </Badge>
                         )}
                         {effStatus === "not_arrived" && (
-                          <Badge variant="outline" className="text-[11px] font-extrabold px-2.5 py-0.5 rounded-lg border bg-rose-500/15 text-rose-500 border-rose-500/30 flex items-center gap-1">
+                          <Badge variant="outline" className="text-[11px] font-extrabold px-2.5 py-0.5 rounded-lg border bg-destructive/15 text-destructive border-destructive/30 flex items-center gap-1">
                             <AlertCircle className="h-3 w-3" /> Not Arrived
                           </Badge>
                         )}
                         {effStatus === "confirmed" && (
-                          <Badge variant="outline" className="text-[11px] font-bold px-2.5 py-0.5 rounded-lg border bg-blue-500/10 text-blue-500 border-blue-500/30 flex items-center gap-1">
+                          <Badge variant="outline" className="text-[11px] font-bold px-2.5 py-0.5 rounded-lg border bg-info/10 text-info border-info/30 flex items-center gap-1">
                             <Clock className="h-3 w-3" /> Confirmed
                           </Badge>
                         )}
@@ -4845,8 +4845,8 @@ const WaiterPanel = () => {
                     {/* Table & Pax Row */}
                     <div className="bg-muted/40 p-2 rounded-lg border border-border/30 flex items-center justify-between text-xs font-semibold">
                       <span className="flex items-center gap-1.5 text-foreground">
-                        <Utensils className="h-3.5 w-3.5 text-amber-500" />
-                        Table: <strong className="text-amber-500 font-extrabold">{r.tableNumber ? `Table ${r.tableNumber}` : "Unassigned"}</strong>
+                        <Utensils className="h-3.5 w-3.5 text-warning" />
+                        Table: <strong className="text-warning font-extrabold">{r.tableNumber ? `Table ${r.tableNumber}` : "Unassigned"}</strong>
                       </span>
                       <span className="flex items-center gap-1 text-muted-foreground">
                         <Users className="h-3 w-3" /> {r.guestCount} Pax
@@ -4875,9 +4875,9 @@ const WaiterPanel = () => {
 
                     {/* Advance Deposit Badge */}
                     {r.advancePaid && Number(r.advancePaid) > 0 ? (
-                      <div className="flex items-center justify-between bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 p-2 rounded-lg font-bold text-xs">
+                      <div className="flex items-center justify-between bg-success/10 border border-success/30 text-success p-2 rounded-lg font-bold text-xs">
                         <span className="flex items-center gap-1">
-                          <Check className="h-3.5 w-3.5 text-emerald-500" /> Advance Deposit Paid
+                          <Check className="h-3.5 w-3.5 text-success" /> Advance Deposit Paid
                         </span>
                         <span className="font-extrabold">PKR {Number(r.advancePaid).toLocaleString()}</span>
                       </div>
@@ -4910,7 +4910,7 @@ const WaiterPanel = () => {
       <Dialog open={showMyCollectionDialog} onOpenChange={setShowMyCollectionDialog}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400">
+            <DialogTitle className="flex items-center gap-2 text-success">
               <Wallet className="h-5 w-5" />
               My Collection & Active Balance
             </DialogTitle>
@@ -4921,9 +4921,9 @@ const WaiterPanel = () => {
 
           <div className="space-y-4 py-2">
             {/* Total Card */}
-            <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-center">
+            <div className="p-4 rounded-xl bg-success/10 border border-success/20 text-center">
               <span className="text-xs text-muted-foreground uppercase tracking-wider font-semibold block">Total Expected Collection</span>
-              <span className="text-2xl font-black text-emerald-600 dark:text-emerald-400 font-mono">
+              <span className="text-2xl font-black text-success font-mono">
                 {currency} {(myActiveCash?.totalExpected || 0).toLocaleString()}
               </span>
             </div>
@@ -4954,14 +4954,14 @@ const WaiterPanel = () => {
                         <div className="flex items-center gap-1.5 flex-wrap">
                           <span className="font-bold font-mono">#{ord.orderNo || ord.orderNumber || ord.id.slice(-6)}</span>
                           {ord.channel && (
-                            <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 font-semibold border-emerald-500/30 text-emerald-600 dark:text-emerald-400">
+                            <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 font-semibold border-success/30 text-success">
                               {ord.channel}
                             </Badge>
                           )}
                         </div>
                         <span className="text-muted-foreground">({ord.paymentMethod || 'Cash'})</span>
                       </div>
-                      <span className="font-bold font-mono text-emerald-600 dark:text-emerald-400 shrink-0">
+                      <span className="font-bold font-mono text-success shrink-0">
                         {currency} {(Number(ord.staffAmount ?? ord.total ?? 0)).toLocaleString()}
                       </span>
                     </div>
@@ -4975,7 +4975,7 @@ const WaiterPanel = () => {
             </div>
 
             {/* Manager Notice */}
-            <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs text-amber-700 dark:text-amber-300 flex items-start gap-2">
+            <div className="p-3 rounded-lg bg-warning/10 border border-warning/20 text-xs text-warning flex items-start gap-2">
               <Info className="h-4 w-4 shrink-0 mt-0.5" />
               <span>Hand this cash over to the Manager to clear your balance.</span>
             </div>

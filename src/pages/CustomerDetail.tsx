@@ -19,7 +19,7 @@ import { PageHeader } from "@/components/ui/page-header";
 
 const statusColor: Record<string, string> = {
   completed: "bg-success/10 text-success",
-  preparing: "bg-accent/10 text-accent",
+  preparing: "bg-primary/10 text-primary",
   pending: "bg-warning/10 text-warning",
   cancelled: "bg-destructive/10 text-destructive",
   ready: "bg-info/10 text-info",
@@ -186,9 +186,9 @@ const CustomerDetail = () => {
         <Card className="shadow-sm border border-border/80">
           <CardHeader className="pb-3">
             <CardTitle className="text-base font-bold flex items-center gap-2 text-foreground">
-              <Heart className="h-4.5 w-4.5 text-rose-500 fill-rose-500" />
+              <Heart className="h-4.5 w-4.5 text-destructive fill-destructive" />
               Favorite Items
-              <Badge variant="secondary" className="text-[10px] font-semibold bg-rose-500/10 text-rose-500 border border-rose-500/20">
+              <Badge variant="secondary" className="text-[10px] font-semibold bg-destructive/10 text-destructive border border-destructive/20">
                 Most Ordered
               </Badge>
             </CardTitle>

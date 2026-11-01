@@ -33,7 +33,7 @@ import { useVisiblePolling } from "@/hooks/use-visible-polling";
 
 const LEAVE_TYPE_COLORS: Record<string, string> = {
   sick:      "bg-destructive/10 text-destructive",
-  casual:    "bg-blue-100 text-blue-700",
+  casual:    "bg-info text-info",
   annual:    "bg-success/10 text-success",
   emergency: "bg-warning/10 text-warning",
 };
@@ -45,12 +45,12 @@ const LEAVE_STATUS_COLORS: Record<string, string> = {
 const ATT_STATUS_COLORS: Record<string, string> = {
   present: "bg-success/10 text-success",
   late:    "bg-warning/10 text-warning",
-  halfday: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-200",
+  halfday: "bg-primary text-primary",
   absent:  "bg-destructive/10 text-destructive",
   off:     "bg-muted text-muted-foreground",
-  leave:   "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-200",
-  upcoming: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-200",
-  "waiting for clock in": "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-200",
+  leave:   "bg-success text-success",
+  upcoming: "bg-info text-info",
+  "waiting for clock in": "bg-warning text-warning",
 };
 
 type ShiftName = "morning" | "evening" | "night";
@@ -228,11 +228,11 @@ export default function EmployeePortal() {
   // Schedule: last/current/next week always fetched in parallel; buttons switch which is shown
   const weekSections = [
     { key: "prev" as const,    label: "Last Week",    weekStart: prevWeekStart,
-      dot: "bg-orange-500", tabActive: "bg-orange-50 border-orange-300 dark:bg-orange-950/30 dark:border-orange-800", tabText: "text-orange-900 dark:text-orange-200" },
+      dot: "bg-primary", tabActive: "bg-primary border-primary", tabText: "text-primary" },
     { key: "current" as const, label: "Current Week", weekStart: currentWeekStart,
-      dot: "bg-green-500",  tabActive: "bg-green-50 border-green-300 dark:bg-green-950/30 dark:border-green-800",   tabText: "text-green-900 dark:text-green-200" },
+      dot: "bg-success",  tabActive: "bg-success border-success",   tabText: "text-success" },
     { key: "next" as const,    label: "Next Week",    weekStart: nextWeekStart,
-      dot: "bg-blue-500",   tabActive: "bg-blue-50 border-blue-300 dark:bg-blue-950/30 dark:border-blue-800",      tabText: "text-blue-900 dark:text-blue-200" },
+      dot: "bg-info",   tabActive: "bg-info border-info",      tabText: "text-info" },
   ];
   const weekStarts = weekSections.map(s => s.weekStart);
   const scheduleQueries = useQueries({
@@ -649,7 +649,7 @@ export default function EmployeePortal() {
             {[
               { label: "Present",      value: String(presentCount),               color: "text-success",     extra: null, statusKey: "present" },
               { label: "Late",         value: String(lateCount),                  color: "text-warning",     extra: null, statusKey: "late" },
-              { label: "Half Day",     value: String(halfdayCount),               color: "text-orange-500",  extra: null, statusKey: "halfday" },
+              { label: "Half Day",     value: String(halfdayCount),               color: "text-primary",  extra: null, statusKey: "halfday" },
               { label: "Absent",       value: String(absentCount),                color: "text-destructive", extra: null, statusKey: "absent" },
               { label: "Not Recorded", value: String(notRecordedCount),           color: "text-muted-foreground", extra: null, statusKey: "not-recorded" },
               { label: "Hours",        value: `${totalHours.toFixed(1)}h`,        color: "text-primary",     extra: null, statusKey: null },
@@ -950,14 +950,14 @@ export default function EmployeePortal() {
         {/* ── MY CASH & SETTLEMENTS ── */}
         <TabsContent value="cash-settlements" className="mt-4 space-y-4">
           {/* Active Uncleared Balance Card */}
-          <Card className="shadow-sm border-emerald-500/30 bg-emerald-500/5">
+          <Card className="shadow-sm border-success/30 bg-success/5">
             <CardHeader className="pb-2">
               <CardTitle className="text-base flex items-center justify-between">
-                <span className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400">
+                <span className="flex items-center gap-2 text-success">
                   <Wallet className="h-5 w-5" />
                   Active Uncleared Balance
                 </span>
-                <Badge className="bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border-emerald-500/30">
+                <Badge className="bg-success/20 text-success border-success/30">
                   {myActiveCash?.orderCount || 0} Active Orders
                 </Badge>
               </CardTitle>
@@ -975,14 +975,14 @@ export default function EmployeePortal() {
                     </div>
                   );
                 })}
-                <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex-1 min-w-[110px]">
-                  <span className="text-xs text-emerald-600 dark:text-emerald-400 font-bold block uppercase">Total Expected</span>
-                  <span className="text-xl font-black text-emerald-600 dark:text-emerald-400 font-mono">
+                <div className="p-3 rounded-xl bg-success/10 border border-success/30 flex-1 min-w-[110px]">
+                  <span className="text-xs text-success font-bold block uppercase">Total Expected</span>
+                  <span className="text-xl font-black text-success font-mono">
                     {currency} {(myActiveCash?.totalExpected || 0).toLocaleString()}
                   </span>
                 </div>
               </div>
-              <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs text-amber-700 dark:text-amber-300 flex items-center gap-2">
+              <div className="p-3 rounded-lg bg-warning/10 border border-warning/20 text-xs text-warning flex items-center gap-2">
                 <Info className="h-4 w-4 shrink-0" />
                 <span>Hand this cash over to the Manager to clear your balance.</span>
               </div>
@@ -1019,10 +1019,10 @@ export default function EmployeePortal() {
                         <TableCell className="text-xs text-right font-mono">
                           Rs. {rec.totalExpected.toLocaleString()}
                         </TableCell>
-                        <TableCell className="text-xs text-right font-mono font-semibold text-emerald-600 dark:text-emerald-400">
+                        <TableCell className="text-xs text-right font-mono font-semibold text-success">
                           Rs. {rec.totalActual.toLocaleString()}
                         </TableCell>
-                        <TableCell className={cn("text-xs text-right font-mono font-bold", rec.cashDifference < 0 ? "text-destructive" : rec.cashDifference > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground")}>
+                        <TableCell className={cn("text-xs text-right font-mono font-bold", rec.cashDifference < 0 ? "text-destructive" : rec.cashDifference > 0 ? "text-success" : "text-muted-foreground")}>
                           {rec.cashDifference > 0 ? "+" : ""}Rs. {rec.cashDifference.toLocaleString()}
                         </TableCell>
                         <TableCell className="text-xs text-muted-foreground max-w-[150px] truncate">

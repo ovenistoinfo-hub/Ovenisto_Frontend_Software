@@ -37,7 +37,7 @@ function getStatus(s: WarehouseStockRecord): StockStatus {
 
 const STATUS_STYLE: Record<StockStatus, string> = {
   EMPTY: "bg-destructive/10 text-destructive",
-  LOW: "bg-yellow-100 text-yellow-800",
+  LOW: "bg-warning text-warning",
   NORMAL: "bg-success/10 text-success",
 };
 const STATUS_ORDER: Record<StockStatus, number> = { EMPTY: 0, LOW: 1, NORMAL: 2 };
@@ -467,11 +467,11 @@ const KitchenStock = () => {
           {/* Stats */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             <Card
-              className={`shadow-sm cursor-pointer transition-all ${cardFilter === "low" ? "ring-2 ring-yellow-500" : "hover:ring-1 hover:ring-yellow-300"}`}
+              className={`shadow-sm cursor-pointer transition-all ${cardFilter === "low" ? "ring-2 ring-warning" : "hover:ring-1 hover:ring-warning"}`}
               onClick={() => toggleCard("low")}
             >
               <CardContent className="pt-6">
-                <div className="flex items-center gap-2"><AlertTriangle className="h-5 w-5 text-yellow-500" /><div className="text-3xl font-bold text-yellow-600">{isLoading ? "—" : stats.low}</div></div>
+                <div className="flex items-center gap-2"><AlertTriangle className="h-5 w-5 text-warning" /><div className="text-3xl font-bold text-warning">{isLoading ? "—" : stats.low}</div></div>
                 <p className="text-sm text-muted-foreground mt-1">Low Stock</p>
               </CardContent>
             </Card>
@@ -490,9 +490,9 @@ const KitchenStock = () => {
                 <p className="text-sm text-muted-foreground mt-1">Expired Today</p>
               </CardContent>
             </Card>
-            <Card className="shadow-sm border-orange-500/30 cursor-pointer hover:ring-1 hover:ring-orange-500/50 transition-all" onClick={() => expiry.nearExpiryCount > 0 && setExpiryView("near")}>
+            <Card className="shadow-sm border-primary/30 cursor-pointer hover:ring-1 hover:ring-primary/50 transition-all" onClick={() => expiry.nearExpiryCount > 0 && setExpiryView("near")}>
               <CardContent className="pt-6">
-                <div className="flex items-center gap-2"><Clock className="h-5 w-5 text-orange-500" /><div className="text-3xl font-bold text-orange-500">{isLoading ? "—" : expiry.nearExpiryCount}</div></div>
+                <div className="flex items-center gap-2"><Clock className="h-5 w-5 text-primary" /><div className="text-3xl font-bold text-primary">{isLoading ? "—" : expiry.nearExpiryCount}</div></div>
                 <p className="text-sm text-muted-foreground mt-1">Near Expiry (7d)</p>
               </CardContent>
             </Card>
@@ -513,7 +513,7 @@ const KitchenStock = () => {
 
           {/* ── Inline Create Demand panel (KM) ── */}
           {showCreateDemand && canDemand && (
-            <Card className="shadow-sm border-orange-400/30 bg-orange-50/[0.02] dark:bg-orange-950/[0.02]">
+            <Card className="shadow-sm border-primary/30 bg-primary/[0.02]/[0.02]">
               <CardHeader className="pb-2 flex flex-row items-center justify-between">
                 <Label className="text-xs text-muted-foreground uppercase tracking-wider">New Stock Demand</Label>
                 <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setShowCreateDemand(false)}><ChevronUp className="h-4 w-4" /></Button>
@@ -554,7 +554,7 @@ const KitchenStock = () => {
                     ) : (
                       <div className="space-y-2">
                         {demandItems.map((item, idx) => (
-                          <div key={idx} className="border rounded-lg p-3 space-y-2 border-l-2 border-l-orange-400/60 bg-orange-50/30 dark:bg-orange-950/10">
+                          <div key={idx} className="border rounded-lg p-3 space-y-2 border-l-2 border-l-orange-400/60 bg-primary/30">
                             <div className="flex items-center justify-between gap-2 min-w-0">
                               <span className="font-medium text-sm truncate">{item.name}</span>
                               <div className="flex items-center gap-2 shrink-0">
@@ -641,7 +641,7 @@ const KitchenStock = () => {
                             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                               <div className="space-y-1">
                                 <Label className="text-xs text-muted-foreground">Available in Branch</Label>
-                                <div className={`h-10 flex items-center px-3 text-sm font-semibold rounded-md border bg-muted/50 ${item.availableStock <= 0 ? "text-destructive" : "text-blue-600"}`}>{item.availableStock} {item.unit}</div>
+                                <div className={`h-10 flex items-center px-3 text-sm font-semibold rounded-md border bg-muted/50 ${item.availableStock <= 0 ? "text-destructive" : "text-info"}`}>{item.availableStock} {item.unit}</div>
                               </div>
                               <div className="space-y-1">
                                 <Label className="text-xs text-muted-foreground">Transfer Qty ({item.unit}) *</Label>
@@ -739,7 +739,7 @@ const KitchenStock = () => {
                           <TableCell className="text-sm text-muted-foreground">{s.ingredient.category?.name ?? "—"}</TableCell>
                           <TableCell className="text-sm">{s.ingredient.unit?.symbol || s.ingredient.unit?.name || "—"}</TableCell>
                           <TableCell className="text-right text-sm">{s.ingredient.purchasePrice != null ? `Rs. ${Number(s.ingredient.purchasePrice).toFixed(2)}` : "—"}</TableCell>
-                          <TableCell className={`text-right font-medium ${Number(s.currentStock) <= 0 ? "text-destructive" : status === "LOW" ? "text-yellow-600" : ""}`}>
+                          <TableCell className={`text-right font-medium ${Number(s.currentStock) <= 0 ? "text-destructive" : status === "LOW" ? "text-warning" : ""}`}>
                             {Number(s.currentStock).toFixed(3)}
                           </TableCell>
                           <TableCell className="text-right text-sm text-muted-foreground">{Number(s.lowStockLevel).toFixed(3)}</TableCell>
@@ -755,7 +755,7 @@ const KitchenStock = () => {
                                   <Button
                                     size="sm"
                                     variant={inDemand ? "default" : "outline"}
-                                    className={cn("h-7 text-xs px-2", inDemand ? "bg-primary text-primary-foreground" : status === "EMPTY" ? "bg-destructive text-destructive-foreground" : status === "LOW" ? "bg-yellow-500 text-white" : "")}
+                                    className={cn("h-7 text-xs px-2", inDemand ? "bg-primary text-primary-foreground" : status === "EMPTY" ? "bg-destructive text-destructive-foreground" : status === "LOW" ? "bg-warning text-white" : "")}
                                     onClick={() => handleToggleDemand(s)}
                                   >
                                     {inDemand ? <><CheckCircle2 className="h-3 w-3 mr-1" />Added</> : <><ClipboardList className="h-3 w-3 mr-1" />Demand</>}
@@ -765,7 +765,7 @@ const KitchenStock = () => {
                                   <Button
                                     size="sm"
                                     variant={inTransfer ? "default" : "outline"}
-                                    className={cn("h-7 text-xs px-2", inTransfer ? "bg-primary text-primary-foreground" : status !== "NORMAL" ? "border-orange-400 text-orange-600" : "")}
+                                    className={cn("h-7 text-xs px-2", inTransfer ? "bg-primary text-primary-foreground" : status !== "NORMAL" ? "border-primary text-primary" : "")}
                                     onClick={() => handleToggleTransfer(s)}
                                   >
                                     {inTransfer ? <><CheckCircle2 className="h-3 w-3 mr-1" />Added</> : <><Truck className="h-3 w-3 mr-1" />Transfer</>}
@@ -789,7 +789,7 @@ const KitchenStock = () => {
         <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              {expiryView === "expired" ? <><XCircle className="h-5 w-5 text-destructive" /> Expired Today</> : <><Clock className="h-5 w-5 text-orange-500" /> Near Expiry Items (within 7 days)</>}
+              {expiryView === "expired" ? <><XCircle className="h-5 w-5 text-destructive" /> Expired Today</> : <><Clock className="h-5 w-5 text-primary" /> Near Expiry Items (within 7 days)</>}
             </DialogTitle>
           </DialogHeader>
           {(() => {
@@ -799,14 +799,14 @@ const KitchenStock = () => {
             return (
               <div className="space-y-4">
                 {groups.map((g, gi) => (
-                  <Card key={g.ingredientId} className={`shadow-sm ${isExpiredView ? "border-destructive/30" : "border-orange-500/30"}`}>
+                  <Card key={g.ingredientId} className={`shadow-sm ${isExpiredView ? "border-destructive/30" : "border-primary/30"}`}>
                     <CardContent className="pt-5 pb-4">
                       <div className="flex items-start justify-between gap-4 mb-4">
                         <div>
                           <div className="text-lg font-bold">{gi + 1}. {g.ingredientName}</div>
                           <div className="text-xs text-muted-foreground mt-0.5">{g.brand ? `${g.brand} · ` : ""}{g.unit || "—"}</div>
                         </div>
-                        <Badge variant="secondary" className={`text-sm px-3 py-1 ${isExpiredView ? "bg-destructive/10 text-destructive" : "bg-orange-100 text-orange-800"}`}>
+                        <Badge variant="secondary" className={`text-sm px-3 py-1 ${isExpiredView ? "bg-destructive/10 text-destructive" : "bg-primary text-primary"}`}>
                           {g.affectedQty} {g.unit} {isExpiredView ? "expired" : "expiring soon"}
                         </Badge>
                       </div>
@@ -818,9 +818,9 @@ const KitchenStock = () => {
                             <span className="font-bold">{g.totalCurrentStock} {g.unit}</span>
                           </div>
                           <div className="flex items-center gap-2">
-                            <div className={`w-3 h-3 rounded-full ${isExpiredView ? "bg-destructive" : "bg-orange-500"}`} />
+                            <div className={`w-3 h-3 rounded-full ${isExpiredView ? "bg-destructive" : "bg-primary"}`} />
                             <span className="text-muted-foreground">{isExpiredView ? "Expired Today:" : "Expiring:"}</span>
-                            <span className={`font-bold ${isExpiredView ? "text-destructive" : "text-orange-500"}`}>{g.affectedQty} {g.unit}</span>
+                            <span className={`font-bold ${isExpiredView ? "text-destructive" : "text-primary"}`}>{g.affectedQty} {g.unit}</span>
                           </div>
                         </div>
                       </div>
@@ -829,15 +829,15 @@ const KitchenStock = () => {
                         {g.batches.map(b => {
                           const daysLeft = Math.ceil((new Date(b.expiryDate).getTime() - Date.now()) / 86400000);
                           return (
-                            <div key={b.id} className={`flex items-center justify-between rounded-lg border p-3 ${daysLeft < 0 ? "border-destructive/30 bg-destructive/5" : "border-orange-500/30 bg-orange-500/5"}`}>
+                            <div key={b.id} className={`flex items-center justify-between rounded-lg border p-3 ${daysLeft < 0 ? "border-destructive/30 bg-destructive/5" : "border-primary/30 bg-primary/5"}`}>
                               <div className="flex items-center gap-4">
-                                <div className={`text-2xl font-bold ${daysLeft < 0 ? "text-destructive" : "text-orange-500"}`}>{b.remainingQty}<span className="text-xs ml-1 font-normal">{g.unit}</span></div>
+                                <div className={`text-2xl font-bold ${daysLeft < 0 ? "text-destructive" : "text-primary"}`}>{b.remainingQty}<span className="text-xs ml-1 font-normal">{g.unit}</span></div>
                                 <div>
                                   <div className="text-sm font-medium">{daysLeft < 0 ? `Expired ${Math.abs(daysLeft)} days ago` : daysLeft === 0 ? "Expires today!" : `Expires in ${daysLeft} day${daysLeft > 1 ? "s" : ""}`}</div>
                                   <div className="text-xs text-muted-foreground">Expiry: {b.expiryDate} · Purchased: {b.purchasedAt}</div>
                                 </div>
                               </div>
-                              <Badge variant="secondary" className={daysLeft < 0 ? "bg-destructive/10 text-destructive" : "bg-orange-100 text-orange-800"}>
+                              <Badge variant="secondary" className={daysLeft < 0 ? "bg-destructive/10 text-destructive" : "bg-primary text-primary"}>
                                 {daysLeft < 0 ? "Expired" : `${daysLeft}d left`}
                               </Badge>
                             </div>

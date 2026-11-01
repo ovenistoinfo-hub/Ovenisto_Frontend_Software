@@ -786,11 +786,11 @@ const Payroll = () => {
                           <TableCell>
                             {(row.advanceDeducted > 0 || row.advancePaidThisMonth > 0) ? (
                               <div className="space-y-0.5">
-                                <Badge variant="secondary" className="bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-300 font-semibold text-[11px]">
+                                <Badge variant="secondary" className="bg-warning text-warning border-warning font-semibold text-[11px]">
                                   - Rs. {row.advanceDeducted || row.advancePaidThisMonth}
                                 </Badge>
                                 {row.lastAdvanceDate && (
-                                  <p className="text-[9px] text-amber-600 dark:text-amber-400 font-medium">Taken: {row.lastAdvanceDate}</p>
+                                  <p className="text-[9px] text-warning font-medium">Taken: {row.lastAdvanceDate}</p>
                                 )}
                                 <p className="text-[9px] text-muted-foreground font-semibold">
                                   {row.isPaid ? `Net Paid: Rs. ${row.finalPay}` : `Rem Payable: Rs. ${row.finalPay}`}
@@ -827,10 +827,10 @@ const Payroll = () => {
                                       size="sm"
                                       variant="outline"
                                       className={cn(
-                                        "h-7 text-xs font-medium border-amber-500",
+                                        "h-7 text-xs font-medium border-warning",
                                         row.advancePaidThisMonth > 0
                                           ? "text-muted-foreground border-muted bg-muted/40 opacity-70 cursor-not-allowed"
-                                          : "text-amber-600 dark:text-amber-400 hover:bg-amber-500/10"
+                                          : "text-warning hover:bg-warning/10"
                                       )}
                                       onClick={() => openAdvanceModal(row)}
                                       disabled={row.advancePaidThisMonth > 0 || row.remainingAdvanceAllowed <= 0}
@@ -883,14 +883,14 @@ const Payroll = () => {
                                     <span className="text-sm font-semibold">Rs. {row.commissionRate} / Ride</span>
                                   </div>
                                   <div className="flex flex-col space-y-1">
-                                    <span className="text-[10px] uppercase font-bold text-emerald-600 dark:text-emerald-400 tracking-wider">Total Commissions</span>
+                                    <span className="text-[10px] uppercase font-bold text-success tracking-wider">Total Commissions</span>
                                     <div className="flex items-center gap-1.5">
-                                      <span className="text-xs text-emerald-500 font-bold">Rs.</span>
+                                      <span className="text-xs text-success font-bold">Rs.</span>
                                       <Input
                                         type="number"
                                         value={row.totalDeliveryCommissions}
                                         onChange={(e) => handleCommissionChange(row.employee.id, Math.max(0, parseFloat(e.target.value) || 0))}
-                                        className="h-7 text-xs px-2 w-24 border-emerald-500/30 bg-emerald-500/[0.02]"
+                                        className="h-7 text-xs px-2 w-24 border-success/30 bg-success/[0.02]"
                                         disabled={row.isPaid}
                                       />
                                     </div>
@@ -1193,7 +1193,7 @@ const Payroll = () => {
                         </span>
                       )}
                     </TableCell>
-                    <TableCell className="text-xs text-right text-emerald-600 dark:text-emerald-400 font-semibold">+Rs. {(selectedSlip.totalDeliveryCommissions ?? 0).toLocaleString()}</TableCell>
+                    <TableCell className="text-xs text-right text-success font-semibold">+Rs. {(selectedSlip.totalDeliveryCommissions ?? 0).toLocaleString()}</TableCell>
                   </TableRow>
                 )}
                 {selectedSlip && selectedSlip.advanceDeducted > 0 && (
@@ -1201,12 +1201,12 @@ const Payroll = () => {
                     <TableCell className="text-xs">
                       Less Salary Advance Taken
                       {selectedSlip.lastAdvanceDate && (
-                        <p className="text-[10px] text-amber-600 dark:text-amber-400 italic">
+                        <p className="text-[10px] text-warning italic">
                           (Paid on {selectedSlip.lastAdvanceDate})
                         </p>
                       )}
                     </TableCell>
-                    <TableCell className="text-xs text-right text-amber-600 font-semibold">-Rs. {selectedSlip.advanceDeducted.toLocaleString()}</TableCell>
+                    <TableCell className="text-xs text-right text-warning font-semibold">-Rs. {selectedSlip.advanceDeducted.toLocaleString()}</TableCell>
                   </TableRow>
                 )}
               </TableBody>
@@ -1321,7 +1321,7 @@ const Payroll = () => {
                         </span>
                       )}
                     </TableCell>
-                    <TableCell className="text-xs text-right text-emerald-600 dark:text-emerald-400 font-semibold">+Rs. {(selectedLogSlip.totalDeliveryCommissions ?? 0).toLocaleString()}</TableCell>
+                    <TableCell className="text-xs text-right text-success font-semibold">+Rs. {(selectedLogSlip.totalDeliveryCommissions ?? 0).toLocaleString()}</TableCell>
                   </TableRow>
                 )}
                 {effectiveAdvanceAmount > 0 && !selectedLogSlip?.isAdvance && (
@@ -1329,12 +1329,12 @@ const Payroll = () => {
                     <TableCell className="text-xs">
                       Less Salary Advance Deducted
                       {matchedAdvanceLog?.paidAt && (
-                        <p className="text-[10px] text-amber-600 dark:text-amber-400 italic">
+                        <p className="text-[10px] text-warning italic">
                           (Paid on {new Date(matchedAdvanceLog.paidAt).toLocaleDateString("en-PK")})
                         </p>
                       )}
                     </TableCell>
-                    <TableCell className="text-xs text-right text-amber-600 font-semibold">-Rs. {effectiveAdvanceAmount.toLocaleString()}</TableCell>
+                    <TableCell className="text-xs text-right text-warning font-semibold">-Rs. {effectiveAdvanceAmount.toLocaleString()}</TableCell>
                   </TableRow>
                 )}
               </TableBody>
@@ -1418,7 +1418,7 @@ const Payroll = () => {
         <DialogContent className="sm:max-w-[480px]">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-lg">
-              <Coins className="h-5 w-5 text-amber-500" /> Pay Salary Advance
+              <Coins className="h-5 w-5 text-warning" /> Pay Salary Advance
             </DialogTitle>
           </DialogHeader>
           {advanceModalRow && (
@@ -1441,13 +1441,13 @@ const Payroll = () => {
                 </div>
                 <div className="p-2.5 rounded border bg-background">
                   <p className="text-muted-foreground font-medium">Advance Paid This Month</p>
-                  <p className="text-sm font-bold text-amber-600">Rs. {advanceModalRow.advancePaidThisMonth}</p>
+                  <p className="text-sm font-bold text-warning">Rs. {advanceModalRow.advancePaidThisMonth}</p>
                 </div>
               </div>
 
-              <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs flex justify-between items-center">
-                <span className="font-medium text-amber-900 dark:text-amber-200">Max Available Advance Now:</span>
-                <span className="text-base font-bold text-amber-600 dark:text-amber-400">Rs. {advanceModalRow.remainingAdvanceAllowed}</span>
+              <div className="p-3 rounded-lg bg-warning/10 border border-warning/20 text-xs flex justify-between items-center">
+                <span className="font-medium text-warning">Max Available Advance Now:</span>
+                <span className="text-base font-bold text-warning">Rs. {advanceModalRow.remainingAdvanceAllowed}</span>
               </div>
 
               <div className="space-y-1.5">
@@ -1482,7 +1482,7 @@ const Payroll = () => {
             <Button variant="outline" size="sm" onClick={() => setAdvanceModalRow(null)}>Cancel</Button>
             <Button
               size="sm"
-              className="bg-amber-500 hover:bg-amber-600 text-white font-semibold"
+              className="bg-warning hover:bg-warning text-white font-semibold"
               onClick={handleConfirmAdvance}
               disabled={
                 submittingAdvance ||

@@ -434,7 +434,7 @@ const Sales = () => {
               <p className="text-xs text-muted-foreground font-medium">Total Sales</p>
               <p className="text-xl font-bold mt-1 tracking-tight">{currency} {(summary?.sale ?? 0).toLocaleString()}</p>
             </div>
-            <div className="h-9 w-9 rounded-lg bg-emerald-500/10 text-emerald-500 flex items-center justify-center border border-emerald-500/20 shrink-0">
+            <div className="h-9 w-9 rounded-lg bg-success/10 text-success flex items-center justify-center border border-success/20 shrink-0">
               <DollarSign className="h-4 w-4" />
             </div>
           </CardContent>
@@ -446,7 +446,7 @@ const Sales = () => {
               <p className="text-xs text-muted-foreground font-medium">Total Cost</p>
               <p className="text-xl font-bold mt-1 tracking-tight">{currency} {(summary?.cost ?? 0).toLocaleString()}</p>
             </div>
-            <div className="h-9 w-9 rounded-lg bg-amber-500/10 text-amber-500 flex items-center justify-center border border-amber-500/20 shrink-0">
+            <div className="h-9 w-9 rounded-lg bg-warning/10 text-warning flex items-center justify-center border border-warning/20 shrink-0">
               <Wallet className="h-4 w-4" />
             </div>
           </CardContent>
@@ -456,11 +456,11 @@ const Sales = () => {
           <CardContent className="p-4 flex items-center justify-between">
             <div>
               <p className="text-xs text-muted-foreground font-medium">Total Profit</p>
-              <p className={`text-xl font-bold mt-1 tracking-tight ${(summary?.profit ?? 0) >= 0 ? "text-emerald-500" : "text-destructive"}`}>
+              <p className={`text-xl font-bold mt-1 tracking-tight ${(summary?.profit ?? 0) >= 0 ? "text-success" : "text-destructive"}`}>
                 {currency} {(summary?.profit ?? 0).toLocaleString()}
               </p>
             </div>
-            <div className="h-9 w-9 rounded-lg bg-emerald-500/10 text-emerald-500 flex items-center justify-center border border-emerald-500/20 shrink-0">
+            <div className="h-9 w-9 rounded-lg bg-success/10 text-success flex items-center justify-center border border-success/20 shrink-0">
               <Coins className="h-4 w-4" />
             </div>
           </CardContent>
@@ -470,11 +470,11 @@ const Sales = () => {
           <CardContent className="p-4 flex items-center justify-between">
             <div>
               <p className="text-xs text-muted-foreground font-medium">Total Margin</p>
-              <p className={`text-xl font-bold mt-1 tracking-tight ${(summary?.marginPct ?? 0) >= 0 ? "text-emerald-500" : "text-destructive"}`}>
+              <p className={`text-xl font-bold mt-1 tracking-tight ${(summary?.marginPct ?? 0) >= 0 ? "text-success" : "text-destructive"}`}>
                 {summary?.marginPct ?? 0}%
               </p>
             </div>
-            <div className="h-9 w-9 rounded-lg bg-blue-500/10 text-blue-500 flex items-center justify-center border border-blue-500/20 shrink-0">
+            <div className="h-9 w-9 rounded-lg bg-info/10 text-info flex items-center justify-center border border-info/20 shrink-0">
               <Percent className="h-4 w-4" />
             </div>
           </CardContent>
@@ -555,7 +555,7 @@ const Sales = () => {
                   className="h-8 text-xs bg-background"
                 />
               </div>
-              <span className="text-xs text-muted-foreground/60 font-medium px-0.5">to</span>
+              <span className="text-xs text-muted-foreground font-medium px-0.5">to</span>
               <div className="w-36">
                 <DatePicker
                   value={dateTo}

@@ -27,15 +27,15 @@ const roleColors: Record<string, string> = {
   "Super Admin": "bg-purple-500/15 text-purple-700 dark:text-purple-300 border-purple-500/30",
   Admin: "bg-destructive/15 text-destructive border-destructive/30",
   Manager: "bg-info/15 text-info border-info/30",
-  "Floor Manager": "bg-teal-500/15 text-teal-700 dark:text-teal-300 border-teal-500/30",
+  "Floor Manager": "bg-success/15 text-success border-success/30",
   Cashier: "bg-success/15 text-success border-success/30",
   Waiter: "bg-warning/15 text-warning dark:text-warning border-warning/30",
-  "Kitchen Manager": "bg-orange-500/15 text-orange-700 dark:text-orange-300 border-orange-500/30",
-  "Kitchen Staff": "bg-accent/15 text-accent border-accent/30",
-  "Delivery Manager": "bg-sky-500/15 text-sky-700 dark:text-sky-300 border-sky-500/30",
-  "Store Manager": "bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border-indigo-500/30",
-  Accountant: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30",
-  Rider: "bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30",
+  "Kitchen Manager": "bg-primary/15 text-primary border-primary/30",
+  "Kitchen Staff": "bg-primary/15 text-primary border-primary/30",
+  "Delivery Manager": "bg-info/15 text-info border-info/30",
+  "Store Manager": "bg-info/15 text-info border-info/30",
+  Accountant: "bg-success/15 text-success border-success/30",
+  Rider: "bg-warning/15 text-warning border-warning/30",
   "Customer Screen": "bg-slate-500/15 text-slate-700 dark:text-slate-300 border-slate-500/30",
 };
 
@@ -321,12 +321,12 @@ const Users = () => {
   return (
     <div className="space-y-6">
       <PageHeader
-        icon={<Shield className="h-5 w-5 text-amber-500" />}
+        icon={<Shield className="h-5 w-5 text-warning" />}
         title="Users & Permissions"
         subtitle="Manage login accounts, branch access, and security permissions"
         actions={
           (isAdminOrHigher || isManager) ? (
-            <Button size="sm" className="bg-amber-500 hover:bg-amber-600 text-black font-extrabold gap-1.5 shadow-md active:scale-95 transition-all" onClick={openAdd}>
+            <Button size="sm" className="bg-warning hover:bg-warning text-black font-extrabold gap-1.5 shadow-md active:scale-95 transition-all" onClick={openAdd}>
               <Plus className="h-4 w-4 stroke-[3]" /> Add User Account
             </Button>
           ) : undefined
@@ -335,31 +335,31 @@ const Users = () => {
 
       {/* Summary KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
-        <Card className="shadow-sm border-border/60 bg-gradient-to-br from-card to-muted/20">
+        <Card className="shadow-sm border-border/60 bg-muted/40">
           <CardContent className="p-4 flex items-center justify-between">
             <div>
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Total Accounts</p>
               <h3 className="text-2xl font-black font-mono text-foreground mt-0.5">{stats.total}</h3>
             </div>
-            <div className="p-2.5 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400">
+            <div className="p-2.5 rounded-xl bg-warning/10 text-warning">
               <UsersIcon className="h-5 w-5" />
             </div>
           </CardContent>
         </Card>
 
-        <Card className="shadow-sm border-border/60 bg-gradient-to-br from-card to-muted/20">
+        <Card className="shadow-sm border-border/60 bg-muted/40">
           <CardContent className="p-4 flex items-center justify-between">
             <div>
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Active Staff</p>
-              <h3 className="text-2xl font-black font-mono text-emerald-600 dark:text-emerald-400 mt-0.5">{stats.active}</h3>
+              <h3 className="text-2xl font-black font-mono text-success mt-0.5">{stats.active}</h3>
             </div>
-            <div className="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+            <div className="p-2.5 rounded-xl bg-success/10 text-success">
               <CheckCircle2 className="h-5 w-5" />
             </div>
           </CardContent>
         </Card>
 
-        <Card className="shadow-sm border-border/60 bg-gradient-to-br from-card to-muted/20">
+        <Card className="shadow-sm border-border/60 bg-muted/40">
           <CardContent className="p-4 flex items-center justify-between">
             <div>
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Admin / Owners</p>
@@ -371,13 +371,13 @@ const Users = () => {
           </CardContent>
         </Card>
 
-        <Card className="shadow-sm border-border/60 bg-gradient-to-br from-card to-muted/20">
+        <Card className="shadow-sm border-border/60 bg-muted/40">
           <CardContent className="p-4 flex items-center justify-between">
             <div>
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Pending Logins</p>
-              <h3 className="text-2xl font-black font-mono text-sky-600 dark:text-sky-400 mt-0.5">{stats.unlinkedCount}</h3>
+              <h3 className="text-2xl font-black font-mono text-info mt-0.5">{stats.unlinkedCount}</h3>
             </div>
-            <div className="p-2.5 rounded-xl bg-sky-500/10 text-sky-600 dark:text-sky-400">
+            <div className="p-2.5 rounded-xl bg-info/10 text-info">
               <UserPlus className="h-5 w-5" />
             </div>
           </CardContent>
@@ -416,7 +416,7 @@ const Users = () => {
               <Shield className="h-12 w-12 text-muted-foreground mx-auto mb-3 opacity-30" />
               <p className="text-sm font-semibold text-foreground">No matching user accounts found</p>
               <p className="text-xs text-muted-foreground mt-1">Try adjusting your search query or role filter.</p>
-              <Button size="sm" className="bg-amber-500 hover:bg-amber-600 text-black font-extrabold mt-4 gap-1.5" onClick={openAdd}>
+              <Button size="sm" className="bg-warning hover:bg-warning text-black font-extrabold mt-4 gap-1.5" onClick={openAdd}>
                 <Plus className="h-4 w-4" /> Add User
               </Button>
             </div>
@@ -441,7 +441,7 @@ const Users = () => {
                       <TableCell className="text-center font-mono text-xs text-muted-foreground">{i + 1}</TableCell>
                       <TableCell className="font-semibold text-xs text-foreground">
                         <div className="flex items-center gap-2.5">
-                          <div className="h-7 w-7 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center font-bold text-xs shrink-0">
+                          <div className="h-7 w-7 rounded-full bg-warning/10 border border-warning/20 text-warning flex items-center justify-center font-bold text-xs shrink-0">
                             {u.name.charAt(0).toUpperCase()}
                           </div>
                           <span>{u.name}</span>
@@ -463,7 +463,7 @@ const Users = () => {
                         ) : u.branch || "Chain-wide / All"}
                       </TableCell>
                       <TableCell>
-                        <Badge variant="secondary" className={cn("text-[10px] uppercase tracking-wider font-bold", u.status === "active" ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30" : "bg-destructive/15 text-destructive border-destructive/30")}>
+                        <Badge variant="secondary" className={cn("text-[10px] uppercase tracking-wider font-bold", u.status === "active" ? "bg-success/15 text-success border-success/30" : "bg-destructive/15 text-destructive border-destructive/30")}>
                           {u.status}
                         </Badge>
                       </TableCell>
@@ -497,9 +497,9 @@ const Users = () => {
       <Dialog open={showDialog} onOpenChange={setShowDialog}>
         <DialogContent className="max-w-3xl max-h-[92vh] overflow-y-auto p-0 gap-0 border-border/80 shadow-2xl">
           {/* Custom Header */}
-          <DialogHeader className="px-6 pt-5 pb-4 border-b border-border/60 bg-gradient-to-r from-card via-card to-muted/20">
+          <DialogHeader className="px-6 pt-5 pb-4 border-b border-border/60 bg-muted/40">
             <div className="flex items-center gap-3">
-              <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-500">
+              <div className="p-2.5 rounded-xl bg-warning/10 border border-warning/30 text-warning">
                 <ShieldCheck className="h-5 w-5" />
               </div>
               <div>
@@ -528,7 +528,7 @@ const Users = () => {
                 <Tabs value={accountMode} onValueChange={(v) => handleModeChange(v as "employee" | "owner")} className="w-full">
                   <TabsList className="grid grid-cols-2 w-full p-1 bg-muted/60 rounded-xl h-12">
                     <TabsTrigger value="employee" className="rounded-lg text-xs font-bold gap-2 data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-sm">
-                      <UserCheck className="h-4 w-4 text-emerald-500" />
+                      <UserCheck className="h-4 w-4 text-success" />
                       Employee Login Account
                     </TabsTrigger>
                     <TabsTrigger value="owner" className="rounded-lg text-xs font-bold gap-2 data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-sm">
@@ -542,9 +542,9 @@ const Users = () => {
 
             {/* Employee Selection Section (Only in Add + Employee mode) */}
             {!editingId && accountMode === "employee" && (
-              <div className="p-4 rounded-xl bg-emerald-500/5 border border-emerald-500/20 space-y-3">
+              <div className="p-4 rounded-xl bg-success/5 border border-success/20 space-y-3">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                  <div className="flex items-center gap-2 text-xs font-bold text-success">
                     <UserPlus className="h-4 w-4" />
                     Step 1: Select Onboarded Employee
                   </div>
@@ -556,13 +556,13 @@ const Users = () => {
                 {unlinkedEmployees.length === 0 ? (
                   <div className="p-3.5 rounded-lg bg-card border border-border/80 text-xs text-muted-foreground flex items-center justify-between">
                     <span>No unlinked employees found waiting for a login.</span>
-                    <Link to="/employees" className="text-emerald-600 dark:text-emerald-400 font-bold hover:underline flex items-center gap-1">
+                    <Link to="/employees" className="text-success font-bold hover:underline flex items-center gap-1">
                       Onboard Employee →
                     </Link>
                   </div>
                 ) : (
                   <Select value={selectedEmployeeId} onValueChange={handleEmployeeSelect}>
-                    <SelectTrigger className="h-10 bg-card border-emerald-500/30 text-xs font-semibold">
+                    <SelectTrigger className="h-10 bg-card border-success/30 text-xs font-semibold">
                       <SelectValue placeholder="-- Choose an onboarded staff member --" />
                     </SelectTrigger>
                     <SelectContent>
@@ -580,10 +580,10 @@ const Users = () => {
                 )}
 
                 {selectedEmployeeObj && (
-                  <div className="p-3 rounded-lg bg-card border border-emerald-500/30 text-xs space-y-1 animate-in fade-in duration-200">
+                  <div className="p-3 rounded-lg bg-card border border-success/30 text-xs space-y-1 animate-in fade-in duration-200">
                     <div className="flex items-center justify-between">
                       <span className="font-bold text-foreground">Linked Profile Details</span>
-                      <Badge variant="outline" className="text-[9px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30">
+                      <Badge variant="outline" className="text-[9px] bg-success/10 text-success border-success/30">
                         ✔ Auto-Filled
                       </Badge>
                     </div>
@@ -601,7 +601,7 @@ const Users = () => {
                 {/* 1. Identity & Credentials Card */}
                 <div className="space-y-3">
                   <div className="flex items-center gap-2 text-xs font-bold text-muted-foreground uppercase tracking-wider">
-                    <KeyRound className="h-3.5 w-3.5 text-amber-500" />
+                    <KeyRound className="h-3.5 w-3.5 text-warning" />
                     Account Identity & Credentials
                   </div>
 
@@ -686,7 +686,7 @@ const Users = () => {
                 <div className="space-y-3 pt-2">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2 text-xs font-bold text-muted-foreground uppercase tracking-wider">
-                      <Building2 className="h-3.5 w-3.5 text-amber-500" />
+                      <Building2 className="h-3.5 w-3.5 text-warning" />
                       Role & Branch Scope
                     </div>
                     <Badge variant="outline" className={cn("text-[11px] font-bold px-2 py-0.5", roleColors[form.role])}>
@@ -757,7 +757,7 @@ const Users = () => {
                 <div className="space-y-3 pt-2">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2 text-xs font-bold text-muted-foreground uppercase tracking-wider">
-                      <Shield className="h-3.5 w-3.5 text-amber-500" />
+                      <Shield className="h-3.5 w-3.5 text-warning" />
                       Granular Module Permissions
                     </div>
                     <div className="flex items-center gap-1.5">
@@ -767,7 +767,7 @@ const Users = () => {
                       <Button type="button" variant="outline" size="sm" className="h-7 text-[10px] gap-1 px-2" onClick={() => applyPreset("view")}>
                         <Eye className="h-3 w-3" /> View Only
                       </Button>
-                      <Button type="button" variant="outline" size="sm" className="h-7 text-[10px] gap-1 px-2 text-amber-600 dark:text-amber-400" onClick={() => applyPreset("full")}>
+                      <Button type="button" variant="outline" size="sm" className="h-7 text-[10px] gap-1 px-2 text-warning" onClick={() => applyPreset("full")}>
                         <Sparkles className="h-3 w-3" /> Full Access
                       </Button>
                     </div>
@@ -787,20 +787,20 @@ const Users = () => {
                         {modules.map(mod => (
                           <tr key={mod} className="hover:bg-muted/30 transition-colors">
                             <td className="p-2.5 font-semibold text-foreground flex items-center gap-2">
-                              <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                              <span className="h-1.5 w-1.5 rounded-full bg-warning" />
                               {mod}
                             </td>
                             {permTypes.map(perm => (
                               <td key={perm} className="p-2.5 text-center">
                                 {(["Dashboard", "Sales", "Reports", "My Portal", "Attendance"].includes(mod)) && perm !== "view" ? (
-                                  <span className="text-muted-foreground/40 font-mono">—</span>
+                                  <span className="text-muted-foreground/75 font-mono">—</span>
                                 ) : (mod === "Settings") && (perm === "create" || perm === "delete") ? (
-                                  <span className="text-muted-foreground/40 font-mono">—</span>
+                                  <span className="text-muted-foreground/75 font-mono">—</span>
                                 ) : (
                                   <Checkbox
                                     checked={(perms[mod] || []).includes(perm)}
                                     onCheckedChange={() => togglePerm(mod, perm)}
-                                    className="data-[state=checked]:bg-amber-500 data-[state=checked]:border-amber-500"
+                                    className="data-[state=checked]:bg-warning data-[state=checked]:border-warning"
                                   />
                                 )}
                               </td>
@@ -816,13 +816,13 @@ const Users = () => {
           </div>
 
           {/* Modal Footer */}
-          <DialogFooter className="px-6 py-4 border-t border-border/60 bg-gradient-to-r from-card via-card to-muted/20 flex items-center justify-between">
+          <DialogFooter className="px-6 py-4 border-t border-border/60 bg-muted/40 flex items-center justify-between">
             <Button variant="outline" size="sm" onClick={() => setShowDialog(false)}>
               Cancel
             </Button>
             <Button
               size="sm"
-              className="bg-amber-500 hover:bg-amber-600 text-black font-extrabold gap-1.5 shadow-md active:scale-95 transition-all"
+              className="bg-warning hover:bg-warning text-black font-extrabold gap-1.5 shadow-md active:scale-95 transition-all"
               onClick={handleSave}
               disabled={saving || (!editingId && accountMode === "employee" && selectedEmployeeId === "none")}
             >

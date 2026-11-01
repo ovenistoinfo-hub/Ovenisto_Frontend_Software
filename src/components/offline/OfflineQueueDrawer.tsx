@@ -42,7 +42,7 @@ export function OfflineQueueDrawer({ open, onOpenChange }: { open: boolean; onOp
                       <AlertTriangle className="h-3 w-3" /> Needs Review
                     </Badge>
                   ) : row.status === "syncing" ? (
-                    <Badge variant="outline" className="bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30 text-[10px] font-bold">
+                    <Badge variant="outline" className="bg-warning/10 text-warning border-warning/30 text-[10px] font-bold">
                       Syncing…
                     </Badge>
                   ) : (

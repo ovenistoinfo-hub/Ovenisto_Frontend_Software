@@ -116,26 +116,26 @@ const Deals = () => {
       return {
         statusKey: "expired",
         label: "Expired",
-        dotClass: "bg-rose-500",
+        dotClass: "bg-destructive",
         badgeClass:
-          "border-rose-500/20 bg-rose-500/10 text-rose-600 dark:text-rose-400",
+          "border-destructive/20 bg-destructive/10 text-destructive",
       };
     }
     if (deal.validFrom && deal.validFrom.slice(0, 10) > today) {
       return {
         statusKey: "scheduled",
         label: "Scheduled",
-        dotClass: "bg-amber-500",
+        dotClass: "bg-warning",
         badgeClass:
-          "border-amber-500/20 bg-amber-500/10 text-amber-600 dark:text-amber-400",
+          "border-warning/20 bg-warning/10 text-warning",
       };
     }
     return {
       statusKey: "active",
       label: "Active",
-      dotClass: "bg-emerald-500",
+      dotClass: "bg-success",
       badgeClass:
-        "border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+        "border-success/20 bg-success/10 text-success",
     };
   };
 
@@ -364,21 +364,21 @@ const Deals = () => {
                   label: "Active",
                   count: counts.active,
                   badgeStyle:
-                    "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 font-semibold",
+                    "bg-success/15 text-success font-semibold",
                 },
                 {
                   key: "scheduled" as const,
                   label: "Scheduled",
                   count: counts.scheduled,
                   badgeStyle:
-                    "bg-amber-500/15 text-amber-600 dark:text-amber-400 font-semibold",
+                    "bg-warning/15 text-warning font-semibold",
                 },
                 {
                   key: "expired" as const,
                   label: "Expired",
                   count: counts.expired,
                   badgeStyle:
-                    "bg-rose-500/15 text-rose-600 dark:text-rose-400 font-semibold",
+                    "bg-destructive/15 text-destructive font-semibold",
                 },
                 {
                   key: "draft" as const,
@@ -604,7 +604,7 @@ const Deals = () => {
                                 {deal.code}
                               </span>
                             ) : (
-                              <span className="text-xs text-muted-foreground/60 font-mono">
+                              <span className="text-xs text-muted-foreground font-mono">
                                 —
                               </span>
                             )}

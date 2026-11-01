@@ -52,7 +52,7 @@ const CustomerDisplay = () => {
           <Flame className="h-20 w-20 mb-4 text-primary" />
           <h1 className="text-4xl font-bold mb-2 text-primary">Welcome to Ovenisto</h1>
           <p className="text-xl text-muted-foreground italic">&quot;Flame-Kissed Flavor&quot;</p>
-          <p className="text-sm text-muted-foreground/50 mt-8">{time.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</p>
+          <p className="text-sm text-muted-foreground mt-8">{time.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</p>
         </div>
       </div>
     );
@@ -113,7 +113,7 @@ const CustomerDisplay = () => {
           </div>
           <p className="italic">Thank you for choosing Ovenisto!</p>
         </div>
-        <div className="text-center py-2 text-xs text-muted-foreground/40">Powered by Ovenisto POS</div>
+        <div className="text-center py-2 text-xs text-muted-foreground/75">Powered by Ovenisto POS</div>
       </div>
     </div>
   );

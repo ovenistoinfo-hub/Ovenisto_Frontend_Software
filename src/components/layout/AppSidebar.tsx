@@ -152,7 +152,7 @@ export function AppSidebar() {
           if (visibleItems.length === 0) return null;
           return (
             <SidebarGroup key={section.label}>
-              {!collapsed && <SidebarGroupLabel className="text-[10px] uppercase tracking-wider text-muted-foreground/70 font-semibold">{section.label}</SidebarGroupLabel>}
+              {!collapsed && <SidebarGroupLabel className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">{section.label}</SidebarGroupLabel>}
               <SidebarGroupContent>
                 <SidebarMenu>
                   {visibleItems.map((item: any) =>

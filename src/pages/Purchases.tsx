@@ -1254,7 +1254,7 @@ const Purchases = () => {
                   {supplierItemsTotal > 0 && (
                     <div className="flex items-center justify-between text-sm">
                       <span className="text-muted-foreground">Supplier Items (Credit)</span>
-                      <span className="font-medium tabular-nums text-amber-600 dark:text-amber-400">{currency} {supplierItemsTotal.toLocaleString()}</span>
+                      <span className="font-medium tabular-nums text-warning">{currency} {supplierItemsTotal.toLocaleString()}</span>
                     </div>
                   )}
                   {nonSupplierItemsTotal > 0 && (
@@ -1329,7 +1329,7 @@ const Purchases = () => {
                         <div key="non-supplier" className="border p-3 rounded-lg bg-muted/40 space-y-2">
                           <div className="flex justify-between text-xs font-semibold text-muted-foreground uppercase">
                             <span>{b.supplierName}</span>
-                            <span className="text-emerald-600 dark:text-emerald-400 font-semibold">Fully Paid (Cash) ✓</span>
+                            <span className="text-success font-semibold">Fully Paid (Cash) ✓</span>
                           </div>
                           <div className="flex justify-between text-xs text-muted-foreground">
                             <span>Subtotal:</span>
@@ -1359,7 +1359,7 @@ const Purchases = () => {
                     return (
                       <div key={b.supplierId} className="border p-3 rounded-lg bg-muted/20 space-y-2.5">
                         <div className="flex justify-between text-xs font-semibold uppercase">
-                          <span className="text-amber-600 dark:text-amber-400">{b.supplierName}</span>
+                          <span className="text-warning">{b.supplierName}</span>
                           <span>Subtotal: {currency} {b.subtotal.toLocaleString()}</span>
                         </div>
                         
@@ -1418,7 +1418,7 @@ const Purchases = () => {
 
                         <div className="flex justify-between text-xs text-muted-foreground pt-1.5 border-t">
                           <span>Due to Vendor:</span>
-                          <span className={b.total - pay.paidAmount > 0 ? "font-bold text-red-600 dark:text-red-400" : "text-emerald-600 font-semibold"}>
+                          <span className={b.total - pay.paidAmount > 0 ? "font-bold text-destructive" : "text-success font-semibold"}>
                             {currency} {Math.max(0, b.total - pay.paidAmount).toLocaleString()}
                           </span>
                         </div>
@@ -1429,7 +1429,7 @@ const Purchases = () => {
                   {overallDue > 0 && (
                     <div className="flex justify-between text-sm pt-1.5 border-t">
                       <span className="font-semibold text-muted-foreground">Overall Due Udhaar:</span>
-                      <span className="font-bold text-red-600 dark:text-red-400">
+                      <span className="font-bold text-destructive">
                         {currency} {overallDue.toLocaleString()}
                       </span>
                     </div>
@@ -1501,7 +1501,7 @@ const Purchases = () => {
             </div>
             <div className="inline-flex items-center gap-1.5">
               <div className="w-36"><DatePicker value={dateFrom} onChange={handleDateFrom} placeholder="Start date" className="h-8 text-xs bg-background" /></div>
-              <span className="text-xs text-muted-foreground/60 font-medium px-0.5">to</span>
+              <span className="text-xs text-muted-foreground font-medium px-0.5">to</span>
               <div className="w-36"><DatePicker value={dateTo} onChange={handleDateTo} min={dateFrom || undefined} placeholder="End date" className="h-8 text-xs bg-background" /></div>
               {(dateFrom || dateTo) && (
                 <Button variant="ghost" size="sm" onClick={clearDates} className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-md" title="Clear date filter">
@@ -1553,12 +1553,12 @@ const Purchases = () => {
                         <TableCell className="font-medium">
                           {currency} {(p.total ?? 0).toLocaleString()}
                         </TableCell>
-                        <TableCell className="text-sm text-emerald-600 dark:text-emerald-400">
+                        <TableCell className="text-sm text-success">
                           {currency} {(p.paid ?? 0).toLocaleString()}
                         </TableCell>
                         <TableCell className="text-sm">
                           {(p.due ?? 0) > 0 ? (
-                            <span className="font-semibold text-red-600 dark:text-red-400">{currency} {(p.due ?? 0).toLocaleString()}</span>
+                            <span className="font-semibold text-destructive">{currency} {(p.due ?? 0).toLocaleString()}</span>
                           ) : (
                             <span className="text-muted-foreground">—</span>
                           )}
@@ -1583,7 +1583,7 @@ const Purchases = () => {
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                className="h-7 w-7 text-amber-600 hover:text-amber-700"
+                                className="h-7 w-7 text-warning hover:text-warning"
                                 onClick={() => { setPayingId(p.id); setPayDialogAmount(p.due ?? 0); setPayDialogNote(""); }}
                                 title="Record Payment"
                               >
@@ -1908,14 +1908,14 @@ const Purchases = () => {
                                 <TableCell className="text-right text-sm font-medium">
                                   {currency} {due.total.toLocaleString()}
                                 </TableCell>
-                                <TableCell className="text-right text-sm text-emerald-600 dark:text-emerald-400">
+                                <TableCell className="text-right text-sm text-success">
                                   {currency} {due.paid.toLocaleString()}
                                 </TableCell>
                                 <TableCell className="text-right text-sm">
                                   {due.due > 0 ? (
-                                    <span className="font-semibold text-red-600 dark:text-red-400">{currency} {due.due.toLocaleString()}</span>
+                                    <span className="font-semibold text-destructive">{currency} {due.due.toLocaleString()}</span>
                                   ) : (
-                                    <span className="text-emerald-600 dark:text-emerald-400 font-semibold">Fully Paid ✓</span>
+                                    <span className="text-success font-semibold">Fully Paid ✓</span>
                                   )}
                                 </TableCell>
                                 <TableCell>
@@ -1928,7 +1928,7 @@ const Purchases = () => {
                                     <Button
                                       variant="outline"
                                       size="sm"
-                                      className="h-7 text-xs text-amber-600 border-amber-600 hover:bg-amber-50"
+                                      className="h-7 text-xs text-warning border-warning hover:bg-warning"
                                       onClick={() => {
                                         setPayingId(sd.id);
                                         setPayDialogAmount(due.due);
@@ -1983,14 +1983,14 @@ const Purchases = () => {
                                 <TableCell className="text-sm text-muted-foreground">
                                   {new Date(ph.createdAt).toLocaleString()}
                                 </TableCell>
-                                <TableCell className="text-right font-medium text-emerald-600 dark:text-emerald-400">
+                                <TableCell className="text-right font-medium text-success">
                                   {currency} {ph.amount.toLocaleString()}
                                 </TableCell>
                                 <TableCell className="text-right">
                                   {ph.balanceAfter > 0 ? (
-                                    <span className="font-semibold text-red-600 dark:text-red-400">{currency} {ph.balanceAfter.toLocaleString()}</span>
+                                    <span className="font-semibold text-destructive">{currency} {ph.balanceAfter.toLocaleString()}</span>
                                   ) : (
-                                    <span className="text-emerald-600 dark:text-emerald-400 font-semibold">Fully Paid ✓</span>
+                                    <span className="text-success font-semibold">Fully Paid ✓</span>
                                   )}
                                 </TableCell>
                                 <TableCell className="text-sm text-muted-foreground">
@@ -2098,7 +2098,7 @@ const Purchases = () => {
         <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Wallet className="h-4 w-4 text-amber-600" />
+              <Wallet className="h-4 w-4 text-warning" />
               Record Vendor Payment
             </DialogTitle>
           </DialogHeader>
@@ -2141,7 +2141,7 @@ const Purchases = () => {
                       <span className="text-muted-foreground">
                         {activeDues.length === 1 ? activeDues[0].supplierName : "Outstanding Due"}
                       </span>
-                      <span className="font-bold text-red-600 dark:text-red-400">
+                      <span className="font-bold text-destructive">
                         {currency} {(activeDues.length === 1 ? activeDues[0].due : (p.due ?? 0)).toLocaleString()}
                       </span>
                     </div>

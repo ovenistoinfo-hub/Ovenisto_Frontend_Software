@@ -1218,3 +1218,22 @@ Production staff app = Railway service **Ovenisto_Software** (`main`, Railpack, 
 `https://ovenistosoftware-production.up.railway.app`; the Vercel deploy above is retired. `VITE_API_URL` is the production
 backend `/api` URL (build-time). Its origin must be in the production backend's `CORS_ORIGIN`. The production DB started
 empty, so the first login lands on a chain with no branches: create them in Outlets (phone: 11 digits, `0300-1234567`).
+
+## QA round 2026-10-28/30 (staff app side)
+- **`utils/deliveryPayment.ts` `getDeliveryPaymentMode`:** `Pending` / `Unpaid` (a website order not yet paid) is `cod`, matching the backend's
+  `computeOrderAmountToCollect`. Before, it fell through to `prepaid` and the Delivery board and assign dialog said "ONLINE PREPAID, 0 collection".
+- **Kitchen Panel shows item notes** (`KitchenItemEntry.notes`, red "Note: …" under the dish). Receipts: write `•`, not `&bull;`, inside JS strings in JSX.
+- **Dark theme `--destructive` is a light red** (`0 84% 60%` in `index.css`) because pages use `text-destructive` as text; don't lower its lightness.
+- **Declining a website booking** (Reservations "New website requests" card) asks for an optional reason via `window.prompt` and sends
+  `rejectionReason` with `status: cancelled`; the customer sees it. The card's note says the customer sees "Confirmed" or "Cancelled".
+- **The service worker caches the build:** after a deploy, unregister it and delete `caches` before judging what is live.
+- The QA recipe (staging flow, rider app on a phone, audits) is in the root guide's "QA round 2026-10-28/30" block.
+
+## QA round 2026-10-31 (staff app side)
+- **Every sidebar page needs a `breadcrumbConfig` entry in `AppHeader.tsx`**, or the header reads "Home > Page" (11 pages had none). The header's quick-action labels hide below `xl` and the user name below `lg`, because the header overflowed at ~800 px.
+- **My Portal (`EmployeePortal.tsx`):** a day with no published shift reads "Not scheduled" (a default off day still reads "Day Off"); the leave list defaults to the whole year, not "until today", so booked leave shows.
+- **Payroll:** a row paid through month end shows no "Next" period; "Next" starts the day after `latestPaidThrough`. Mark Paid pays with no confirmation step (left as is).
+- **Validation messages say what is wrong** (Expenses, Stock Adjustments: "greater than 0"); General settings blocks a blank business name or currency before saving.
+- **Production batch waste form** wraps (`flex-wrap`) so the Confirm button stays visible at ~800 px.
+- **There is no Stock Take page** (`/stock/stock-take` is a 404; its breadcrumb entry is stale).
+- Typecheck baseline is still 21 errors (`tsc -p tsconfig.app.json`), 101 tests.

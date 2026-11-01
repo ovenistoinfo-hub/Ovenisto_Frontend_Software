@@ -1982,7 +1982,7 @@ const DealForm = () => {
                 {comboRows.length === 0 ? (
                   <div className="text-center py-12 space-y-3 border-2 border-dashed border-border/60 rounded-xl bg-muted/10">
                     <div className="w-12 h-12 rounded-full bg-muted/60 flex items-center justify-center mx-auto">
-                      <Package className="h-5 w-5 text-muted-foreground/50" />
+                      <Package className="h-5 w-5 text-muted-foreground" />
                     </div>
                     <div>
                       <p className="text-sm font-semibold text-foreground">No items added yet</p>
@@ -2045,7 +2045,7 @@ const DealForm = () => {
                             </Select>
 
                             <div className="flex items-center gap-2 min-w-0">
-                              <span className="text-[10px] font-mono text-muted-foreground/60 shrink-0 w-4 text-right">{idx + 1}.</span>
+                              <span className="text-[10px] font-mono text-muted-foreground shrink-0 w-4 text-right">{idx + 1}.</span>
                               <Select
                                 value={row.itemId}
                                 onValueChange={(val) => updateComboItem(idx, val)}
@@ -2171,7 +2171,7 @@ const DealForm = () => {
                 {optionGroups.length === 0 ? (
                   <div className="text-center py-12 space-y-3 border-2 border-dashed border-border/60 rounded-xl bg-muted/10">
                     <div className="w-12 h-12 rounded-full bg-muted/60 flex items-center justify-center mx-auto">
-                      <Layers className="h-5 w-5 text-muted-foreground/50" />
+                      <Layers className="h-5 w-5 text-muted-foreground" />
                     </div>
                     <div>
                       <p className="text-sm font-semibold text-foreground">No selection steps created yet</p>
@@ -2326,7 +2326,7 @@ const DealForm = () => {
                                       </Select>
 
                                       <div className="flex items-center gap-2 min-w-0">
-                                        <span className="text-[10px] font-mono text-muted-foreground/60 shrink-0 w-4 text-right">{cIdx + 1}.</span>
+                                        <span className="text-[10px] font-mono text-muted-foreground shrink-0 w-4 text-right">{cIdx + 1}.</span>
                                         <Select
                                           value={choice.itemId}
                                           onValueChange={(val) => updateChoiceItem(setOptionGroups, group.id, cIdx, val)}
@@ -2459,7 +2459,7 @@ const DealForm = () => {
                               Recipe Cost
                             </Badge>
                           ) : (
-                            <Badge variant="outline" className="text-[11px] text-muted-foreground/60 px-1.5 py-0">
+                            <Badge variant="outline" className="text-[11px] text-muted-foreground px-1.5 py-0">
                               No Recipe
                             </Badge>
                           )}
@@ -2573,7 +2573,7 @@ const DealForm = () => {
                             </>
                           ) : (
                             <>
-                              <p className="text-xl font-semibold font-mono text-muted-foreground/40">—</p>
+                              <p className="text-xl font-semibold font-mono text-muted-foreground/75">—</p>
                               <p className="text-xs text-muted-foreground mt-0.5">
                                 {dealPrice > 0 ? "Add recipes for profit %" : "Enter deal price below"}
                               </p>
@@ -2600,7 +2600,7 @@ const DealForm = () => {
                             {optionComboTotals.maxCost > 0 ? (
                               <Badge variant="secondary" className="text-[11px] px-1.5 py-0">Recipe Cost</Badge>
                             ) : (
-                              <Badge variant="outline" className="text-[11px] text-muted-foreground/60 px-1.5 py-0">No Recipe</Badge>
+                              <Badge variant="outline" className="text-[11px] text-muted-foreground px-1.5 py-0">No Recipe</Badge>
                             )}
                           </div>
                           <div>
@@ -2727,7 +2727,7 @@ const DealForm = () => {
                               </>
                             ) : (
                               <>
-                                <p className="text-xl font-semibold font-mono text-muted-foreground/40">—</p>
+                                <p className="text-xl font-semibold font-mono text-muted-foreground/75">—</p>
                                 <p className="text-xs text-muted-foreground mt-0.5">
                                   {dealPrice > 0 ? "Add recipes for profit %" : "Enter deal price below"}
                                 </p>
@@ -2763,7 +2763,7 @@ const DealForm = () => {
                           className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs"
                         >
                           <span className="text-foreground/90 truncate">
-                            <span className="font-mono text-muted-foreground/60 mr-1.5">
+                            <span className="font-mono text-muted-foreground mr-1.5">
                               #{step.groupIndex + 1}
                             </span>
                             {group ? groupLabel(group) : `Step ${step.groupIndex + 1}`}
@@ -3118,7 +3118,7 @@ const DealForm = () => {
 
                                 {/* Item select */}
                                 <div className="flex items-center gap-2 min-w-0">
-                                  <span className="text-[10px] font-mono text-muted-foreground/60 shrink-0 w-4 text-right">{idx + 1}.</span>
+                                  <span className="text-[10px] font-mono text-muted-foreground shrink-0 w-4 text-right">{idx + 1}.</span>
                                   <Select
                                     value={row.itemId}
                                     onValueChange={(val) => updateScopeRowItem(idx, val)}
@@ -3212,7 +3212,7 @@ const DealForm = () => {
                 {discountImpact.itemCount === 0 ? (
                   <div className="text-center py-10 space-y-2 border-2 border-dashed border-border/60 rounded-xl bg-muted/10">
                     <div className="w-12 h-12 rounded-full bg-muted/60 flex items-center justify-center mx-auto">
-                      <Percent className="h-5 w-5 text-muted-foreground/50" />
+                      <Percent className="h-5 w-5 text-muted-foreground" />
                     </div>
                     <p className="text-sm font-semibold text-foreground">Nothing in scope yet</p>
                     <p className="text-xs text-muted-foreground">
@@ -3235,7 +3235,7 @@ const DealForm = () => {
                         {discountImpact.hasCost ? (
                           <Badge variant="secondary" className="text-[11px] px-1.5 py-0">Recipe Cost</Badge>
                         ) : (
-                          <Badge variant="outline" className="text-[11px] text-muted-foreground/60 px-1.5 py-0">No Recipe</Badge>
+                          <Badge variant="outline" className="text-[11px] text-muted-foreground px-1.5 py-0">No Recipe</Badge>
                         )}
                       </div>
                       <div>
@@ -3355,7 +3355,7 @@ const DealForm = () => {
                           </>
                         ) : (
                           <>
-                            <p className="text-xl font-semibold font-mono text-muted-foreground/40">—</p>
+                            <p className="text-xl font-semibold font-mono text-muted-foreground/75">—</p>
                             <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">
                               Set recipes in Menu Items for live margin
                             </p>
@@ -3645,7 +3645,7 @@ const DealForm = () => {
 
                                 {/* Item select */}
                                 <div className="flex items-center gap-2 min-w-0">
-                                  <span className="text-[10px] font-mono text-muted-foreground/60 shrink-0 w-4 text-right">
+                                  <span className="text-[10px] font-mono text-muted-foreground shrink-0 w-4 text-right">
                                     {idx + 1}.
                                   </span>
                                   <Select

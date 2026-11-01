@@ -27,8 +27,8 @@ function expiryColor(effectiveExpiry: string | null): string {
   const diffMs = new Date(effectiveExpiry).getTime() - Date.now();
   const diffH = diffMs / (1000 * 60 * 60);
   if (diffMs < 0) return 'text-destructive font-semibold';
-  if (diffH < 2) return 'text-orange-500 font-semibold';
-  if (diffH < 6) return 'text-yellow-600';
+  if (diffH < 2) return 'text-primary font-semibold';
+  if (diffH < 6) return 'text-warning';
   return 'text-success';
 }
 

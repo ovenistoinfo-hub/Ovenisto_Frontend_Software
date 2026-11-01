@@ -1049,7 +1049,7 @@ const FoodMenuForm = () => {
                                     {(row.costs[key] || 0) > 0
                                       ? `Rs.${Math.round(row.costs[key]).toLocaleString()}`
                                       : (row.quantities[key] || 0) > 0 && row.ingredientId
-                                        ? <span className="text-muted-foreground/60 text-xs" title="Ingredient purchase price is not set">Rs.0</span>
+                                        ? <span className="text-muted-foreground text-xs" title="Ingredient purchase price is not set">Rs.0</span>
                                         : "—"}
                                   </TableCell>
                                 </React.Fragment>
@@ -1060,7 +1060,7 @@ const FoodMenuForm = () => {
                                 {(row.costs["base"] || 0) > 0
                                   ? `Rs.${Math.round(row.costs["base"]).toLocaleString()}`
                                   : (row.quantities["base"] || 0) > 0 && row.ingredientId
-                                    ? <span className="text-muted-foreground/60 text-xs" title="Ingredient purchase price is not set">Rs.0</span>
+                                    ? <span className="text-muted-foreground text-xs" title="Ingredient purchase price is not set">Rs.0</span>
                                     : "—"}
                               </TableCell>
                             )}
@@ -1275,7 +1275,7 @@ const FoodMenuForm = () => {
                                             {(row.costs[key] || 0) > 0
                                               ? `Rs.${Math.round(row.costs[key]).toLocaleString()}`
                                               : (row.quantities[key] || 0) > 0 && row.ingredientId
-                                                ? <span className="text-muted-foreground/60 text-xs" title="Ingredient purchase price is not set">Rs.0</span>
+                                                ? <span className="text-muted-foreground text-xs" title="Ingredient purchase price is not set">Rs.0</span>
                                                 : "—"}
                                           </TableCell>
                                           <TableCell>
@@ -1306,7 +1306,7 @@ const FoodMenuForm = () => {
                                             {(row.costs[key] || 0) > 0
                                               ? `Rs.${Math.round(row.costs[key]).toLocaleString()}`
                                               : (row.quantities[key] || 0) > 0 && row.ingredientId
-                                                ? <span className="text-muted-foreground/60 text-xs" title="Ingredient purchase price is not set">Rs.0</span>
+                                                ? <span className="text-muted-foreground text-xs" title="Ingredient purchase price is not set">Rs.0</span>
                                                 : "—"}
                                           </TableCell>
                                           <TableCell>

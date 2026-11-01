@@ -1126,7 +1126,7 @@ const OrderStatusBoard = () => {
         ) : activeStatusOrders.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-center p-8">
             <div className="h-16 w-16 rounded-2xl bg-muted/40 flex items-center justify-center mb-3 border border-border/60">
-              <ShoppingBag className="h-8 w-8 text-muted-foreground/40" />
+              <ShoppingBag className="h-8 w-8 text-muted-foreground/75" />
             </div>
             <h2 className="text-base font-extrabold text-foreground mb-1">No Orders Found</h2>
             <p className="text-xs text-muted-foreground max-w-sm">
@@ -1173,7 +1173,7 @@ const OrderStatusBoard = () => {
                     {colOrders.length === 0 ? (
                       <div className="h-40 flex flex-col items-center justify-center text-center p-4 border border-dashed border-border/50 rounded-xl">
                         <p className="text-xs font-bold text-muted-foreground">No {col.title} orders</p>
-                        <p className="text-[10px] text-muted-foreground/60">in {activeStatus} state</p>
+                        <p className="text-[10px] text-muted-foreground">in {activeStatus} state</p>
                       </div>
                     ) : (
                       colOrders.map((order) => renderOrderCard(order))
@@ -1287,7 +1287,7 @@ const OrderStatusBoard = () => {
                               href={orderMapsUrl({ lat: selectedOrder.deliveryLat, lng: selectedOrder.deliveryLng, address: selectedOrder.deliveryAddress })!}
                               target="_blank"
                               rel="noreferrer"
-                              className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-400 hover:underline">
+                              className="inline-flex items-center gap-1 text-[11px] font-bold text-info hover:underline">
                               <Navigation className="h-3 w-3" /> Open in Maps <ArrowUpRight className="h-3 w-3" />
                             </a>
                             {hasLivePoint({ lat: selectedOrder.deliveryLat, lng: selectedOrder.deliveryLng }) && (
@@ -1365,8 +1365,8 @@ const OrderStatusBoard = () => {
                                         </span>
                                       </TableCell>
                                       <TableCell className="text-xs font-medium text-center py-1.5">{sub.qty}</TableCell>
-                                      <TableCell className="text-xs font-mono text-right py-1.5 text-muted-foreground/60">—</TableCell>
-                                      <TableCell className="text-xs font-mono text-right py-1.5 text-muted-foreground/60">—</TableCell>
+                                      <TableCell className="text-xs font-mono text-right py-1.5 text-muted-foreground">—</TableCell>
+                                      <TableCell className="text-xs font-mono text-right py-1.5 text-muted-foreground">—</TableCell>
                                     </TableRow>
                                   );
                                 })}

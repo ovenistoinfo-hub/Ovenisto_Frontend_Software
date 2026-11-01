@@ -69,7 +69,7 @@ const DEFAULT_SHIFT_CONFIG: ShiftConfig = {
 
 const LEAVE_TYPE_COLORS: Record<string, string> = {
   sick:      "bg-destructive/10 text-destructive",
-  casual:    "bg-blue-100 text-blue-700",
+  casual:    "bg-info text-info",
   annual:    "bg-success/10 text-success",
   emergency: "bg-warning/10 text-warning",
 };
@@ -81,12 +81,12 @@ const LEAVE_STATUS_COLORS: Record<string, string> = {
 const ATT_STATUS_COLORS: Record<string, string> = {
   present: "bg-success/10 text-success",
   late:    "bg-warning/10 text-warning",
-  halfday: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-200",
+  halfday: "bg-primary text-primary",
   absent:  "bg-destructive/10 text-destructive",
   off:     "bg-muted text-muted-foreground",
-  leave:   "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-200",
-  upcoming: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-200",
-  "waiting for clock in": "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-200",
+  leave:   "bg-success text-success",
+  upcoming: "bg-info text-info",
+  "waiting for clock in": "bg-warning text-warning",
 };
 
 function getWeekStart(offset = 0): string {
@@ -535,27 +535,27 @@ export default function AttendancePage() {
   const weekSections = [
     {
       key: "prev" as const, label: "Last Week", weekStart: prevWeekStart, schedules: prevSchedules,
-      headerBg:   "bg-orange-100 dark:bg-orange-900/30 text-orange-900 dark:text-orange-200",
-      cellBg:     "bg-orange-50/40 dark:bg-orange-950/10",
-      dot:        "bg-orange-500",
-      tabActive:  "bg-orange-50 border-orange-300 dark:bg-orange-950/30 dark:border-orange-800",
-      tabText:    "text-orange-900 dark:text-orange-200",
+      headerBg:   "bg-primary text-primary",
+      cellBg:     "bg-primary/40",
+      dot:        "bg-primary",
+      tabActive:  "bg-primary border-primary",
+      tabText:    "text-primary",
     },
     {
       key: "current" as const, label: "Current Week", weekStart: currentWeekStart, schedules: currSchedules,
-      headerBg:   "bg-green-100 dark:bg-green-900/30 text-green-900 dark:text-green-200",
-      cellBg:     "bg-green-50/40 dark:bg-green-950/10",
-      dot:        "bg-green-500",
-      tabActive:  "bg-green-50 border-green-300 dark:bg-green-950/30 dark:border-green-800",
-      tabText:    "text-green-900 dark:text-green-200",
+      headerBg:   "bg-success text-success",
+      cellBg:     "bg-success/40",
+      dot:        "bg-success",
+      tabActive:  "bg-success border-success",
+      tabText:    "text-success",
     },
     {
       key: "next" as const, label: "Next Week", weekStart: nextWeekStart, schedules: nextSchedules,
-      headerBg:   "bg-blue-100 dark:bg-blue-900/30 text-blue-900 dark:text-blue-200",
-      cellBg:     "bg-blue-50/40 dark:bg-blue-950/10",
-      dot:        "bg-blue-500",
-      tabActive:  "bg-blue-50 border-blue-300 dark:bg-blue-950/30 dark:border-blue-800",
-      tabText:    "text-blue-900 dark:text-blue-200",
+      headerBg:   "bg-info text-info",
+      cellBg:     "bg-info/40",
+      dot:        "bg-info",
+      tabActive:  "bg-info border-info",
+      tabText:    "text-info",
     },
   ];
   const activeSection = weekSections.find(s => s.key === schedWeekView) ?? weekSections[1];
@@ -625,7 +625,7 @@ export default function AttendancePage() {
             {[
               { label: "Present",      value: present, color: "text-success", statusKey: "present" },
               { label: "Late",         value: late,    color: "text-warning", statusKey: "late" },
-              { label: "Half Day",     value: halfday, color: "text-orange-500", statusKey: "halfday" },
+              { label: "Half Day",     value: halfday, color: "text-primary", statusKey: "halfday" },
               { label: "Absent",       value: absent,  color: "text-destructive", statusKey: "absent" },
               { label: "Not Recorded", value: notRecorded, color: "text-muted-foreground", statusKey: "not-recorded" },
             ].map(s => (
@@ -646,7 +646,7 @@ export default function AttendancePage() {
           </div>
 
           <Card className="shadow-sm">
-            <CardContent className="p-0">
+            <CardContent className="p-0 overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow className="bg-muted/50 hover:bg-muted/50">
@@ -757,7 +757,7 @@ export default function AttendancePage() {
 
           {/* Clean table */}
           <Card className="shadow-sm">
-            <CardContent className="p-0">
+            <CardContent className="p-0 overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow className="bg-muted/50 hover:bg-muted/50">
@@ -843,7 +843,7 @@ export default function AttendancePage() {
 
           {showManageLeaves && (
             <Card className="shadow-sm border-primary/30">
-              <CardContent className="p-0">
+              <CardContent className="p-0 overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow className="bg-muted/50 hover:bg-muted/50">

@@ -217,7 +217,7 @@ const Suppliers = () => {
               <div className="rounded-lg border overflow-auto max-h-[calc(100vh-300px)]">
                 <Table>
                   <TableHeader className="sticky top-0 z-10 bg-card"><TableRow className="bg-muted/50 hover:bg-muted/50"><TableHead>SN</TableHead><TableHead>Name</TableHead><TableHead>Company</TableHead><TableHead>Phone</TableHead><TableHead>Total Purchases</TableHead><TableHead>Outstanding Due</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader>
-                  <TableBody>{paged.map((s, i) => (<TableRow key={s.id} className="hover:bg-muted/30 transition-colors"><TableCell>{(page-1)*10+i+1}</TableCell><TableCell className="font-medium">{s.name}</TableCell><TableCell>{s.company}</TableCell><TableCell>{s.phone}</TableCell><TableCell>{currency} {(s.totalPurchases ?? 0).toLocaleString()}</TableCell><TableCell className={s.totalDue > 0 ? "font-semibold text-red-600 dark:text-red-400" : "text-emerald-600 font-medium"}>{currency} {(s.totalDue ?? 0).toLocaleString()}</TableCell><TableCell><div className="flex gap-1">
+                  <TableBody>{paged.map((s, i) => (<TableRow key={s.id} className="hover:bg-muted/30 transition-colors"><TableCell>{(page-1)*10+i+1}</TableCell><TableCell className="font-medium">{s.name}</TableCell><TableCell>{s.company}</TableCell><TableCell>{s.phone}</TableCell><TableCell>{currency} {(s.totalPurchases ?? 0).toLocaleString()}</TableCell><TableCell className={s.totalDue > 0 ? "font-semibold text-destructive" : "text-success font-medium"}>{currency} {(s.totalDue ?? 0).toLocaleString()}</TableCell><TableCell><div className="flex gap-1">
                     <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setShowDetail(s)}><Eye className="h-3 w-3" /></Button>
                     {canManage && <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(s)}><Pencil className="h-3 w-3" /></Button>}
                     {canManage && <AlertDialog><AlertDialogTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"><Trash2 className="h-4 w-4" /></Button></AlertDialogTrigger><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Delete {s.name}?</AlertDialogTitle><AlertDialogDescription>This action cannot be undone.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={() => handleDelete(s.id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Delete</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>}
@@ -264,13 +264,13 @@ const Suppliers = () => {
                 </div>
                 <div className="rounded-lg border p-3 text-center">
                   <p className="text-xs text-muted-foreground mb-1">Total Paid</p>
-                  <p className="text-base font-bold text-emerald-600 dark:text-emerald-400">
+                  <p className="text-base font-bold text-success">
                     {currency} {((showDetail.totalPurchases ?? 0) - (showDetail.totalDue ?? 0)).toLocaleString()}
                   </p>
                 </div>
-                <div className="rounded-lg border p-3 text-center bg-red-50 dark:bg-red-950/30">
+                <div className="rounded-lg border p-3 text-center bg-destructive">
                   <p className="text-xs text-muted-foreground mb-1">Outstanding Due</p>
-                  <p className="text-base font-bold text-red-600 dark:text-red-400">
+                  <p className="text-base font-bold text-destructive">
                     {currency} {(showDetail.totalDue ?? 0).toLocaleString()}
                   </p>
                 </div>
@@ -349,22 +349,22 @@ const Suppliers = () => {
                           <div className="flex items-center justify-between">
                             <span className="text-sm font-medium">{p.invoiceNumber || `Purchase #${p.id.slice(0, 8)}`}</span>
                             <Badge variant="secondary" className={
-                              p.status === 'paid' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' :
-                              p.status === 'unpaid' ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' :
-                              'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
+                              p.status === 'paid' ? 'bg-success text-success' :
+                              p.status === 'unpaid' ? 'bg-destructive text-destructive' :
+                              'bg-warning text-warning'
                             }>{p.status}</Badge>
                           </div>
                           <div className="grid grid-cols-3 gap-2 text-xs">
                             <div><span className="text-muted-foreground">Total: </span><span className="font-medium">{currency} {p.total.toLocaleString()}</span></div>
-                            <div><span className="text-muted-foreground">Paid: </span><span className="font-medium text-emerald-600 dark:text-emerald-400">{currency} {p.paid.toLocaleString()}</span></div>
-                            <div><span className="text-muted-foreground">Due: </span><span className={p.due > 0 ? 'font-bold text-red-600 dark:text-red-400' : 'text-muted-foreground'}>{p.due > 0 ? `${currency} ${p.due.toLocaleString()}` : '—'}</span></div>
+                            <div><span className="text-muted-foreground">Paid: </span><span className="font-medium text-success">{currency} {p.paid.toLocaleString()}</span></div>
+                            <div><span className="text-muted-foreground">Due: </span><span className={p.due > 0 ? 'font-bold text-destructive' : 'text-muted-foreground'}>{p.due > 0 ? `${currency} ${p.due.toLocaleString()}` : '—'}</span></div>
                           </div>
                           {p.paymentHistory.length > 0 && (
                             <div className="pt-1.5 border-t space-y-1">
                               {p.paymentHistory.map(ph => (
                                 <div key={ph.id} className="flex justify-between text-xs text-muted-foreground">
                                   <span>{new Date(ph.createdAt).toLocaleDateString()} — {ph.note || 'Payment'}</span>
-                                  <span className="text-emerald-600 dark:text-emerald-400 font-medium">+{currency} {ph.amount.toLocaleString()}</span>
+                                  <span className="text-success font-medium">+{currency} {ph.amount.toLocaleString()}</span>
                                 </div>
                               ))}
                             </div>

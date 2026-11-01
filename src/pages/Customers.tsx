@@ -205,7 +205,7 @@ const Customers = () => {
             </div>
             <div className="inline-flex items-center gap-1.5">
               <div className="w-36"><DatePicker value={rangeFrom} onChange={handleRangeFrom} placeholder="Start date" className="h-8 text-xs bg-background" /></div>
-              <span className="text-xs text-muted-foreground/60 font-medium px-0.5">to</span>
+              <span className="text-xs text-muted-foreground font-medium px-0.5">to</span>
               <div className="w-36"><DatePicker value={rangeTo} onChange={handleRangeTo} min={rangeFrom || undefined} placeholder="End date" className="h-8 text-xs bg-background" /></div>
             </div>
             {periodActive && (
