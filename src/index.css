@@ -122,6 +122,12 @@
     @apply bg-background text-foreground font-sans;
   }
 
+  /* Right-aligned table cells hold figures and money: never split "Rs." from its number. */
+  td.text-right,
+  th.text-right {
+    white-space: nowrap;
+  }
+
   /* Webkit scrollbar styling */
   *::-webkit-scrollbar {
     width: 8px;
