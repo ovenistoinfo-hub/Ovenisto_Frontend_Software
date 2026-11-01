@@ -747,10 +747,10 @@ const OrderStatusBoard = () => {
           {/* Card Main Info */}
           <div className="p-3.5 space-y-2.5">
             {/* Customer & Staff */}
-            <div className="flex items-center justify-between text-xs">
-              <div className="flex items-center gap-1.5 truncate">
+            <div className="flex flex-wrap items-center justify-between text-xs gap-x-2 gap-y-1">
+              <div className="flex items-center gap-1.5 min-w-0">
                 <User className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                <span className="font-bold text-foreground truncate">{order.customer}</span>
+                <span className="font-bold text-foreground break-words leading-tight min-w-0">{order.customer}</span>
               </div>
               {order.staff && (
                 <span className="text-[10px] text-muted-foreground bg-muted/40 px-2 py-0.5 rounded-full shrink-0 border border-border/30">
@@ -769,15 +769,15 @@ const OrderStatusBoard = () => {
                       className="rounded-xl bg-card border border-primary/30 p-2.5 space-y-2 shadow-2xs hover:border-primary/50 transition-all"
                     >
                       {/* Deal Header: Deal Tag + Deal Name */}
-                      <div className="flex items-center justify-between text-xs gap-2 pb-1 border-b border-primary/20">
-                        <div className="flex items-center gap-1.5 truncate min-w-0">
+                      <div className="flex items-start justify-between text-xs gap-2 pb-1 border-b border-primary/20">
+                        <div className="flex items-start gap-1.5 min-w-0">
                           <Badge
                             variant="outline"
                             className="text-[9px] font-semibold text-primary border-primary/30 bg-primary/10 px-1.5 py-0 h-4 uppercase tracking-wider shrink-0 gap-0.5"
                           >
                             <Gift className="h-2.5 w-2.5" /> Deal
                           </Badge>
-                          <span className="font-semibold text-xs text-foreground truncate">{row.dealName}</span>
+                          <span className="font-semibold text-xs text-foreground break-words leading-tight min-w-0">{row.dealName}</span>
                         </div>
                         <span className="text-[10px] font-mono text-muted-foreground shrink-0">
                           {row.items.length} items
@@ -793,13 +793,13 @@ const OrderStatusBoard = () => {
                           return (
                             <div
                               key={subIdx}
-                              className="flex items-center justify-between text-xs gap-2 p-1.5 rounded-lg bg-background/60 dark:bg-muted/30 border border-border/40 hover:border-primary/30 transition-all"
+                              className="flex flex-wrap items-center justify-between text-xs gap-x-2 gap-y-1 p-1.5 rounded-lg bg-background/60 dark:bg-muted/30 border border-border/40 hover:border-primary/30 transition-all"
                             >
                               {/* Left: Sub-item Status Badge + Qty + Name */}
-                              <div className="flex items-center gap-1.5 truncate min-w-0">
+                              <div className="flex items-center gap-1.5 min-w-0 flex-1 basis-36">
                                 <ItemStatusPill status={subStatus} />
                                 <span className="font-bold text-xs text-foreground shrink-0">{subItem.qty}×</span>
-                                <span className="truncate font-semibold text-foreground text-xs">{subItem.name}</span>
+                                <span className="font-semibold text-foreground text-xs break-words leading-tight min-w-0">{subItem.name}</span>
                               </div>
 
                               {/* Right side: Individual Countdown Timer Pill for this deal dish */}
@@ -819,12 +819,12 @@ const OrderStatusBoard = () => {
                 const itemCook = row.cookInfo;
 
                 return (
-                  <div key={i} className="flex items-center justify-between text-xs gap-2 p-1.5 rounded-lg bg-card border border-border/40 hover:border-primary/30 transition-all">
+                  <div key={i} className="flex flex-wrap items-center justify-between text-xs gap-x-2 gap-y-1 p-1.5 rounded-lg bg-card border border-border/40 hover:border-primary/30 transition-all">
                     {/* Left: Status Badge + Qty + Name */}
-                    <div className="flex items-center gap-1.5 truncate min-w-0">
+                    <div className="flex items-center gap-1.5 min-w-0 flex-1 basis-36">
                       <ItemStatusPill status={itemStatus} />
                       <span className="font-bold text-xs text-foreground shrink-0">{item.qty}×</span>
-                      <span className="truncate font-semibold text-foreground text-xs">{item.name}</span>
+                      <span className="font-semibold text-foreground text-xs break-words leading-tight min-w-0">{item.name}</span>
                     </div>
 
                     {/* Right side: Countdown Timer */}

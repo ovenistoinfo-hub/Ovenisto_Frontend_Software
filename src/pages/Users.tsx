@@ -421,7 +421,7 @@ const Users = () => {
                       <TableCell className="text-xs font-mono text-muted-foreground">{u.email}</TableCell>
                       <TableCell className="text-xs font-mono text-muted-foreground">{u.phone || "—"}</TableCell>
                       <TableCell>
-                        <Badge variant="outline" className={cn("text-[11px] font-semibold px-2 py-0.5", roleColors[u.role] || "")}>
+                        <Badge variant="outline" className={cn("text-[11px] font-semibold px-2 py-0.5 whitespace-nowrap", roleColors[u.role] || "")}>
                           {u.role}
                         </Badge>
                       </TableCell>

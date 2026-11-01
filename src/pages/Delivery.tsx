@@ -266,11 +266,11 @@ const Delivery = () => {
                         onClick={() => setDetailItem({ order: o, assignment: null })}>
                         <div className="absolute top-0 left-0 right-0 h-1 bg-warning" />
                         <CardContent className="p-4 space-y-3">
-                          <div className="flex items-center justify-between">
+                          <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1.5">
                             <div className="flex items-center gap-2">
-                              <span className="font-bold text-base text-foreground group-hover:text-warning transition-colors whitespace-nowrap">#{o.orderNumber}</span>
+                              <span className="font-bold text-base text-foreground group-hover:text-primary transition-colors whitespace-nowrap">#{o.orderNumber}</span>
                             </div>
-                            <div className="flex items-center gap-1.5">
+                            <div className="flex flex-wrap items-center gap-1.5">
                               <KitchenStatusBadge status={(o as any).status} />
                               <Badge variant="outline" className="bg-warning/10 text-warning border-warning/30 font-bold">
                                 Unassigned
@@ -281,7 +281,7 @@ const Delivery = () => {
                           <div className="space-y-1.5 text-xs">
                             <p className="font-semibold text-sm text-foreground">{o.customerName || "Walk-in Guest"}</p>
                             <p className="text-muted-foreground flex items-center gap-1.5">
-                              <MapPin className="h-3.5 w-3.5 text-warning shrink-0" />
+                              <MapPin className="h-3.5 w-3.5 text-primary shrink-0" />
                               <span className="truncate">{o.deliveryAddress || "No address provided"}</span>
                             </p>
                             <p className="text-muted-foreground flex items-center gap-1.5">
@@ -290,7 +290,7 @@ const Delivery = () => {
                             </p>
                             <div className="pt-1 flex items-center justify-between border-t border-border/50 mt-2">
                               <span className="text-xs text-muted-foreground">Order Total</span>
-                              <span className="font-bold text-base text-warning">{currency} {o.total?.toLocaleString()}</span>
+                              <span className="font-bold text-base text-foreground">{currency} {o.total?.toLocaleString()}</span>
                             </div>
 
                             <PaymentBadge
@@ -303,7 +303,7 @@ const Delivery = () => {
 
                           <Button
                             size="sm"
-                            className="w-full bg-warning hover:bg-warning text-warning-foreground font-bold gap-1.5 shadow-sm"
+                            className="w-full font-bold gap-1.5 shadow-sm"
                             onClick={e => { e.stopPropagation(); openAssignDialog(o.id); }}>
                             <Bike className="h-4 w-4" />
                             Assign Rider
@@ -328,12 +328,12 @@ const Delivery = () => {
                       const statusInfo = STATUS_CONFIG[a.status] || { label: a.status, class: "bg-muted text-muted-foreground" };
                       return (
                         <Card key={a.id}
-                          className="shadow-sm border-border/80 bg-card hover:border-warning/50 transition-all cursor-pointer group"
+                          className="shadow-sm border-border/80 bg-card hover:border-primary/50 transition-all cursor-pointer group"
                           onClick={() => setDetailItem({ order: a.order as unknown as PendingDeliveryOrder, assignment: a })}>
                           <CardContent className="p-4 space-y-3">
-                            <div className="flex items-center justify-between">
-                              <span className="font-bold text-base group-hover:text-warning transition-colors whitespace-nowrap">#{a.order?.orderNumber}</span>
-                              <div className="flex items-center gap-1.5">
+                            <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1.5">
+                              <span className="font-bold text-base group-hover:text-primary transition-colors whitespace-nowrap">#{a.order?.orderNumber}</span>
+                              <div className="flex flex-wrap items-center gap-1.5">
                                 <KitchenStatusBadge status={(a.order as any)?.status} />
                                 <Badge variant="outline" className={cn("font-bold text-xs", statusInfo.class)}>
                                   {statusInfo.label}
@@ -344,7 +344,7 @@ const Delivery = () => {
                             <div className="space-y-1.5 text-xs">
                               <p className="font-semibold text-sm">{a.order?.customerName || "Walk-in Guest"}</p>
                               <p className="text-muted-foreground flex items-center gap-1.5">
-                                <MapPin className="h-3.5 w-3.5 text-warning shrink-0" />
+                                <MapPin className="h-3.5 w-3.5 text-primary shrink-0" />
                                 <span className="truncate">{a.customerAddress || "—"}</span>
                               </p>
                               <p className="text-muted-foreground flex items-center gap-1.5">
@@ -576,7 +576,7 @@ const Delivery = () => {
           <DialogFooter className="gap-2 sm:gap-0">
             <Button variant="outline" onClick={() => setShowAssign(null)}>Cancel</Button>
             <Button
-              className="bg-warning hover:bg-warning text-warning-foreground font-bold gap-1.5"
+              className="font-bold gap-1.5"
               disabled={!selectedRider || assigning}
               onClick={handleAssign}>
               {assigning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Bike className="h-4 w-4" />}
@@ -711,7 +711,7 @@ const Delivery = () => {
           <DialogFooter className="gap-2">
             {!detailItem?.assignment && detailItem?.order && (
               <Button
-                className="bg-warning hover:bg-warning text-warning-foreground font-bold gap-1.5"
+                className="font-bold gap-1.5"
                 onClick={() => {
                   const orderId = detailItem.order!.id;
                   setDetailItem(null);
