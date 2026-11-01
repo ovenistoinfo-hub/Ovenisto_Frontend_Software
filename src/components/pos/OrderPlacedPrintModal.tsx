@@ -429,12 +429,12 @@ export const OrderPlacedPrintModal: React.FC<OrderPlacedPrintModalProps> = ({
               <button
                 type="button"
                 onClick={() => setPreviewMode("both")}
-                className="group relative flex flex-col items-center justify-center p-4 py-5 rounded-2xl border border-border/60 bg-muted/20 hover:bg-purple-500/10 hover:border-purple-500/40 text-center transition-all duration-200 cursor-pointer active:scale-[0.97] shadow-xs"
+                className="group relative flex flex-col items-center justify-center p-4 py-5 rounded-2xl border border-border/60 bg-muted/20 hover:bg-primary/10 hover:border-primary/40 text-center transition-all duration-200 cursor-pointer active:scale-[0.97] shadow-xs"
               >
-                <div className="h-12 w-12 rounded-full bg-purple-500/10 border border-purple-500/30 flex items-center justify-center text-purple-500 mb-3 group-hover:scale-110 group-hover:bg-purple-500/20 transition-all">
+                <div className="h-12 w-12 rounded-full bg-primary/10 border border-primary/30 flex items-center justify-center text-primary mb-3 group-hover:scale-110 group-hover:bg-primary/20 transition-all">
                   <ScrollText className="h-6 w-6" />
                 </div>
-                <span className="text-xs sm:text-sm font-bold text-foreground group-hover:text-purple-500 transition-colors">
+                <span className="text-xs sm:text-sm font-bold text-foreground group-hover:text-primary transition-colors">
                   Print KOT + Bill
                 </span>
               </button>
