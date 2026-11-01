@@ -422,7 +422,7 @@ const Delivery = () => {
                 Live Rider Fleet & Cash Collection Status
               </CardTitle>
             </CardHeader>
-            <CardContent className="p-0">
+            <CardContent className="p-0 overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow className="bg-muted/40 hover:bg-muted/40 text-xs uppercase font-bold">
