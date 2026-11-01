@@ -1156,6 +1156,19 @@ Orders placed on the public website arrive as Delivery / Take Away orders with
   refuses other links), "Show on the website". Cards have Edit / Hide / Delete (AlertDialog). Service:
   `siteContent.service.ts` `kitchenPostService`. The website shows them at `/kitchen` and on Home.
 
+## Theme, shared UI and responsive audit (2026-11-01, staff app)
+Cream/terracotta theme, light and dark, applied to every page (commits on `develop`). Rules to keep:
+- **Tokens only.** Colours are HSL triplets in `src/index.css`; a grep for `(text|bg|border)-(purple|amber|emerald|zinc|…)-NNN` in `src/pages` should stay at zero (the receipt paper in `OrderPlacedPrintModal` is the one deliberate exception: receipts print white).
+  `--accent` is a pale tint, so **never use `text-accent`** (invisible); use `text-primary`. Status colours stay separate from the palette: light `--warning` is dark amber (`30 92% 30%`, white text), dark `--warning-foreground` is dark brown, so amber buttons use `text-warning-foreground`, never `text-black`. Light `--destructive` is `0 72% 46%`; dark stays the light red `0 84% 60%`.
+- **The look lives in the shared primitives, not in pages:** `ui/card` (rounded-xl, layered shadow, `CardTitle` is `text-lg`), `ui/table` (tinted thead, small uppercase headers, `py-3.5` cells), `ui/page-header`, `ui/dialog` + `alert-dialog` (`w-[calc(100%-1.5rem)]`, `max-h-[calc(100dvh-1.5rem)]`, scrolls inside; a tall form used to run off a phone), `date-picker`/`time-picker` triggers (`text-sm`, same as inputs). Don't restyle these per page.
+- **Stat card pattern** (Users, Delivery): neutral `Card`, uppercase `text-xs` label, `text-3xl font-semibold tabular-nums` figure, muted icon tile; colour only where it means something (green for money in). No `font-black`/`font-extrabold` (bulk-replaced with `font-bold`/`font-semibold` on every page), no faded background icons.
+- **Responsive audit traps:**
+  - `AppLayout`'s `<main overflow-auto>` scrolls sideways by itself, so `documentElement.scrollWidth` hides overflow. Measure `main.scrollWidth - main.clientWidth`.
+  - A table inside `<CardContent className="p-0">` needs `overflow-x-auto` on that card (the Delivery rider fleet table and three Attendance tables lacked it).
+  - Hidden `Tabs` panels aren't rendered, so an audit must click each tab (a synthetic `pointerdown/mousedown/mouseup/click` sequence works in an iframe).
+  - A contrast walker in a hidden iframe reports false 1.2–1.6:1 hits (sidebar, tables) right after toggling `.dark`; confirm in the real pane before "fixing".
+  - The browser pane is ~430 px wide: judge phone layouts there, not desktop.
+
 ## MCP Tools: code-review-graph
 
 **IMPORTANT: This project has a knowledge graph. ALWAYS use the
