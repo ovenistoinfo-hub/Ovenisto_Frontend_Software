@@ -371,7 +371,7 @@ const CashHub = () => {
             </div>
           </CardHeader>
           <CardContent className="pb-4">
-            <div className="text-2xl sm:text-3xl font-black text-foreground font-mono">
+            <div className="text-2xl sm:text-3xl font-bold text-foreground font-mono">
               {currency} {totalUnclearedCash.toLocaleString()}
             </div>
             <p className="text-[11px] text-muted-foreground mt-1 font-medium">
@@ -391,7 +391,7 @@ const CashHub = () => {
           </CardHeader>
           <CardContent className="pb-4">
             <div className="flex items-baseline gap-2">
-              <span className="text-2xl sm:text-3xl font-black text-foreground font-mono">{activeStaffCount}</span>
+              <span className="text-2xl sm:text-3xl font-bold text-foreground font-mono">{activeStaffCount}</span>
               <Badge variant="outline" className="text-[10px] bg-info/10 text-info border-info/30 px-2 py-0.5 font-bold">
                 {activeStaffCount === 1 ? "1 Member" : `${activeStaffCount} Members`}
               </Badge>
@@ -412,7 +412,7 @@ const CashHub = () => {
             </div>
           </CardHeader>
           <CardContent className="pb-4">
-            <div className="text-2xl sm:text-3xl font-black text-success font-mono">
+            <div className="text-2xl sm:text-3xl font-bold text-success font-mono">
               {currency} {totalCashSettledToday.toLocaleString()}
             </div>
             <p className="text-[11px] text-muted-foreground mt-1 font-medium">
@@ -435,7 +435,7 @@ const CashHub = () => {
             </div>
           </CardHeader>
           <CardContent className="pb-4 flex flex-col justify-between">
-            <div className="text-2xl sm:text-3xl font-black font-mono text-foreground">
+            <div className="text-2xl sm:text-3xl font-bold font-mono text-foreground">
               {todayNetDifference > 0
                 ? `+${currency} ${todayNetDifference.toLocaleString()}`
                 : todayNetDifference < 0
@@ -456,7 +456,7 @@ const CashHub = () => {
             <Coins className="h-4 w-4" />
             Live Balances
             {activeStaffCount > 0 && (
-              <Badge className="ml-1 px-1.5 py-0.5 text-[10px] bg-warning text-black font-extrabold rounded-full border-none">
+              <Badge className="ml-1 px-1.5 py-0.5 text-[10px] bg-warning text-black font-semibold rounded-full border-none">
                 {activeStaffCount}
               </Badge>
             )}
@@ -546,12 +546,12 @@ const CashHub = () => {
                     <Card key={item.staffId} className="p-4 space-y-3 border-border bg-card shadow-sm">
                       <div className="flex items-start justify-between">
                         <div className="flex items-center gap-3">
-                          <div className="h-10 w-10 rounded-full bg-warning/10 border border-warning/20 flex items-center justify-center text-warning font-black text-sm shrink-0">
+                          <div className="h-10 w-10 rounded-full bg-warning/10 border border-warning/20 flex items-center justify-center text-warning font-bold text-sm shrink-0">
                             {item.staffName.charAt(0).toUpperCase()}
                           </div>
                           <div>
                             <div className="flex items-center gap-2">
-                              <span className="font-extrabold text-sm text-foreground">{item.staffName}</span>
+                              <span className="font-semibold text-sm text-foreground">{item.staffName}</span>
                               <Badge variant="outline" className="text-[10px] font-semibold px-2 py-0.5 bg-warning/10 text-warning border-warning/30">
                                 {item.staffRole}
                               </Badge>
@@ -598,7 +598,7 @@ const CashHub = () => {
                       <div className="flex items-center justify-between pt-2 border-t border-border/60">
                         <div>
                           <span className="text-[11px] text-muted-foreground block font-medium uppercase tracking-wider">Total Expected</span>
-                          <span className="text-lg font-black text-warning font-mono">
+                          <span className="text-lg font-bold text-warning font-mono">
                             {currency} {item.totalExpected.toLocaleString()}
                           </span>
                         </div>
@@ -633,7 +633,7 @@ const CashHub = () => {
                           size="sm"
                           onClick={() => handleOpenSettlement(item)}
                           disabled={!item.accountLinked}
-                          className="w-full text-xs font-extrabold gap-1.5 rounded-xl gradient-primary text-primary-foreground shadow-sm h-9"
+                          className="w-full text-xs font-semibold gap-1.5 rounded-xl gradient-primary text-primary-foreground shadow-sm h-9"
                         >
                           <Coins className="h-3.5 w-3.5" />
                           Settle
@@ -650,16 +650,16 @@ const CashHub = () => {
                   <Table>
                     <TableHeader className="bg-muted/50">
                       <TableRow className="hover:bg-transparent border-b border-border/60">
-                        <TableHead className="font-extrabold text-xs uppercase tracking-wider py-3.5">Staff Member</TableHead>
-                        <TableHead className="font-extrabold text-xs uppercase tracking-wider py-3.5 text-center">Orders</TableHead>
+                        <TableHead className="font-semibold text-xs uppercase tracking-wider py-3.5">Staff Member</TableHead>
+                        <TableHead className="font-semibold text-xs uppercase tracking-wider py-3.5 text-center">Orders</TableHead>
                         {configuredMethods.map((m) => (
-                          <TableHead key={m} className="font-extrabold text-xs uppercase tracking-wider py-3.5 text-right">
+                          <TableHead key={m} className="font-semibold text-xs uppercase tracking-wider py-3.5 text-right">
                             {m}
                           </TableHead>
                         ))}
-                        <TableHead className="font-extrabold text-xs uppercase tracking-wider py-3.5 text-right">Total Expected</TableHead>
-                        <TableHead className="font-extrabold text-xs uppercase tracking-wider py-3.5 text-center">Holding Time</TableHead>
-                        <TableHead className="font-extrabold text-xs uppercase tracking-wider py-3.5 text-right pr-6">Action</TableHead>
+                        <TableHead className="font-semibold text-xs uppercase tracking-wider py-3.5 text-right">Total Expected</TableHead>
+                        <TableHead className="font-semibold text-xs uppercase tracking-wider py-3.5 text-center">Holding Time</TableHead>
+                        <TableHead className="font-semibold text-xs uppercase tracking-wider py-3.5 text-right pr-6">Action</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -674,7 +674,7 @@ const CashHub = () => {
                             {/* Staff Info Column */}
                             <TableCell className="py-3.5">
                               <div className="flex items-center gap-3">
-                                <div className="h-10 w-10 rounded-full bg-warning/10 border border-warning/20 flex items-center justify-center text-warning font-extrabold text-sm shrink-0">
+                                <div className="h-10 w-10 rounded-full bg-warning/10 border border-warning/20 flex items-center justify-center text-warning font-semibold text-sm shrink-0">
                                   {item.staffName.charAt(0).toUpperCase()}
                                 </div>
                                 <div>
@@ -726,7 +726,7 @@ const CashHub = () => {
 
                             {/* Total Expected Column */}
                             <TableCell className="text-right py-3.5">
-                              <span className="inline-flex items-center px-3 py-1 rounded-xl bg-warning/10 text-warning border border-warning/20 font-black font-mono text-sm shadow-sm">
+                              <span className="inline-flex items-center px-3 py-1 rounded-xl bg-warning/10 text-warning border border-warning/20 font-bold font-mono text-sm shadow-sm">
                                 {currency} {item.totalExpected.toLocaleString()}
                               </span>
                             </TableCell>
@@ -769,7 +769,7 @@ const CashHub = () => {
                                       ? undefined
                                       : "This staff member has no linked login account — link one before settling their cash"
                                   }
-                                  className="h-9 text-xs font-extrabold gap-1.5 rounded-xl gradient-primary text-primary-foreground shadow-sm active:scale-95 transition-all"
+                                  className="h-9 text-xs font-semibold gap-1.5 rounded-xl gradient-primary text-primary-foreground shadow-sm active:scale-95 transition-all"
                                 >
                                   <Coins className="h-3.5 w-3.5" />
                                   Settle
@@ -873,14 +873,14 @@ const CashHub = () => {
                 <Table>
                   <TableHeader className="bg-muted/50 border-b border-border/60">
                     <TableRow className="hover:bg-transparent">
-                      <TableHead className="font-extrabold text-xs uppercase tracking-wider py-3.5">Settlement #</TableHead>
-                      <TableHead className="font-extrabold text-xs uppercase tracking-wider py-3.5">Date & Time</TableHead>
-                      <TableHead className="font-extrabold text-xs uppercase tracking-wider py-3.5">Staff Member</TableHead>
-                      <TableHead className="font-extrabold text-xs uppercase tracking-wider py-3.5">Settled By</TableHead>
-                      <TableHead className="font-extrabold text-xs uppercase tracking-wider py-3.5 text-right">Expected</TableHead>
-                      <TableHead className="font-extrabold text-xs uppercase tracking-wider py-3.5 text-right">Actual</TableHead>
-                      <TableHead className="font-extrabold text-xs uppercase tracking-wider py-3.5 text-center">Difference</TableHead>
-                      <TableHead className="font-extrabold text-xs uppercase tracking-wider py-3.5 text-right pr-6">Action</TableHead>
+                      <TableHead className="font-semibold text-xs uppercase tracking-wider py-3.5">Settlement #</TableHead>
+                      <TableHead className="font-semibold text-xs uppercase tracking-wider py-3.5">Date & Time</TableHead>
+                      <TableHead className="font-semibold text-xs uppercase tracking-wider py-3.5">Staff Member</TableHead>
+                      <TableHead className="font-semibold text-xs uppercase tracking-wider py-3.5">Settled By</TableHead>
+                      <TableHead className="font-semibold text-xs uppercase tracking-wider py-3.5 text-right">Expected</TableHead>
+                      <TableHead className="font-semibold text-xs uppercase tracking-wider py-3.5 text-right">Actual</TableHead>
+                      <TableHead className="font-semibold text-xs uppercase tracking-wider py-3.5 text-center">Difference</TableHead>
+                      <TableHead className="font-semibold text-xs uppercase tracking-wider py-3.5 text-right pr-6">Action</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -888,7 +888,7 @@ const CashHub = () => {
                       const diff = Number(item.cashDifference) || 0;
                       return (
                         <TableRow key={item.id} className="hover:bg-muted/30 transition-colors border-b border-border/40">
-                          <TableCell className="font-mono text-xs font-extrabold text-foreground">
+                          <TableCell className="font-mono text-xs font-semibold text-foreground">
                             {item.settlementNo}
                           </TableCell>
                           <TableCell className="text-xs text-muted-foreground font-medium">

@@ -274,7 +274,7 @@ export default function WarehouseDashboard() {
                   <div className="flex items-center gap-2 text-muted-foreground text-xs font-medium">
                     <Layers className="h-3.5 w-3.5 text-success" /> Stock Value
                   </div>
-                  <p className="text-xl font-black text-success">{fmt(d?.inventoryValue ?? 0)}</p>
+                  <p className="text-xl font-bold text-success">{fmt(d?.inventoryValue ?? 0)}</p>
                   <p className="text-[11px] text-muted-foreground truncate">{d?.costingTable.length ?? 0} items tracked</p>
                 </Card>
 
@@ -283,7 +283,7 @@ export default function WarehouseDashboard() {
                     <div className="flex items-center gap-2 text-muted-foreground text-xs font-medium">
                       <Wallet className="h-3.5 w-3.5 text-destructive" /> Payable
                     </div>
-                    <p className="text-xl font-black text-destructive">{fmt(d?.payable ?? 0)}</p>
+                    <p className="text-xl font-bold text-destructive">{fmt(d?.payable ?? 0)}</p>
                   </Card>
                 )}
 
@@ -292,7 +292,7 @@ export default function WarehouseDashboard() {
                     <div className="flex items-center gap-2 text-muted-foreground text-xs font-medium">
                       <HandCoins className="h-3.5 w-3.5 text-info" /> Receivable
                     </div>
-                    <p className="text-xl font-black text-info">{fmt(d?.receivable ?? 0)}</p>
+                    <p className="text-xl font-bold text-info">{fmt(d?.receivable ?? 0)}</p>
                   </Card>
                 )}
 
@@ -300,7 +300,7 @@ export default function WarehouseDashboard() {
                   <div className="flex items-center gap-2 text-muted-foreground text-xs font-medium">
                     <Trash2 className="h-3.5 w-3.5 text-purple-500" /> Waste
                   </div>
-                  <p className="text-xl font-black text-purple-600 dark:text-purple-400">{fmt(d?.waste ?? 0)}</p>
+                  <p className="text-xl font-bold text-purple-600 dark:text-purple-400">{fmt(d?.waste ?? 0)}</p>
                 </Card>
               </div>
 

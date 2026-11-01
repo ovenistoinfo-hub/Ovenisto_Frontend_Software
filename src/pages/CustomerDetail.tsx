@@ -201,7 +201,7 @@ const CustomerDetail = () => {
                   className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-muted/40 border border-border/80 shadow-2xs hover:border-primary/40 transition-all"
                 >
                   <span className="text-xs font-semibold text-foreground">{name}</span>
-                  <Badge className="text-[10px] font-extrabold bg-primary/15 text-primary border border-primary/30 px-1.5 py-0.5 rounded-md">
+                  <Badge className="text-[10px] font-semibold bg-primary/15 text-primary border border-primary/30 px-1.5 py-0.5 rounded-md">
                     {qty}x
                   </Badge>
                 </div>

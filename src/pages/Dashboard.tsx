@@ -725,7 +725,7 @@ const Dashboard = () => {
           <div className="h-8 w-8 rounded-lg gradient-primary flex items-center justify-center shadow-xs">
             <Flame className="h-4 w-4 text-primary-foreground" />
           </div>
-          <span className="text-sm font-extrabold text-foreground">Ovenisto Dashboard</span>
+          <span className="text-sm font-semibold text-foreground">Ovenisto Dashboard</span>
         </div>
       </header>
       <main className="flex-1 p-4 sm:p-6 lg:p-8 space-y-6">
@@ -1411,7 +1411,7 @@ const Dashboard = () => {
               <Flame className="h-4 w-4 text-primary-foreground" />
             </div>
             <div>
-              <h1 className="text-sm font-extrabold tracking-tight text-foreground flex items-center gap-1.5">
+              <h1 className="text-sm font-semibold tracking-tight text-foreground flex items-center gap-1.5">
                 Ovenisto
                 <span className="text-muted-foreground font-semibold">Dashboard</span>
               </h1>
@@ -1504,7 +1504,7 @@ const Dashboard = () => {
             <div className="flex items-center justify-between">
               {!sidebarCollapsed ? (
                 <div className="flex items-center gap-2">
-                  <span className="text-[11px] font-extrabold uppercase tracking-wider text-muted-foreground">
+                  <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                     Dashboard Sections
                   </span>
                   <Badge variant="outline" className="text-[10px] font-mono px-1.5 py-0 h-4 bg-muted/60">
@@ -1557,7 +1557,7 @@ const Dashboard = () => {
                   if (groupItems.length === 0) return null;
                   return (
                     <div key={group} className="pt-2">
-                      <div className="text-[10px] font-extrabold uppercase tracking-wider text-muted-foreground/70 px-2.5 pb-1 flex items-center justify-between">
+                      <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70 px-2.5 pb-1 flex items-center justify-between">
                         <span>{group}</span>
                         <span className="text-[9px] font-normal text-muted-foreground">{groupItems.length}</span>
                       </div>

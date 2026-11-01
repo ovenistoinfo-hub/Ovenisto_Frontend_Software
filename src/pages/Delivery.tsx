@@ -25,7 +25,7 @@ function KitchenStatusBadge({ status }: { status?: string }) {
   const st = (status || "pending").toLowerCase();
   if (st === "ready" || st === "completed") {
     return (
-      <Badge variant="outline" className="bg-success/10 text-success border-success/30 text-[10px] font-extrabold gap-1">
+      <Badge variant="outline" className="bg-success/10 text-success border-success/30 text-[10px] font-semibold gap-1">
         <CheckCircle2 className="h-3 w-3 text-success" />
         Kitchen: Food Ready
       </Badge>
@@ -33,7 +33,7 @@ function KitchenStatusBadge({ status }: { status?: string }) {
   }
   if (st === "preparing") {
     return (
-      <Badge variant="outline" className="bg-warning/10 text-warning border-warning/30 text-[10px] font-extrabold gap-1 animate-pulse">
+      <Badge variant="outline" className="bg-warning/10 text-warning border-warning/30 text-[10px] font-semibold gap-1 animate-pulse">
         <Clock className="h-3 w-3 text-warning" />
         Kitchen: Preparing
       </Badge>
@@ -77,7 +77,7 @@ function PaymentBadge({ paymentMethod, advancePayment, total, currency }: {
         <Truck className="h-3 w-3" /> CASH ON DELIVERY
       </span>
       <p className="text-xs text-muted-foreground font-medium">
-        To Collect: <span className="font-extrabold text-warning">{currency} {toCollect.toLocaleString()}</span>
+        To Collect: <span className="font-semibold text-warning">{currency} {toCollect.toLocaleString()}</span>
       </p>
     </div>
   );
@@ -88,7 +88,7 @@ function PaymentBadge({ paymentMethod, advancePayment, total, currency }: {
         <Wallet className="h-3 w-3" /> PARTIAL ADVANCE
       </span>
       <p className="text-xs text-muted-foreground font-medium">
-        Adv: <span className="font-bold text-foreground">{currency} {advancePayment.toLocaleString()}</span> | Remaining: <span className="font-extrabold text-warning">{currency} {toCollect.toLocaleString()}</span>
+        Adv: <span className="font-bold text-foreground">{currency} {advancePayment.toLocaleString()}</span> | Remaining: <span className="font-semibold text-warning">{currency} {toCollect.toLocaleString()}</span>
       </p>
     </div>
   );
@@ -180,11 +180,11 @@ const Delivery = () => {
     <div className="space-y-6">
       {/* Header */}
       <PageHeader
-        icon={<Bike className="h-5 w-5 text-warning" />}
+        icon={<Bike className="h-5 w-5" />}
         title="Delivery Control Center"
         subtitle="Live dispatch monitoring, rider fleet management & real-time cash collection"
         actions={
-          <Button variant="outline" size="sm" onClick={load} className="gap-1.5 hover:bg-warning/10 hover:text-warning hover:border-warning/30">
+          <Button variant="outline" size="sm" onClick={load} className="gap-1.5">
             <RefreshCw className="h-3.5 w-3.5" />
             Refresh
           </Button>
@@ -193,51 +193,27 @@ const Delivery = () => {
 
       {/* Hero Metric Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card className="shadow-sm relative overflow-hidden border border-warning/20 bg-muted/40">
-          <div className="absolute top-0 right-0 p-3 opacity-10">
-            <Package className="h-16 w-16 text-warning" />
-          </div>
-          <CardContent className="p-4 space-y-1">
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Active Deliveries</p>
-            <div className="flex items-baseline gap-2">
-              <span className="text-3xl font-black text-warning">{pendingOrders.length + activeAssignments.length}</span>
-              <span className="text-xs text-muted-foreground font-medium">({pendingOrders.length} unassigned)</span>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="shadow-sm relative overflow-hidden border border-success/20 bg-muted/40">
-          <div className="absolute top-0 right-0 p-3 opacity-10">
-            <TrendingUp className="h-16 w-16 text-success" />
-          </div>
-          <CardContent className="p-4 space-y-1">
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Today's Delivery Sales</p>
-            <p className="text-3xl font-black text-success">{currency} {totalTodaySales.toLocaleString()}</p>
-          </CardContent>
-        </Card>
-
-        <Card className="shadow-sm relative overflow-hidden border border-warning/30 bg-muted/40">
-          <div className="absolute top-0 right-0 p-3 opacity-10">
-            <Banknote className="h-16 w-16 text-warning" />
-          </div>
-          <CardContent className="p-4 space-y-1">
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Pending Rider Cash</p>
-            <p className="text-3xl font-black text-warning">{currency} {totalPendingCash.toLocaleString()}</p>
-          </CardContent>
-        </Card>
-
-        <Card className="shadow-sm relative overflow-hidden border border-info/20 bg-muted/40">
-          <div className="absolute top-0 right-0 p-3 opacity-10">
-            <Bike className="h-16 w-16 text-info" />
-          </div>
-          <CardContent className="p-4 space-y-1">
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Riders Available</p>
-            <div className="flex items-baseline gap-1.5">
-              <span className="text-3xl font-black text-info">{availableRiders}</span>
-              <span className="text-base font-bold text-muted-foreground">/ {riderStats.length} total</span>
-            </div>
-          </CardContent>
-        </Card>
+        {[
+          { label: "Active Deliveries", icon: Package, tone: "text-foreground", value: `${pendingOrders.length + activeAssignments.length}`, note: `${pendingOrders.length} unassigned` },
+          { label: "Today's Delivery Sales", icon: TrendingUp, tone: "text-success", value: `${currency} ${totalTodaySales.toLocaleString()}` },
+          { label: "Pending Rider Cash", icon: Banknote, tone: "text-foreground", value: `${currency} ${totalPendingCash.toLocaleString()}` },
+          { label: "Riders Available", icon: Bike, tone: "text-foreground", value: `${availableRiders}`, note: `of ${riderStats.length}` },
+        ].map(({ label, icon: Icon, tone, value, note }) => (
+          <Card key={label}>
+            <CardContent className="p-4 flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{label}</p>
+                <div className="mt-2 flex items-baseline gap-2 flex-wrap">
+                  <span className={`text-3xl font-semibold tabular-nums leading-none ${tone}`}>{value}</span>
+                  {note && <span className="text-xs text-muted-foreground">{note}</span>}
+                </div>
+              </div>
+              <div className="h-10 w-10 shrink-0 rounded-xl bg-muted text-muted-foreground flex items-center justify-center">
+                <Icon className="h-5 w-5" />
+              </div>
+            </CardContent>
+          </Card>
+        ))}
       </div>
 
       {/* Tabs */}
@@ -247,7 +223,7 @@ const Delivery = () => {
             <Package className="h-4 w-4" />
             Active Orders
             {(pendingOrders.length + activeAssignments.length) > 0 && (
-              <Badge className="h-5 px-1.5 text-[11px] bg-warning text-black font-extrabold rounded-full">
+              <Badge className="h-5 px-1.5 text-[11px] bg-warning text-black font-semibold rounded-full">
                 {pendingOrders.length + activeAssignments.length}
               </Badge>
             )}
@@ -292,7 +268,7 @@ const Delivery = () => {
                         <CardContent className="p-4 space-y-3">
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
-                              <span className="font-black text-base text-foreground group-hover:text-warning transition-colors whitespace-nowrap">#{o.orderNumber}</span>
+                              <span className="font-bold text-base text-foreground group-hover:text-warning transition-colors whitespace-nowrap">#{o.orderNumber}</span>
                             </div>
                             <div className="flex items-center gap-1.5">
                               <KitchenStatusBadge status={(o as any).status} />
@@ -314,7 +290,7 @@ const Delivery = () => {
                             </p>
                             <div className="pt-1 flex items-center justify-between border-t border-border/50 mt-2">
                               <span className="text-xs text-muted-foreground">Order Total</span>
-                              <span className="font-black text-base text-warning">{currency} {o.total?.toLocaleString()}</span>
+                              <span className="font-bold text-base text-warning">{currency} {o.total?.toLocaleString()}</span>
                             </div>
 
                             <PaymentBadge
@@ -356,7 +332,7 @@ const Delivery = () => {
                           onClick={() => setDetailItem({ order: a.order as unknown as PendingDeliveryOrder, assignment: a })}>
                           <CardContent className="p-4 space-y-3">
                             <div className="flex items-center justify-between">
-                              <span className="font-black text-base group-hover:text-warning transition-colors whitespace-nowrap">#{a.order?.orderNumber}</span>
+                              <span className="font-bold text-base group-hover:text-warning transition-colors whitespace-nowrap">#{a.order?.orderNumber}</span>
                               <div className="flex items-center gap-1.5">
                                 <KitchenStatusBadge status={(a.order as any)?.status} />
                                 <Badge variant="outline" className={cn("font-bold text-xs", statusInfo.class)}>
@@ -377,7 +353,7 @@ const Delivery = () => {
                               </p>
                               <div className="pt-1 flex items-center justify-between border-t border-border/50">
                                 <span className="text-xs text-muted-foreground">Order Total</span>
-                                <span className="font-black text-base text-foreground">{currency} {a.order?.total?.toLocaleString()}</span>
+                                <span className="font-bold text-base text-foreground">{currency} {a.order?.total?.toLocaleString()}</span>
                               </div>
 
                               <PaymentBadge
@@ -457,13 +433,13 @@ const Delivery = () => {
                           </Badge>
                         </TableCell>
 
-                        <TableCell className="text-right font-extrabold text-sm">{r.todayOrders ?? 0}</TableCell>
+                        <TableCell className="text-right font-semibold text-sm">{r.todayOrders ?? 0}</TableCell>
 
-                        <TableCell className="text-right font-extrabold text-sm text-success">
+                        <TableCell className="text-right font-semibold text-sm text-success">
                           {currency} {(r.todaySales || 0).toLocaleString()}
                         </TableCell>
 
-                        <TableCell className="text-right font-black text-sm">
+                        <TableCell className="text-right font-bold text-sm">
                           {pendingCash > 0 ? (
                             <span className="inline-block bg-warning/10 text-warning px-2 py-0.5 rounded border border-warning/20">
                               {currency} {pendingCash.toLocaleString()}
@@ -533,7 +509,7 @@ const Delivery = () => {
               <div className="bg-muted/50 border border-border/60 rounded-xl p-3 space-y-1.5 text-xs">
                 <div className="flex justify-between items-center font-bold">
                   <span>Order #{order.orderNumber}</span>
-                  <span className="text-warning font-black text-sm">{currency} {order.total?.toLocaleString()}</span>
+                  <span className="text-warning font-bold text-sm">{currency} {order.total?.toLocaleString()}</span>
                 </div>
                 <p className="text-muted-foreground flex items-center gap-1">
                   <MapPin className="h-3 w-3 text-warning shrink-0" />
@@ -631,7 +607,7 @@ const Delivery = () => {
             {/* Customer & Location */}
             <div className="bg-muted/40 border border-border/50 rounded-xl p-3 space-y-2">
               <div className="flex items-center justify-between">
-                <p className="text-sm font-extrabold text-foreground">{detailItem?.order?.customerName || "Walk-in Guest"}</p>
+                <p className="text-sm font-semibold text-foreground">{detailItem?.order?.customerName || "Walk-in Guest"}</p>
                 {(detailItem?.order as any)?.phone && (
                   <a
                     href={`tel:${(detailItem?.order as any)?.phone}`}
@@ -689,7 +665,7 @@ const Delivery = () => {
                       </div>
                     ))}
 
-                    <div className="pt-2.5 flex items-center justify-between font-black text-sm text-foreground">
+                    <div className="pt-2.5 flex items-center justify-between font-bold text-sm text-foreground">
                       <span>Total Amount</span>
                       <span className="text-warning text-base">{currency} {detailItem?.order?.total?.toLocaleString()}</span>
                     </div>

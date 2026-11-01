@@ -365,7 +365,7 @@ const TableLayout = () => {
                       t.status === "bill-requested" && "animate-ping",
                       statusDotColor
                     )} />
-                    <span className="text-sm font-black uppercase tracking-wider text-foreground">Table {t.number}</span>
+                    <span className="text-sm font-bold uppercase tracking-wider text-foreground">Table {t.number}</span>
                   </div>
                   {/* QR Code Action */}
                   {!isSuperAdmin && (
@@ -404,11 +404,11 @@ const TableLayout = () => {
 
                 {/* Bottom Bar: Area Name and Capacity */}
                 <div className="flex items-center justify-between w-full mt-1 shrink-0 select-none gap-1">
-                  <span className="text-xs text-muted-foreground font-extrabold tracking-wide truncate flex-1 min-w-0 pr-1" title={t.floor || "Main Hall"}>
+                  <span className="text-xs text-muted-foreground font-semibold tracking-wide truncate flex-1 min-w-0 pr-1" title={t.floor || "Main Hall"}>
                     {t.floor || "Main Hall"}
                   </span>
                   <div className="flex items-center gap-1 shrink-0">
-                    <div className="flex items-center gap-1 text-[11px] font-black text-foreground bg-zinc-100 dark:bg-zinc-800/90 px-2 py-0.5 rounded-full border border-zinc-200 dark:border-zinc-700/80 shadow-xs">
+                    <div className="flex items-center gap-1 text-[11px] font-bold text-foreground bg-zinc-100 dark:bg-zinc-800/90 px-2 py-0.5 rounded-full border border-zinc-200 dark:border-zinc-700/80 shadow-xs">
                       <Users className="h-3 w-3 text-muted-foreground shrink-0" />
                       <span>{t.capacity}</span>
                     </div>

@@ -977,7 +977,7 @@ export default function EmployeePortal() {
                 })}
                 <div className="p-3 rounded-xl bg-success/10 border border-success/30 flex-1 min-w-[110px]">
                   <span className="text-xs text-success font-bold block uppercase">Total Expected</span>
-                  <span className="text-xl font-black text-success font-mono">
+                  <span className="text-xl font-bold text-success font-mono">
                     {currency} {(myActiveCash?.totalExpected || 0).toLocaleString()}
                   </span>
                 </div>

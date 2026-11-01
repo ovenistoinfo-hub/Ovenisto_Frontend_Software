@@ -1993,9 +1993,9 @@ const Reservations = () => {
                 <ChefHat className="h-6 w-6" />
               </div>
               <div>
-                <DialogTitle className="text-lg font-black tracking-tight text-foreground flex items-center gap-2">
+                <DialogTitle className="text-lg font-bold tracking-tight text-foreground flex items-center gap-2">
                   Food Menu Catalog
-                  <Badge variant="outline" className="text-[10px] font-extrabold bg-primary/10 text-primary border-primary/20 px-2 py-0.5">
+                  <Badge variant="outline" className="text-[10px] font-semibold bg-primary/10 text-primary border-primary/20 px-2 py-0.5">
                     POS Catalog
                   </Badge>
                 </DialogTitle>
@@ -2065,7 +2065,7 @@ const Reservations = () => {
                     )}
                   >
                     {cat.name}
-                    <span className={cn("text-[10px] px-1.5 py-0.2 rounded-full font-black", selectedCatId === cat.id ? "bg-primary-foreground/20 text-primary-foreground" : "bg-muted text-muted-foreground")}>
+                    <span className={cn("text-[10px] px-1.5 py-0.2 rounded-full font-bold", selectedCatId === cat.id ? "bg-primary-foreground/20 text-primary-foreground" : "bg-muted text-muted-foreground")}>
                       {count}
                     </span>
                   </button>
@@ -2105,10 +2105,10 @@ const Reservations = () => {
                           <h4 className="font-bold text-xs sm:text-sm text-foreground line-clamp-1 group-hover:text-primary transition-colors">
                             {deal.name}
                           </h4>
-                          <p className="text-xs font-black text-primary font-mono">{dealPriceLabel(deal)}</p>
+                          <p className="text-xs font-bold text-primary font-mono">{dealPriceLabel(deal)}</p>
                         </div>
                         <div className="pt-3">
-                          <span className="w-full inline-flex items-center justify-center h-8 text-xs font-extrabold gradient-primary text-primary-foreground rounded-xl shadow-xs gap-1">
+                          <span className="w-full inline-flex items-center justify-center h-8 text-xs font-semibold gradient-primary text-primary-foreground rounded-xl shadow-xs gap-1">
                             <Plus className="h-3.5 w-3.5" /> Add Deal
                           </span>
                         </div>
@@ -2155,7 +2155,7 @@ const Reservations = () => {
                             />
                           ) : (
                             <div className="w-full h-full gradient-primary flex items-center justify-center rounded-xl shadow-inner">
-                              <span className="text-primary-foreground text-2xl font-black tracking-tight">
+                              <span className="text-primary-foreground text-2xl font-bold tracking-tight">
                                 {item.name.charAt(0).toUpperCase()}
                               </span>
                             </div>
@@ -2168,7 +2168,7 @@ const Reservations = () => {
 
                           {/* Selected Quantity Counter Badge (Top Right) */}
                           {totalSelectedQty > 0 && (
-                            <Badge className="absolute top-2 right-2 text-[10px] font-black bg-primary text-primary-foreground shadow-md px-2 py-0.5 rounded-full border border-primary-foreground/20">
+                            <Badge className="absolute top-2 right-2 text-[10px] font-bold bg-primary text-primary-foreground shadow-md px-2 py-0.5 rounded-full border border-primary-foreground/20">
                               {totalSelectedQty} in pre-order
                             </Badge>
                           )}
@@ -2179,7 +2179,7 @@ const Reservations = () => {
                           <h4 className="font-bold text-xs sm:text-sm text-foreground line-clamp-1 group-hover:text-primary transition-colors">
                             {item.name}
                           </h4>
-                          <p className="text-xs font-black text-primary font-mono">
+                          <p className="text-xs font-bold text-primary font-mono">
                             PKR {Number(item.price).toLocaleString()}
                           </p>
                         </div>
@@ -2206,7 +2206,7 @@ const Reservations = () => {
                                         onClick={() => handleAddPreOrderItem(item, v.id)}
                                       >
                                         <span>+ {v.name}</span>
-                                        <span className="font-mono text-primary font-extrabold">PKR {Number(v.price).toLocaleString()}</span>
+                                        <span className="font-mono text-primary font-semibold">PKR {Number(v.price).toLocaleString()}</span>
                                       </Button>
                                     ) : (
                                       <div className="flex items-center justify-between w-full bg-primary/10 border border-primary/30 rounded-lg p-0.5">
@@ -2219,7 +2219,7 @@ const Reservations = () => {
                                         >
                                           <Minus className="h-3 w-3" />
                                         </Button>
-                                        <span className="font-extrabold text-xs text-primary px-1">
+                                        <span className="font-semibold text-xs text-primary px-1">
                                           {v.name}: {varQty}
                                         </span>
                                         <Button
@@ -2243,7 +2243,7 @@ const Reservations = () => {
                             <Button
                               type="button"
                               size="sm"
-                              className="w-full h-8 text-xs font-extrabold gradient-primary text-primary-foreground rounded-xl shadow-xs gap-1"
+                              className="w-full h-8 text-xs font-semibold gradient-primary text-primary-foreground rounded-xl shadow-xs gap-1"
                               onClick={() => handleAddPreOrderItem(item)}
                             >
                               <Plus className="h-3.5 w-3.5" /> Add to Order
@@ -2259,7 +2259,7 @@ const Reservations = () => {
                               >
                                 <Minus className="h-3.5 w-3.5" />
                               </Button>
-                              <span className="font-extrabold text-sm text-primary px-2 font-mono">
+                              <span className="font-semibold text-sm text-primary px-2 font-mono">
                                 {singleItemQty}
                               </span>
                               <Button
@@ -2290,9 +2290,9 @@ const Reservations = () => {
               </div>
               <div>
                 <p className="text-xs text-muted-foreground font-semibold">Pre-Order Food Selection</p>
-                <p className="text-sm font-black text-foreground">
+                <p className="text-sm font-bold text-foreground">
                   {form.preOrderItems?.reduce((sum, i) => sum + i.qty, 0) || 0} Total Items —{" "}
-                  <span className="text-primary font-mono font-black">
+                  <span className="text-primary font-mono font-bold">
                     PKR {(form.subtotal || 0).toLocaleString()}
                   </span>
                 </p>
@@ -2301,7 +2301,7 @@ const Reservations = () => {
 
             <Button
               type="button"
-              className="gradient-primary text-primary-foreground font-extrabold shadow-md px-6 py-2.5 rounded-xl text-sm gap-1.5 w-full sm:w-auto"
+              className="gradient-primary text-primary-foreground font-semibold shadow-md px-6 py-2.5 rounded-xl text-sm gap-1.5 w-full sm:w-auto"
               onClick={() => setShowMenuPicker(false)}
             >
               <Check className="h-4 w-4" /> Done Selecting ({form.preOrderItems?.length || 0} items)

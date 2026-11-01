@@ -474,7 +474,7 @@ const Users = () => {
                 <ShieldCheck className="h-5 w-5" />
               </div>
               <div>
-                <DialogTitle className="text-lg font-black tracking-tight flex items-center gap-2">
+                <DialogTitle className="text-lg font-bold tracking-tight flex items-center gap-2">
                   {editingId ? "Edit Staff User Account" : "Grant User Access"}
                   {editingId && (
                     <Badge variant="outline" className={cn("text-[10px] px-2 py-0 font-bold", roleColors[form.role])}>
@@ -793,7 +793,7 @@ const Users = () => {
             </Button>
             <Button
               size="sm"
-              className="bg-warning hover:bg-warning text-black font-extrabold gap-1.5 shadow-md active:scale-95 transition-all"
+              className="bg-warning hover:bg-warning text-black font-semibold gap-1.5 shadow-md active:scale-95 transition-all"
               onClick={handleSave}
               disabled={saving || (!editingId && accountMode === "employee" && selectedEmployeeId === "none")}
             >

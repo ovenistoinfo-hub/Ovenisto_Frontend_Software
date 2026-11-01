@@ -928,7 +928,7 @@ const Payroll = () => {
                   </div>
                   <div className="space-y-1 border-t md:border-t-0 md:border-l pt-3 md:pt-0">
                     <p className="text-xs text-primary uppercase tracking-wider font-semibold">Total Net Pay</p>
-                    <p className="text-xl font-black text-primary">Rs. {totalFinalPay}</p>
+                    <p className="text-xl font-bold text-primary">Rs. {totalFinalPay}</p>
                   </div>
                 </CardContent>
               </Card>
