@@ -1168,6 +1168,7 @@ Cream/terracotta theme, light and dark, applied to every page (commits on `devel
   - Hidden `Tabs` panels aren't rendered, so an audit must click each tab (a synthetic `pointerdown/mousedown/mouseup/click` sequence works in an iframe).
   - A contrast walker in a hidden iframe reports false 1.2–1.6:1 hits (sidebar, tables) right after toggling `.dark`; confirm in the real pane before "fixing".
   - The browser pane is ~430 px wide: judge phone layouts there, not desktop.
+- **Dashboard sections load on demand (2026-11-01).** `Dashboard.tsx` no longer calls `reports/dashboard` (it took ~11 s and only supplied the branch name, now `useData().settings.restaurantName`). Each of the 18 report queries is `enabled: <visible flag> && activeSection === "<id>"`, so opening the page fires ~7 requests and a section fetches only when selected. A new section must gate its query the same way. For readable text use solid tokens (`text-muted-foreground`), never `opacity-*` or alpha like `/70`: that is what made Dashboard words look dim.
 
 ## MCP Tools: code-review-graph
 
