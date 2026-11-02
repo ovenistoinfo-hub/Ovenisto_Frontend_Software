@@ -18,6 +18,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { getDeliveryPaymentMode, getRiderCollectAmount } from "@/utils/deliveryPayment";
 import { orderDirectionsUrl, hasLivePoint } from "@/lib/maps";
+import { GiftNote } from "@/components/website/GiftNote";
 import { api } from "@/services/api";
 
 const STATUS_CONFIG: Record<string, { label: string; class: string; border: string }> = {
@@ -389,6 +390,8 @@ const RiderPortal = () => {
                           <p className="text-base font-semibold text-foreground">{a.order?.customerName || "Walk-in Guest"}</p>
                         </div>
                       </div>
+
+                      <GiftNote name={a.order?.giftRecipientName} phone={a.order?.giftRecipientPhone} message={a.order?.giftMessage} />
 
                       {/* Address */}
                       <div className="space-y-1">

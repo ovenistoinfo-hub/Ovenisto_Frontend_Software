@@ -67,6 +67,10 @@ export interface OrderRecord {
   // Live-location pin a website customer shared at checkout (Step 11); null when they typed only.
   deliveryLat?: number | null;
   deliveryLng?: number | null;
+  // Website "Send as a gift": who the rider delivers to (the order's own name/phone are the buyer's).
+  giftRecipientName?: string | null;
+  giftRecipientPhone?: string | null;
+  giftMessage?: string | null;
   deliveryFee: number;
   riderId: string | null;
   isFutureSale: boolean;

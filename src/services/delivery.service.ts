@@ -28,6 +28,9 @@ export interface PendingDeliveryOrder {
   deliveryAddress: string | null;
   deliveryLat?: number | null;
   deliveryLng?: number | null;
+  giftRecipientName?: string | null;
+  giftRecipientPhone?: string | null;
+  giftMessage?: string | null;
   status: string;
   type: string;
   orderSource?: string | null;
@@ -53,7 +56,7 @@ export interface AssignmentRecord {
   notes: string | null;
   commissionEarned?: number;
   commissionRate?: number;
-  order?: { id: string; orderNumber: string; total: number; advancePayment: number; paymentMethod: string | null; customerName: string | null; deliveryAddress: string | null; deliveryLat?: number | null; deliveryLng?: number | null; phone?: string | null };
+  order?: { id: string; orderNumber: string; total: number; advancePayment: number; paymentMethod: string | null; customerName: string | null; deliveryAddress: string | null; deliveryLat?: number | null; deliveryLng?: number | null; phone?: string | null; giftRecipientName?: string | null; giftRecipientPhone?: string | null; giftMessage?: string | null };
   rider?: RiderRecord;
 }
 

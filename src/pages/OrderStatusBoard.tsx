@@ -30,6 +30,7 @@ import { OrderPlacedPrintModal, type PlacedOrderSlipData } from "@/components/po
 import { orderMapsUrl, hasLivePoint } from "@/lib/maps";
 import { useWebsiteOrders } from "@/hooks/useWebsiteOrders";
 import { WebsiteOrdersInbox } from "@/components/website/WebsiteOrdersInbox";
+import { GiftNote } from "@/components/website/GiftNote";
 
 // ─── Status Definitions & Professional Theme Config ───────────────────────
 
@@ -1278,6 +1279,7 @@ const OrderStatusBoard = () => {
                     {selectedOrder.tableNumber && (
                       <p><span className="text-muted-foreground">Table:</span> <strong className="text-primary font-semibold">#{selectedOrder.tableNumber}</strong></p>
                     )}
+                    <GiftNote className="col-span-2" name={(selectedOrder as any).giftRecipientName} phone={(selectedOrder as any).giftRecipientPhone} message={(selectedOrder as any).giftMessage} />
                     {selectedOrder.deliveryAddress && (
                       <div className="col-span-2 flex flex-col items-start gap-1">
                         <p><span className="text-muted-foreground">Address:</span> <strong className="text-foreground">{selectedOrder.deliveryAddress}</strong></p>

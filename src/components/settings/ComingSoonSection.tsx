@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from "react";
-import { Sparkles, Trash2, Plus, Loader2, MessageSquare, ThumbsUp } from "lucide-react";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { Sparkles, Trash2, Plus, Loader2, MessageSquare, ThumbsUp, Upload, X, ImageIcon } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -20,6 +20,11 @@ export function ComingSoonSection() {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [adding, setAdding] = useState(false);
+  const [image, setImage] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  // One hidden picker serves the add form (id null) and every row's Replace button.
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const uploadFor = useRef<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -39,14 +44,49 @@ export function ComingSoonSection() {
     if (name.trim().length < 2) return toast.error("Enter the dish name");
     setAdding(true);
     try {
-      await siteContentService.createComingSoon({ name: name.trim(), description: description.trim() || undefined });
+      await siteContentService.createComingSoon({ name: name.trim(), description: description.trim() || undefined, image: image ?? undefined });
       setName("");
       setDescription("");
+      setImage(null);
       await load();
     } catch (err) {
       toast.error(errorText(err, "Couldn't add the dish"));
     } finally {
       setAdding(false);
+    }
+  };
+
+  const pickPhoto = (forId: string | null) => {
+    uploadFor.current = forId;
+    fileInputRef.current?.click();
+  };
+
+  const handlePhoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setUploading(true);
+    try {
+      const url = await siteContentService.uploadImage(file);
+      if (uploadFor.current) {
+        await siteContentService.updateComingSoon(uploadFor.current, { image: url });
+        await load();
+      } else {
+        setImage(url);
+      }
+    } catch (err) {
+      toast.error(errorText(err, "Photo upload failed"));
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const removeDishPhoto = async (dish: ComingSoonDish) => {
+    try {
+      await siteContentService.updateComingSoon(dish.id, { image: null });
+      await load();
+    } catch (err) {
+      toast.error(errorText(err, "Couldn't remove the photo"));
     }
   };
 
@@ -88,13 +128,29 @@ export function ComingSoonSection() {
         title="Coming soon"
         description="Dishes the website lists under Coming soon. Customers tap “I want this” to vote. Shared by every branch; saved as you go."
       >
-        <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)_auto]">
+        <input type="file" accept="image/*" ref={fileInputRef} className="hidden" onChange={handlePhoto} />
+        <div className="flex gap-3">
+          {image ? (
+            <div className="relative h-24 w-24 shrink-0">
+              <img src={image} alt="New dish" className="h-full w-full rounded-lg object-cover" />
+              <button type="button" onClick={() => setImage(null)} aria-label="Remove photo" className="absolute right-1 top-1 rounded-full bg-black/60 p-1 text-white hover:bg-black/80"><X className="h-3.5 w-3.5" /></button>
+              <button type="button" onClick={() => pickPhoto(null)} disabled={uploading} className="absolute inset-x-1 bottom-1 rounded bg-black/60 py-0.5 text-[11px] font-medium text-white hover:bg-black/80">Replace</button>
+            </div>
+          ) : (
+            <button type="button" onClick={() => pickPhoto(null)} disabled={uploading} className="flex h-24 w-24 shrink-0 flex-col items-center justify-center gap-1 rounded-lg border-2 border-dashed border-border text-muted-foreground transition-colors hover:border-primary/50">
+              {uploading ? <Loader2 className="h-5 w-5 animate-spin text-primary" /> : <Upload className="h-5 w-5" />}
+              <span className="text-xs">{uploading ? "Uploading..." : "Add photo"}</span>
+            </button>
+          )}
+          <div className="grid min-w-0 flex-1 gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)_auto]">
           <Input placeholder="Dish name" maxLength={100} value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && add()} aria-label="Dish name" />
-          <Input placeholder="Short note (optional)" maxLength={200} value={description} onChange={(e) => setDescription(e.target.value)} onKeyDown={(e) => e.key === "Enter" && add()} aria-label="Short note" />
+          <Input placeholder="Description: what is in it (optional)" maxLength={200} value={description} onChange={(e) => setDescription(e.target.value)} onKeyDown={(e) => e.key === "Enter" && add()} aria-label="Description" />
           <Button onClick={add} disabled={adding} className="gradient-primary text-primary-foreground">
             {adding ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}Add
           </Button>
+          </div>
         </div>
+        <p className="text-xs text-muted-foreground">A photo and a short note make customers want it: they see both on the website. Max 5MB, JPG, PNG or WebP.</p>
 
         {loading ? (
           <div className="space-y-2">{Array.from({ length: 2 }).map((_, i) => <Skeleton key={i} className="h-16 rounded-lg" />)}</div>
@@ -114,6 +170,15 @@ export function ComingSoonSection() {
                 )}>
                   {i + 1}
                 </span>
+                <div className="group relative h-14 w-14 shrink-0">
+                  {dish.image ? (
+                    <img src={dish.image} alt={dish.name} className="h-full w-full rounded-lg object-cover" />
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center rounded-lg border border-dashed border-border text-muted-foreground"><ImageIcon className="h-5 w-5" /></div>
+                  )}
+                  <button type="button" onClick={() => pickPhoto(dish.id)} disabled={uploading} aria-label={dish.image ? `Replace photo of ${dish.name}` : `Add photo of ${dish.name}`} className="absolute inset-0 flex items-center justify-center rounded-lg bg-black/55 text-[11px] font-medium text-white opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100">{dish.image ? "Replace" : "Add"}</button>
+                  {dish.image && <button type="button" onClick={() => removeDishPhoto(dish)} aria-label={`Remove photo of ${dish.name}`} className="absolute -right-1 -top-1 rounded-full bg-background p-0.5 text-muted-foreground shadow ring-1 ring-border hover:text-destructive"><X className="h-3 w-3" /></button>}
+                </div>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-baseline justify-between gap-2">
                     <p className="truncate text-sm font-semibold">{dish.name}</p>

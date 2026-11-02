@@ -1,10 +1,11 @@
-import { api } from './api';
+import { api, getAccessToken } from './api';
 
 /** A dish the website lists under "Coming soon"; customers vote for it. Chain-wide. */
 export interface ComingSoonDish {
   id: string;
   name: string;
   description: string | null;
+  image: string | null;
   votes: number;
   isActive: boolean;
   createdAt: string;
@@ -42,11 +43,25 @@ export const siteContentService = {
     const res = await api.get<{ success: boolean; data: ComingSoonDish[] }>('/site-content/coming-soon');
     return res.data;
   },
-  async createComingSoon(data: { name: string; description?: string }): Promise<ComingSoonDish> {
+  /** Direct image upload (Cloudinary through the backend); returns the https URL. */
+  async uploadImage(file: File): Promise<string> {
+    const formData = new FormData();
+    formData.append('image', file);
+    const token = getAccessToken();
+    const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3001/api'}/upload/image`, {
+      method: 'POST',
+      headers: { ...(token && { Authorization: `Bearer ${token}` }) },
+      body: formData,
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Upload failed');
+    return data.data.url;
+  },
+  async createComingSoon(data: { name: string; description?: string; image?: string }): Promise<ComingSoonDish> {
     const res = await api.post<{ success: boolean; data: ComingSoonDish }>('/site-content/coming-soon', data);
     return res.data;
   },
-  async updateComingSoon(id: string, data: Partial<{ name: string; description: string | null; isActive: boolean }>): Promise<ComingSoonDish> {
+  async updateComingSoon(id: string, data: Partial<{ name: string; description: string | null; image: string | null; isActive: boolean }>): Promise<ComingSoonDish> {
     const res = await api.put<{ success: boolean; data: ComingSoonDish }>(`/site-content/coming-soon/${id}`, data);
     return res.data;
   },

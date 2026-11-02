@@ -1251,3 +1251,13 @@ empty, so the first login lands on a chain with no branches: create them in Outl
 - **Production batch waste form** wraps (`flex-wrap`) so the Confirm button stays visible at ~800 px.
 - **There is no Stock Take page** (`/stock/stock-take` is a 404; its breadcrumb entry is stale).
 - Typecheck baseline is still 21 errors (`tsc -p tsconfig.app.json`), 101 tests.
+
+## Gifts + Coming Soon photos (2026-11-02, uncommitted)
+- **`components/website/GiftNote.tsx`** shows "Gift for NAME (phone) · Card: message" and renders nothing for an ordinary order. It sits on
+  the Website Orders inbox card (under the buyer), the Order Monitor detail, the Delivery board detail and the Rider Portal card. The order's
+  own name/phone are the BUYER's on the inbox/Order Monitor; the delivery screens' name/phone are already the recipient's (backend
+  `deliveryContact`). `OrderRecord`, `PendingDeliveryOrder` and `AssignmentRecord.order` carry `giftRecipientName/Phone`/`giftMessage`.
+- **Settings → Website → Coming soon (`ComingSoonSection.tsx`)**: each dish has a photo (dashed dropzone + preview with Replace/Remove on the
+  add form; Replace/Add/Remove on each row) and a description (200 chars, renamed from "Short note"). Upload goes through
+  `siteContentService.uploadImage` (`/api/upload/image`). Typecheck 21 (baseline), 103 tests.
+- **Regional gift items need no code:** staff add them as ordinary menu items (e.g. a "Gifts" category) in Food Menu.

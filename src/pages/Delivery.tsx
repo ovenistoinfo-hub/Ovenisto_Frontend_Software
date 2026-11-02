@@ -19,6 +19,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { getDeliveryPaymentMode, getRiderCollectAmount } from "@/utils/deliveryPayment";
 import { orderMapsUrl, hasLivePoint } from "@/lib/maps";
+import { GiftNote } from "@/components/website/GiftNote";
 
 /** Kitchen Status Badge for delivery cards */
 function KitchenStatusBadge({ status }: { status?: string }) {
@@ -605,6 +606,7 @@ const Delivery = () => {
 
           <div className="space-y-4">
             {/* Customer & Location */}
+            <GiftNote name={detailItem?.order?.giftRecipientName} phone={detailItem?.order?.giftRecipientPhone} message={detailItem?.order?.giftMessage} />
             <div className="bg-muted/40 border border-border/50 rounded-xl p-3 space-y-2">
               <div className="flex items-center justify-between">
                 <p className="text-sm font-semibold text-foreground">{detailItem?.order?.customerName || "Walk-in Guest"}</p>

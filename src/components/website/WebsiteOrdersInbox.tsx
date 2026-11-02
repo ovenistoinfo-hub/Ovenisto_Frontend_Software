@@ -13,6 +13,7 @@ import { orderService, type OrderRecord, type OrderItemRecord } from '@/services
 import { paymentService, type RefundDue } from '@/services/payment.service';
 import { isPaidOnline, REFUND_REASON_LABEL } from '@/lib/onlinePayment';
 import { useData } from '@/contexts/DataContext';
+import { GiftNote } from '@/components/website/GiftNote';
 import { toast } from 'sonner';
 
 /** A guest who has waited this long for an answer is shown in red. */
@@ -171,6 +172,8 @@ export function WebsiteOrdersInbox({ onClose }: { onClose?: () => void }) {
             </div>
           )}
         </div>
+
+        <GiftNote name={o.giftRecipientName} phone={o.giftRecipientPhone} message={o.giftMessage} className="mx-4 mt-2" />
 
         {/* What they ordered: a deal's dishes sit together under its name. */}
         <ul className="flex-1 space-y-2.5 px-4 py-3 text-xs">
